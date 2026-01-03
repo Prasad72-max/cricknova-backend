@@ -1,4 +1,6 @@
+# =========================
 # Python
+# =========================
 venv/
 __pycache__/
 *.pyc
@@ -7,12 +9,79 @@ __pycache__/
 .env
 .env.*
 
+# =========================
 # Logs
+# =========================
 *.log
+nohup.out
 
-# Uploads / videos
+# =========================
+# Uploads / videos / temp
+# =========================
 uploaded_videos/
 uploads/
+*.mp4
+temp_*.mp4
 
-# OS
+# =========================
+# ML models / weights
+# =========================
+*.pt
+
+# =========================
+# OS / Editor
+# =========================
 .DS_Store
+.atom/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# =========================
+# Miscellaneous
+# =========================
+*.class
+*.swp
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# =========================
+# Flutter / Dart
+# =========================
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+
+# =========================
+# Android
+# =========================
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# =========================
+# Obfuscation / symbols
+# =========================
+app.*.symbols
+app.*.map.json
+
+# =========================
+# Node
+# =========================
+node_modules/
+npm-debug.log*
+
+# =========================
+# Flutter Desktop (ignore unless needed)
+# =========================
+windows/

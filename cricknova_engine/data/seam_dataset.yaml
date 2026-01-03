@@ -1,0 +1,5 @@
+train: cricknova_engine/data/seam_dataset/train/images
+val: cricknova_engine/data/seam_dataset/val/images
+
+nc: 2
+names: ["seam_front", "seam_side"]
