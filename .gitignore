@@ -99,4 +99,8 @@ nohup.out
 
 uploaded_videos/
 *.mov
+<<<<<<< HEAD
 
+=======
+node_modules/
+>>>>>>> 885ecbd (Ignore node_modules)git rebase --continue
