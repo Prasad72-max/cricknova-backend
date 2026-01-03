@@ -1,0 +1,18 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Env & secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# Uploads / videos
+uploaded_videos/
+uploads/
+
+# OS
+.DS_Store
