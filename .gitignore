@@ -5,7 +5,9 @@ venv/
 __pycache__/
 *.pyc
 
+# =========================
 # Env & secrets
+# =========================
 .env
 .env.*
 
@@ -21,6 +23,7 @@ nohup.out
 uploaded_videos/
 uploads/
 *.mp4
+*.mov
 temp_*.mp4
 
 # =========================
@@ -69,38 +72,19 @@ coverage/
 /android/app/profile
 /android/app/release
 
+# =========================
 # Obfuscation / symbols
+# =========================
 app.*.symbols
 app.*.map.json
 
+# =========================
 # Node
+# =========================
 node_modules/
 npm-debug.log*
 
-# Flutter Desktop (ignore unless needed)
-windows/ 
-
-# Python
-venv/
-__pycache__/
-*.pyc
-
-# Temp / videos
-*.mp4
-temp_*.mp4
-nohup.out
-
-# ML models
-*.pt
-
-# Railway / env
-.env
-.env.*
-
-uploaded_videos/
-*.mov
-<<<<<<< HEAD
-
-=======
-node_modules/
->>>>>>> 885ecbd (Ignore node_modules)git rebase --continue
+# =========================
+# Flutter Desktop
+# =========================
+windows/
