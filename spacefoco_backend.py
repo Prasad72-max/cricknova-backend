@@ -26,7 +26,7 @@ ENGINE_PATH = os.path.join(PROJECT_ROOT, "cricknova_engine")
 if ENGINE_PATH not in sys.path:
     sys.path.insert(0, ENGINE_PATH)
 
-from processing.ball_tracker_motion import track_ball_positions
+from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
 import time
 
 
