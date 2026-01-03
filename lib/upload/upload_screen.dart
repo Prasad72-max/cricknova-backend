@@ -70,7 +70,7 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = null;
     });
 
-    final uri = Uri.parse("http://192.168.1.17:8000/training/analyze");
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/upload/video");
     final request = http.MultipartRequest("POST", uri);
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
@@ -135,7 +135,7 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = "Reviewing decision...";
     });
 
-    final uri = Uri.parse("http://192.168.1.17:8000/training/drs");
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/drs/review");
     final request = http.MultipartRequest("POST", uri);
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
@@ -197,7 +197,7 @@ class _UploadScreenState extends State<UploadScreen> {
       coachReply = "Analyzing your batting...";
     });
 
-    final uri = Uri.parse("http://192.168.1.17:8000/coach/analyze");
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/coach/analyze");
 
     try {
       final request = http.MultipartRequest("POST", uri);

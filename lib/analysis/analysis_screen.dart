@@ -26,7 +26,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   List<dynamic>? trajectory;
 
   // CHANGE THIS TO YOUR IP:
-final String backendUrl = "http://192.168.1.8:8000/training/analyze";
+  final String backendUrl = "https://cricknova-backend.onrender.com/training/analyze";
   @override
   Widget build(BuildContext context) {
     return Scaffold(

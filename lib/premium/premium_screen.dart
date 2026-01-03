@@ -44,7 +44,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     try {
       final verifyRes = await http.post(
-        Uri.parse("http://192.168.1.17:8000/payment/verify-payment"),
+        Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "razorpay_order_id": response.orderId,
@@ -107,7 +107,7 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   void _startRazorpayCheckout(int amountRupees) async {
     final res = await http.post(
-      Uri.parse("http://192.168.1.17:8000/payment/create-order"),
+      Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({"amount": amountRupees}),
     );

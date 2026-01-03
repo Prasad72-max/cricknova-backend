@@ -59,7 +59,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       diffResult = null;
     });
 
-    final uri = Uri.parse("http://192.168.1.17:8000/coach/diff");
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/analyse/compare");
     final request = http.MultipartRequest("POST", uri);
 
     request.files.add(await http.MultipartFile.fromPath("left", leftVideo!.path));
