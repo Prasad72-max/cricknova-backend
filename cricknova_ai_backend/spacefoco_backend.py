@@ -1,4 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+import os
+import sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import os
@@ -16,14 +22,11 @@ RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 razorpay_client = None
 if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
-ENGINE_PATH = os.path.join(PROJECT_ROOT, "cricknova_engine")
 
-if ENGINE_PATH not in sys.path:
-    sys.path.insert(0, ENGINE_PATH)
+def razorpay_ready():
+    return bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
 
-from processing.ball_tracker_motion import track_ball_positions
+from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
 import time
 
 
@@ -62,9 +65,22 @@ app.add_middleware(
 
 
 # -----------------------------
-# PAYMENT API (CREATE ORDER)
+# PAYMENT API (CONFIG ENDPOINT)
 # -----------------------------
 
+@app.get("/payment/config")
+def payment_config():
+    if not RAZORPAY_KEY_ID:
+        raise HTTPException(status_code=500, detail="Razorpay key not configured")
+    return {
+        "key_id": RAZORPAY_KEY_ID,
+        "currency": "INR"
+    }
+
+
+# -----------------------------
+# PAYMENT API (CREATE ORDER)
+# -----------------------------
 class CreateOrderRequest(BaseModel):
     amount: int  # amount in INR (e.g. 99)
 
@@ -83,10 +99,12 @@ async def create_payment_order(req: CreateOrderRequest):
         }
 
     try:
+        # Enable automatic capture for live payments
         order = razorpay_client.order.create({
-            "amount": req.amount * 100,  # INR → paise
+            "amount": req.amount * 100,
             "currency": "INR",
-            "payment_capture": 1
+            "payment_capture": 1,
+            "receipt": f"cricknova_{int(time.time())}"
         })
 
         return {
@@ -836,3 +854,28 @@ async def drs_review(file: UploadFile = File(...)):
     finally:
         if os.path.exists(video_path):
             os.remove(video_path)
+
+# -----------------------------
+# PAYMENT API (WEBHOOK VERIFICATION)
+# -----------------------------
+
+@app.post("/payment/webhook")
+async def razorpay_webhook(request: Request):
+    payload = await request.body()
+    signature = request.headers.get("X-Razorpay-Signature")
+    secret = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+
+    if not secret or not signature:
+        raise HTTPException(status_code=400, detail="Webhook not configured")
+
+    import hmac, hashlib
+    expected = hmac.new(
+        secret.encode(),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    return {"status": "ok"}

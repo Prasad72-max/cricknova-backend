@@ -96,3 +96,7 @@ nohup.out
 # Railway / env
 .env
 .env.*
+
+uploaded_videos/
+*.mov
+

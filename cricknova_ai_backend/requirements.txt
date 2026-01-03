@@ -1,14 +1,7 @@
 fastapi
 uvicorn[standard]
 python-dotenv
-razorpay
-numpy
-opencv-python
-pydanticfastapi
-uvicorn
 python-multipart
+numpy
 opencv-python-headless
-numpy
-fastapi
-uvicorn[standard]
-python-multipart
+razorpay
