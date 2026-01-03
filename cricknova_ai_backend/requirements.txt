@@ -1,8 +1,14 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
 razorpay
+numpy
+opencv-python
+pydanticfastapi
+uvicorn
+python-multipart
 opencv-python-headless
 numpy
-pydantic
-openai
+fastapi
+uvicorn[standard]
+python-multipart
