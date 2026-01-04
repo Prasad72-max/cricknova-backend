@@ -88,3 +88,4 @@ npm-debug.log*
 # Flutter Desktop
 # =========================
 windows/
+openai>=1.0.0
