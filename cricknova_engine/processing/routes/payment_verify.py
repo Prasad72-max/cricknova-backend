@@ -28,7 +28,9 @@ def verify_payment(data: VerifyRequest):
 
     # ✅ PAYMENT IS REAL
     return {
-        "status": "success",
-        "premium": True,
-        "plan": data.plan
+        "success": True,
+        "message": "Payment verified successfully",
+        "premium_activated": True,
+        "plan": data.plan,
+        "user_id": data.user_id
     }

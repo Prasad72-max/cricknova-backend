@@ -70,8 +70,9 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = null;
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/upload/video");
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/analyze");
     final request = http.MultipartRequest("POST", uri);
+    request.headers["Accept"] = "application/json";
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
@@ -83,6 +84,7 @@ class _UploadScreenState extends State<UploadScreen> {
         print("ANALYSIS RESPONSE => $data");
         setState(() {
           final analysis = data["analysis"] ?? data;
+          print("ANALYSIS KEYS => ${analysis.keys}");
 
           final rawSpeed =
               analysis["speed_kmph"] ??
@@ -135,8 +137,9 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = "Reviewing decision...";
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/drs/review");
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
     final request = http.MultipartRequest("POST", uri);
+    request.headers["Accept"] = "application/json";
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
@@ -201,6 +204,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
     try {
       final request = http.MultipartRequest("POST", uri);
+      request.headers["Accept"] = "application/json";
 
       // send video (REQUIRED by backend)
       request.files.add(

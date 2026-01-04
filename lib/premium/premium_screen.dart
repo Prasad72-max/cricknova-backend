@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:developer';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
@@ -24,6 +25,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   void initState() {
     super.initState();
     _razorpay = Razorpay();
+    debugPrint("Razorpay initialized");
 
     _razorpay.on(
       Razorpay.EVENT_PAYMENT_SUCCESS,
@@ -43,19 +45,25 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     try {
-      final verifyRes = await http.post(
-        Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "razorpay_order_id": response.orderId,
-          "razorpay_payment_id": response.paymentId,
-          "razorpay_signature": response.signature,
-          "user_id": "demo@cricknova.ai",
-          "plan": "YEARLY_599"
-        }),
-      );
+      final verifyRes = await http
+          .post(
+            Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({
+              "razorpay_order_id": response.orderId,
+              "razorpay_payment_id": response.paymentId,
+              "razorpay_signature": response.signature,
+              "user_id": "demo@cricknova.ai",
+              "plan": "YEARLY_599"
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
 
       final data = jsonDecode(verifyRes.body);
+      debugPrint("✅ Payment verify response: $data");
 
       if (verifyRes.statusCode == 200 && data["status"] == "success") {
         setState(() {
@@ -89,11 +97,14 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   void _handlePaymentError(PaymentFailureResponse response) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Payment failed or cancelled"),
+      SnackBar(
+        content: Text(
+          "Payment failed: ${response.code} | ${response.message}",
+        ),
         backgroundColor: Colors.redAccent,
       ),
     );
+    debugPrint("❌ Razorpay error => code=${response.code}, message=${response.message}");
   }
 
   void _handleExternalWallet(ExternalWalletResponse response) {
@@ -106,23 +117,33 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   void _startRazorpayCheckout(int amountRupees) async {
-    final res = await http.post(
-      Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"amount": amountRupees}),
-    );
+    final res = await http
+        .post(
+          Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: jsonEncode({"amount": amountRupees}),
+        )
+        .timeout(const Duration(seconds: 60));
 
     if (res.statusCode != 200) {
       throw Exception("Order creation failed");
     }
 
     final data = jsonDecode(res.body);
+    debugPrint("✅ Create order response: $data");
+    if (data["success"] != true || data["orderId"] == null) {
+      throw Exception("Invalid order response from backend");
+    }
 
+    debugPrint("🟣 Razorpay checkout key => ${data['key_id']}");
     final options = {
-      'key': 'rzp_live_RyxXeylgDimsty',
+      'key': data['key_id'],
       'order_id': data['orderId'],
-      'amount': data['amount'], // paise
-      'currency': 'INR',
+      'amount': data['amount'], // paise from backend
+      'currency': data['currency'] ?? 'INR',
       'name': 'CrickNova AI',
       'description': 'Premium Subscription',
       'prefill': {
@@ -135,14 +156,21 @@ class _PremiumScreenState extends State<PremiumScreen>
       'theme': {
         'color': '#00A8FF',
       },
-      // Removed 'external' block so Razorpay decides payment methods automatically.
     };
 
     debugPrint("🚀 Razorpay options: $options");
     try {
       _razorpay.open(options);
-    } catch (e) {
-      debugPrint("❌ Razorpay open failed: $e");
+    } catch (e, st) {
+      log("❌ Razorpay open failed", error: e, stackTrace: st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Unable to open payment gateway"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
@@ -429,6 +457,7 @@ class _PremiumScreenState extends State<PremiumScreen>
               // Direct, non-scripted Razorpay flow
               // Razorpay will automatically show UPI, cards, netbanking, wallets
               final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+              debugPrint("🟢 Starting payment for ₹$numeric");
               _startRazorpayCheckout(numeric.toInt());
             },
             child: Container(

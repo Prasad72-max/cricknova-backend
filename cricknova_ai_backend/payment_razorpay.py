@@ -72,7 +72,9 @@ def verify_payment(data: dict = Body(...)):
         # ✅ Payment verified — mark user premium here
         return {
             "success": True,
-            "message": "Payment verified successfully"
+            "message": "Payment verified successfully",
+            "premium_activated": True,
+            "plan": "pro"
         }
 
     except razorpay.errors.SignatureVerificationError:

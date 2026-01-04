@@ -1,47 +1,71 @@
 import 'dart:convert';
-import 'package:flutter_cashfree_pg_sdk/flutter_cashfree_pg_sdk.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:http/http.dart' as http;
 
-class CashfreeService {
-  static Future<bool> startPayment({
-    required double amount,
-    required String customerId,
+class RazorpayService {
+  late Razorpay _razorpay;
+
+  void init({
+    required Function(Map<String, dynamic>) onSuccess,
+    required Function(Map<String, dynamic>) onError,
+  }) {
+    _razorpay = Razorpay();
+
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
+        (PaymentSuccessResponse response) {
+      onSuccess({
+        "paymentId": response.paymentId,
+        "orderId": response.orderId,
+        "signature": response.signature,
+      });
+    });
+
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR,
+        (PaymentFailureResponse response) {
+      onError({
+        "code": response.code,
+        "message": response.message,
+      });
+    });
+  }
+
+  Future<void> startPayment({
+    required int amountInPaise,
+    required String name,
     required String email,
     required String phone,
   }) async {
-    // 1. Call backend
     final res = await http.post(
-      Uri.parse("http://192.168.1.17:8000/payment/create-order"),
+      Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "order_amount": amount,
-        "order_currency": "INR",
-        "customer_id": customerId,
-        "customer_email": email,
-        "customer_phone": phone,
+        "amount": amountInPaise,
       }),
     );
 
-    final data = jsonDecode(res.body);
     if (res.statusCode != 200) {
-      throw Exception("Backend error: ${res.body}");
+      throw Exception("Order creation failed: ${res.body}");
     }
-    if (data["status"] != "success") return false;
 
-    // 2. Launch Cashfree SDK
-    final cfPayment = CFPaymentGatewayService();
+    final data = jsonDecode(res.body);
 
-    final session = CFSession(
-      paymentSessionId: data["payment_session_id"],
-      orderId: data["order_id"],
-      environment: CFEnvironment.SANDBOX, // change to PRODUCTION later
-    );
+    final options = {
+      "key": "rzp_live_xxxxxxxxxx", // Razorpay LIVE key_id only
+      "amount": data["amount"],
+      "currency": data["currency"],
+      "name": "CrickNova",
+      "description": "Subscription Payment",
+      "order_id": data["orderId"],
+      "prefill": {
+        "email": email,
+        "contact": phone,
+      },
+    };
 
-    final result = await cfPayment.doPayment(session);
+    _razorpay.open(options);
+  }
 
-    if (result == null) return false;
-
-    final txStatus = result["txStatus"]?.toString().toUpperCase();
-    return txStatus == "SUCCESS";
+  void dispose() {
+    _razorpay.clear();
   }
 }

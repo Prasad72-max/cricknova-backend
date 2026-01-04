@@ -87,7 +87,8 @@ def verify_payment(payload: VerifyPaymentRequest):
 
         return {
             "success": True,
-            "message": "Payment verified successfully"
+            "message": "Payment verified successfully",
+            "premium_activated": True
         }
 
     except Exception as e:

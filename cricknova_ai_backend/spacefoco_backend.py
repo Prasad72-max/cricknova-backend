@@ -111,7 +111,8 @@ async def create_payment_order(req: CreateOrderRequest):
             "success": True,
             "orderId": order["id"],
             "amount": order["amount"],
-            "currency": order["currency"]
+            "currency": order["currency"],
+            "key_id": RAZORPAY_KEY_ID
         }
 
     except Exception as e:

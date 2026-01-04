@@ -1,3 +1,4 @@
+import 'premium_service.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:flutter/foundation.dart';
 
@@ -12,7 +13,15 @@ class RazorpayService {
   }) {
     _razorpay = Razorpay();
 
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, onPaymentSuccess);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+      debugPrint("✅ Razorpay payment success: ${response.paymentId}");
+
+      // 🔥 Activate premium immediately
+      await PremiumService.activatePremium();
+
+      // Forward to original callback
+      onPaymentSuccess(response);
+    });
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, onPaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternalWallet);
   }
