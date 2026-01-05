@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
-import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
 
 class TrajectoryPainter extends CustomPainter {
@@ -60,7 +59,6 @@ class _UploadScreenState extends State<UploadScreen> {
     controller = VideoPlayerController.file(video!)
       ..initialize().then((_) {
         setState(() {});
-        controller!.play();
       });
 
     setState(() {
@@ -110,13 +108,25 @@ class _UploadScreenState extends State<UploadScreen> {
             swing = swingVal?.toUpperCase() ?? "NA";
           }
 
-          final spinVal = analysis["spin"];
-          spin = spinVal?.toString().toUpperCase() ?? "NA";
+          final spinValRaw = analysis["spin"]?.toString().toLowerCase();
+
+          if (spinValRaw == "offspin" || spinValRaw == "off spin") {
+            spin = "OFF SPIN";
+          } else if (spinValRaw == "legspin" || spinValRaw == "leg spin") {
+            spin = "LEG SPIN";
+          } else if (spinValRaw == "doosra") {
+            spin = "DOOSRA";
+          } else if (spinValRaw == "googly") {
+            spin = "GOOGLY";
+          } else {
+            spin = spinValRaw?.toUpperCase() ?? "NA";
+          }
 
           trajectory = const [];
           showTrajectory = false;
 
           print("UI STATE => speed=$speed swing=$swing spin=$spin");
+          controller?.play();
         });
       } else {
         final err = await response.stream.bytesToString();
@@ -169,17 +179,6 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> runCoach() async {
-    final isPremium = await PremiumService.isPremium();
-    if (!isPremium) {
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PremiumScreen()),
-        );
-      }
-      return;
-    }
-
     if (video == null) {
       setState(() {
         showCoach = true;
@@ -219,10 +218,29 @@ class _UploadScreenState extends State<UploadScreen> {
       final response = await request.send();
       print("COACH STATUS => ${response.statusCode}");
 
-      if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
-        final data = jsonDecode(respStr);
+      final respStr = await response.stream.bytesToString();
 
+      if (response.statusCode == 403) {
+        final data = jsonDecode(respStr);
+        final detail = data["detail"] ?? "";
+
+        setState(() {
+          showCoach = false;
+        });
+
+        if (detail.contains("PLAN")) {
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PremiumScreen()),
+            );
+          }
+          return;
+        }
+      }
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(respStr);
         setState(() {
           coachReply =
               data["coach_feedback"] ??
@@ -438,7 +456,11 @@ class _UploadScreenState extends State<UploadScreen> {
                   ),
 
                 if (uploading)
-                  const Center(child: CircularProgressIndicator()),
+                  Positioned(
+                    top: 20,
+                    right: 20,
+                    child: CircularProgressIndicator(),
+                  ),
               ],
             ),
     );

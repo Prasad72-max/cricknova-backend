@@ -31,6 +31,29 @@ import time
 
 
 # -----------------------------
+# SUBSCRIPTION STATE (IN-MEMORY)
+# -----------------------------
+
+SUBSCRIPTIONS = {}
+PLAN_LIMITS = {
+    "IN_99": {"chat": 200, "mistake": 15, "compare": 0, "duration_days": 30},
+    "IN_299": {"chat": 1200, "mistake": 30, "compare": 0, "duration_days": 180},
+    "IN_499": {"chat": 3000, "mistake": 60, "compare": 50, "duration_days": 365},
+    "IN_1999": {"chat": 20000, "mistake": 200, "compare": 200, "duration_days": 365},
+}
+
+from datetime import datetime
+
+def get_active_subscription(user_id: str):
+    sub = SUBSCRIPTIONS.get(user_id)
+    if not sub:
+        return None
+    if datetime.utcnow() >= datetime.fromisoformat(sub["expiry"]):
+        return None
+    return sub
+
+
+# -----------------------------
 # TRAJECTORY NORMALIZATION
 # -----------------------------
 def build_trajectory(ball_positions, frame_width, frame_height):
@@ -112,6 +135,7 @@ async def create_payment_order(req: CreateOrderRequest):
             "orderId": order["id"],
             "amount": order["amount"],
             "currency": order["currency"],
+            "key": RAZORPAY_KEY_ID,
             "key_id": RAZORPAY_KEY_ID
         }
 
@@ -158,6 +182,17 @@ async def verify_payment(req: VerifyPaymentRequest):
         }
 
     # ✅ Payment verified successfully
+    # Set subscription in memory if user_id and plan are present and valid
+    from datetime import datetime, timedelta
+    if req.user_id and req.plan in PLAN_LIMITS:
+        limits = PLAN_LIMITS[req.plan]
+        SUBSCRIPTIONS[req.user_id] = {
+            "plan": req.plan,
+            "chat_used": 0,
+            "mistake_used": 0,
+            "compare_used": 0,
+            "expiry": (datetime.utcnow() + timedelta(days=limits["duration_days"])).isoformat()
+        }
     return {
         "status": "success",
         "premium": True,
@@ -413,7 +448,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 # AI COACH ANALYSIS API
 # -----------------------------
 @app.post("/coach/analyze")
-async def ai_coach_analyze(file: UploadFile = File(...)):
+async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -423,6 +458,17 @@ async def ai_coach_analyze(file: UploadFile = File(...)):
         }
     client = OpenAI(api_key=api_key)
 
+    # ---- Subscription/Mistake Limit Check ----
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+    sub = get_active_subscription(user_id)
+    if not sub:
+        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+    if sub["mistake_used"] >= PLAN_LIMITS[sub["plan"]]["mistake"]:
+        raise HTTPException(status_code=403, detail="MISTAKE_LIMIT_REACHED")
+    sub["mistake_used"] += 1
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
@@ -486,7 +532,7 @@ class CoachChatRequest(BaseModel):
     message: str | None = None
 
 @app.post("/coach/chat")
-async def ai_coach_chat(req: CoachChatRequest = Body(...)):
+async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     from openai import OpenAI
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -506,6 +552,17 @@ async def ai_coach_chat(req: CoachChatRequest = Body(...)):
 
     client = OpenAI(api_key=api_key)
 
+    # ---- Subscription/Chat Limit Check ----
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+    sub = get_active_subscription(user_id)
+    if not sub:
+        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+    if sub["chat_used"] >= PLAN_LIMITS[sub["plan"]]["chat"]:
+        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
+    sub["chat_used"] += 1
     try:
         prompt = f'''
 You are an elite cricket coach.
@@ -545,6 +602,7 @@ Avoid fluff. Be direct and helpful.
 # -----------------------------
 @app.post("/coach/diff")
 async def ai_coach_diff(
+    request: Request,
     left: UploadFile = File(...),
     right: UploadFile = File(...)
 ):
@@ -557,6 +615,18 @@ async def ai_coach_diff(
         }
 
     client = OpenAI(api_key=api_key)
+
+    # ---- Subscription/Compare Limit Check ----
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+    sub = get_active_subscription(user_id)
+    if not sub:
+        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+    if sub["compare_used"] >= PLAN_LIMITS[sub["plan"]]["compare"]:
+        raise HTTPException(status_code=403, detail="COMPARE_LIMIT_REACHED")
+    sub["compare_used"] += 1
 
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")

@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class PremiumScreen extends StatefulWidget {
   const PremiumScreen({super.key});
@@ -15,17 +16,21 @@ class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   bool isIndia = true;
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
-  bool isPremium = false;
-  int usedVideoCompare = 0;
-  int videoCompareLimit = 0;
 
   late Razorpay _razorpay;
+  String? _razorpayKey;
+  bool _isPaying = false;
+
+  // Track selected plan
+  String? _lastPlanTitle;
+  String? _lastPlanPrice;
 
   @override
   void initState() {
     super.initState();
     _razorpay = Razorpay();
     debugPrint("Razorpay initialized");
+    _prefetchRazorpayKey();
 
     _razorpay.on(
       Razorpay.EVENT_PAYMENT_SUCCESS,
@@ -43,8 +48,34 @@ class _PremiumScreenState extends State<PremiumScreen>
     );
   }
 
+  Future<void> _prefetchRazorpayKey() async {
+    try {
+      final res = await http.get(
+        Uri.parse("https://cricknova-backend.onrender.com/payment/config"),
+      ).timeout(const Duration(seconds: 15));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        _razorpayKey = data['key_id'];
+        debugPrint("⚡ Razorpay key prefetched");
+      }
+    } catch (e) {
+      debugPrint("⚠️ Razorpay key prefetch failed");
+    }
+  }
+
+
   void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     try {
+      final planCode = _lastPlanPrice == "₹99"
+          ? "IN_99"
+          : _lastPlanPrice == "₹299"
+              ? "IN_299"
+              : _lastPlanPrice == "₹499"
+                  ? "IN_499"
+                  : _lastPlanPrice == "₹1999"
+                      ? "IN_1999"
+                      : null;
       final verifyRes = await http
           .post(
             Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
@@ -56,8 +87,8 @@ class _PremiumScreenState extends State<PremiumScreen>
               "razorpay_order_id": response.orderId,
               "razorpay_payment_id": response.paymentId,
               "razorpay_signature": response.signature,
-              "user_id": "demo@cricknova.ai",
-              "plan": "YEARLY_599"
+              "user_id": FirebaseAuth.instance.currentUser?.uid,
+              "plan": planCode
             }),
           )
           .timeout(const Duration(seconds: 60));
@@ -66,12 +97,6 @@ class _PremiumScreenState extends State<PremiumScreen>
       debugPrint("✅ Payment verify response: $data");
 
       if (verifyRes.statusCode == 200 && data["status"] == "success") {
-        setState(() {
-          isPremium = true;
-          videoCompareLimit = 15;
-          usedVideoCompare = 0;
-        });
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -116,69 +141,65 @@ class _PremiumScreenState extends State<PremiumScreen>
     );
   }
 
-  void _startRazorpayCheckout(int amountRupees) async {
-    final res = await http
-        .post(
-          Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-          },
-          body: jsonEncode({"amount": amountRupees}),
-        )
-        .timeout(const Duration(seconds: 60));
+  Future<void> _startRazorpayCheckout(int amountRupees) async {
+    if (_isPaying) return;
+    _isPaying = true;
 
-    if (res.statusCode != 200) {
-      throw Exception("Order creation failed");
-    }
-
-    final data = jsonDecode(res.body);
-    debugPrint("✅ Create order response: $data");
-    if (data["success"] != true || data["orderId"] == null) {
-      throw Exception("Invalid order response from backend");
-    }
-
-    debugPrint("🟣 Razorpay checkout key => ${data['key_id']}");
-    final options = {
-      'key': data['key_id'],
-      'order_id': data['orderId'],
-      'amount': data['amount'], // paise from backend
-      'currency': data['currency'] ?? 'INR',
-      'name': 'CrickNova AI',
-      'description': 'Premium Subscription',
-      'prefill': {
-        'email': 'demo@cricknova.ai',
-      },
-      'retry': {
-        'enabled': true,
-        'max_count': 1,
-      },
-      'theme': {
-        'color': '#00A8FF',
-      },
-    };
-
-    debugPrint("🚀 Razorpay options: $options");
     try {
+      if (_razorpayKey == null) {
+        await _prefetchRazorpayKey();
+      }
+
+      if (_razorpayKey == null) {
+        throw Exception("Razorpay key not available");
+      }
+
+      final res = await http.post(
+        Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode({"amount": amountRupees}),
+      ).timeout(const Duration(seconds: 20));
+
+      if (res.statusCode != 200) {
+        throw Exception("Order creation failed");
+      }
+
+      final data = jsonDecode(res.body);
+
+      final options = {
+        'key': _razorpayKey,
+        'order_id': data['orderId'],
+        'amount': data['amount'],
+        'currency': data['currency'] ?? 'INR',
+        'name': 'CrickNova AI',
+        'description': 'Premium Subscription',
+        'prefill': {
+          'email': 'demo@cricknova.ai',
+        },
+        'theme': {
+          'color': '#00A8FF',
+        },
+      };
+
       _razorpay.open(options);
     } catch (e, st) {
-      log("❌ Razorpay open failed", error: e, stackTrace: st);
+      log("❌ Payment start failed", error: e, stackTrace: st);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Unable to open payment gateway"),
+            content: Text("Unable to start payment"),
             backgroundColor: Colors.redAccent,
           ),
         );
       }
+    } finally {
+      _isPaying = false;
     }
   }
 
-  bool canUseFeature({required int used, required int limit}) {
-    if (!isPremium) return false;
-    if (used >= limit) return false;
-    return true;
-  }
 
   @override
   void dispose() {
@@ -294,9 +315,9 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Starter",
         glowColor: Colors.blueAccent,
         features: [
-          "2 AI Mistake Analyses / month",
-          "10 AI Coach Chats / month",
-          "Speed • Swing • Spin (limited)",
+          "200 AI Chats",
+          "15 Mistake Detections",
+          "Speed • Swing • Spin (Basic)",
           "Basic Swing Path",
         ],
       ),
@@ -304,11 +325,10 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "6 Months",
         price: "₹299",
-        tag: null,
         glowColor: Colors.purpleAccent,
         features: [
-          "15 AI Mistake Analyses / 6 months",
-          "80 AI Coach Chats / 6 months",
+          "1,200 AI Chats",
+          "30 Mistake Detections",
           "Advanced Speed Tracking",
           "Shot Map Lite",
         ],
@@ -317,28 +337,28 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "Yearly",
         price: "₹499",
-        tag: null,
         glowColor: Colors.greenAccent,
         features: [
-          "25 AI Mistake Analyses / year",
-          "140 AI Coach Chats / year",
+          "3,000 AI Chats",
+          "60 Mistake Detections",
+          "50 Video Compare",
           "Shot Heatmap",
           "Game Simulation AI",
-          "Bowling Accuracy Tracking",
         ],
       ),
       const SizedBox(height: 20),
       sexyPlanCard(
-        title: "Yearly Elite",
-        price: "₹599",
-        tag: "Elite 💎",
-        glowColor: Colors.amberAccent,
+        title: "ULTRA PRO",
+        price: "₹1999",
+        tag: "Best Value 🏆",
+        glowColor: Colors.redAccent,
         features: [
-          "10 AI Mistake Analyses / month",
-          "200 AI Coach Chats / month",
-          "15 Video Compare (Analyse Yourself)",
-          "Early Access to New AI",
-          "Unlimited Cloud Storage",
+          "1 Year Access",
+          "20,000 AI Chats",
+          "200 Mistake Detections",
+          "200 Video Compare",
+          "All Premium Features",
+          "Priority AI Processing",
         ],
       ),
     ];
@@ -350,48 +370,48 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "Monthly",
         price: "\$29.99",
-        tag: null,
         glowColor: Colors.blueAccent,
         features: [
-          "2 AI Mistake Analyses / month",
-          "10 AI Coach Chats / month",
-          "Speed • Swing • Spin (limited)",
+          "300 AI Chats",
+          "20 Mistake Detections",
+          "Basic Speed • Swing • Spin",
         ],
       ),
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "6 Months",
         price: "\$39.99",
-        tag: null,
         glowColor: Colors.purpleAccent,
         features: [
-          "15 AI Mistake Analyses / 6 months",
-          "80 AI Coach Chats / 6 months",
-          "Advanced Speed Tracking",
+          "1,200 AI Chats",
+          "30 Mistake Detections",
+          "5 Video Compare",
         ],
       ),
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "Yearly",
         price: "\$59.99",
-        tag: "Best Value 🔥",
         glowColor: Colors.greenAccent,
         features: [
-          "25 AI Mistake Analyses / year",
-          "140 AI Coach Chats / year",
+          "1,800 AI Chats",
+          "50 Mistake Detections",
+          "10 Video Compare",
         ],
       ),
       const SizedBox(height: 20),
       sexyPlanCard(
-        title: "Yearly Elite",
-        price: "\$89.99",
-        tag: "Elite 🍿",
-        glowColor: Colors.amberAccent,
+        title: "ULTRA INTERNATIONAL",
+        price: "\$149.99",
+        tag: "Unlimited Feel 🌍",
+        glowColor: Colors.redAccent,
         features: [
-          "10 AI Mistake Analyses / month",
-          "200 AI Coach Chats / month",
-          "15 Video Compare (Analyse Yourself)",
-          "Early Access to New AI",
+          "1 Year Access",
+          "20,000 AI Chats",
+          "200 Mistake Detections",
+          "150 Video Compare",
+          "All Features Unlocked",
+          "Priority AI",
         ],
       ),
     ];
@@ -453,13 +473,26 @@ class _PremiumScreenState extends State<PremiumScreen>
           const SizedBox(height: 16),
 
           GestureDetector(
-            onTap: () {
-              // Direct, non-scripted Razorpay flow
-              // Razorpay will automatically show UPI, cards, netbanking, wallets
-              final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
-              debugPrint("🟢 Starting payment for ₹$numeric");
-              _startRazorpayCheckout(numeric.toInt());
-            },
+            onTap: _isPaying
+                ? null
+                : () {
+                    // Track selected plan before payment
+                    _lastPlanTitle = title;
+                    _lastPlanPrice = price;
+                    if (!mounted) return;
+                    final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+                    if (isIndia) {
+                      debugPrint("🟢 Starting Razorpay payment for ₹${numeric.toInt()}");
+                      _startRazorpayCheckout(numeric.toInt()); // pass RUPEES only
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("International payments handled via PayPal / Payoneer"),
+                          backgroundColor: Colors.blueAccent,
+                        ),
+                      );
+                    }
+                  },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -470,12 +503,24 @@ class _PremiumScreenState extends State<PremiumScreen>
                 ]),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Center(
-                child: Text("Buy Now",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
+              child: Center(
+                child: _isPaying
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        "Buy Now",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ),

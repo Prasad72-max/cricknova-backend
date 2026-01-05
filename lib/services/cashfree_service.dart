@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class RazorpayService {
   late Razorpay _razorpay;
@@ -35,11 +36,28 @@ class RazorpayService {
     required String email,
     required String phone,
   }) async {
+    // 1️⃣ Fetch Razorpay key from backend (LIVE / TEST handled by backend)
+    final keyRes = await http.get(
+      Uri.parse("https://cricknova-backend.onrender.com/payment/config"),
+    );
+
+    if (keyRes.statusCode != 200) {
+      throw Exception("Failed to fetch Razorpay key");
+    }
+
+    final keyData = jsonDecode(keyRes.body);
+    final razorpayKey = keyData["key_id"];
+
+    if (razorpayKey == null) {
+      throw Exception("Razorpay key missing from backend");
+    }
+
+    // 2️⃣ Create order on backend
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "amount": amountInPaise,
+        "amount": amountInPaise ~/ 100, // backend expects INR
       }),
     );
 
@@ -49,9 +67,10 @@ class RazorpayService {
 
     final data = jsonDecode(res.body);
 
+    // 3️⃣ Open Razorpay Checkout
     final options = {
-      "key": "rzp_live_xxxxxxxxxx", // Razorpay LIVE key_id only
-      "amount": data["amount"],
+      "key": razorpayKey,
+      "amount": data["amount"], // MUST be in paise (backend returns paise)
       "currency": data["currency"],
       "name": "CrickNova",
       "description": "Subscription Payment",
@@ -60,7 +79,14 @@ class RazorpayService {
         "email": email,
         "contact": phone,
       },
+      "theme": {
+        "color": "#000000",
+      },
     };
+
+    if (kDebugMode) {
+      debugPrint("RAZORPAY OPTIONS => $options");
+    }
 
     _razorpay.open(options);
   }

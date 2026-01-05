@@ -27,19 +27,22 @@ class RazorpayService {
   }
 
   /// Open Razorpay checkout (LIVE payment)
+  /// [key] is the Razorpay API key (do not hardcode; pass from caller)
   void openCheckout({
+    required String key,
     required String orderId,
     required int amount, // amount in paise
     required String email,
     String? contact, // ✅ OPTIONAL (global safe)
   }) {
     final Map<String, Object> options = {
-      "key": "rzp_live_RyxXeylgDimsty", // LIVE KEY
+      "key": key, // Pass the key dynamically
       "order_id": orderId,
-      "amount": amount,
+      "amount": amount, // 🔥 REQUIRED: amount in paise
       "currency": "INR",
       "name": "CrickNova AI",
       "description": "Premium Subscription",
+      "timeout": 180, // seconds
 
       "prefill": {
         "email": email,

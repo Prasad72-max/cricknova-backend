@@ -6,7 +6,6 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
-import '../services/premium_service.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? context;
@@ -30,11 +29,17 @@ class _AICoachScreenState extends State<AICoachScreen> {
   int currentChatIndex = 0;
   List<Map<String, dynamic>> chats = [];
 
+  int usedChats = 0;
+  int chatLimit = 0;
+  bool limitLoading = true;
+
   @override
   void initState() {
     super.initState();
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
     loadChats();
+
+    loadChatLimit();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.initialQuestion != null &&
@@ -63,7 +68,16 @@ class _AICoachScreenState extends State<AICoachScreen> {
     if (chats.isEmpty) {
       createNewChat();
     }
+    currentChatIndex = 0;
 
+    setState(() {});
+  }
+
+  Future<void> loadChatLimit() async {
+    final prefs = await SharedPreferences.getInstance();
+    chatLimit = prefs.getInt("chatLimit") ?? 0;
+    usedChats = prefs.getInt("chatUsed") ?? 0;
+    limitLoading = false;
     setState(() {});
   }
 
@@ -77,19 +91,33 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
   }
 
-  List<Map<String, dynamic>> get messages =>
-      List<Map<String, dynamic>>.from(chats[currentChatIndex]["messages"]);
+  List<Map<String, dynamic>> get messages {
+    if (chats.isEmpty) return [];
+    if (currentChatIndex < 0 || currentChatIndex >= chats.length) return [];
+    final msgs = chats[currentChatIndex]["messages"];
+    if (msgs == null) return [];
+    return List<Map<String, dynamic>>.from(msgs);
+  }
 
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
-    // 🔒 Premium Gate
-    final isPremium = await PremiumService.isPremium();
-    if (!isPremium) {
+    if (!limitLoading && chatLimit > 0 && usedChats >= chatLimit) {
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PremiumScreen()),
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text("Chat Limit Reached"),
+            content: const Text(
+              "You have used all AI Coach chats for your plan.\nUpgrade to continue.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              ),
+            ],
+          ),
         );
       }
       return;
@@ -117,6 +145,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
 
     try {
+      final userId = "demo@cricknova.ai";
+
       final response = await http
           .post(
             uri,
@@ -126,9 +156,22 @@ class _AICoachScreenState extends State<AICoachScreen> {
             },
             body: jsonEncode({
               "message": userMessage,
+              "user_id": userId,
             }),
           )
           .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 403) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const PremiumScreen()),
+          );
+        }
+        loading = false;
+        setState(() {});
+        return;
+      }
 
       String coachText;
       if (response.statusCode == 200) {
@@ -136,6 +179,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
         coachText = decoded["reply"]?.toString() ??
             decoded["coach_feedback"]?.toString() ??
             "No reply received";
+        usedChats++;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt("chatUsed", usedChats);
       } else {
         coachText =
             "Server error ${response.statusCode}: ${response.body}";
@@ -268,11 +314,18 @@ class _AICoachScreenState extends State<AICoachScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              itemCount: messages.length,
-              itemBuilder: (_, i) =>
-                  buildMessage(messages[i]),
-            ),
+            child: messages.isEmpty
+                ? const Center(
+                    child: Text(
+                      "Start your first AI coaching session",
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: messages.length,
+                    itemBuilder: (_, i) =>
+                        buildMessage(messages[i]),
+                  ),
           ),
           if (loading)
             Padding(
