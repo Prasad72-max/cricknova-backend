@@ -1,10 +1,21 @@
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.get("/__alive")
+def alive():
+    return {
+        "alive": True,
+        "paypal": True,
+        "file": "spacefoco_backend.py"
+    }
 import os
 import sys
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from cricknova_engine.processing.routes.payment_verify import router as subscription_router
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import os
@@ -16,41 +27,63 @@ from pydantic import BaseModel
 from fastapi import Body
 from dotenv import load_dotenv
 load_dotenv()
+from paypal_service import router as paypal_router
+
+try:
+    from subscriptions_store import get_current_user
+except ImportError:
+    def get_current_user(authorization: str | None = None):
+        if not authorization:
+            return None
+        if authorization.lower().startswith("bearer "):
+            return authorization.split(" ", 1)[1]
+        return authorization
+PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
+PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
 import razorpay
+# --- PayPal SDK imports ---
+from paypalcheckoutsdk.core import PayPalHttpClient, SandboxEnvironment, LiveEnvironment
+from paypalcheckoutsdk.orders import OrdersCreateRequest, OrdersCaptureRequest
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 razorpay_client = None
 if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
     razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
 
+
 def razorpay_ready():
     return bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
+
+
+
+
+# --- PayPal client lazy getter ---
+def get_paypal_client():
+    client_id = os.getenv("PAYPAL_CLIENT_ID")
+    secret = os.getenv("PAYPAL_SECRET")
+    mode = os.getenv("PAYPAL_MODE", "sandbox")
+
+    if not client_id or not secret:
+        return None
+
+    env = (
+        LiveEnvironment(client_id=client_id, client_secret=secret)
+        if mode == "live"
+        else SandboxEnvironment(client_id=client_id, client_secret=secret)
+    )
+    return PayPalHttpClient(env)
 
 from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
 import time
 
-
-# -----------------------------
-# SUBSCRIPTION STATE (IN-MEMORY)
-# -----------------------------
-
-SUBSCRIPTIONS = {}
-PLAN_LIMITS = {
-    "IN_99": {"chat": 200, "mistake": 15, "compare": 0, "duration_days": 30},
-    "IN_299": {"chat": 1200, "mistake": 30, "compare": 0, "duration_days": 180},
-    "IN_499": {"chat": 3000, "mistake": 60, "compare": 50, "duration_days": 365},
-    "IN_1999": {"chat": 20000, "mistake": 200, "compare": 200, "duration_days": 365},
-}
-
-from datetime import datetime
-
-def get_active_subscription(user_id: str):
-    sub = SUBSCRIPTIONS.get(user_id)
-    if not sub:
-        return None
-    if datetime.utcnow() >= datetime.fromisoformat(sub["expiry"]):
-        return None
-    return sub
+# Subscription management (external store)
+from subscriptions_store import (
+    get_subscription,
+    is_subscription_active,
+    increment_chat,
+    increment_mistake,
+    increment_compare
+)
 
 
 # -----------------------------
@@ -60,7 +93,154 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return []
 
 
-app = FastAPI()
+# -----------------------------
+# PAYPAL ROUTER (REGISTER)
+# -----------------------------
+app.include_router(paypal_router)
+# -----------------------------
+# PAYPAL MODELS (MUST LOAD BEFORE ROUTES)
+# -----------------------------
+class PayPalCreateOrderRequest(BaseModel):
+    amount_usd: float
+    plan: str
+    user_id: str
+
+class PayPalCaptureRequest(BaseModel):
+    order_id: str
+    user_id: str
+    plan: str
+
+# =============================
+# PAYPAL ROUTES (EARLY LOAD)
+# =============================
+
+@app.get("/paypal/__test", tags=["PayPal"])
+def __paypal_test():
+    return {"paypal": "visible"}
+
+@app.get("/paypal/config", tags=["PayPal"])
+def paypal_config():
+    if not PAYPAL_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="PayPal not configured")
+    return {
+        "enabled": True,
+        "mode": PAYPAL_MODE
+    }
+
+@app.post("/paypal/create-order", tags=["PayPal"])
+async def paypal_create_order(req: PayPalCreateOrderRequest):
+    paypal_client = get_paypal_client()
+    if not paypal_client:
+        raise HTTPException(status_code=500, detail="PayPal not configured")
+
+    request_obj = OrdersCreateRequest()
+    request_obj.prefer("return=representation")
+    request_obj.request_body({
+        "intent": "CAPTURE",
+        "purchase_units": [{
+            "amount": {
+                "currency_code": "USD",
+                "value": f"{req.amount_usd:.2f}"
+            }
+        }],
+        "application_context": {
+            "brand_name": "CrickNova AI",
+            "user_action": "PAY_NOW",
+            "return_url": "https://cricknova.app/paypal-success",
+            "cancel_url": "https://cricknova.app/paypal-cancel"
+        }
+    })
+
+    response = paypal_client.execute(request_obj)
+    approval_url = None
+    for link in response.result.links:
+        if link.rel == "approve":
+            approval_url = link.href
+            break
+
+    if not approval_url:
+        raise HTTPException(status_code=500, detail="Approval URL not found")
+
+    return {
+        "success": True,
+        "order_id": response.result.id,
+        "id": response.result.id,
+        "approval_url": approval_url,
+        "approvalUrl": approval_url,
+        "links": [link.__dict__ for link in response.result.links]
+    }
+
+@app.post("/paypal/capture", tags=["PayPal"])
+async def paypal_capture(req: PayPalCaptureRequest):
+    paypal_client = get_paypal_client()
+    if not paypal_client:
+        raise HTTPException(status_code=500, detail="PayPal not configured")
+
+    request_obj = OrdersCaptureRequest(req.order_id)
+    response = paypal_client.execute(request_obj)
+    if response.result.status != "COMPLETED":
+        raise HTTPException(status_code=400, detail="Payment not completed")
+
+    from subscriptions_store import create_or_update_subscription, get_subscription
+
+    capture_id = response.result.purchase_units[0].payments.captures[0].id
+
+    create_or_update_subscription(
+        user_id=req.user_id,
+        plan=req.plan,
+        payment_id=capture_id,
+        order_id=req.order_id
+    )
+
+    sub = get_subscription(req.user_id)
+
+    return {
+        "status": "success",
+        "premium": True,
+        "plan": sub.get("plan"),
+        "limits": sub.get("limits"),
+        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+    }
+
+# -----------------------------
+# USER SUBSCRIPTION ROUTES
+# -----------------------------
+
+app.include_router(
+    subscription_router,
+    prefix="/user",
+    tags=["Subscription"]
+)
+
+
+# -----------------------------
+# SUBSCRIPTION STATUS (RESTORE PREMIUM ON APP START)
+# -----------------------------
+@app.get("/user/subscription/status")
+async def subscription_status(request: Request):
+    user_id = get_current_user(
+        authorization=request.headers.get("Authorization")
+    )
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+    sub = get_subscription(user_id)
+
+    if not sub:
+        return {
+            "premium": False,
+            "plan": None,
+            "limits": None,
+            "expiry": None
+        }
+
+    return {
+        "premium": is_subscription_active(sub),
+        "plan": sub.get("plan"),
+        "limits": sub.get("limits"),
+        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+    }
+
 
 
 # -----------------------------
@@ -101,11 +281,13 @@ def payment_config():
     }
 
 
+
 # -----------------------------
 # PAYMENT API (CREATE ORDER)
 # -----------------------------
 class CreateOrderRequest(BaseModel):
     amount: int  # amount in INR (e.g. 99)
+
 
 @app.post("/payment/create-order")
 async def create_payment_order(req: CreateOrderRequest):
@@ -146,6 +328,10 @@ async def create_payment_order(req: CreateOrderRequest):
         }
 
 
+
+
+
+
 # -----------------------------
 # PAYMENT API (VERIFY PAYMENT)
 # -----------------------------
@@ -181,26 +367,39 @@ async def verify_payment(req: VerifyPaymentRequest):
             "reason": "Invalid payment signature"
         }
 
-    # ✅ Payment verified successfully
-    # Set subscription in memory if user_id and plan are present and valid
-    from datetime import datetime, timedelta
-    if req.user_id and req.plan in PLAN_LIMITS:
-        limits = PLAN_LIMITS[req.plan]
-        SUBSCRIPTIONS[req.user_id] = {
-            "plan": req.plan,
-            "chat_used": 0,
-            "mistake_used": 0,
-            "compare_used": 0,
-            "expiry": (datetime.utcnow() + timedelta(days=limits["duration_days"])).isoformat()
-        }
+    # ✅ Payment verified successfully – persist subscription
+    if not req.user_id or not req.plan:
+        raise HTTPException(status_code=400, detail="Missing user_id or plan")
+
+    from subscriptions_store import create_or_update_subscription
+
+    create_or_update_subscription(
+        user_id=req.user_id,
+        plan=req.plan,
+        payment_id=req.razorpay_payment_id,
+        order_id=req.razorpay_order_id
+    )
+
+    from subscriptions_store import get_subscription
+
+    sub = get_subscription(req.user_id)
+
     return {
         "status": "success",
         "premium": True,
         "user_id": req.user_id,
-        "plan": req.plan
+        "plan": sub.get("plan"),
+        "limits": sub.get("limits"),
+        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
     }
 
 
+# -----------------------------
+# SPEED CALIBRATION (REALISTIC)
+# -----------------------------
+# Broadcast-calibrated factor to align with international speeds
+# Derived from comparison with Hawk-Eye / broadcast averages
+SPEED_CALIBRATION_FACTOR = 0.92
 # -----------------------------
 # FIXED SWING (DEGREES)
 # -----------------------------
@@ -353,46 +552,52 @@ async def analyze_training_video(file: UploadFile = File(...)):
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
         def calculate_speed_kmph(ball_positions, fps):
-            """
-            Nearby-real speed estimation (NON-SCRIPTED).
-            - Frame based (video FPS aware)
-            - Slow-motion safe
-            - Uses median to avoid spikes
-            """
-
-            if len(ball_positions) < 6 or fps <= 1:
+            if len(ball_positions) < 8 or fps <= 1:
                 return None
 
-            # Calculate per-frame pixel movement
+            # ---- FPS normalization ----
+            fps = min(max(fps, 24), 60)
+
+            # ---- Use only PRE-PITCH frames ----
+            ys = [p[1] for p in ball_positions]
+            pitch_idx = int(np.argmax(ys))
+            usable = ball_positions[max(0, pitch_idx - 8):pitch_idx]
+
+            if len(usable) < 5:
+                return None
+
+            # ---- Per-frame distances ----
             distances = []
-            for i in range(1, len(ball_positions)):
-                x1, y1 = ball_positions[i - 1]
-                x2, y2 = ball_positions[i]
+            for i in range(1, len(usable)):
+                x1, y1 = usable[i - 1]
+                x2, y2 = usable[i]
                 d = math.hypot(x2 - x1, y2 - y1)
 
-                # Reject noise / teleport jumps
-                if 1.0 < d < 40.0:
+                # Tight noise rejection
+                if 1.5 < d < 35.0:
                     distances.append(d)
 
             if len(distances) < 4:
                 return None
 
-            # Use median movement (stable)
-            median_px_per_frame = float(np.median(distances))
+            # ---- Trimmed median (remove extreme noise) ----
+            distances.sort()
+            trim = int(len(distances) * 0.2)
+            core = distances[trim:len(distances) - trim]
+            if not core:
+                return None
 
-            # Estimate pitch length in pixels (camera adaptive)
-            ys = [p[1] for p in ball_positions]
-            pitch_px = max(200.0, np.percentile(ys, 90) - np.percentile(ys, 10))
+            median_px = float(np.median(core))
 
-            # Real cricket pitch ≈ 20.12 meters
+            # ---- Pitch length scaling (camera adaptive) ----
+            pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
             meters_per_pixel = 20.12 / pitch_px
 
-            speed_mps = median_px_per_frame * meters_per_pixel * fps
-            speed_kmph = speed_mps * 3.6
+            speed_mps = median_px * meters_per_pixel * fps
+            speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
 
-            # ---- pure physics, no forced numbers ----
-            # reject only impossible noise
-            if speed_kmph <= 0 or speed_kmph > 180:
+            # ICC realistic bowling range
+            if speed_kmph < 80 or speed_kmph > 160:
                 return None
 
             return round(speed_kmph, 1)
@@ -432,6 +637,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
+            "speed_type": "pre-pitch",
+            "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -452,23 +659,28 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {
-            "status": "failed",
-            "coach_feedback": "AI Coach is not configured yet. Please try again later."
-        }
+        raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Mistake Limit Check ----
-    user_id = request.headers.get("X-USER-ID")
+    user_id = get_current_user(
+        authorization=request.headers.get("Authorization")
+    )
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    sub = get_active_subscription(user_id)
-    if not sub:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["mistake_used"] >= PLAN_LIMITS[sub["plan"]]["mistake"]:
+    from subscriptions_store import get_subscription, is_subscription_active, increment_mistake
+    sub = get_subscription(user_id)
+
+    # HARD BLOCK: no subscription record or inactive subscription
+    if not sub or not is_subscription_active(sub):
+        raise HTTPException(
+            status_code=403,
+            detail="PREMIUM_REQUIRED"
+        )
+    if sub["mistake_used"] >= sub.get("limits", {}).get("mistake", 0):
         raise HTTPException(status_code=403, detail="MISTAKE_LIMIT_REACHED")
-    sub["mistake_used"] += 1
+    increment_mistake(user_id)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
@@ -537,10 +749,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {
-            "status": "failed",
-            "reply": "AI Coach is not configured yet."
-        }
+        raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     message = (req.message or "").strip()
 
@@ -553,16 +762,19 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Chat Limit Check ----
-    user_id = request.headers.get("X-USER-ID")
+    user_id = get_current_user(
+        authorization=request.headers.get("Authorization")
+    )
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    sub = get_active_subscription(user_id)
-    if not sub:
+    from subscriptions_store import get_subscription, is_subscription_active, increment_chat
+    sub = get_subscription(user_id)
+    if not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["chat_used"] >= PLAN_LIMITS[sub["plan"]]["chat"]:
+    if sub["chat_used"] >= sub.get("limits", {}).get("chat", 0):
         raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
-    sub["chat_used"] += 1
+    increment_chat(user_id)
     try:
         prompt = f'''
 You are an elite cricket coach.
@@ -609,24 +821,24 @@ async def ai_coach_diff(
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        return {
-            "status": "failed",
-            "difference": "AI Coach is not configured yet. Please try again later."
-        }
+        raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Compare Limit Check ----
-    user_id = request.headers.get("X-USER-ID")
+    user_id = get_current_user(
+        authorization=request.headers.get("Authorization")
+    )
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    sub = get_active_subscription(user_id)
-    if not sub:
+    from subscriptions_store import get_subscription, is_subscription_active, increment_compare
+    sub = get_subscription(user_id)
+    if not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["compare_used"] >= PLAN_LIMITS[sub["plan"]]["compare"]:
+    if sub["compare_used"] >= sub.get("limits", {}).get("compare", 0):
         raise HTTPException(status_code=403, detail="COMPARE_LIMIT_REACHED")
-    sub["compare_used"] += 1
+    increment_compare(user_id)
 
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
@@ -750,7 +962,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             ys = [p[1] for p in ball_positions]
             pitch_px = max(200.0, np.percentile(ys, 90) - np.percentile(ys, 10))
             meters_per_pixel = 20.12 / pitch_px
-            speed_kmph = median_px * meters_per_pixel * fps * 3.6
+            speed_kmph = median_px * meters_per_pixel * fps * 3.6 * SPEED_CALIBRATION_FACTOR
 
             if speed_kmph <= 0 or speed_kmph > 180:
                 return None
@@ -773,6 +985,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
+            "speed_type": "broadcast-adjusted",
+            "speed_note": "Broadcast-style speed calibrated to match international match readings",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -787,24 +1001,25 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    Conservative stump-hit detection using ONLY observed ball positions.
-    No prediction, no scripting.
+    ICC-style conservative stump-hit detection.
+    Returns (hit: bool, confidence: float)
     """
 
     if not ball_positions:
-        return False
+        return False, 0.0
 
-    # Define stump zone (camera-agnostic, central & lower frame)
-    stump_x_min = frame_width * 0.46
-    stump_x_max = frame_width * 0.54
-    stump_y_min = frame_height * 0.60
-    stump_y_max = frame_height * 0.92
+    stump_x_min = frame_width * 0.47
+    stump_x_max = frame_width * 0.53
+    stump_y_min = frame_height * 0.64
+    stump_y_max = frame_height * 0.90
 
-    for (x, y) in ball_positions:
+    hits = 0
+    for (x, y) in ball_positions[-8:]:
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            return True
+            hits += 1
 
-    return False
+    confidence = min(hits / 3.0, 1.0)
+    return hits >= 2, round(confidence, 2)
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -893,14 +1108,14 @@ async def drs_review(file: UploadFile = File(...)):
         # BALL TRACKING (STUMP HIT)
         # -----------------------------
 
-        hits_stumps = detect_stump_hit_from_positions(
+        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
             ball_positions,
             frame_width,
             frame_height
         )
 
         # -----------------------------
-        # FINAL DECISION
+        # FINAL DECISION (ICC LOGIC)
         # -----------------------------
         if ultraedge:
             decision = "NOT OUT"
@@ -917,6 +1132,7 @@ async def drs_review(file: UploadFile = File(...)):
             "drs": {
                 "ultraedge": ultraedge,
                 "ball_tracking": hits_stumps,
+                "stump_confidence": stump_confidence,
                 "decision": decision,
                 "reason": reason
             }

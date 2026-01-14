@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import '../premium/premium_screen.dart';
 
 import 'analysis_result_screen.dart';
 import '../ai_coach/ai_coach_screen.dart';
@@ -27,6 +29,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   // CHANGE THIS TO YOUR IP:
   final String backendUrl = "https://cricknova-backend.onrender.com/training/analyze";
+
+  Future<bool> _checkPremiumOrRedirect() async {
+    final prefs = await SharedPreferences.getInstance();
+    final chatLimit = prefs.getInt("chatLimit") ?? 0;
+    if (chatLimit <= 0) {
+      if (!mounted) return false;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const PremiumScreen()),
+      );
+      return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,7 +94,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ElevatedButton(
               onPressed: (speedKmph == null && swingName == null && spinType == null)
                   ? null
-                  : () {
+                  : () async {
+                      final ok = await _checkPremiumOrRedirect();
+                      if (!ok) return;
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -125,7 +144,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // --------------- UPLOAD BUTTON -------------------
   Widget _uploadButton(BuildContext context) {
     return GestureDetector(
-      onTap: _loading ? null : () => _pickVideo(context),
+      onTap: _loading
+          ? null
+          : () async {
+              final ok = await _checkPremiumOrRedirect();
+              if (!ok) return;
+              _pickVideo(context);
+            },
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(

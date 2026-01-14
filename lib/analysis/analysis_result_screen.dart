@@ -1,20 +1,85 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class AnalysisResultScreen extends StatelessWidget {
+class AnalysisResultScreen extends StatefulWidget {
   final Map<String, dynamic> data;
 
   const AnalysisResultScreen({super.key, required this.data});
 
   @override
+  State<AnalysisResultScreen> createState() => _AnalysisResultScreenState();
+}
+
+class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
+  bool? isPremium;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAccess();
+  }
+
+  Future<void> _checkAccess() async {
+    final prefs = await SharedPreferences.getInstance();
+    final chatLimit = prefs.getInt('chatLimit');
+    final mistakeLimit = prefs.getInt('mistakeLimit');
+    final free = (chatLimit == null || chatLimit <= 0) && (mistakeLimit == null || mistakeLimit <= 0);
+    if (mounted) {
+      setState(() {
+        isPremium = !free;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (isPremium == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (isPremium == false) {
+      return Scaffold(
+        backgroundColor: Colors.grey[100],
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: Text(
+            "Analysis Result",
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.lock, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(
+                "Premium required",
+                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PremiumScreen()));
+                },
+                child: const Text("Go Premium"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final Map<String, dynamic> src =
-        (data["data"] is Map<String, dynamic>)
-            ? Map<String, dynamic>.from(data["data"])
-            : (data["result"] is Map<String, dynamic>)
-                ? Map<String, dynamic>.from(data["result"])
-                : Map<String, dynamic>.from(data);
+        (widget.data["data"] is Map<String, dynamic>)
+            ? Map<String, dynamic>.from(widget.data["data"])
+            : (widget.data["result"] is Map<String, dynamic>)
+                ? Map<String, dynamic>.from(widget.data["result"])
+                : Map<String, dynamic>.from(widget.data);
 
     // ---------- SAFE SPEED ----------
     String speed = "—";
@@ -238,4 +303,20 @@ class TrajectoryPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class PremiumScreen extends StatelessWidget {
+  const PremiumScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Premium'),
+      ),
+      body: const Center(
+        child: Text('Premium Screen'),
+      ),
+    );
+  }
 }

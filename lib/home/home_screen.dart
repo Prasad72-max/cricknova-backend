@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../upload/upload_screen.dart';   // <-- your upload screen
 import '../compare/analyse_yourself_screen.dart';
+import '../services/premium_service.dart';
+import '../ai/ai_coach_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -15,55 +17,43 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String planName = "Free";
-  int planPrice = 0;
-
-  int chatUsed = 0;
-  int chatLimit = 0;
-
-  int mistakeUsed = 0;
-  int mistakeLimit = 0;
-
   List<String> trainingVideos = [];
 
   @override
   void initState() {
     super.initState();
-    loadTrainingVideos();
-    loadUsageStatus();
+    _restoreAndLoad();
+  }
+
+  Future<void> _restoreAndLoad() async {
+    // Always restore premium & usage from backend as source of truth
+    await PremiumService.restoreOnLaunch();
+
+    if (!mounted) return;
+
+    // Force UI refresh after backend sync
+    setState(() {});
+
+    await loadTrainingVideos();
   }
 
   Future<void> loadTrainingVideos() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       trainingVideos = prefs.getStringList("trainingVideos") ?? [];
     });
   }
 
-  Future<void> loadUsageStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    setState(() {
-      planName = prefs.getString("planName") ?? "Free";
-      planPrice = prefs.getInt("planPrice") ?? 0;
-
-      chatUsed = prefs.getInt("chatUsed") ?? 0;
-      chatLimit = prefs.getInt("chatLimit") ?? 0;
-
-      mistakeUsed = prefs.getInt("mistakeUsed") ?? 0;
-      mistakeLimit = prefs.getInt("mistakeLimit") ?? 0;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      backgroundColor: const Color(0xFF020617),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // HEADER
             Container(
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 40),
@@ -71,10 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Color(0xFF050A1E),
-                    Color(0xFF0E1A36),
-                    Color(0xFF1E3A8A),
-                    Color(0xFF3B82F6),
+                    Color(0xFF0B0F1A),
+                    Color(0xFF111827),
+                    Color(0xFF0F172A),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -82,16 +71,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.blueAccent,
+                    color: Color(0x66000000),
                     blurRadius: 40,
                     spreadRadius: 1,
                     offset: Offset(0, 6),
                   ),
                 ],
               ),
-
               child: Stack(
                 children: [
+                  // (keep the circle, but remove purple-heavy glow)
                   Positioned(
                     right: -20,
                     top: -20,
@@ -102,14 +91,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         shape: BoxShape.circle,
                         gradient: RadialGradient(
                           colors: [
-                            Colors.blueAccent.withOpacity(0.6),
+                            const Color(0xFF111827).withOpacity(0.3),
                             Colors.transparent,
                           ],
                         ),
                       ),
                     ),
                   ),
-
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -119,31 +107,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          shadows: [
-                            Shadow(
-                              color: Colors.blueAccent,
-                              blurRadius: 15,
-                            ),
-                          ],
+                          shadows: [],
                         ),
                       ),
-
                       const SizedBox(height: 10),
-
-                      ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [
-                            Colors.white70,
-                            Colors.blueAccent.shade100,
-                          ],
-                        ).createShader(bounds),
-                        child: Text(
-                          "Ready for today’s cricket analysis?",
-                          style: GoogleFonts.poppins(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w400,
-                            color: Colors.white,
-                          ),
+                      Text(
+                        "Ready for today’s cricket analysis?",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white70,
                         ),
                       ),
                     ],
@@ -178,13 +151,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     subtitle: "Compare two videos and see differences",
                     icon: Icons.compare_rounded,
                     onTap: () async {
+                      if (!PremiumService.canCompare()) {
+                        PremiumService.showPaywall(
+                          context,
+                          source: 'analyse',
+                          allowedPlans: ['IN_499', 'IN_1999'],
+                        );
+                        return;
+                      }
+
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => const AnalyseYourselfScreen(),
                         ),
                       );
-                      await loadTrainingVideos();
                     },
                   ),
                 ],
@@ -212,14 +193,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (trainingVideos.isEmpty)
                     const Text(
                       "No training videos uploaded yet",
-                      style: TextStyle(color: Colors.black54),
+                      style: TextStyle(color: Colors.white54),
                     )
                   else
                     ...trainingVideos.map((v) => Container(
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: const Color(0xFF0F172A),
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: const [
                               BoxShadow(
@@ -234,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style:
                                     GoogleFonts.poppins(fontSize: 15)),
                             trailing: const Icon(Icons.play_circle_fill,
-                                color: Colors.blueAccent, size: 30),
+                                color: Color(0xFF7C3AED), size: 30),
                             onTap: () {
                               showModalBottomSheet(
                                 context: context,
@@ -262,6 +243,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                           title: const Text("Analyse Video"),
                                           onTap: () {
                                             Navigator.pop(context);
+
+                                            if (!PremiumService.canCompare()) {
+                                              PremiumService.showPaywall(context);
+                                              return;
+                                            }
+
                                             Navigator.push(
                                               context,
                                               MaterialPageRoute(
@@ -314,8 +301,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFF0B1220),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Color(0xFF1F2937)),
                       boxShadow: const [
                         BoxShadow(
                           color: Colors.black12,
@@ -339,28 +327,36 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             Text(
-                              planPrice > 0 ? "₹$planPrice" : "Free",
+                              PremiumService.isPremium ? "Premium" : "Free",
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: planPrice > 0 ? Colors.green : Colors.grey,
+                                color: PremiumService.isPremium ? Colors.green : Colors.grey,
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 14),
-
                         _usageRow(
                           label: "AI Coach Chats",
-                          used: chatUsed,
-                          total: chatLimit,
+                          used: PremiumService.chatUsed,
+                          total: PremiumService.chatLimit,
                         ),
                         const SizedBox(height: 10),
                         _usageRow(
                           label: "Mistake Detection",
-                          used: mistakeUsed,
-                          total: mistakeLimit,
+                          used: PremiumService.mistakeUsed,
+                          total: PremiumService.mistakeLimit,
                         ),
+                        // Analyse Yourself usage row if allowed
+                        if (PremiumService.compareLimit > 0) ...[
+                          const SizedBox(height: 10),
+                          _usageRow(
+                            label: "Analyse Yourself",
+                            used: PremiumService.compareUsed,
+                            total: PremiumService.compareLimit,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -386,11 +382,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF111827),
           borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Color(0xFF1F2937)),
           boxShadow: const [
             BoxShadow(
-              color: Colors.black12,
+              color: Color(0x22000000),
               blurRadius: 10,
               spreadRadius: 2,
               offset: Offset(0, 4),
@@ -399,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 34, color: Colors.blueAccent),
+            Icon(icon, size: 36, color: const Color(0xFF38BDF8)),
             const SizedBox(width: 18),
             Expanded(
               child: Column(
@@ -408,19 +405,24 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     title,
                     style: GoogleFonts.poppins(
-                        fontSize: 18, fontWeight: FontWeight.w600),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     subtitle,
                     style: GoogleFonts.poppins(
-                        fontSize: 13, color: Colors.black54),
+                      fontSize: 13,
+                      color: Colors.white70,
+                    ),
                   ),
                 ],
               ),
             ),
             const Icon(Icons.arrow_forward_ios,
-                size: 22, color: Colors.black38),
+                size: 20, color: Colors.black38),
           ],
         ),
       ),
@@ -433,13 +435,12 @@ class _HomeScreenState extends State<HomeScreen> {
     required int total,
   }) {
     final displayTotal = total == 0 ? "-" : total.toString();
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: GoogleFonts.poppins(fontSize: 14),
+          style: GoogleFonts.poppins(fontSize: 14, color: Colors.white70),
         ),
         Text(
           "$used/$displayTotal",
@@ -448,7 +449,7 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.w600,
             color: total == 0
                 ? Colors.grey
-                : (used >= total ? Colors.red : Colors.blueAccent),
+                : (used >= total ? Colors.red : Color(0xFF38BDF8)),
           ),
         ),
       ],
@@ -456,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _premiumBadge() {
-    if (planPrice <= 0) return const SizedBox.shrink();
+    if (!PremiumService.isPremium) return const SizedBox.shrink();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),

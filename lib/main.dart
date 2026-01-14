@@ -1,10 +1,24 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:CrickNova_Ai/splash/splash_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
+import 'package:CrickNova_Ai/config/api_config.dart';
+import 'package:CrickNova_Ai/services/premium_service.dart';
+import 'dart:async';
+import 'package:app_links/app_links.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp();
+  }
+
+  // 🔐 Load premium once at app startup
+  await PremiumService.restoreOnLaunch();
+
   runApp(const MyApp());
 }
 
@@ -22,10 +36,56 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.light;
 
+  late final AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSub;
+
   void setTheme(ThemeMode mode) {
     setState(() {
       _themeMode = mode;
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _initAppLinks();
+  }
+
+  Future<void> _initAppLinks() async {
+    _appLinks = AppLinks();
+
+    // Cold start
+    final Uri? initialUri = await _appLinks.getInitialLink();
+    if (initialUri != null) {
+      await _handleDeepLink(initialUri);
+    }
+
+    // Warm start
+    _linkSub = _appLinks.uriLinkStream.listen((uri) async {
+      await _handleDeepLink(uri);
+    });
+  }
+
+  Future<void> _handleDeepLink(Uri uri) async {
+    debugPrint("🔥 Deep link received: $uri");
+
+    if (uri.scheme == 'cricknova' && uri.host == 'paypal-success') {
+      debugPrint("✅ PayPal success detected");
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await PremiumService.syncFromBackend(user.uid);
+      }
+    }
+
+    if (uri.scheme == 'cricknova' && uri.host == 'paypal-cancel') {
+      debugPrint("❌ PayPal cancelled by user");
+    }
+  }
+
+  @override
+  void dispose() {
+    _linkSub?.cancel();
+    super.dispose();
   }
 
   @override

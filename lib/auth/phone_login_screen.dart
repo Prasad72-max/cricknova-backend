@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../navigation/main_navigation.dart';
+import '../services/premium_service.dart';
 
 class PhoneLoginScreen extends StatefulWidget {
   const PhoneLoginScreen({super.key});
@@ -71,6 +72,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     await prefs.setBool("isLoggedIn", true);
     await prefs.setString("userId", user.uid);
     await prefs.setString("loginType", "phone");
+
+    // 🔁 Restore premium from Firestore after login
+    await PremiumService.syncFromFirestore(user.uid);
 
     if (!mounted) return;
 

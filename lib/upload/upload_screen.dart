@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import '../premium/premium_screen.dart';
+import '../services/premium_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TrajectoryPainter extends CustomPainter {
   final List<dynamic> points;
@@ -29,6 +31,69 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
+  Future<bool> _checkCoachAccess() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    int limit = prefs.getInt("mistake_limit") ?? 0;
+    int used = prefs.getInt("mistakeUsed") ?? 0;
+
+    // 🔁 If app reinstalled OR local usage wiped, restore from backend
+    if (limit <= 0 || used == 0) {
+      try {
+        final userId = prefs.getString("user_id");
+
+        // ❗ Do NOT attempt restore without user_id
+        if (userId == null || userId.isEmpty) {
+          return false;
+        }
+
+        final uri = Uri.parse(
+          "https://cricknova-backend.onrender.com/user/subscription/status",
+        );
+
+        final res = await http.get(
+          uri,
+          headers: {
+            "Accept": "application/json",
+            "X-USER-ID": userId,
+          },
+        );
+
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
+
+          final premium = data["premium"] == true;
+          final backendLimit = data["limits"]?["mistake"];
+          final backendUsed = data["used"]?["mistake"] ?? 0;
+
+          // ✅ Restore from backend (SOURCE OF TRUTH)
+          if (premium && backendLimit != null && backendLimit > 0) {
+            await prefs.setInt("mistake_limit", backendLimit);
+            await prefs.setInt("mistakeUsed", backendUsed);
+            print("RESTORE FROM BACKEND => limit=$backendLimit used=$backendUsed");
+            limit = backendLimit;
+            used = backendUsed;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // ❌ No premium OR limit finished → redirect to Premium
+    if (limit <= 0 || used >= limit) {
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "coach"),
+          ),
+        );
+      }
+      return false;
+    }
+
+    // ✅ Premium active and limit available
+    return true;
+  }
   File? video;
   VideoPlayerController? controller;
 
@@ -46,6 +111,75 @@ class _UploadScreenState extends State<UploadScreen> {
 
   bool showCoach = false;
   String? coachReply;
+
+  void _showVideoRulesThenPick() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "🎥 Video Recording Guidelines",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                "• Record in normal speed (no slow motion)\n"
+                "• Ball must be clearly visible\n"
+                "• Keep camera stable\n"
+                "• Full pitch & batsman visible\n"
+                "• Prefer side-on or behind bowler angle\n"
+                "• Avoid heavy zoom or filters\n\n"
+                "⚠️ AI accuracy depends on video quality.",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurpleAccent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    pickAndUpload();
+                  },
+                  child: const Text(
+                    "Next",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> pickAndUpload() async {
     final picker = ImagePicker();
@@ -179,6 +313,8 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> runCoach() async {
+    final canUse = await _checkCoachAccess();
+    if (!canUse) return;
     if (video == null) {
       setState(() {
         showCoach = true;
@@ -246,6 +382,7 @@ class _UploadScreenState extends State<UploadScreen> {
               data["coach_feedback"] ??
               "No coaching feedback received";
         });
+        await PremiumService.consumeMistake();
       } else {
         setState(() {
           coachReply = "Coach unavailable. Server error.";
@@ -266,16 +403,28 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
+    return WillPopScope(
+      onWillPop: () async {
+        // Always go back to previous screen, never jump to Home
+        Navigator.of(context).pop();
+        return false;
+      },
+      child: Scaffold(
         backgroundColor: Colors.black,
-        title: const Text("Upload Training Video"),
-      ),
-      body: controller == null
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          title: const Text("Upload Training Video"),
+        ),
+        body: controller == null
           ? Center(
               child: GestureDetector(
-                onTap: pickAndUpload,
+                onTap: _showVideoRulesThenPick,
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 40, vertical: 22),
@@ -322,6 +471,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _metric("Speed", speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "--"),
+                        const SizedBox(height: 10),
                         _metric(
                           "Swing",
                           swing != null ? swing!.toUpperCase() : "--",
@@ -350,7 +500,27 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 10),
                         GestureDetector(
-                          onTap: runCoach,
+                          onTap: () {
+                            // ⚡ Show overlay immediately (no delay)
+                            setState(() {
+                              showCoach = true;
+                              coachReply = "Analyzing your batting...\nThis may take 10–15 seconds ⏳";
+                            });
+
+                            // Run access check + coach in background
+                            Future.microtask(() async {
+                              final canUse = await _checkCoachAccess();
+                              if (!canUse) {
+                                if (mounted) {
+                                  setState(() {
+                                    showCoach = false;
+                                  });
+                                }
+                                return;
+                              }
+                              await runCoach();
+                            });
+                          },
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -463,6 +633,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   ),
               ],
             ),
+      ),
     );
   }
 

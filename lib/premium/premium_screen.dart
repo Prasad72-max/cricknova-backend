@@ -1,25 +1,111 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'dart:developer';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/premium_service.dart';
 
 class PremiumScreen extends StatefulWidget {
-  const PremiumScreen({super.key});
+  final String? entrySource;
+
+  const PremiumScreen({
+    super.key,
+    this.entrySource,
+  });
 
   @override
   State<PremiumScreen> createState() => _PremiumScreenState();
 }
 
+class PayPalWebViewScreen extends StatelessWidget {
+  final String approvalUrl;
+  final String orderId;
+  final String planId;
+
+  const PayPalWebViewScreen({
+    super.key,
+    required this.approvalUrl,
+    required this.orderId,
+    required this.planId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("PayPal Checkout"),
+      ),
+      body: WebViewWidget(
+        controller: WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..setNavigationDelegate(
+            NavigationDelegate(
+              onNavigationRequest: (nav) async {
+                if (nav.url.contains("paypal-success")) {
+                  await _capture(context);
+                  return NavigationDecision.prevent;
+                }
+                if (nav.url.contains("paypal-cancel")) {
+                  Navigator.pop(context);
+                  return NavigationDecision.prevent;
+                }
+                return NavigationDecision.navigate;
+              },
+            ),
+          )
+          ..loadRequest(Uri.parse(approvalUrl)),
+      ),
+    );
+  }
+
+  Future<void> _capture(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final res = await http.post(
+      Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        "order_id": orderId,
+        "user_id": user.uid,
+        "plan": planId,
+      }),
+    );
+
+    final data = jsonDecode(res.body);
+
+    if (res.statusCode == 200 && data["status"] == "success") {
+      await PremiumService.syncFromBackend(user.uid);
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🎉 Premium Activated Successfully!"),
+          backgroundColor: Colors.black,
+        ),
+      );
+    }
+  }
+}
+
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   bool isIndia = true;
+  static const bool isPayPalSandbox = true; // set false when going live
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
 
   late Razorpay _razorpay;
   String? _razorpayKey;
   bool _isPaying = false;
+  String? _payingPlan;
 
   // Track selected plan
   String? _lastPlanTitle;
@@ -65,60 +151,100 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
 
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    try {
-      final planCode = _lastPlanPrice == "₹99"
-          ? "IN_99"
-          : _lastPlanPrice == "₹299"
-              ? "IN_299"
-              : _lastPlanPrice == "₹499"
-                  ? "IN_499"
-                  : _lastPlanPrice == "₹1999"
-                      ? "IN_1999"
-                      : null;
-      final verifyRes = await http
-          .post(
-            Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            body: jsonEncode({
-              "razorpay_order_id": response.orderId,
-              "razorpay_payment_id": response.paymentId,
-              "razorpay_signature": response.signature,
-              "user_id": FirebaseAuth.instance.currentUser?.uid,
-              "plan": planCode
-            }),
-          )
-          .timeout(const Duration(seconds: 60));
+void _handlePaymentSuccess(PaymentSuccessResponse response) async {
+  try {
+    final planCode = _lastPlanPrice == "₹99"
+        ? "IN_99"
+        : _lastPlanPrice == "₹299"
+            ? "IN_299"
+            : _lastPlanPrice == "₹499"
+                ? "IN_499"
+                : _lastPlanPrice == "₹1999"
+                    ? "IN_1999"
+                    : null;
 
-      final data = jsonDecode(verifyRes.body);
-      debugPrint("✅ Payment verify response: $data");
+    final verifyRes = await http.post(
+      Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        "razorpay_order_id": response.orderId,
+        "razorpay_payment_id": response.paymentId,
+        "razorpay_signature": response.signature,
+        "user_id": FirebaseAuth.instance.currentUser?.uid,
+        "plan": planCode,
+      }),
+    );
 
-      if (verifyRes.statusCode == 200 && data["status"] == "success") {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Payment verified • Premium activated"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        throw Exception("Verification failed");
+    final data = jsonDecode(verifyRes.body);
+
+    if (verifyRes.statusCode == 200 && data["status"] == "success") {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception("User not logged in");
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Payment verification failed"),
-            backgroundColor: Colors.redAccent,
+
+      // Decide duration based on plan price
+      int durationDays;
+      switch (_lastPlanPrice) {
+        case "₹99":
+          durationDays = 30;
+          break;
+        case "₹299":
+          durationDays = 180;
+          break;
+        case "₹499":
+        case "₹1999":
+          durationDays = 365;
+          break;
+        default:
+          durationDays = 30;
+      }
+
+      await PremiumService.activatePremium(
+        uid: user.uid,
+        planId: planCode ?? "UNKNOWN",
+        durationDays: durationDays,
+        paymentId: response.paymentId ?? "",
+      );
+      // 🔄 Force refresh premium state from backend after Razorpay success
+      await PremiumService.syncFromBackend(user.uid);
+
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.black,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
-        );
-      }
+          content: const Text(
+            "🎉 Premium Activated Successfully!",
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      );
+    } else {
+      _isPaying = false;
+      throw Exception("Payment verification failed");
     }
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Payment verification failed"),
+        backgroundColor: Colors.redAccent,
+      ),
+    );
   }
+  _isPaying = false;
+}
 
   void _handlePaymentError(PaymentFailureResponse response) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -130,6 +256,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       ),
     );
     debugPrint("❌ Razorpay error => code=${response.code}, message=${response.message}");
+    _isPaying = false;
   }
 
   void _handleExternalWallet(ExternalWalletResponse response) {
@@ -143,7 +270,6 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   Future<void> _startRazorpayCheckout(int amountRupees) async {
     if (_isPaying) return;
-    _isPaying = true;
 
     try {
       if (_razorpayKey == null) {
@@ -184,6 +310,14 @@ class _PremiumScreenState extends State<PremiumScreen>
         },
       };
 
+      _isPaying = true;
+      // ⏱️ Safety fallback: unlock UI if Razorpay SDK stalls
+      Future.delayed(const Duration(seconds: 20), () {
+        if (mounted && _isPaying) {
+          debugPrint("⏱️ Razorpay timeout fallback unlock");
+          setState(() => _isPaying = false);
+        }
+      });
       _razorpay.open(options);
     } catch (e, st) {
       log("❌ Payment start failed", error: e, stackTrace: st);
@@ -196,10 +330,169 @@ class _PremiumScreenState extends State<PremiumScreen>
         );
       }
     } finally {
-      _isPaying = false;
+      // Do not reset _isPaying here; let handlers do it
     }
   }
 
+
+  Future<void> _startPayPalCheckout(String planId) async {
+    if (_isPaying) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please login first")),
+      );
+      return;
+    }
+
+    try {
+      setState(() {
+        _isPaying = true;
+        _payingPlan = planId;
+      });
+
+      // Compute amount and planCode
+      double amount;
+      String planCode;
+
+      switch (planId) {
+        case "\$29.99":
+          amount = 29.99;
+          planCode = "INTL_MONTHLY";
+          break;
+        case "\$49.99":
+          amount = 49.99;
+          planCode = "INTL_6M";
+          break;
+        case "\$69.99":
+          amount = 69.99;
+          planCode = "INTL_YEARLY";
+          break;
+        case "\$159.99":
+          amount = 159.99;
+          planCode = "INTL_ULTRA";
+          break;
+        default:
+          throw Exception("Invalid PayPal plan");
+      }
+
+      // 1️⃣ Create PayPal order (backend)
+      final createRes = await http.post(
+        Uri.parse("https://cricknova-backend.onrender.com/paypal/create-order"),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode({
+          "amount_usd": amount,
+          "plan": planCode,
+          "user_id": user.uid,
+        }),
+      );
+
+      if (createRes.statusCode != 200 && createRes.statusCode != 201) {
+        throw Exception("PayPal order creation failed");
+      }
+
+      final createData = jsonDecode(createRes.body);
+
+      if (!createData.containsKey("approval_url") ||
+          createData["approval_url"] == null ||
+          createData["approval_url"].toString().isEmpty) {
+        debugPrint("❌ PayPal response invalid: $createData");
+        throw Exception("PayPal approval URL missing");
+      }
+
+      final String orderId = createData["order_id"];
+      final String approvalUrl = createData["approval_url"];
+
+      debugPrint("🔥 PAYPAL APPROVAL URL = $approvalUrl");
+
+      if (!mounted) return;
+
+      setState(() {
+        _isPaying = false;
+        _payingPlan = null;
+      });
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PayPalWebViewScreen(
+            approvalUrl: approvalUrl,
+            orderId: orderId,
+            planId: planCode,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Unable to open PayPal. Please try again."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        if (mounted) {
+          setState(() {
+            _isPaying = false;
+            _payingPlan = null;
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _confirmPayPalPayment({
+    required String orderId,
+    required String planId,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final res = await http.post(
+        Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode({
+          "order_id": orderId,
+          "user_id": user.uid,
+          "plan": planId,
+        }),
+      );
+
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200 && data["status"] == "success") {
+        await PremiumService.syncFromBackend(user.uid);
+        if (!mounted) return;
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("🎉 Premium Activated Successfully!"),
+            backgroundColor: Colors.black,
+          ),
+        );
+      } else {
+        throw Exception("Capture failed");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Payment not completed on PayPal. If you haven't paid yet, please finish payment first.",
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      _isPaying = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -209,8 +502,11 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   @override
   Widget build(BuildContext context) {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final String? sourceFromArgs = args?['source'] as String?;
     return Scaffold(
-      backgroundColor: const Color(0xFF060606),
+      backgroundColor: const Color(0xFF020A1F),
 
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -219,12 +515,12 @@ class _PremiumScreenState extends State<PremiumScreen>
         title: const Text(
           "Upgrade to Premium",
           style: TextStyle(
-            color: Color(0xFF00A8FF),
+            color: Color(0xFF38BDF8),
             fontWeight: FontWeight.bold,
             fontSize: 22,
             shadows: [
               Shadow(
-                color: Color(0xFF00A8FF),
+                color: Color(0xFF38BDF8),
                 blurRadius: 20,
               ),
             ],
@@ -241,7 +537,7 @@ class _PremiumScreenState extends State<PremiumScreen>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: const Color(0xFF0F172A),
                 borderRadius: BorderRadius.circular(30),
               ),
               child: Row(
@@ -267,7 +563,10 @@ class _PremiumScreenState extends State<PremiumScreen>
             const SizedBox(height: 20),
 
             // INDIA PLANS
-            if (isIndia) ...indiaPlans(),
+            if (isIndia)
+              ...((sourceFromArgs ?? widget.entrySource) == "analyse"
+                  ? indiaCompareOnlyPlans()
+                  : indiaPlans()),
 
             // INTERNATIONAL PLANS
             if (!isIndia) ...internationalPlans(),
@@ -285,10 +584,10 @@ class _PremiumScreenState extends State<PremiumScreen>
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? Colors.blueAccent : Colors.transparent,
+          color: selected ? const Color(0xFF38BDF8) : Colors.transparent,
           borderRadius: BorderRadius.circular(26),
           boxShadow: selected
-              ? [const BoxShadow(color: Colors.blueAccent, blurRadius: 12)]
+              ? [const BoxShadow(color: Color(0xFF38BDF8), blurRadius: 12)]
               : [],
         ),
         child: Center(
@@ -312,7 +611,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "Monthly",
         price: "₹99",
-        tag: "Starter",
+        tag: "Starter ⚡",
         glowColor: Colors.blueAccent,
         features: [
           "200 AI Chats",
@@ -325,6 +624,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "6 Months",
         price: "₹299",
+        tag: "Most Popular 🔥",
         glowColor: Colors.purpleAccent,
         features: [
           "1,200 AI Chats",
@@ -337,6 +637,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "Yearly",
         price: "₹499",
+        tag: "Best Value 💎",
         glowColor: Colors.greenAccent,
         features: [
           "3,000 AI Chats",
@@ -350,7 +651,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       sexyPlanCard(
         title: "ULTRA PRO",
         price: "₹1999",
-        tag: "Best Value 🏆",
+        tag: "Elite Access 👑",
         glowColor: Colors.redAccent,
         features: [
           "1 Year Access",
@@ -364,15 +665,46 @@ class _PremiumScreenState extends State<PremiumScreen>
     ];
   }
 
+  List<Widget> indiaCompareOnlyPlans() {
+    return [
+      sexyPlanCard(
+        title: "Yearly",
+        price: "₹499",
+        tag: "Analyse Pro 🎯",
+        glowColor: Colors.greenAccent,
+        features: [
+          "Analyse Yourself",
+          "50 Video Compare",
+          "3,000 AI Chats",
+          "60 Mistake Detections",
+        ],
+      ),
+      const SizedBox(height: 20),
+      sexyPlanCard(
+        title: "ULTRA PRO",
+        price: "₹1999",
+        tag: "Unlimited Analysis 🚀",
+        glowColor: Colors.redAccent,
+        features: [
+          "Unlimited Analyse",
+          "200 Video Compare",
+          "20,000 AI Chats",
+          "200 Mistake Detections",
+        ],
+      ),
+    ];
+  }
+
   // ---------------- INTERNATIONAL PLANS ----------------
   List<Widget> internationalPlans() {
     return [
       sexyPlanCard(
         title: "Monthly",
         price: "\$29.99",
+        tag: "Starter Pass ⚡",
         glowColor: Colors.blueAccent,
         features: [
-          "300 AI Chats",
+          "200 AI Chats",
           "20 Mistake Detections",
           "Basic Speed • Swing • Spin",
         ],
@@ -380,7 +712,8 @@ class _PremiumScreenState extends State<PremiumScreen>
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "6 Months",
-        price: "\$39.99",
+        price: "\$49.99",
+        tag: "Most Popular 🔥",
         glowColor: Colors.purpleAccent,
         features: [
           "1,200 AI Chats",
@@ -391,7 +724,8 @@ class _PremiumScreenState extends State<PremiumScreen>
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "Yearly",
-        price: "\$59.99",
+        price: "\$69.99",
+        tag: "Best Deal 💰",
         glowColor: Colors.greenAccent,
         features: [
           "1,800 AI Chats",
@@ -402,8 +736,8 @@ class _PremiumScreenState extends State<PremiumScreen>
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "ULTRA INTERNATIONAL",
-        price: "\$149.99",
-        tag: "Unlimited Feel 🌍",
+        price: "\$159.99",
+        tag: "Elite International 🌍",
         glowColor: Colors.redAccent,
         features: [
           "1 Year Access",
@@ -429,9 +763,9 @@ class _PremiumScreenState extends State<PremiumScreen>
       margin: const EdgeInsets.only(bottom: 22),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: const Color(0xFF334155)),
         boxShadow: [
           BoxShadow(color: glowColor.withOpacity(0.4), blurRadius: 24),
         ],
@@ -467,44 +801,41 @@ class _PremiumScreenState extends State<PremiumScreen>
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Text("• $f",
-                  style: const TextStyle(color: Colors.white60, fontSize: 14)),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14)),
             ),
 
           const SizedBox(height: 16),
 
           GestureDetector(
-            onTap: _isPaying
-                ? null
-                : () {
-                    // Track selected plan before payment
-                    _lastPlanTitle = title;
-                    _lastPlanPrice = price;
-                    if (!mounted) return;
-                    final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
-                    if (isIndia) {
-                      debugPrint("🟢 Starting Razorpay payment for ₹${numeric.toInt()}");
-                      _startRazorpayCheckout(numeric.toInt()); // pass RUPEES only
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("International payments handled via PayPal / Payoneer"),
-                          backgroundColor: Colors.blueAccent,
-                        ),
-                      );
-                    }
-                  },
+            onTap: () {
+              if (_isPaying) return;
+
+              // Track selected plan before payment
+              _lastPlanTitle = title;
+              _lastPlanPrice = price;
+              if (!mounted) return;
+              final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+              if (isIndia) {
+                debugPrint("🟢 Starting Razorpay payment for ₹${numeric.toInt()}");
+                _startRazorpayCheckout(numeric.toInt()); // pass RUPEES only
+              } else {
+                debugPrint("🌍 Starting PayPal payment for $price");
+                final planId = price;
+                _startPayPalCheckout(planId);
+              }
+            },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 14),
               decoration: BoxDecoration(
                 gradient: LinearGradient(colors: [
                   glowColor,
-                  glowColor.withOpacity(0.6),
+                  glowColor.withOpacity(0.8),
                 ]),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Center(
-                child: _isPaying
+                child: (_payingPlan == price)
                     ? const SizedBox(
                         height: 22,
                         width: 22,
@@ -594,3 +925,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     );
   }
 }
+
+
+

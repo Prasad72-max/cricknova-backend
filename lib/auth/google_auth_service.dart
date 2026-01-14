@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/premium_service.dart';
 
 class GoogleAuthService {
   static final _auth = FirebaseAuth.instance;
@@ -29,6 +30,9 @@ class GoogleAuthService {
       await prefs.setString("userId", user.uid);
       await prefs.setString("userEmail", user.email ?? "");
       await prefs.setString("userName", user.displayName ?? "Player");
+
+      // 🔐 Sync premium from Firestore (source of truth)
+      await PremiumService.syncFromFirestore(user.uid);
 
       return true;
     } catch (e) {

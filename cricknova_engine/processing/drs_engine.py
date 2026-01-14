@@ -1,104 +1,97 @@
 import numpy as np
 import librosa
 
+# FIXED: Static class variable bug
+ball_near_bat_cache = False  # Global instead of ._ball_near_bat
 
 def ball_near_bat(trajectory):
-    """
-    Returns True only if ball passes through bat zone.
-    This prevents UltraEdge firing when bat is nowhere near.
-    """
-    if not trajectory:
+    """Bat zone detection - FIXED tighter window"""
+    if not trajectory or len(trajectory) < 3:
         return False
-
-    # Conservative bat zone (screen-normalized)
-    # Bat usually around middle-lower region
+    
     for p in trajectory:
-        x = p.get("x", 0)
-        y = p.get("y", 0)
-
-        # Bat zone window
-        if 0.40 <= x <= 0.60 and 0.20 <= y <= 0.45:
+        x, y = p.get("x", 0), p.get("y", 0)
+        # TIGHTER bat zone (realistic swing path)
+        if 0.45 <= x <= 0.55 and 0.25 <= y <= 0.38:  # Was too wide
             return True
-
     return False
 
-
-# -----------------------------
-# ULTRAEDGE
-# -----------------------------
-def detect_ultraedge(video_path):
-    # If ball never came near bat, UltraEdge is impossible
-    if not detect_ultraedge._ball_near_bat:
+def detect_ultraedge(video_path, trajectory):  # FIXED: Pass trajectory
+    global ball_near_bat_cache
+    if not ball_near_bat_cache:  # Use global cache
         return False
+    
     try:
-        audio, sr = librosa.load(video_path, sr=None)
+        audio, sr = librosa.load(video_path, sr=None, duration=5.0)  # Limit duration
     except:
         return False
 
-    # Short-time energy (bat contact is very sharp)
-    frame_len = int(0.01 * sr)   # 10 ms
-    hop_len = int(0.005 * sr)    # 5 ms
-
-    energy = librosa.feature.rms(
-        y=audio,
-        frame_length=frame_len,
-        hop_length=hop_len
-    )[0]
-
-    mean_energy = energy.mean()
-    peak_energy = energy.max()
-
-    # Stronger threshold to avoid pitch/pad false spikes
-    if peak_energy > mean_energy * 10:
+    # FIXED: Better spike detection
+    frame_len = int(0.008 * sr)  # 8ms (sharper)
+    hop_len = int(0.004 * sr)    # 4ms
+    
+    energy = librosa.feature.rms(y=audio, frame_length=frame_len, hop_length=hop_len)[0]
+    
+    # ADAPTIVE threshold (pitch noise varies)
+    mean_energy = np.mean(energy)
+    std_energy = np.std(energy)
+    if len(energy) > 10 and np.max(energy) > mean_energy + 8 * std_energy:
         return True
-
     return False
-
 
 def detect_stump_hit(trajectory):
-    if not trajectory:
-        return False
-
-    # Normalized stump zone (camera independent, conservative)
-    for p in trajectory:
-        x = p.get("x", 0)
-        y = p.get("y", 0)
-
-        if 0.46 <= x <= 0.54 and y <= 0.08:
-            return True
-
-    return False
-
+    """FIXED: Physics-based stump zone + post-pitch only"""
+    if not trajectory or len(trajectory) < 8:
+        return 0.0
+    
+    # Ball MUST pitch first (post-bounce frames only)
+    y_positions = [p.get("y", 0) for p in trajectory]
+    pitch_frame = np.argmax(y_positions)  # Lowest point = bounce
+    post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
+    
+    if len(post_pitch) < 3:
+        return 0.0
+    
+    hits = 0
+    for p in post_pitch:
+        x, y = p.get("x", 0), p.get("y", 0)
+        # REAL stump zone (3 stumps width, top 30% height)
+        if 0.46 <= x <= 0.54 and 0.68 <= y <= 0.92:  # Tighter + higher
+            hits += 1
+    
+    return hits / len(post_pitch)
 
 def analyze_training(data):
     trajectory = data.get("trajectory", [])
     video_path = data.get("video_path")
-
-    near_bat = ball_near_bat(trajectory)
-    detect_ultraedge._ball_near_bat = near_bat
-
-    ultraedge = detect_ultraedge(video_path) if (video_path and near_bat) else False
-    hits_stumps = detect_stump_hit(trajectory)
-
+    
+    global ball_near_bat_cache
+    ball_near_bat_cache = ball_near_bat(trajectory)  # FIXED cache
+    
+    # FIXED UltraEdge logic
+    ultraedge = bool(video_path and ball_near_bat_cache and detect_ultraedge(video_path, trajectory))
+    stump_confidence = detect_stump_hit(trajectory)
+    
+    # PHYSICS-BASED DECISION TREE (TV DRS logic)
     if ultraedge:
         decision = "NOT OUT"
-        reason = "Bat involved (UltraEdge detected)"
-    elif hits_stumps:
+        reason = "UltraEdge: Bat first contact"
+    elif stump_confidence >= 0.70:  # Raised threshold
         decision = "OUT"
-        reason = "Ball hit the stumps"
+        reason = "Plumb LBW - stumps hit"
+    elif stump_confidence >= 0.45:
+        decision = "UMPIRE'S CALL"
+        reason = "Clipping stumps - marginal"
     else:
         decision = "NOT OUT"
-        reason = "Ball missed stumps"
-
+        reason = "Missing stumps outside line"
+    
     return {
-        "speed_kmph": data.get("speed_kmph"),
-        "swing": data.get("swing"),
-        "spin": data.get("spin"),
-        "trajectory": trajectory,
         "drs": {
             "ultraedge": ultraedge,
-            "hits_stumps": hits_stumps,
+            "stump_confidence": round(stump_confidence, 2),
             "decision": decision,
-            "reason": reason
+            "reason": reason,
+            "pitch_frame": np.argmax([p.get("y", 0) for p in trajectory]) if trajectory else 0
         }
     }

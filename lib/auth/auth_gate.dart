@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/premium_service.dart';
 import '../navigation/main_navigation.dart';
 import 'login_screen.dart';
 
@@ -24,10 +26,27 @@ class _AuthGateState extends State<AuthGate> {
     await Future.delayed(const Duration(seconds: 2));
 
     final prefs = await SharedPreferences.getInstance();
+
+    final loggedIn = prefs.getBool("isLoggedIn") ?? false;
+    final storedUserName = prefs.getString("userName") ?? "Player";
+
+    if (loggedIn) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        // 🔐 Force refresh Firebase ID token
+        final idToken = await user.getIdToken(true);
+
+        // 💾 Store token globally for API usage
+        await prefs.setString("firebase_id_token", idToken);
+
+        // 🔄 Sync premium status from backend / Firestore
+        await PremiumService.syncFromFirestore(user.uid);
+      }
+    }
+
     setState(() {
-      // ✅ FIXED: keys now MATCH LoginScreen
-      isLoggedIn = prefs.getBool("isLoggedIn") ?? false;
-      userId = prefs.getString("userName") ?? "Player";
+      isLoggedIn = loggedIn;
+      userId = storedUserName;
     });
   }
 

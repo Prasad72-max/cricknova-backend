@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
+import '../services/premium_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -22,8 +24,18 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 3));
 
     final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool("isLoggedIn") ?? false;
-    final userName = prefs.getString("userName") ?? "Player";
+    final isLoggedIn = prefs.getBool("is_logged_in") ?? false;
+    final userName = prefs.getString("user_name") ?? "Player";
+
+    // 🔄 Restore premium on every app launch
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        await PremiumService.restoreOnLaunch();
+      } catch (_) {
+        // fail-safe: do not block app if restore fails
+      }
+    }
 
     if (!mounted) return;
 

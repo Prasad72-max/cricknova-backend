@@ -4,6 +4,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../premium/premium_screen.dart';
 import '../auth/login_screen.dart';
 
@@ -19,6 +21,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController dobController = TextEditingController();
   final TextEditingController battingRoleController = TextEditingController();
   final TextEditingController bowlingRoleController = TextEditingController();
+
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  String? userEmail;
 
   File? profileImage;
   final ImagePicker _picker = ImagePicker();
@@ -58,6 +64,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (imagePath != null && imagePath.isNotEmpty) {
       profileImage = File(imagePath);
     }
+    final user = FirebaseAuth.instance.currentUser;
+    userEmail = user?.email;
     setState(() {});
   }
 
@@ -160,6 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF0B0E11),
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -168,44 +177,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 70, 20, 40),
               decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF050A1E),
-                    Color(0xFF0E1A36),
-                    Color(0xFF1E3A8A),
-                    Color(0xFF3B82F6),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                color: Color(0xFF0F131A),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(20),
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(40)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.blueAccent,
-                    blurRadius: 40,
-                    offset: Offset(0, 8),
-                  )
-                ],
               ),
               child: Stack(
                 children: [
-                  Positioned(
-                    right: -20,
-                    top: -15,
-                    child: Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            Colors.blueAccent.withOpacity(0.7),
-                            Colors.transparent
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  // Removed glowing circle Positioned widget for a cleaner look.
                   Column(
                     children: [
                       GestureDetector(
@@ -215,14 +194,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           width: 110,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.blueAccent.withOpacity(0.7),
-                                blurRadius: 25,
-                                spreadRadius: 2,
-                              ),
-                            ],
+                            color: const Color(0xFF020617),
+                            border: Border.all(color: Color(0xFF3B82F6), width: 1.5),
                           ),
                           child: ClipOval(
                             child: profileImage != null
@@ -240,20 +213,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Text(
                         "My Profile",
                         style: GoogleFonts.poppins(
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                          color: Colors.white,
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          shadows: const [
-                            Shadow(
-                              blurRadius: 18,
-                              color: Colors.blueAccent,
-                            ),
-                          ],
+                          // Remove purple shadow for darker look
                         ),
                       ),
                       ShaderMask(
                         shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Colors.white70, Colors.blueAccent],
+                          colors: [Colors.white70, Colors.white70],
                         ).createShader(bounds),
                         child: Text(
                           "Manage your cricket identity",
@@ -263,6 +231,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                         ),
                       ),
+                      if (userEmail != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            userEmail!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: Colors.white54,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -278,15 +257,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   TextField(
                     controller: nameController,
+                    style: const TextStyle(color: Colors.white),
                     decoration: inputStyle("Full Name"),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: dobController,
+                    style: const TextStyle(color: Colors.white),
                     decoration: inputStyle("Date of Birth (DD/MM/YYYY)"),
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    style: const TextStyle(color: Colors.white),
                     value: battingRoleController.text.isNotEmpty
                         ? battingRoleController.text
                         : null,
@@ -303,6 +285,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    style: const TextStyle(color: Colors.white),
                     value: bowlingRoleController.text.isNotEmpty
                         ? bowlingRoleController.text
                         : null,
@@ -333,9 +316,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: "Explore Premium",
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.workspace_premium, color: Colors.amber),
-                title: const Text("See all premium benefits"),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 18),
+                leading: const Icon(Icons.workspace_premium, color: Color(0xFFFFD700)),
+                title: const Text("See all premium benefits", style: TextStyle(color: Colors.white)),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 18, color: Color(0xFF3B82F6)),
                 onTap: showPremiumPopup,
               ),
             ),
@@ -345,10 +328,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: "Account",
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text("Log Out"),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 18),
+                leading: const Icon(Icons.logout, color: Color(0xFFEF4444)),
+                title: const Text("Log Out", style: TextStyle(color: Colors.white)),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 18, color: Color(0xFF3B82F6)),
                 onTap: () async {
+                  try {
+                    // Firebase sign out
+                    await FirebaseAuth.instance.signOut();
+
+                    // Google sign out + disconnect to force account chooser
+                    await _googleSignIn.signOut();
+                    await _googleSignIn.disconnect();
+                  } catch (_) {}
+
                   final prefs = await SharedPreferences.getInstance();
                   await prefs.clear();
 
@@ -367,6 +359,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
             const SizedBox(height: 30),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                "⚠️ AI Disclaimer:\nAll AI-generated insights, speed estimates, DRS decisions, and coaching feedback are provided for training and educational purposes only. Results may vary based on video quality, camera angle, lighting, and frame rate. CrickNova AI does not claim official match accuracy or replacement of professional umpires or coaches.",
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: Colors.white54,
+                  height: 1.5,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -380,23 +385,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.black54
-                  : Colors.black12,
-              blurRadius: 10,
-            ),
-          ],
+          color: const Color(0xFF11151C),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white12),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
                 style: GoogleFonts.poppins(
-                    fontSize: 18, fontWeight: FontWeight.w600)),
+                    fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white70)),
             const SizedBox(height: 10),
             child,
           ],
@@ -409,12 +407,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: Theme.of(context).brightness == Brightness.dark
-          ? Colors.white10
-          : Colors.grey[100],
-      labelStyle: TextStyle(
-        color: Theme.of(context).textTheme.bodyMedium?.color,
-      ),
+      fillColor: const Color(0xFF0F131A),
+      labelStyle: const TextStyle(color: Colors.white70),
+      floatingLabelStyle: const TextStyle(color: Colors.white),
+      hintStyle: const TextStyle(color: Colors.white54),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
         borderSide: BorderSide.none,
@@ -422,13 +418,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget elevatedButton(String text, Function onTap, {Color color = Colors.blue}) {
+  Widget elevatedButton(String text, Function onTap, {Color? color}) {
     return SizedBox(
       width: double.infinity,
       height: 50,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: color,
+          backgroundColor: color ?? const Color(0xFF3B82F6),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         ),
         onPressed: () => onTap(),
@@ -440,9 +436,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget socialButton(IconData icon, String text, Function onTap) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, size: 28),
+      leading: Icon(icon, size: 28, color: const Color(0xFF3B82F6)),
       title: Text(text, style: const TextStyle(fontSize: 14)),
-      trailing: const Icon(Icons.chevron_right, size: 18),
+      trailing: const Icon(Icons.chevron_right, size: 18, color: Color(0xFF3B82F6)),
       onTap: () => onTap(),
     );
   }
@@ -458,7 +454,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_library),
+                leading: const Icon(Icons.photo_library, color: Color(0xFF3B82F6)),
                 title: const Text("Upload from Gallery"),
                 onTap: () async {
                   Navigator.pop(context);
@@ -472,7 +468,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.camera_alt),
+                leading: const Icon(Icons.camera_alt, color: Color(0xFF3B82F6)),
                 title: const Text("Open Camera"),
                 onTap: () async {
                   Navigator.pop(context);
@@ -487,7 +483,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               if (profileImage != null)
                 ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
+                  leading: const Icon(Icons.delete, color: Color(0xFFEF4444)),
                   title: const Text("Remove Profile Photo"),
                   onTap: () async {
                     Navigator.pop(context);

@@ -89,3 +89,4 @@ npm-debug.log*
 # =========================
 windows/
 openai>=1.0.0
+firebase_key.json

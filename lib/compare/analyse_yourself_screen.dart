@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
+import '../premium/premium_screen.dart';
+import '../services/premium_service.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   const AnalyseYourselfScreen({super.key});
@@ -13,6 +15,7 @@ class AnalyseYourselfScreen extends StatefulWidget {
 }
 
 class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
+
   File? leftVideo;
   File? rightVideo;
 
@@ -23,6 +26,11 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
   bool comparing = false;
   String? diffResult;
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   Future<void> pickVideo({required bool isLeft}) async {
     final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
@@ -52,6 +60,31 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   }
 
   Future<void> runCompare() async {
+    if (!PremiumService.isPremium) {
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "compare"),
+          ),
+        );
+      }
+      return;
+    }
+
+    final remaining = await PremiumService.getCompareLimit();
+    if (remaining <= 0) {
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "compare"),
+          ),
+        );
+      }
+      return;
+    }
+
     if (leftVideo == null || rightVideo == null) return;
 
     setState(() {
@@ -74,6 +107,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         setState(() {
           diffResult = data["difference"] ?? "No difference returned.";
         });
+        await PremiumService.consumeCompare();
       } else {
         setState(() {
           diffResult = "Compare failed (${response.statusCode}). Server error.";

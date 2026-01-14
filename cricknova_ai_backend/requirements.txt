@@ -5,3 +5,5 @@ python-multipart
 numpy
 opencv-python-headless
 razorpay
+google-cloud-firestore
+google-cloud-core

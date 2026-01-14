@@ -1,11 +1,22 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from datetime import datetime, timedelta
+from google.cloud import firestore
 
 # 🔐 Backend is the single source of truth for subscription & limits.
-# FREE users must NEVER consume AI usage.
-# Frontend flags are not trusted.
+# Uses Firestore for persistence (NO in-memory loss)
 
 router = APIRouter()
+_db = None
+
+def get_db():
+    global _db
+    if _db is None:
+        try:
+            _db = firestore.Client()
+        except Exception as e:
+            print("❌ Firestore init failed:", e)
+            return None
+    return _db
 
 # -----------------------------
 # PLAN CONFIG (single source)
@@ -17,25 +28,25 @@ PLANS = {
         "compare_limit": 0,
         "duration_days": 0,
     },
-    "IN_99": {   # Monthly
+    "IN_99": {
         "chat_limit": 200,
         "mistake_limit": 15,
         "compare_limit": 0,
         "duration_days": 30,
     },
-    "IN_299": {  # 6 months
+    "IN_299": {
         "chat_limit": 1200,
         "mistake_limit": 30,
         "compare_limit": 0,
         "duration_days": 180,
     },
-    "IN_499": {  # Yearly
+    "IN_499": {
         "chat_limit": 3000,
         "mistake_limit": 60,
         "compare_limit": 50,
         "duration_days": 365,
     },
-    "IN_1999": { # Yearly Pro
+    "IN_1999": {
         "chat_limit": 20000,
         "mistake_limit": 200,
         "compare_limit": 200,
@@ -44,36 +55,68 @@ PLANS = {
 }
 
 # -----------------------------
-# TEMP IN-MEMORY STORE
-# (Replace later with DB)
+# FIRESTORE HELPERS
 # -----------------------------
-USERS = {}
+def user_ref(user_id: str):
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=503, detail="DATABASE_UNAVAILABLE")
+    return db.collection("subscriptions").document(user_id)
 
 def get_user(user_id: str):
-    if user_id not in USERS:
-        USERS[user_id] = {
+    ref = user_ref(user_id)
+    snap = ref.get()
+
+    if not snap.exists:
+        data = {
             "plan": "FREE",
             "chat_used": 0,
             "mistake_used": 0,
             "compare_used": 0,
             "expiry": None,
+            "updated_at": datetime.utcnow().isoformat(),
         }
-    return USERS[user_id]
+        ref.set(data)
+        return data
+
+    return snap.to_dict()
+
+def save_user(user_id: str, data: dict):
+    data["updated_at"] = datetime.utcnow().isoformat()
+    user_ref(user_id).set(data)
 
 # -----------------------------
 # SUBSCRIPTION STATUS
 # -----------------------------
-@router.get("/subscription/status")
-def subscription_status(user_id: str):
+@router.get("/subscription")
+def subscription_status(request: Request):
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
     user = get_user(user_id)
     plan_cfg = PLANS[user["plan"]]
 
+    # auto-expire
+    if user["expiry"]:
+        if datetime.utcnow() >= datetime.fromisoformat(user["expiry"]):
+            user["plan"] = "FREE"
+            user["expiry"] = None
+            save_user(user_id, user)
+
     return {
-        "isPremium": user["plan"] != "FREE",
+        "premium": user["plan"] != "FREE",
         "plan": user["plan"],
-        "chat_remaining": max(plan_cfg["chat_limit"] - user["chat_used"], 0),
-        "mistake_remaining": max(plan_cfg["mistake_limit"] - user["mistake_used"], 0),
-        "compare_remaining": max(plan_cfg["compare_limit"] - user["compare_used"], 0),
+        "limits": {
+            "chat": plan_cfg["chat_limit"],
+            "mistake": plan_cfg["mistake_limit"],
+            "compare": plan_cfg["compare_limit"],
+        },
+        "used": {
+            "chat": user["chat_used"],
+            "mistake": user["mistake_used"],
+            "compare": user["compare_used"],
+        },
         "expiry": user["expiry"],
     }
 
@@ -81,13 +124,17 @@ def subscription_status(user_id: str):
 # ACTIVATE PLAN (after payment)
 # -----------------------------
 @router.post("/subscription/activate")
-def activate_plan(user_id: str, plan: str):
+def activate_plan(request: Request, plan: str):
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
     if plan not in PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")
 
     duration = PLANS[plan]["duration_days"]
 
-    USERS[user_id] = {
+    data = {
         "plan": plan,
         "chat_used": 0,
         "mistake_used": 0,
@@ -95,64 +142,55 @@ def activate_plan(user_id: str, plan: str):
         "expiry": (datetime.utcnow() + timedelta(days=duration)).isoformat() if duration > 0 else None,
     }
 
+    save_user(user_id, data)
     return {"status": "activated", "plan": plan}
 
 # -----------------------------
 # USAGE ENDPOINTS
 # -----------------------------
-@router.post("/use/chat")
-def use_chat(user_id: str):
+def _check_access(user_id: str, key: str):
     user = get_user(user_id)
 
-    # 🚫 HARD BLOCK: FREE users cannot use AI
     if user["plan"] == "FREE":
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
 
-    if user["expiry"] is not None:
+    if user["expiry"]:
         if datetime.utcnow() >= datetime.fromisoformat(user["expiry"]):
+            user["plan"] = "FREE"
+            user["expiry"] = None
+            save_user(user_id, user)
             raise HTTPException(status_code=403, detail="PLAN_EXPIRED")
-    limit = PLANS[user["plan"]]["chat_limit"]
 
-    if user["chat_used"] >= limit:
-        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
+    limit = PLANS[user["plan"]][key + "_limit"]
+    used_key = key + "_used"
 
-    user["chat_used"] += 1
-    return {"remaining": limit - user["chat_used"]}
+    if user[used_key] >= limit:
+        raise HTTPException(status_code=403, detail=f"{key.upper()}_LIMIT_REACHED")
+
+    user[used_key] += 1
+    save_user(user_id, user)
+
+    return {"remaining": limit - user[used_key]}
+
+@router.post("/use/chat")
+def use_chat(request: Request):
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    return _check_access(user_id, "chat")
+
 
 @router.post("/use/mistake")
-def use_mistake(user_id: str):
-    user = get_user(user_id)
+def use_mistake(request: Request):
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    return _check_access(user_id, "mistake")
 
-    # 🚫 HARD BLOCK: FREE users cannot use AI
-    if user["plan"] == "FREE":
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-
-    if user["expiry"] is not None:
-        if datetime.utcnow() >= datetime.fromisoformat(user["expiry"]):
-            raise HTTPException(status_code=403, detail="PLAN_EXPIRED")
-    limit = PLANS[user["plan"]]["mistake_limit"]
-
-    if user["mistake_used"] >= limit:
-        raise HTTPException(status_code=403, detail="MISTAKE_LIMIT_REACHED")
-
-    user["mistake_used"] += 1
-    return {"remaining": limit - user["mistake_used"]}
 
 @router.post("/use/compare")
-def use_compare(user_id: str):
-    user = get_user(user_id)
-
-    # 🚫 HARD BLOCK: FREE users cannot use AI
-    if user["plan"] == "FREE":
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-
-    if user["expiry"] is not None:
-        if datetime.utcnow() >= datetime.fromisoformat(user["expiry"]):
-            raise HTTPException(status_code=403, detail="PLAN_EXPIRED")
-    limit = PLANS[user["plan"]]["compare_limit"]
-
-    if user["compare_used"] >= limit:
-        raise HTTPException(status_code=403, detail="COMPARE_LIMIT_REACHED")
-
-    user["compare_used"] += 1
-    return {"remaining": limit - user["compare_used"]}
+def use_compare(request: Request):
+    user_id = request.headers.get("X-USER-ID")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    return _check_access(user_id, "compare")

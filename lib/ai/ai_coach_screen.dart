@@ -4,8 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
+import '../services/premium_service.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? context;
@@ -29,19 +31,24 @@ class _AICoachScreenState extends State<AICoachScreen> {
   int currentChatIndex = 0;
   List<Map<String, dynamic>> chats = [];
 
-  int usedChats = 0;
-  int chatLimit = 0;
-  bool limitLoading = true;
+  // Helper to block free users after paywall
+  bool _blocked = false;
 
   @override
   void initState() {
     super.initState();
-    uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
-    loadChats();
 
-    loadChatLimit();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!PremiumService.isLoaded) {
+        await PremiumService.restoreOnLaunch();
+      }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // TEMP: allow AI access even if not premium (payment debug mode)
+      // Premium enforcement handled server-side for now
+
+      uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
+      await loadChats();
+
       if (widget.initialQuestion != null &&
           widget.initialQuestion!.isNotEmpty) {
         controller.text = widget.initialQuestion!;
@@ -73,14 +80,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
   }
 
-  Future<void> loadChatLimit() async {
-    final prefs = await SharedPreferences.getInstance();
-    chatLimit = prefs.getInt("chatLimit") ?? 0;
-    usedChats = prefs.getInt("chatUsed") ?? 0;
-    limitLoading = false;
-    setState(() {});
-  }
-
   void createNewChat() {
     chats.insert(0, {
       "title": "New Chat",
@@ -102,7 +101,16 @@ class _AICoachScreenState extends State<AICoachScreen> {
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
-    if (!limitLoading && chatLimit > 0 && usedChats >= chatLimit) {
+    final remaining = await PremiumService.getChatLimit();
+
+    // 🛡️ Safety: if limits look empty right after reinstall,
+    // force restore once AFTER premium data is loaded
+    if (remaining <= 0 && PremiumService.isLoaded) {
+      await PremiumService.restoreOnLaunch();
+    }
+
+    final refreshedRemaining = await PremiumService.getChatLimit();
+    if (refreshedRemaining <= 0) {
       if (mounted) {
         showDialog(
           context: context,
@@ -145,7 +153,11 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
 
     try {
-      final userId = "demo@cricknova.ai";
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception("User not authenticated");
+      }
+      final idToken = await user.getIdToken(true);
 
       final response = await http
           .post(
@@ -153,36 +165,61 @@ class _AICoachScreenState extends State<AICoachScreen> {
             headers: {
               "Content-Type": "application/json",
               "Accept": "application/json",
+              "Authorization": "Bearer $idToken",
+              "X-USER-ID": user.uid,
             },
             body: jsonEncode({
               "message": userMessage,
-              "user_id": userId,
             }),
           )
           .timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 403) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const PremiumScreen()),
-          );
-        }
+      if (response.statusCode == 401) {
+        chats[currentChatIndex]["messages"].add({
+          "role": "coach",
+          "text": "Session expired. Please reopen the app or login again.",
+        });
         loading = false;
+        saveChats();
         setState(() {});
         return;
       }
 
       String coachText;
+
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         coachText = decoded["reply"]?.toString() ??
             decoded["coach_feedback"]?.toString() ??
             "No reply received";
-        usedChats++;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt("chatUsed", usedChats);
-      } else {
+        await PremiumService.consumeChat();
+      } 
+      else if (response.statusCode == 403) {
+        loading = false;
+        saveChats();
+        setState(() {});
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PremiumScreen()),
+          );
+        }
+        return;
+      }
+      else if (response.statusCode == 404 &&
+               response.body.toLowerCase().contains("premium")) {
+        loading = false;
+        saveChats();
+        setState(() {});
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PremiumScreen()),
+          );
+        }
+        return;
+      }
+      else {
         coachText =
             "Server error ${response.statusCode}: ${response.body}";
       }
@@ -191,10 +228,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
         "role": "coach",
         "text": coachText,
       });
-    } catch (_) {
+    } catch (e) {
       chats[currentChatIndex]["messages"].add({
         "role": "coach",
-        "text": "AI Coach not reachable. Check server & WiFi.",
+        "text": "Session expired or authentication failed. Please login again.",
       });
     }
 
@@ -237,8 +274,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
         padding: const EdgeInsets.all(14),
         constraints: const BoxConstraints(maxWidth: 320),
         decoration: BoxDecoration(
-          color:
-              isUser ? const Color(0xFF2563EB) : const Color(0xFF16A34A),
+          color: isUser
+              ? const Color(0xFF1E293B)  // dark slate (user)
+              : const Color(0xFF0F766E), // muted cyan (coach)
           borderRadius: BorderRadius.circular(18),
         ),
         child: Text(
@@ -269,7 +307,13 @@ class _AICoachScreenState extends State<AICoachScreen> {
                 return ListTile(
                   title: Text(
                     chats[i]["title"],
-                    style: const TextStyle(color: Colors.white),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   selected: i == currentChatIndex,
                   onTap: () {
@@ -300,6 +344,13 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🔒 HARD BLOCK FREE USERS BEFORE UI RENDERS
+    if (!PremiumService.isLoaded) {
+      return const SizedBox.shrink();
+    }
+
+    // TEMP: do not block UI for non-premium during debug
+
     return Scaffold(
       drawer: buildHistoryDrawer(),
       backgroundColor: const Color(0xFF020617),
@@ -308,7 +359,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
         elevation: 0,
         title: const Text(
           "CrickNova AI Coach",
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(
+            color: Color(0xFFE5E7EB),
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       body: Column(
@@ -336,7 +390,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                   TyperAnimatedText(
                     "CrickNova analysing...",
                     textStyle:
-                        const TextStyle(color: Colors.white70),
+                        const TextStyle(color: Color(0xFF94A3B8)),
                   )
                 ],
               ),
@@ -346,16 +400,16 @@ class _AICoachScreenState extends State<AICoachScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: controller,
-                    style:
-                        const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText:
-                          "Ask CrickNova AI Coach...",
-                      hintStyle:
-                          TextStyle(color: Colors.white54),
-                      border: InputBorder.none,
+                  child: AbsorbPointer(
+                    absorbing: false,
+                    child: TextField(
+                      controller: controller,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        hintText: "Ask CrickNova AI Coach...",
+                        hintStyle: TextStyle(color: Color(0xFF64748B)),
+                        border: InputBorder.none,
+                      ),
                     ),
                   ),
                 ),
@@ -371,8 +425,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                   onPressed: toggleMic,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.send,
-                      color: Colors.white),
+                  icon: const Icon(Icons.send, color: Colors.white),
                   onPressed: sendMessage,
                 ),
               ],

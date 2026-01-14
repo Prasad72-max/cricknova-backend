@@ -3,14 +3,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../navigation/main_navigation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/premium_service.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
   Future<void> signInWithGoogle(BuildContext context) async {
     try {
+      // Show blocking loader
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
       final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return;
+      if (googleUser == null) {
+        Navigator.pop(context);
+        return;
+      }
 
       final googleAuth = await googleUser.authentication;
 
@@ -23,7 +34,10 @@ class LoginScreen extends StatelessWidget {
           await FirebaseAuth.instance.signInWithCredential(credential);
 
       final user = userCredential.user;
-      if (user == null) return;
+      if (user == null) {
+        Navigator.pop(context);
+        return;
+      }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool("is_logged_in", true);
@@ -31,6 +45,14 @@ class LoginScreen extends StatelessWidget {
       await prefs.setString("login_type", "google");
       await prefs.setString("user_name", user.displayName ?? "Player");
 
+      // 🔥 HARD BLOCK: backend is source of truth
+      // This MUST complete before Home is shown
+      await PremiumService.restoreOnLaunch();
+
+      // Close loader
+      Navigator.pop(context);
+
+      // Navigate only AFTER premium sync
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -40,8 +62,9 @@ class LoginScreen extends StatelessWidget {
         (route) => false,
       );
     } catch (e) {
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           backgroundColor: Colors.redAccent,
           content: Text("Google login failed"),
         ),

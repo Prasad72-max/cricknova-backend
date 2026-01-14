@@ -6,6 +6,12 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+configurations.all {
+    resolutionStrategy {
+        force("com.razorpay:checkout:1.6.38")
+    }
+}
+
 android {
     namespace = "com.cricknova.ai"
     compileSdk = flutter.compileSdkVersion
@@ -46,6 +52,9 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-analytics")
+
+    // ✅ Force single compatible Razorpay SDK to avoid AnalyticsUtil crash
+    implementation("com.razorpay:checkout:1.6.38")
 }
 
 flutter {
