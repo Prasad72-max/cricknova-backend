@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from fastapi import Body
 from dotenv import load_dotenv
 load_dotenv()
-from paypal_service import router as paypal_router
+from cricknova_ai_backend.paypal_service import router as paypal_router
 
 try:
     from subscriptions_store import get_current_user
