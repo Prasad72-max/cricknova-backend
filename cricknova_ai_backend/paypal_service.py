@@ -3,7 +3,7 @@ import requests
 from dotenv import load_dotenv
 
 from fastapi import APIRouter, HTTPException
-from subscriptions_store import create_or_update_subscription
+from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
 load_dotenv()
 
