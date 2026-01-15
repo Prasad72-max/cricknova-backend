@@ -6,4 +6,4 @@ numpy
 opencv-python-headless
 razorpay
 openai>=1.0.0
-paypal-checkout-serversdk
+paypal-checkout-serversdk==1.0.3
