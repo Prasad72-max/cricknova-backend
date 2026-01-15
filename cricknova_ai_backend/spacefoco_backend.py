@@ -1,20 +1,11 @@
-from fastapi import FastAPI
-app = FastAPI()
-
-@app.get("/__alive")
-def alive():
-    return {
-        "alive": True,
-        "paypal": True,
-        "file": "spacefoco_backend.py"
-    }
+print("🔥🔥🔥 RUNNING MAIN.PY (NUCLEAR FIX ACTIVE) 🔥🔥🔥")
 import os
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import UploadFile, File, HTTPException, Request
 from cricknova_engine.processing.routes.payment_verify import router as subscription_router
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
@@ -25,12 +16,16 @@ import cv2
 import sys
 from pydantic import BaseModel
 from fastapi import Body
-from dotenv import load_dotenv
-load_dotenv()
+from fastapi import FastAPI
+
+app = FastAPI(
+    title="CrickNova AI Backend",
+    version="1.0.0"
+)
 from cricknova_ai_backend.paypal_service import router as paypal_router
 
 try:
-    from subscriptions_store import get_current_user
+    from cricknova_ai_backend.subscriptions_store import get_current_user
 except ImportError:
     def get_current_user(authorization: str | None = None):
         if not authorization:
@@ -77,7 +72,7 @@ from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
 import time
 
 # Subscription management (external store)
-from subscriptions_store import (
+from cricknova_ai_backend.subscriptions_store import (
     get_subscription,
     is_subscription_active,
     increment_chat,
@@ -181,7 +176,7 @@ async def paypal_capture(req: PayPalCaptureRequest):
     if response.result.status != "COMPLETED":
         raise HTTPException(status_code=400, detail="Payment not completed")
 
-    from subscriptions_store import create_or_update_subscription, get_subscription
+    from cricknova_ai_backend.subscriptions_store import create_or_update_subscription, get_subscription
 
     capture_id = response.result.purchase_units[0].payments.captures[0].id
 
@@ -254,6 +249,7 @@ def root():
     }
 
 
+
 # -----------------------------
 # CORS
 # -----------------------------
@@ -264,7 +260,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 # -----------------------------
@@ -371,7 +366,7 @@ async def verify_payment(req: VerifyPaymentRequest):
     if not req.user_id or not req.plan:
         raise HTTPException(status_code=400, detail="Missing user_id or plan")
 
-    from subscriptions_store import create_or_update_subscription
+    from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
     create_or_update_subscription(
         user_id=req.user_id,
@@ -380,7 +375,7 @@ async def verify_payment(req: VerifyPaymentRequest):
         order_id=req.razorpay_order_id
     )
 
-    from subscriptions_store import get_subscription
+    from cricknova_ai_backend.subscriptions_store import get_subscription
 
     sub = get_subscription(req.user_id)
 
@@ -669,7 +664,7 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from subscriptions_store import get_subscription, is_subscription_active, increment_mistake
+    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_mistake
     sub = get_subscription(user_id)
 
     # HARD BLOCK: no subscription record or inactive subscription
@@ -768,7 +763,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from subscriptions_store import get_subscription, is_subscription_active, increment_chat
+    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
     if not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
@@ -832,7 +827,7 @@ async def ai_coach_diff(
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from subscriptions_store import get_subscription, is_subscription_active, increment_compare
+    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_compare
     sub = get_subscription(user_id)
     if not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
