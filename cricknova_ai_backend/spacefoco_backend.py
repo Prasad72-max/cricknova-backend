@@ -1,10 +1,7 @@
-print("🔥🔥🔥 RUNNING MAIN.PY (NUCLEAR FIX ACTIVE) 🔥🔥🔥")
+import os
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
 import os
 import sys
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 from fastapi import UploadFile, File, HTTPException, Request
 from cricknova_engine.processing.routes.payment_verify import router as subscription_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -515,11 +512,20 @@ def calculate_spin_real(ball_positions):
 @app.post("/training/analyze")
 async def analyze_training_video(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
+        data = await file.read()
+        tmp.write(data)
+        tmp.flush()
+        os.fsync(tmp.fileno())
         video_path = tmp.name
 
     try:
         ball_positions = track_ball_positions(video_path)
+
+        if not ball_positions or len(ball_positions) < 5:
+            raise HTTPException(
+                status_code=500,
+                detail="AI_PIPELINE_FAILED_TRACKING"
+            )
 
         # Use ONLY the first ball delivery (no best-ball logic)
         if len(ball_positions) > 30:
@@ -677,7 +683,10 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         raise HTTPException(status_code=403, detail="MISTAKE_LIMIT_REACHED")
     increment_mistake(user_id)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
+        data = await file.read()
+        tmp.write(data)
+        tmp.flush()
+        os.fsync(tmp.fileno())
         video_path = tmp.name
 
     try:
@@ -837,7 +846,10 @@ async def ai_coach_diff(
 
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        tmp.write(file.file.read())
+        data = file.file.read()
+        tmp.write(data)
+        tmp.flush()
+        os.fsync(tmp.fileno())
         tmp.close()
         return tmp.name
 
@@ -914,7 +926,10 @@ Keep it short, clear, and professional.
 @app.post("/live/analyze")
 async def analyze_live_match_video(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
+        data = await file.read()
+        tmp.write(data)
+        tmp.flush()
+        os.fsync(tmp.fileno())
         video_path = tmp.name
 
     try:
@@ -1046,7 +1061,10 @@ def ball_near_bat_zone(ball_positions, frame_width, frame_height):
 @app.post("/training/drs")
 async def drs_review(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
+        data = await file.read()
+        tmp.write(data)
+        tmp.flush()
+        os.fsync(tmp.fileno())
         video_path = tmp.name
 
     try:
