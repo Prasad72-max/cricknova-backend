@@ -92,3 +92,8 @@ openai>=1.0.0
 firebase_key.json
 # Firebase secrets
 cricknova_ai_backend/*.json
+__pycache__/
+*.pyc
+.firebase/
+*.zip
+runs/
