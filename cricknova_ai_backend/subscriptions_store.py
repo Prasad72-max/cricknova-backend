@@ -9,21 +9,40 @@ FILE_PATH = os.path.join(BASE_DIR, "subscriptions.json")
 # PLAN DEFINITIONS (SOURCE OF TRUTH)
 # -----------------------------
 PLANS = {
-    "monthly": {
+    # -------- INDIA PLANS --------
+    "IN_99": {
         "duration_days": 30,
         "limits": {"chat": 200, "mistake": 15, "compare": 0}
     },
-    "6_months": {
+    "IN_299": {
         "duration_days": 180,
         "limits": {"chat": 1200, "mistake": 30, "compare": 0}
     },
-    "yearly": {
+    "IN_499": {
         "duration_days": 365,
         "limits": {"chat": 3000, "mistake": 60, "compare": 50}
     },
-    "ultra_pro": {
+    "IN_1999": {
         "duration_days": 365,
         "limits": {"chat": 20000, "mistake": 200, "compare": 200}
+    },
+
+    # -------- INTERNATIONAL PLANS --------
+    "INTL_MONTHLY": {
+        "duration_days": 30,
+        "limits": {"chat": 200, "mistake": 20, "compare": 0}
+    },
+    "INTL_6M": {
+        "duration_days": 180,
+        "limits": {"chat": 1200, "mistake": 30, "compare": 5}
+    },
+    "INTL_YEARLY": {
+        "duration_days": 365,
+        "limits": {"chat": 1800, "mistake": 50, "compare": 10}
+    },
+    "INTL_ULTRA": {
+        "duration_days": 365,
+        "limits": {"chat": 20000, "mistake": 200, "compare": 150}
     }
 }
 
