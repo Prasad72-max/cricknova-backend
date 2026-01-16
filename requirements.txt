@@ -5,6 +5,11 @@ python-multipart
 numpy
 opencv-python-headless
 razorpay
+<<<<<<< Updated upstream
 openai>=1.0.0
 paypal-checkout-serversdk==1.0.3
 google-cloud-firestore>=2.16.0
+=======
+google-cloud-firestore
+google-cloud-core
+>>>>>>> Stashed changes
