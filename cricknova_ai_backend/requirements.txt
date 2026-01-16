@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+python-multipart
+numpy
+opencv-python-headless
+razorpay
+openai>=1.0.0
+paypal-checkout-serversdk==1.0.3
+google-cloud-firestore>=2.16.0

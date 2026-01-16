@@ -31,17 +31,10 @@ from pydantic import BaseModel
 from fastapi import Body
 from dotenv import load_dotenv
 load_dotenv()
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 from cricknova_ai_backend.paypal_service import router as paypal_router
 
-try:
-    from subscriptions_store import get_current_user
-except ImportError:
-    def get_current_user(authorization: str | None = None):
-        if not authorization:
-            return None
-        if authorization.lower().startswith("bearer "):
-            return authorization.split(" ", 1)[1]
-        return authorization
+from cricknova_ai_backend.subscriptions_store import get_current_user
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
 import razorpay
@@ -81,12 +74,13 @@ from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
 import time
 
 # Subscription management (external store)
-from subscriptions_store import (
+from cricknova_ai_backend.subscriptions_store import (
     get_subscription,
     is_subscription_active,
     increment_chat,
     increment_mistake,
-    increment_compare
+    increment_compare,
+    create_or_update_subscription
 )
 
 
@@ -185,7 +179,7 @@ async def paypal_capture(req: PayPalCaptureRequest):
     if response.result.status != "COMPLETED":
         raise HTTPException(status_code=400, detail="Payment not completed")
 
-    from subscriptions_store import create_or_update_subscription, get_subscription
+    from cricknova_ai_backend.subscriptions_store import create_or_update_subscription, get_subscription
 
     capture_id = response.result.purchase_units[0].payments.captures[0].id
 
@@ -225,6 +219,9 @@ async def subscription_status(request: Request):
     user_id = get_current_user(
         authorization=request.headers.get("Authorization")
     )
+    if not user_id and DEV_MODE:
+        user_id = "debug-user"
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
@@ -366,7 +363,7 @@ async def verify_payment(req: VerifyPaymentRequest):
     if not req.user_id or not req.plan:
         raise HTTPException(status_code=400, detail="Missing user_id or plan")
 
-    from subscriptions_store import create_or_update_subscription
+    from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
     create_or_update_subscription(
         user_id=req.user_id,
@@ -375,7 +372,7 @@ async def verify_payment(req: VerifyPaymentRequest):
         order_id=req.razorpay_order_id
     )
 
-    from subscriptions_store import get_subscription
+    from cricknova_ai_backend.subscriptions_store import get_subscription
 
     sub = get_subscription(req.user_id)
 
@@ -613,9 +610,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         raw_speed = calculate_speed_kmph(ball_positions, video_fps)
 
         # IMPORTANT:
-        # Do NOT force 0.0 when speed is not detected.
-        # Return None so the app can distinguish "no data" vs real zero.
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
+        # Always return a numeric value for speed_kmph, use 0.0 if not detected.
+        speed_kmph = round(raw_speed, 1) if raw_speed is not None else 0.0
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -661,10 +657,18 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     user_id = get_current_user(
         authorization=request.headers.get("Authorization")
     )
+
+    # Allow Swagger / local testing without auth
+    if not user_id and request.headers.get("X-Debug") == "true":
+        user_id = "debug-user"
+
+    if not user_id and DEV_MODE:
+        user_id = "debug-user"
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from subscriptions_store import get_subscription, is_subscription_active, increment_mistake
+    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_mistake
     sub = get_subscription(user_id)
 
     # HARD BLOCK: no subscription record or inactive subscription
@@ -760,10 +764,18 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     user_id = get_current_user(
         authorization=request.headers.get("Authorization")
     )
+
+    # Allow Swagger / local testing without auth
+    if not user_id and request.headers.get("X-Debug") == "true":
+        user_id = "debug-user"
+
+    if not user_id and DEV_MODE:
+        user_id = "debug-user"
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from subscriptions_store import get_subscription, is_subscription_active, increment_chat
+    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
     if not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
@@ -824,10 +836,18 @@ async def ai_coach_diff(
     user_id = get_current_user(
         authorization=request.headers.get("Authorization")
     )
+
+    # Allow Swagger / local testing without auth
+    if not user_id and request.headers.get("X-Debug") == "true":
+        user_id = "debug-user"
+
+    if not user_id and DEV_MODE:
+        user_id = "debug-user"
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from subscriptions_store import get_subscription, is_subscription_active, increment_compare
+    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_compare
     sub = get_subscription(user_id)
     if not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")

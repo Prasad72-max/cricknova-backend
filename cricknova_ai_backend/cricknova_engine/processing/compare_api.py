@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from processing.ball_tracker_motion import track_ball_positions
-from spacefoco_backend import detect_swing_x, calculate_spin_real
+from cricknova_engine.processing.routes.spacefoco_backend import detect_swing_x, calculate_spin_real
 
 load_dotenv()
 

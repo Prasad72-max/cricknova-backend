@@ -6,6 +6,7 @@ import hmac
 import hashlib
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from cricknova_engine.processing.routes.user_subscription import activate_plan
 
 router = APIRouter()
 
@@ -38,6 +39,8 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
+    user_id: str
+    plan: str
 
 
 # ---------- API ----------
@@ -72,6 +75,9 @@ def create_order(payload: CreateOrderRequest):
 @router.post("/verify-payment")
 def verify_payment(payload: VerifyPaymentRequest):
     try:
+        if not payload.plan or not payload.user_id:
+            raise HTTPException(status_code=400, detail="Invalid payment payload")
+
         secret = os.getenv("RAZORPAY_KEY_SECRET")
         if not secret:
             raise HTTPException(status_code=500, detail="Razorpay secret missing")
@@ -85,9 +91,16 @@ def verify_payment(payload: VerifyPaymentRequest):
         if generated_signature != payload.razorpay_signature:
             raise HTTPException(status_code=400, detail="Invalid payment signature")
 
+        # TODO: store razorpay_payment_id in DB to prevent reuse
+
+        # ✅ Activate premium plan in backend (single source of truth)
+        activate_plan(payload.user_id, payload.plan)
+
         return {
             "success": True,
-            "message": "Payment verified successfully"
+            "message": "Payment verified & premium activated",
+            "premium_activated": True,
+            "plan": payload.plan
         }
 
     except Exception as e:

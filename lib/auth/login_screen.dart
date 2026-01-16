@@ -25,6 +25,12 @@ class LoginScreen extends StatelessWidget {
 
       final googleAuth = await googleUser.authentication;
 
+      final idToken = googleAuth.idToken;
+      if (idToken != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString("id_token", idToken);
+      }
+
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,

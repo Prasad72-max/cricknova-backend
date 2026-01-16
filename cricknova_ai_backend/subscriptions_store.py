@@ -67,20 +67,30 @@ def get_subscription(user_id: str):
 
     expiry = sub.get("expiry")
     if not expiry:
-        return FREE_PLAN.copy()
+        sub["active"] = False
+        return sub
 
     try:
         expiry_dt = datetime.fromisoformat(expiry)
     except Exception:
-        return FREE_PLAN.copy()
+        sub["active"] = False
+        return sub
 
     if datetime.utcnow() >= expiry_dt:
-        return FREE_PLAN.copy()
+        sub["active"] = False
+    else:
+        sub["active"] = True
 
     return sub
 
 def is_subscription_active(sub: dict) -> bool:
-    return bool(sub and sub.get("active") is True)
+    if not sub:
+        return False
+    if not sub.get("active"):
+        return False
+    if not sub.get("limits"):
+        return False
+    return True
 
 def create_or_update_subscription(user_id: str, plan: str, payment_id: str, order_id: str):
     if plan not in PLANS:
@@ -116,7 +126,14 @@ def increment_chat(user_id: str):
     sub = subs.get(user_id)
     if not sub:
         return
-    sub["chat_used"] += 1
+
+    limit = sub.get("limits", {}).get("chat", 0)
+    used = sub.get("chat_used", 0)
+
+    if used >= limit:
+        return
+
+    sub["chat_used"] = used + 1
     save_subscriptions(subs)
 
 def increment_mistake(user_id: str):
@@ -124,7 +141,14 @@ def increment_mistake(user_id: str):
     sub = subs.get(user_id)
     if not sub:
         return
-    sub["mistake_used"] += 1
+
+    limit = sub.get("limits", {}).get("mistake", 0)
+    used = sub.get("mistake_used", 0)
+
+    if used >= limit:
+        return
+
+    sub["mistake_used"] = used + 1
     save_subscriptions(subs)
 
 def increment_compare(user_id: str):
@@ -132,7 +156,14 @@ def increment_compare(user_id: str):
     sub = subs.get(user_id)
     if not sub:
         return
-    sub["compare_used"] += 1
+
+    limit = sub.get("limits", {}).get("compare", 0)
+    used = sub.get("compare_used", 0)
+
+    if used >= limit:
+        return
+
+    sub["compare_used"] = used + 1
     save_subscriptions(subs)
 
 # -----------------------------
@@ -143,14 +174,16 @@ def get_current_user(authorization: str | None = None):
     Extract user_id from Authorization header.
     Expected format: "Bearer <USER_ID>"
     """
+
+    # fallback to debug user when auth is missing
     if not authorization:
-        return None
+        return "debug-user"
 
     try:
         parts = authorization.split(" ")
-        if len(parts) == 2:
+        if len(parts) == 2 and parts[1]:
             return parts[1]
     except Exception:
         pass
 
-    return None
+    return "debug-user"

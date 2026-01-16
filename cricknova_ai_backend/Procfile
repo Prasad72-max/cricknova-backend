@@ -1,1 +1,1 @@
-web: uvicorn spacefoco_backend:app --host 0.0.0.0 --port $PORT
+web: uvicorn cricknova_ai_backend.spacefoco_backend:app --host 0.0.0.0 --port $PORT

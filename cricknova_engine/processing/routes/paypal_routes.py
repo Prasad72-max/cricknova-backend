@@ -138,7 +138,7 @@ def capture_paypal_order(req: CapturePayPalOrder):
         raise HTTPException(status_code=400, detail="Payment not completed")
 
     # ✅ Activate subscription
-    from subscriptions_store import create_or_update_subscription, get_subscription
+    from cricknova_ai_backend.subscriptions_store import create_or_update_subscription, get_subscription
 
     create_or_update_subscription(
         user_id=req.user_id,

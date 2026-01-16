@@ -4,6 +4,11 @@ from openai import OpenAI
 from datetime import datetime
 import os
 from google.cloud import firestore
+from cricknova_ai_backend.subscriptions_store import get_current_user
+
+# 🔧 TEMP DEBUG FLAGS (Render stability)
+BYPASS_AUTH = os.getenv("BYPASS_AUTH", "false").lower() == "true"
+BYPASS_LIMITS = os.getenv("BYPASS_LIMITS", "false").lower() == "true"
 
 router = APIRouter()
 
@@ -157,21 +162,26 @@ def check_chat_limit(user_id: str):
 @router.post("/coach/chat")
 async def ai_coach(req: CoachRequest, request: Request):
     # 🔐 Resolve authenticated user (robust multi-source)
-    user_id = (
-        req.user_id
-        or request.headers.get("x-user-id")
-        or request.headers.get("X-User-Id")
-        or getattr(request.state, "user_id", None)
-    )
+    user_id = None
+
+    if not BYPASS_AUTH:
+        user_id = get_current_user(
+            authorization=request.headers.get("Authorization")
+        )
 
     print("🔐 RESOLVED USER_ID:", user_id)
     print("📦 HEADERS:", dict(request.headers))
+    print("🧪 BYPASS_AUTH:", BYPASS_AUTH)
 
-    if not user_id:
+    if not user_id and not BYPASS_AUTH:
         raise HTTPException(
             status_code=401,
             detail="USER_NOT_AUTHENTICATED"
         )
+
+    # fallback dummy user for AI testing
+    if BYPASS_AUTH and not user_id:
+        user_id = "render-test-user"
 
     if not req.message or not req.message.strip():
         return {"reply": "Ask a cricket-related question."}
@@ -184,7 +194,14 @@ async def ai_coach(req: CoachRequest, request: Request):
         }
 
     # 🔐 LIMIT CHECK (only after AI is ready)
-    limit_info = check_chat_limit(user_id)
+    if BYPASS_LIMITS:
+        limit_info = {
+            "used": 0,
+            "limit": 9999,
+            "remaining": 9999
+        }
+    else:
+        limit_info = check_chat_limit(user_id)
 
     try:
         prompt = f"""

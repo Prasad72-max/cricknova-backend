@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 import math
 
-def track_ball_positions(video_path, max_frames=120):
+def track_ball_positions(video_path, max_frames=60):
     cap = cv2.VideoCapture(video_path)
+
     fps = cap.get(cv2.CAP_PROP_FPS)
     if fps is None or fps <= 1:
         fps = 30.0
@@ -12,14 +13,23 @@ def track_ball_positions(video_path, max_frames=120):
     prev_gray = None
     frame_count = 0
 
+    # scale down once (huge speed boost)
+    TARGET_WIDTH = 640
+
     while cap.isOpened() and frame_count < max_frames:
         ret, frame = cap.read()
         if not ret:
             break
 
         frame_count += 1
+
+        # downscale frame
+        h, w = frame.shape[:2]
+        scale = TARGET_WIDTH / w
+        frame = cv2.resize(frame, (TARGET_WIDTH, int(h * scale)))
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (9, 9), 0)
+        gray = cv2.GaussianBlur(gray, (7, 7), 0)
 
         if prev_gray is None:
             prev_gray = gray
@@ -46,9 +56,13 @@ def track_ball_positions(video_path, max_frames=120):
                 max_area = area
 
         if ball_candidate:
-            positions.append((ball_candidate[0], ball_candidate[1]))
+            positions.append(ball_candidate)
 
         prev_gray = gray
+
+        # stop early if enough points found
+        if len(positions) >= 30:
+            break
 
     cap.release()
     return positions
