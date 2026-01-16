@@ -154,13 +154,13 @@ class _PremiumScreenState extends State<PremiumScreen>
 void _handlePaymentSuccess(PaymentSuccessResponse response) async {
   try {
     final planCode = _lastPlanPrice == "₹99"
-        ? "IN_99"
+        ? "monthly"
         : _lastPlanPrice == "₹299"
-            ? "IN_299"
+            ? "6_months"
             : _lastPlanPrice == "₹499"
-                ? "IN_499"
+                ? "yearly"
                 : _lastPlanPrice == "₹1999"
-                    ? "IN_1999"
+                    ? "ultra_pro"
                     : null;
 
     final verifyRes = await http.post(
