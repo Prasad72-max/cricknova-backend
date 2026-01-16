@@ -1,7 +1,9 @@
-# Root entrypoint wrapper
-# This file exists ONLY to support:
-# uvicorn spacefoco_backend:app
+from fastapi import FastAPI
 
-from cricknova_ai_backend.spacefoco_backend import app
+# Main FastAPI application
+app = FastAPI(title="CrickNova AI Backend")
 
-__all__ = ["app"]
+# Health check (Render & uptime)
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "CrickNova AI Backend"}
