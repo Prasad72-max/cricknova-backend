@@ -174,14 +174,16 @@ def get_current_user(authorization: str | None = None):
     Extract user_id from Authorization header.
     Expected format: "Bearer <USER_ID>"
     """
+
+    # fallback to debug user when auth is missing
     if not authorization:
-        return None
+        return "debug-user"
 
     try:
         parts = authorization.split(" ")
-        if len(parts) == 2:
+        if len(parts) == 2 and parts[1]:
             return parts[1]
     except Exception:
         pass
 
-    return None
+    return "debug-user"
