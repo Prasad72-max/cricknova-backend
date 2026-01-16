@@ -48,7 +48,7 @@ class _UploadScreenState extends State<UploadScreen> {
         }
 
         final uri = Uri.parse(
-          "https://cricknova-backend.onrender.com/user/subscription/status",
+          "https://cricknova-ai-engine.onrender.com/user/subscription/status",
         );
 
         final res = await http.get(
@@ -202,7 +202,7 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = null;
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/analyze");
+    final uri = Uri.parse("https://cricknova-ai-engine.onrender.com/training/analyze");
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
@@ -281,7 +281,7 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = "Reviewing decision...";
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
+    final uri = Uri.parse("https://cricknova-ai-engine.onrender.com/training/drs");
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
@@ -335,7 +335,7 @@ class _UploadScreenState extends State<UploadScreen> {
       coachReply = "Analyzing your batting...";
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/coach/analyze");
+    final uri = Uri.parse("https://cricknova-ai-engine.onrender.com/coach/analyze");
 
     try {
       final request = http.MultipartRequest("POST", uri);
