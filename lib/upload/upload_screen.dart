@@ -223,11 +223,12 @@ class _UploadScreenState extends State<UploadScreen> {
               analysis["speed_mph"] ??
               analysis["speed"];
 
-          double? parsedSpeed;
+          double parsedSpeed = 0.0;
+
           if (rawSpeed is num) {
             parsedSpeed = rawSpeed.toDouble();
           } else if (rawSpeed is String) {
-            parsedSpeed = double.tryParse(rawSpeed);
+            parsedSpeed = double.tryParse(rawSpeed) ?? 0.0;
           }
           speed = parsedSpeed;
 

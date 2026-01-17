@@ -612,8 +612,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
         raw_speed = calculate_speed_kmph(ball_positions, video_fps)
 
         # IMPORTANT:
-        # Always return None for speed_kmph if not detected.
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
+        # Always return 0.0 for speed_kmph if not detected (never None, so frontend always shows value).
+        speed_kmph = round(raw_speed, 1) if raw_speed is not None else 0.0
+        print(f"[SPEED] raw={raw_speed}, final={speed_kmph}, fps={video_fps}, points={len(ball_positions)}")
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -1011,7 +1012,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             return round(speed_kmph, 1)
 
         raw_speed = calculate_speed_kmph(ball_positions, fps)
-        speed_kmph = raw_speed if raw_speed is not None else None
+        speed_kmph = raw_speed if raw_speed is not None else 0.0
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
         trajectory = []
