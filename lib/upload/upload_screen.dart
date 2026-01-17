@@ -342,6 +342,14 @@ class _UploadScreenState extends State<UploadScreen> {
       final request = http.MultipartRequest("POST", uri);
       request.headers["Accept"] = "application/json";
 
+      // Add Authorization and debug headers so the AI backend can identify the user
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString("user_id");
+      if (userId != null && userId.isNotEmpty) {
+        request.headers["Authorization"] = "Bearer $userId";
+      }
+      request.headers["X-Debug"] = "true";
+
       // send video (REQUIRED by backend)
       request.files.add(
         await http.MultipartFile.fromPath("file", video!.path),

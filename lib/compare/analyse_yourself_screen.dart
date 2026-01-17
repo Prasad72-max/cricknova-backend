@@ -94,6 +94,8 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
     final uri = Uri.parse("https://cricknova-backend.onrender.com/coach/diff");
     final request = http.MultipartRequest("POST", uri);
+    request.headers["Accept"] = "application/json";
+    request.headers["Authorization"] = "Bearer ${PremiumService.userId}";
 
     request.files.add(await http.MultipartFile.fromPath("left", leftVideo!.path));
     request.files.add(await http.MultipartFile.fromPath("right", rightVideo!.path));

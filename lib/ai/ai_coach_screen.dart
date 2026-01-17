@@ -168,6 +168,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
               "Content-Type": "application/json",
               "Accept": "application/json",
               "Authorization": "Bearer ${user.uid}",
+              "X-Debug": "true"
             },
             body: jsonEncode({
               "message": userMessage,
