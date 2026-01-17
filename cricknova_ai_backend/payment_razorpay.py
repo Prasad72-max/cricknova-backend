@@ -51,7 +51,7 @@ def create_order(data: dict = Body(...)):
 # -------------------------------------------------
 # VERIFY PAYMENT (MANDATORY)
 # -------------------------------------------------
-@router.post("/verify")
+@router.post("/verify-payment")
 def verify_payment(data: dict = Body(...)):
     """
     App sends after payment success:
@@ -71,10 +71,7 @@ def verify_payment(data: dict = Body(...)):
 
         # ✅ Payment verified — mark user premium here
         return {
-            "success": True,
-            "message": "Payment verified successfully",
-            "premium_activated": True,
-            "plan": "pro"
+            "status": "success"
         }
 
     except razorpay.errors.SignatureVerificationError:
