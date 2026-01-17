@@ -1,4 +1,5 @@
 import os
+import asyncio
 import sys
 import math
 import time
@@ -31,6 +32,7 @@ from pydantic import BaseModel
 from fastapi import Body
 from dotenv import load_dotenv
 load_dotenv()
+print("🔑 OPENAI KEY LOADED:", bool(os.getenv("OPENAI_API_KEY")))
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 from cricknova_ai_backend.paypal_service import router as paypal_router
 
@@ -610,8 +612,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         raw_speed = calculate_speed_kmph(ball_positions, video_fps)
 
         # IMPORTANT:
-        # Always return a numeric value for speed_kmph, use 0.0 if not detected.
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else 0.0
+        # Always return None for speed_kmph if not detected.
+        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -742,6 +744,23 @@ Mention one mistake and one improvement.
 class CoachChatRequest(BaseModel):
     message: str | None = None
 
+
+# Helper for OpenAI chat with timeout
+async def _openai_chat_with_timeout(client, messages, timeout_seconds=15):
+    loop = asyncio.get_event_loop()
+    return await asyncio.wait_for(
+        loop.run_in_executor(
+            None,
+            lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=180,
+                temperature=0.6
+            )
+        ),
+        timeout=timeout_seconds
+    )
+
 @app.post("/coach/chat")
 async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     from openai import OpenAI
@@ -777,8 +796,13 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
     from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
+
+    # Allow in DEV mode or when subscription record exists but active flag is delayed
     if not is_subscription_active(sub):
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+        if DEV_MODE:
+            pass
+        else:
+            raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
     if sub["chat_used"] >= sub.get("limits", {}).get("chat", 0):
         raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
     increment_chat(user_id)
@@ -793,22 +817,24 @@ Reply clearly, practically, and motivating.
 Avoid fluff. Be direct and helpful.
 '''
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a professional cricket coach."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=180,
-            temperature=0.6
-        )
+        messages = [
+            {"role": "system", "content": "You are a professional cricket coach."},
+            {"role": "user", "content": prompt}
+        ]
 
-        reply_text = response.choices[0].message.content.strip()
+        try:
+            response = await _openai_chat_with_timeout(client, messages, 15)
+            reply_text = response.choices[0].message.content.strip()
+            return {
+                "status": "success",
+                "reply": reply_text
+            }
 
-        return {
-            "status": "success",
-            "reply": reply_text
-        }
+        except asyncio.TimeoutError:
+            return {
+                "status": "failed",
+                "reply": "AI is busy right now. Please try again in a few seconds."
+            }
 
     except Exception as e:
         return {

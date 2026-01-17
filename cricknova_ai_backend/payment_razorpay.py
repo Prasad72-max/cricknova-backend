@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException
+from cricknova_ai_backend.subscriptions_store import activate_plan_internal
+from fastapi import Request
 import razorpay
 import os
 from dotenv import load_dotenv
@@ -52,7 +54,7 @@ def create_order(data: dict = Body(...)):
 # VERIFY PAYMENT (MANDATORY)
 # -------------------------------------------------
 @router.post("/verify-payment")
-def verify_payment(data: dict = Body(...)):
+def verify_payment(request: Request, data: dict = Body(...)):
     """
     App sends after payment success:
     {
@@ -69,9 +71,25 @@ def verify_payment(data: dict = Body(...)):
             "razorpay_signature": data["razorpay_signature"],
         })
 
-        # ✅ Payment verified — mark user premium here
+        user_id = request.headers.get("X-USER-ID")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+        plan = data.get("plan")
+        if not plan:
+            raise HTTPException(status_code=400, detail="PLAN_REQUIRED")
+
+        # 🔥 Activate subscription in backend (single source of truth)
+        activate_plan_internal(
+            user_id=user_id,
+            plan=plan
+        )
+
         return {
-            "status": "success"
+            "success": True,
+            "verified": True,
+            "premium_activated": True,
+            "plan": plan
         }
 
     except razorpay.errors.SignatureVerificationError:

@@ -54,6 +54,17 @@ PLANS = {
     },
 }
 
+PLAN_ALIASES = {
+    "monthly": "IN_99",
+    "6_months": "IN_299",
+    "yearly": "IN_499",
+    "ultra_pro": "IN_1999",
+    "INTL_MONTHLY": "IN_99",
+    "INTL_6M": "IN_299",
+    "INTL_YEARLY": "IN_499",
+    "INTL_ULTRA": "IN_1999",
+}
+
 # -----------------------------
 # FIRESTORE HELPERS
 # -----------------------------
@@ -128,6 +139,9 @@ def activate_plan(request: Request, plan: str):
     user_id = request.headers.get("X-USER-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+    if plan in PLAN_ALIASES:
+        plan = PLAN_ALIASES[plan]
 
     if plan not in PLANS:
         raise HTTPException(status_code=400, detail="Invalid plan")

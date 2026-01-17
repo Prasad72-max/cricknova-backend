@@ -13,13 +13,13 @@ class RazorpayService {
   }) {
     _razorpay = Razorpay();
 
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) async {
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) {
       debugPrint("✅ Razorpay payment success: ${response.paymentId}");
+      debugPrint("🧾 orderId=${response.orderId}, signature=${response.signature}");
 
-      // 🔥 Activate premium immediately
-      await PremiumService.activatePremium();
+      // ❗ Do NOT activate premium here
+      // Premium must be activated ONLY after backend verification
 
-      // Forward to original callback
       onPaymentSuccess(response);
     });
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, onPaymentError);
@@ -38,7 +38,8 @@ class RazorpayService {
     final Map<String, Object> options = {
       "key": key, // Pass the key dynamically
       "order_id": orderId,
-      "amount": amount, // 🔥 REQUIRED: amount in paise
+      // Razorpay expects amount in paise
+      "amount": amount * 100,
       "currency": "INR",
       "name": "CrickNova AI",
       "description": "Premium Subscription",

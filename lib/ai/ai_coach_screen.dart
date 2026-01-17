@@ -101,34 +101,36 @@ class _AICoachScreenState extends State<AICoachScreen> {
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
-    final remaining = await PremiumService.getChatLimit();
-
-    // 🛡️ Safety: if limits look empty right after reinstall,
-    // force restore once AFTER premium data is loaded
-    if (remaining <= 0 && PremiumService.isLoaded) {
+    // 🔁 Always ensure premium data is restored before checking limits
+    if (!PremiumService.isLoaded) {
       await PremiumService.restoreOnLaunch();
     }
 
-    final refreshedRemaining = await PremiumService.getChatLimit();
-    if (refreshedRemaining <= 0) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text("Chat Limit Reached"),
-            content: const Text(
-              "You have used all AI Coach chats for your plan.\nUpgrade to continue.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("OK"),
+    // ✅ Premium users should NEVER be blocked by local limits
+    final isPremium = PremiumService.isPremium;
+
+    if (!isPremium) {
+      final remaining = await PremiumService.getChatLimit();
+      if (remaining <= 0) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text("Chat Limit Reached"),
+              content: const Text(
+                "You have used all AI Coach chats for your plan.\nUpgrade to continue.",
               ),
-            ],
-          ),
-        );
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("OK"),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
       }
-      return;
     }
 
     String userMessage = controller.text.trim();
@@ -165,7 +167,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
             headers: {
               "Content-Type": "application/json",
               "Accept": "application/json",
-              "Authorization": "Bearer $idToken",
+              "Authorization": "Bearer ${user.uid}",
             },
             body: jsonEncode({
               "message": userMessage,
@@ -197,7 +199,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
         loading = false;
         saveChats();
         setState(() {});
-        if (mounted) {
+
+        // 🚫 Redirect ONLY if user is truly not premium
+        final isPremium = PremiumService.isPremium;
+        if (!isPremium && mounted) {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PremiumScreen()),
@@ -210,7 +215,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
         loading = false;
         saveChats();
         setState(() {});
-        if (mounted) {
+
+        final isPremium = PremiumService.isPremium;
+        if (!isPremium && mounted) {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const PremiumScreen()),

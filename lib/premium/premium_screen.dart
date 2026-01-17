@@ -186,30 +186,6 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         throw Exception("User not logged in");
       }
 
-      // Decide duration based on plan price
-      int durationDays;
-      switch (_lastPlanPrice) {
-        case "₹99":
-          durationDays = 30;
-          break;
-        case "₹299":
-          durationDays = 180;
-          break;
-        case "₹499":
-        case "₹1999":
-          durationDays = 365;
-          break;
-        default:
-          durationDays = 30;
-      }
-
-      await PremiumService.activatePremium(
-        uid: user.uid,
-        planId: planCode ?? "UNKNOWN",
-        durationDays: durationDays,
-        paymentId: response.paymentId ?? "",
-      );
-      // 🔄 Force refresh premium state from backend after Razorpay success
       await PremiumService.syncFromBackend(user.uid);
 
       if (!mounted) return;
@@ -303,7 +279,16 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         'name': 'CrickNova AI',
         'description': 'Premium Subscription',
         'prefill': {
-          'email': 'demo@cricknova.ai',
+          'email': FirebaseAuth.instance.currentUser?.email ?? 'demo@cricknova.ai',
+        },
+        'method': {
+          'upi': true,
+          'card': true,
+          'netbanking': true,
+          'wallet': true,
+        },
+        'modal': {
+          'confirm_close': true,
         },
         'theme': {
           'color': '#00A8FF',

@@ -6,7 +6,8 @@ import hmac
 import hashlib
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from cricknova_engine.processing.routes.user_subscription import activate_plan
+from cricknova_engine.processing.routes import user_subscription
+from fastapi import Request
 
 router = APIRouter()
 
@@ -73,7 +74,7 @@ def create_order(payload: CreateOrderRequest):
 
 
 @router.post("/verify-payment")
-def verify_payment(payload: VerifyPaymentRequest):
+def verify_payment(payload: VerifyPaymentRequest, request: Request):
     try:
         if not payload.plan or not payload.user_id:
             raise HTTPException(status_code=400, detail="Invalid payment payload")
@@ -94,14 +95,33 @@ def verify_payment(payload: VerifyPaymentRequest):
         # TODO: store razorpay_payment_id in DB to prevent reuse
 
         # ✅ Activate premium plan in backend (single source of truth)
-        activate_plan(payload.user_id, payload.plan)
+        # Map app plan codes to backend plan codes
+        PLAN_MAP = {
+            "monthly": "IN_99",
+            "6_months": "IN_299",
+            "yearly": "IN_499",
+            "ultra_pro": "IN_1999",
+        }
+
+        backend_plan = PLAN_MAP.get(payload.plan)
+        if not backend_plan:
+            raise HTTPException(status_code=400, detail="Unknown plan code")
+
+        user_subscription.activate_plan_internal(
+            user_id=payload.user_id,
+            plan=backend_plan
+        )
 
         return {
             "success": True,
+            "status": "success",
             "message": "Payment verified & premium activated",
             "premium_activated": True,
-            "plan": payload.plan
+            "backend_plan": backend_plan,
+            "app_plan": payload.plan
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Payment verification failed: {e}")

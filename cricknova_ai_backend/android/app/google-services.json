@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "974755575850",
+    "project_id": "cricknova-5f94f",
+    "storage_bucket": "cricknova-5f94f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:974755575850:android:79ad7eda415c43a8492b53",
+        "android_client_info": {
+          "package_name": "com.cricknova.ai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdZGHmz9cXjJ4hSQT0Pz1YMHusELtwAOc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

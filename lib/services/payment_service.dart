@@ -12,30 +12,6 @@ class PaymentService {
   String? _keyId;
   String? _pendingPayPalOrderId;
 
-  Future<void> _activatePremiumOnServer({
-    required PaymentSuccessResponse response,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw StateError('User not logged in during payment success');
-    }
-
-    // 🔥 This is the REAL premium activation (source of truth)
-    await FirebaseFirestore.instance
-        .collection('subscriptions')
-        .doc(user.uid)
-        .set({
-      'isPremium': true,
-      'plan': 'IN_99', // replace dynamically if needed
-      'paymentId': response.paymentId,
-      'orderId': response.orderId,
-      'signature': response.signature,
-      'startDate': DateTime.now().toIso8601String(),
-      'expiryDate': DateTime.now()
-          .add(const Duration(days: 30))
-          .toIso8601String(),
-    }, SetOptions(merge: true));
-  }
 
   void init({
     required String keyId,
@@ -47,17 +23,42 @@ class PaymentService {
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
         (PaymentSuccessResponse response) async {
       try {
-        // 1️⃣ Activate premium in Firestore (REAL source)
-        await _activatePremiumOnServer(response: response);
+        final verifyRes = await http.post(
+          Uri.parse("$backendBaseUrl/payment/verify-payment"),
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: jsonEncode({
+            "razorpay_order_id": response.orderId,
+            "razorpay_payment_id": response.paymentId,
+            "razorpay_signature": response.signature,
+            "user_id": FirebaseAuth.instance.currentUser?.uid,
+            "plan": "IN_1999",
+          }),
+        );
 
-        // 2️⃣ Sync premium into app memory
-        await PremiumService.restoreOnLaunch();
+        final verifyData = jsonDecode(verifyRes.body);
+
+        if (verifyRes.statusCode == 200 &&
+            verifyData is Map &&
+            verifyData["status"] == "success") {
+          await PremiumService.syncFromBackend(
+            FirebaseAuth.instance.currentUser!.uid,
+          );
+          onSuccess(response);
+        } else {
+          throw StateError(
+              "Backend verification failed: ${verifyRes.body}");
+        }
       } catch (e) {
-        // If this fails, user paid but premium didn't sync
-        // It WILL recover on next app launch
+        onError(
+          PaymentFailureResponse(
+            code: -1,
+            message: "Payment verified by Razorpay but failed on server",
+          ),
+        );
       }
-
-      onSuccess(response);
     });
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, onError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternalWallet);
@@ -172,7 +173,9 @@ class PaymentService {
     final data = jsonDecode(res.body);
 
     if (data["premium"] == true) {
-      await PremiumService.restoreOnLaunch();
+      await PremiumService.syncFromBackend(
+        FirebaseAuth.instance.currentUser!.uid,
+      );
     }
   }
 

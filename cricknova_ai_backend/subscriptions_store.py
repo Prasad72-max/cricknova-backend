@@ -2,6 +2,13 @@ import json
 import os
 from datetime import datetime, timedelta
 
+# -----------------------------
+# PAYMENT STATUS STORE (TEMP)
+# -----------------------------
+PAYMENT_SUCCESS = "success"
+PAYMENT_PENDING = "pending"
+PAYMENT_FAILED = "failed"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FILE_PATH = os.path.join(BASE_DIR, "subscriptions.json")
 
@@ -43,13 +50,17 @@ PLANS = {
     "INTL_ULTRA": {
         "duration_days": 365,
         "limits": {"chat": 20000, "mistake": 200, "compare": 150}
+    },
+    "ultra_pro": {
+        "duration_days": 365,
+        "limits": {"chat": 20000, "mistake": 200, "compare": 150}
     }
 }
 
 FREE_PLAN = {
     "plan": "free",
     "active": False,
-    "limits": {"chat": 5, "mistake": 2, "compare": 0},
+    "limits": {"chat": 0, "mistake": 0, "compare": 0},
     "chat_used": 0,
     "mistake_used": 0,
     "compare_used": 0,
@@ -82,7 +93,9 @@ def get_subscription(user_id: str):
     sub = subs.get(user_id)
 
     if not sub:
-        return FREE_PLAN.copy()
+        sub = FREE_PLAN.copy()
+        sub["user_id"] = user_id
+        return sub
 
     expiry = sub.get("expiry")
     if not expiry:
@@ -136,6 +149,40 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
 
     save_subscriptions(subs)
     return subs[user_id]
+
+# -----------------------------
+# PAYMENT VERIFICATION
+# -----------------------------
+def verify_payment_and_activate(
+    user_id: str,
+    plan: str,
+    order_id: str,
+    payment_id: str,
+    payment_status: str
+):
+    """
+    Backend-only source of truth.
+    Activate subscription ONLY if payment_status == success
+    """
+
+    if payment_status != PAYMENT_SUCCESS:
+        return {
+            "status": payment_status,
+            "activated": False
+        }
+
+    sub = create_or_update_subscription(
+        user_id=user_id,
+        plan=plan,
+        payment_id=payment_id,
+        order_id=order_id
+    )
+
+    return {
+        "status": PAYMENT_SUCCESS,
+        "activated": True,
+        "subscription": sub
+    }
 
 # -----------------------------
 # USAGE COUNTERS

@@ -13,12 +13,38 @@ class RazorpayService {
     _razorpay = Razorpay();
 
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
-        (PaymentSuccessResponse response) {
-      onSuccess({
-        "paymentId": response.paymentId,
-        "orderId": response.orderId,
-        "signature": response.signature,
-      });
+        (PaymentSuccessResponse response) async {
+      try {
+        final verifyRes = await http.post(
+          Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({
+            "razorpay_order_id": response.orderId,
+            "razorpay_payment_id": response.paymentId,
+            "razorpay_signature": response.signature,
+          }),
+        );
+
+        final data = jsonDecode(verifyRes.body);
+
+        if (verifyRes.statusCode == 200 && data["status"] == "success") {
+          onSuccess({
+            "paymentId": response.paymentId,
+            "orderId": response.orderId,
+            "signature": response.signature,
+          });
+        } else {
+          onError({
+            "code": "VERIFY_FAILED",
+            "message": "Payment verification failed on backend",
+          });
+        }
+      } catch (e) {
+        onError({
+          "code": "VERIFY_EXCEPTION",
+          "message": e.toString(),
+        });
+      }
     });
 
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR,

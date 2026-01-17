@@ -1,0 +1,496 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../premium/premium_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:CrickNova_Ai/config/api_config.dart';
+class PremiumService {
+  // ⚠️ RULE: Usage counters are NEVER reset on client.
+  // They are restored ONLY from Firestore backend.
+  // Logout / reinstall must NOT affect usage.
+
+  // 🔒 Prevent backend sync from overwriting newer local usage
+  static bool _usageDirty = false;
+  static DateTime? _lastLocalUsageUpdate;
+
+  // Single source of truth for UI
+  static bool isPremium = false;
+  // Backward-compat alias (used by UI)
+  static bool? get cachedIsPremium => isPremium;
+  static String plan = "FREE";
+
+  // Usage counters (used by HomeScreen UI)
+  static int chatUsed = 0;
+  static int mistakeUsed = 0;
+  static int compareUsed = 0;
+
+  static int chatLimit = 0;
+  static int mistakeLimit = 0;
+  static int compareLimit = 0;
+
+  // Init guard
+  static bool isLoaded = false;
+
+  static const String _premiumKey = "is_premium";
+  static const String _planKey = "premium_plan";
+
+  static const String _chatLimitKey = "chat_limit";
+  static const String _mistakeLimitKey = "mistake_limit";
+  static const String _compareLimitKey = "compare_limit";
+
+  /// 🔥 CALL THIS ON APP START (main.dart)
+  /// 🔁 BACKWARD-COMPAT (used by login_screen.dart)
+  static Future<void> syncFromFirestore(String uid) async {
+    await loadPremiumFromUid(uid);
+  }
+
+  /// 🌐 Sync premium from backend API (used after Razorpay / PayPal success)
+  static Future<void> syncFromBackend(String uid) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // Always trust backend via Firestore mirror
+      await loadPremiumFromUid(uid);
+      _usageDirty = false;
+      _lastLocalUsageUpdate = null;
+
+    } catch (e) {
+      debugPrint("Premium sync failed: $e");
+    }
+  }
+
+  static Future<void> loadPremiumFromUid(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection("subscriptions")
+          .doc(uid)
+          .get(const GetOptions(source: Source.server));
+
+      if (!doc.exists) {
+        await _cache(false, "FREE", 0, 0, 0);
+        return;
+      }
+
+      final data = doc.data()!;
+      DateTime? expiry;
+      final rawExpiry = data["expiry"] ?? data["expiryDate"];
+      if (rawExpiry is Timestamp) {
+        expiry = rawExpiry.toDate();
+      } else if (rawExpiry is String) {
+        expiry = DateTime.tryParse(rawExpiry);
+      }
+      if (expiry != null && DateTime.now().isAfter(expiry)) {
+        await _cache(false, "FREE", 0, 0, 0);
+        return;
+      }
+
+      final planId = data["plan"] ?? "FREE";
+
+      final used = data["used"] ?? {};
+
+      // 🛑 Do not overwrite newer local usage with stale server data
+      if (_usageDirty && _lastLocalUsageUpdate != null) {
+        debugPrint("⏸️ Skipping usage overwrite (local usage is newer)");
+      } else {
+        chatUsed = used["chat"] ?? 0;
+        mistakeUsed = used["mistake"] ?? 0;
+        compareUsed = used["compare"] ?? 0;
+      }
+
+      switch (planId) {
+        case "IN_99":
+          await _cache(true, planId, 200, 15, 0);
+          break;
+        case "IN_299":
+          await _cache(true, planId, 1200, 30, 0);
+          break;
+        case "IN_499":
+          await _cache(true, planId, 3000, 60, 50);
+          break;
+        case "IN_1999":
+          await _cache(true, planId, 20000, 200, 200);
+          break;
+        default:
+          await _cache(false, "FREE", 0, 0, 0);
+      }
+
+      isLoaded = true;
+    } catch (e) {
+      return;
+    }
+  }
+
+  /// 🔁 Call this on every app launch (Splash / main)
+  static Future<void> restoreOnLaunch() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    // 🔴 No user = FREE
+    if (user == null) {
+      isPremium = false;
+      plan = "FREE";
+      chatLimit = 0;
+      mistakeLimit = 0;
+      compareLimit = 0;
+      // ❌ DO NOT touch usage counters here
+      isLoaded = true;
+      return;
+    }
+
+    // 🔒 Always trust server, never cache
+    await loadPremiumFromUid(user.uid);
+    isLoaded = true;
+  }
+
+  /// ✅ CALL THIS AFTER PAYMENT SUCCESS
+  static Future<void> setPremiumTrue({
+    required String planId,
+    required int chatLimit,
+    required int mistakeLimit,
+    required int diffLimit,
+  }) async {
+    // ⚠️ WARNING: Do NOT use this after Razorpay payment.
+    // Premium must be activated only after backend / webhook verification.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await FirebaseFirestore.instance
+        .collection("subscriptions")
+        .doc(user.uid)
+        .set({
+      "isPremium": true,
+      "plan": planId,
+      "chatLimit": chatLimit,
+      "mistakeLimit": mistakeLimit,
+      "diffLimit": diffLimit,
+      "updatedAt": FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await _cache(true, planId, chatLimit, mistakeLimit, diffLimit);
+  }
+
+  /// 🔐 ACTIVATE PREMIUM AFTER SUCCESSFUL PAYMENT (USED BY premium_screen.dart)
+  static Future<void> activatePremium({
+    required String uid,
+    required String planId,
+    required int durationDays,
+    required String paymentId,
+  }) async {
+    final now = DateTime.now();
+    final expiry = now.add(Duration(days: durationDays));
+
+    await FirebaseFirestore.instance
+        .collection("subscriptions")
+        .doc(uid)
+        .set({
+      "uid": uid,
+      "isPremium": true,
+      "plan": planId,
+      "paymentId": paymentId,
+      "startDate": now.toIso8601String(),
+      "expiryDate": expiry.toIso8601String(),
+      "updatedAt": FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await loadPremiumFromUid(uid);
+  }
+
+  // -----------------------------
+  // CACHE HELPERS
+  // -----------------------------
+  static Future<void> _cache(
+    bool premium,
+    String planId,
+    int chat,
+    int mistake,
+    int compare,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Persist limits
+    await prefs.setBool(_premiumKey, premium);
+    await prefs.setString(_planKey, planId);
+    await prefs.setInt(_chatLimitKey, chat);
+    await prefs.setInt(_mistakeLimitKey, mistake);
+    await prefs.setInt(_compareLimitKey, compare);
+
+    // In-memory state (single source for UI)
+    isPremium = premium;
+    plan = planId;
+
+    chatLimit = chat;
+    mistakeLimit = mistake;
+    compareLimit = compare;
+
+  }
+
+
+  // -----------------------------
+  // LOGOUT / RESET
+  // -----------------------------
+  static Future<void> clearPremium() async {
+    isPremium = false;
+    plan = "FREE";
+    chatLimit = 0;
+    mistakeLimit = 0;
+    compareLimit = 0;
+    // ❌ DO NOT reset usage here
+  }
+
+  // -----------------------------
+  // ACCESS GUARDS (SINGLE TRUTH)
+  // -----------------------------
+  static bool canChat() {
+    if (!isLoaded) return true; // ⏳ wait until restore finishes
+    if (!isPremium) return false;
+    if (chatLimit <= 0) return false;
+    return chatUsed < chatLimit;
+  }
+
+  static bool canMistake() {
+    if (!isLoaded) return true; // ⏳ wait until restore finishes
+    if (!isPremium) return false;
+    if (mistakeLimit <= 0) return false;
+    return mistakeUsed < mistakeLimit;
+  }
+
+  static bool canCompare() {
+    if (!isLoaded) return true; // ⏳ wait until restore finishes
+    if (!isPremium) return false;
+    if (compareLimit <= 0) return false;
+    return compareUsed < compareLimit;
+  }
+
+  // -----------------------------
+  // CHAT HELPERS
+  // -----------------------------
+  static Future<int> getChatLimit() async {
+    if (!isPremium) return 0;
+    return chatLimit - chatUsed;
+  }
+
+  static Future<void> consumeChat() async {
+    if (!canChat()) return;
+    chatUsed++;
+    _usageDirty = true;
+    _lastLocalUsageUpdate = DateTime.now();
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      FirebaseFirestore.instance
+          .collection("subscriptions")
+          .doc(user.uid)
+          .update({
+        "used.chat": FieldValue.increment(1),
+        "updatedAt": FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  // -----------------------------
+  // MISTAKE HELPERS
+  // -----------------------------
+  static Future<int> getMistakeLimit() async {
+    if (!isPremium) return 0;
+    return mistakeLimit - mistakeUsed;
+  }
+
+  static Future<void> consumeMistake() async {
+    if (!canMistake()) return;
+    mistakeUsed++;
+    _usageDirty = true;
+    _lastLocalUsageUpdate = DateTime.now();
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      FirebaseFirestore.instance
+          .collection("subscriptions")
+          .doc(user.uid)
+          .update({
+        "used.mistake": FieldValue.increment(1),
+        "updatedAt": FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  // -----------------------------
+  // COMPARE HELPERS
+  // -----------------------------
+  static Future<int> getCompareLimit() async {
+    if (!isPremium) return 0;
+    return compareLimit - compareUsed;
+  }
+
+  static Future<void> consumeCompare() async {
+    if (!canCompare()) return;
+    compareUsed++;
+    _usageDirty = true;
+    _lastLocalUsageUpdate = DateTime.now();
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      FirebaseFirestore.instance
+          .collection("subscriptions")
+          .doc(user.uid)
+          .update({
+        "used.compare": FieldValue.increment(1),
+        "updatedAt": FieldValue.serverTimestamp(),
+      });
+    }
+  }
+  // -----------------------------
+  // PAYWALL HELPER
+  // -----------------------------
+  static void showPaywall(
+    BuildContext context, {
+    String? source,
+    List<String>? allowedPlans,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const PremiumScreen(),
+        settings: RouteSettings(
+          arguments: {
+            if (source != null) 'source': source,
+            if (allowedPlans != null) 'allowedPlans': allowedPlans,
+          },
+        ),
+      ),
+    );
+  }
+
+  // -----------------------------
+  // PAYPAL HELPERS
+  // -----------------------------
+  // -----------------------------
+  // PAYPAL CREATE + APPROVAL (INTL)
+  // -----------------------------
+  static Future<void> startPaypalPayment({
+    required double amount,
+    required String plan,
+  }) async {
+    final response = await http.post(
+      Uri.parse("${ApiConfig.baseUrl}/paypal/create-order"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "amount": amount,
+        "currency": "USD",
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to create PayPal order");
+    }
+
+    final data = jsonDecode(response.body);
+    debugPrint("🧾 PayPal create-order response: $data");
+
+    // Support both common backend keys
+    String? approvalUrl;
+
+    if (data["approvalUrl"] != null) {
+      approvalUrl = data["approvalUrl"];
+    } else if (data["approval_url"] != null) {
+      approvalUrl = data["approval_url"];
+    } else if (data["links"] is List) {
+      try {
+        final approveLink = (data["links"] as List)
+            .firstWhere((e) => e["rel"] == "approve");
+        approvalUrl = approveLink["href"];
+      } catch (_) {
+        approvalUrl = null;
+      }
+    }
+
+    if (approvalUrl == null || approvalUrl.isEmpty) {
+      throw Exception("PayPal approval URL missing from backend response");
+    }
+
+    // Normalize URL (force https if backend sent http)
+    if (approvalUrl.startsWith("http://")) {
+      approvalUrl = approvalUrl.replaceFirst("http://", "https://");
+    }
+
+    // Open PayPal approval page in external browser
+    await openPayPalApprovalUrl(approvalUrl);
+  }
+  static Future<void> openPayPalApprovalUrl(String approvalUrl) async {
+    final uri = Uri.parse(approvalUrl);
+    debugPrint("🌍 Opening PayPal URL: $approvalUrl");
+
+    final opened = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!opened) {
+      throw Exception('Could not open PayPal approval URL');
+    }
+  }
+
+  // -----------------------------
+  // PAYPAL CAPTURE (BACKEND VERIFY)
+  // -----------------------------
+  static Future<void> capturePaypalOrder({
+    required String orderId,
+    required String plan,
+    required String userId,
+  }) async {
+    final response = await http.post(
+      Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "order_id": orderId,
+        "plan": plan,
+        "user_id": userId,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("PayPal capture failed");
+    }
+
+    final data = jsonDecode(response.body);
+
+    // ✅ Sync premium from backend / Firestore
+    await syncFromBackend(userId);
+  }
+
+  // -----------------------------
+  // PAYPAL RETURN HANDLER (DEEPLINK)
+  // -----------------------------
+  static Future<void> capturePaypalOrderFromReturn(String orderId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception("User not logged in");
+    }
+
+    // Plan can be inferred later or passed via query if needed
+    // For now backend already knows plan from order mapping
+    final response = await http.post(
+      Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "order_id": orderId,
+        "user_id": user.uid,
+        "plan": "INTL", // backend validates actual plan
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("PayPal capture from return failed");
+    }
+
+    // 🔥 Sync premium state after successful capture
+    await syncFromBackend(user.uid);
+  }
+}

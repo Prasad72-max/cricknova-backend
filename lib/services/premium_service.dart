@@ -173,29 +173,39 @@ class PremiumService {
   }
 
   /// 🔐 ACTIVATE PREMIUM AFTER SUCCESSFUL PAYMENT (USED BY premium_screen.dart)
-  static Future<void> activatePremium({
-    required String uid,
-    required String planId,
-    required int durationDays,
+  /// 🔐 VERIFY RAZORPAY PAYMENT WITH BACKEND (SINGLE SOURCE OF TRUTH)
+  static Future<void> verifyRazorpayPayment({
     required String paymentId,
+    required String orderId,
+    required String signature,
+    required String plan,
   }) async {
-    final now = DateTime.now();
-    final expiry = now.add(Duration(days: durationDays));
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception("User not logged in");
+    }
 
-    await FirebaseFirestore.instance
-        .collection("subscriptions")
-        .doc(uid)
-        .set({
-      "uid": uid,
-      "isPremium": true,
-      "plan": planId,
-      "paymentId": paymentId,
-      "startDate": now.toIso8601String(),
-      "expiryDate": expiry.toIso8601String(),
-      "updatedAt": FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final response = await http.post(
+      Uri.parse("${ApiConfig.baseUrl}/payment/verify-payment"),
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: jsonEncode({
+        "razorpay_payment_id": paymentId,
+        "razorpay_order_id": orderId,
+        "razorpay_signature": signature,
+        "user_id": user.uid,
+        "plan": plan,
+      }),
+    );
 
-    await loadPremiumFromUid(uid);
+    if (response.statusCode != 200) {
+      throw Exception("Payment verification failed");
+    }
+
+    // ✅ Always resync from backend after verification
+    await syncFromBackend(user.uid);
   }
 
   // -----------------------------
@@ -244,32 +254,30 @@ class PremiumService {
   // ACCESS GUARDS (SINGLE TRUTH)
   // -----------------------------
   static bool canChat() {
-    if (!isLoaded) return true; // ⏳ wait until restore finishes
-    if (!isPremium) return false;
-    if (chatLimit <= 0) return false;
-    return chatUsed < chatLimit;
+    if (!isLoaded) return true; // allow while restoring
+    if (isPremium) return true; // premium users are never blocked locally
+    return false;
   }
 
   static bool canMistake() {
-    if (!isLoaded) return true; // ⏳ wait until restore finishes
-    if (!isPremium) return false;
-    if (mistakeLimit <= 0) return false;
-    return mistakeUsed < mistakeLimit;
+    if (!isLoaded) return true;
+    if (isPremium) return true;
+    return false;
   }
 
   static bool canCompare() {
-    if (!isLoaded) return true; // ⏳ wait until restore finishes
-    if (!isPremium) return false;
-    if (compareLimit <= 0) return false;
-    return compareUsed < compareLimit;
+    if (!isLoaded) return true;
+    if (isPremium) return true;
+    return false;
   }
 
   // -----------------------------
   // CHAT HELPERS
   // -----------------------------
   static Future<int> getChatLimit() async {
-    if (!isPremium) return 0;
-    return chatLimit - chatUsed;
+    if (!isLoaded) return 999999;
+    if (isPremium) return 999999;
+    return 0;
   }
 
   static Future<void> consumeChat() async {

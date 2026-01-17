@@ -6,6 +6,35 @@ import os
 from google.cloud import firestore
 from cricknova_ai_backend.subscriptions_store import get_current_user
 
+def get_current_user(authorization: str | None = None):
+    """
+    Extract user_id from Authorization header.
+    Expected format: "Bearer <FIREBASE_ID_TOKEN>"
+    """
+    if not authorization:
+        return None
+
+    try:
+        scheme, token = authorization.split(" ", 1)
+        if scheme.lower() != "bearer" or not token:
+            return None
+
+        try:
+            import firebase_admin
+            from firebase_admin import auth as firebase_auth
+
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app()
+
+            decoded = firebase_auth.verify_id_token(token)
+            return decoded.get("uid")
+        except Exception:
+            # If Firebase verification fails, do NOT silently allow access
+            return None
+
+    except Exception:
+        return None
+
 # 🔧 TEMP DEBUG FLAGS (Render stability)
 BYPASS_AUTH = os.getenv("BYPASS_AUTH", "false").lower() == "true"
 BYPASS_LIMITS = os.getenv("BYPASS_LIMITS", "false").lower() == "true"
@@ -33,14 +62,6 @@ if not OPENAI_API_KEY:
     OPENAI_API_KEY = None
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-
-PLAN_LIMITS = {
-    "FREE": 5,   # allow limited free trial chats
-    "IN_99": 200,
-    "IN_299": 1200,
-    "IN_499": 3000,
-    "IN_1999": 20000,
-}
 
 # -----------------------------
 # TEMP OVERRIDE FLAG
@@ -133,22 +154,29 @@ def check_chat_limit(user_id: str):
     if datetime.utcnow() > expiry_dt:
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
 
-    plan = sub.get("plan")
-    limits = sub.get("limits", {})
-    chat_limit = limits.get("chat", 0)
-
+    plan = sub.get("plan") or "FREE"
     used = sub.get("chat_used", 0)
 
-    if not plan or chat_limit <= 0:
+    PLAN_CHAT_LIMITS = {
+        "IN_99": 200,
+        "IN_299": 1200,
+        "IN_499": 3000,
+        "IN_1999": 20000,
+    }
+
+    chat_limit = PLAN_CHAT_LIMITS.get(plan, 0)
+
+    if chat_limit <= 0:
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
 
     if used >= chat_limit:
         raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
 
     # increment usage atomically
-    db_client.collection("subscriptions").document(user_id).update({
-        "chat_used": firestore.Increment(1)
-    })
+    db_client.collection("subscriptions").document(user_id).set(
+        {"chat_used": firestore.Increment(1)},
+        merge=True
+    )
 
     return {
         "used": used + 1,
