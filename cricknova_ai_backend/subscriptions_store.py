@@ -89,6 +89,18 @@ def save_subscriptions(data):
 # CORE LOGIC
 # -----------------------------
 def get_subscription(user_id: str):
+    # DEV override for local / Swagger / curl testing
+    if user_id == "debug-user":
+        return {
+            "user_id": "debug-user",
+            "plan": "ultra_pro",
+            "active": True,
+            "limits": {"chat": 9999, "mistake": 999, "compare": 999},
+            "chat_used": 0,
+            "mistake_used": 0,
+            "compare_used": 0,
+            "expiry": "2099-01-01T00:00:00"
+        }
     subs = load_subscriptions()
     sub = subs.get(user_id)
 
