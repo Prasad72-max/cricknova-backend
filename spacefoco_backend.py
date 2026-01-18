@@ -12,6 +12,10 @@ from fastapi import FastAPI
 
 app = FastAPI(title="CrickNova AI Backend")
 
+@app.on_event("startup")
+async def startup_log():
+    print("🔥🔥 SPACEFOCO BACKEND STARTED — SPACEFOCO FIXED BACKEND ACTIVE 🔥🔥")
+
 @app.get("/__alive")
 def alive():
     return {
@@ -191,12 +195,15 @@ async def paypal_capture(req: PayPalCaptureRequest):
 
     sub = get_subscription(req.user_id)
 
+    expiry = sub.get("expiry")
     return {
         "status": "success",
         "premium": True,
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+        "expiry": expiry if isinstance(expiry, str) else (
+            expiry.isoformat() if expiry else None
+        )
     }
 
 # -----------------------------
@@ -231,11 +238,14 @@ async def subscription_status(request: Request):
             "expiry": None
         }
 
+    expiry = sub.get("expiry")
     return {
         "premium": is_subscription_active(sub),
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+        "expiry": expiry if isinstance(expiry, str) else (
+            expiry.isoformat() if expiry else None
+        )
     }
 
 
@@ -372,13 +382,16 @@ async def verify_payment(req: VerifyPaymentRequest):
 
     sub = get_subscription(req.user_id)
 
+    expiry = sub.get("expiry")
     return {
         "status": "success",
         "premium": True,
         "user_id": req.user_id,
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+        "expiry": expiry if isinstance(expiry, str) else (
+            expiry.isoformat() if expiry else None
+        )
     }
 
 
@@ -540,7 +553,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
         def calculate_speed_kmph(ball_positions, fps):
-            if len(ball_positions) < 8 or fps <= 1:
+            if fps is None or fps <= 1:
+                fps = 30.0
+
+            if len(ball_positions) < 8:
                 return None
 
             # ---- FPS normalization ----
@@ -577,6 +593,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
             median_px = float(np.median(core))
 
+            # Safety floor: prevent zero / microscopic motion collapse
+            if median_px < 1.2:
+                return None
+
             # ---- Pitch length scaling (camera adaptive) ----
             pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
             meters_per_pixel = 20.12 / pitch_px
@@ -584,10 +604,15 @@ async def analyze_training_video(file: UploadFile = File(...)):
             speed_mps = median_px * meters_per_pixel * fps
             speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
 
-            # ICC realistic bowling range
-            if speed_kmph < 80 or speed_kmph > 160:
+            # ICC realistic bowling range (relaxed for mobile videos)
+            # Do NOT discard valid speeds too aggressively
+            if speed_kmph < 40 or speed_kmph > 180:
                 return None
 
+            print(
+                f"[SPEED DEBUG] fps={fps}, median_px={median_px:.2f}, "
+                f"pitch_px={pitch_px:.1f}, speed={speed_kmph:.1f}"
+            )
             return round(speed_kmph, 1)
 
         # Extract reference frame for pitch detection
