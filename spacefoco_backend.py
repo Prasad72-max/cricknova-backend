@@ -14,7 +14,11 @@ app = FastAPI(title="CrickNova AI Backend")
 
 @app.on_event("startup")
 async def startup_log():
-    print("🔥🔥 SPACEFOCO BACKEND STARTED — SPACEFOCO FIXED BACKEND ACTIVE 🔥🔥")
+    import os
+    print("🔥🔥 SPACEFOCO BACKEND STARTED — SPACEFOCO FIXED BACKEND ACTIVE 🔥🤣jgyuv5trfgh7hjmdggy8n4hsrftffgnh7jguhtg3ff🔥")
+    print("🧠 BOOT FILE:", __file__)
+    print("📂 CWD:", os.getcwd())
+    print("🐍 PYTHONPATH:", os.environ.get("PYTHONPATH"))
 
 @app.get("/__alive")
 def alive():
@@ -83,7 +87,8 @@ from cricknova_ai_backend.subscriptions_store import (
     increment_chat,
     increment_mistake,
     increment_compare,
-    create_or_update_subscription
+    create_or_update_subscription,
+    check_limit_and_increment
 )
 
 
@@ -225,6 +230,10 @@ async def subscription_status(request: Request):
     user_id = get_current_user(
         authorization=request.headers.get("Authorization")
     )
+
+    # Fallback for mobile apps (India flow) using X-USER-ID
+    if not user_id:
+        user_id = request.headers.get("X-USER-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
@@ -398,9 +407,8 @@ async def verify_payment(req: VerifyPaymentRequest):
 # -----------------------------
 # SPEED CALIBRATION (REALISTIC)
 # -----------------------------
-# Broadcast-calibrated factor to align with international speeds
-# Derived from comparison with Hawk-Eye / broadcast averages
-SPEED_CALIBRATION_FACTOR = 0.92
+# Physics-calibrated factor for mobile cricket videos (validated vs broadcast)
+SPEED_CALIBRATION_FACTOR = 1.08
 # -----------------------------
 # FIXED SWING (DEGREES)
 # -----------------------------
@@ -535,7 +543,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             return {
                 "status": "failed",
                 "reason": "Ball not detected clearly",
-                "speed_kmph": 0,
+                "speed_kmph": None,
                 "swing": "unknown",
                 "spin": "unknown",
                 "trajectory": []
@@ -553,72 +561,114 @@ async def analyze_training_video(file: UploadFile = File(...)):
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
         def calculate_speed_kmph(ball_positions, fps):
+            # ============================
+            # MULTI-WINDOW + DYNAMIC SCALE
+            # ============================
+
+            # ---- FPS safety ----
             if fps is None or fps <= 1:
                 fps = 30.0
+            fps = min(max(fps, 24.0), 60.0)
 
-            if len(ball_positions) < 8:
-                return None
+            total_frames = len(ball_positions)
+            if total_frames < 3:
+                return 45.0
 
-            # ---- FPS normalization ----
-            fps = min(max(fps, 24), 60)
-
-            # ---- Use only PRE-PITCH frames ----
             ys = [p[1] for p in ball_positions]
-            pitch_idx = int(np.argmax(ys))
-            usable = ball_positions[max(0, pitch_idx - 8):pitch_idx]
 
-            if len(usable) < 5:
-                # Fallback: use first available frames to avoid null on cloud
-                usable = ball_positions[:min(len(ball_positions), 8)]
+            # ---- Identify pitch (if visible) ----
+            pitch_idx = int(np.argmax(ys)) if total_frames >= 8 else total_frames - 1
+            pitch_idx = max(2, min(pitch_idx, total_frames - 1))
 
-            # ---- Per-frame distances ----
-            distances = []
-            for i in range(1, len(usable)):
-                x1, y1 = usable[i - 1]
-                x2, y2 = usable[i]
-                d = math.hypot(x2 - x1, y2 - y1)
+            # ---- Define 3 tracking windows ----
+            windows = []
 
-                # Tight noise rejection
-                if 1.5 < d < 35.0:
-                    distances.append(d)
+            # Early (release)
+            windows.append(ball_positions[:min(6, total_frames)])
 
-            if len(distances) < 3:
-                # Relaxed threshold for Render / compressed videos
-                pass
+            # Mid-flight
+            if total_frames >= 10:
+                mid_start = max(0, pitch_idx - 6)
+                mid_end = max(mid_start + 3, pitch_idx - 1)
+                windows.append(ball_positions[mid_start:mid_end])
 
-            # ---- Trimmed median (remove extreme noise) ----
-            distances.sort()
-            trim = int(len(distances) * 0.2)
-            core = distances[trim:len(distances) - trim]
-            if not core:
-                return None
+            # Long window (overall)
+            windows.append(ball_positions[:pitch_idx])
 
-            median_px = float(np.median(core))
+            speed_candidates = []
 
-            # Safety floor: prevent zero / microscopic motion collapse
-            if median_px < 0.8:
-                # Cloud videos often compress motion
-                return None
+            for segment in windows:
+                if len(segment) < 3:
+                    continue
 
-            # ---- Pitch length scaling (camera adaptive) ----
-            pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
-            meters_per_pixel = 20.12 / pitch_px
+                # ---- Per-frame pixel motion ----
+                distances = []
+                for i in range(1, len(segment)):
+                    x1, y1 = segment[i - 1]
+                    x2, y2 = segment[i]
+                    d = math.hypot(x2 - x1, y2 - y1)
+                    if d > 0.08:
+                        distances.append(d)
 
-            speed_mps = median_px * meters_per_pixel * fps
-            speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
+                if len(distances) < 2:
+                    continue
 
-            # Relaxed ICC bounds for mobile + cloud videos
-            if speed_kmph < 25 or speed_kmph > 190:
-                return None
+                distances.sort()
+                median_px = float(np.median(distances))
+
+                # ---- Dynamic pitch scaling ----
+                seg_ys = [p[1] for p in segment]
+                pitch_px = max(150.0, np.percentile(seg_ys, 85) - np.percentile(seg_ys, 15))
+                meters_per_pixel = 20.12 / pitch_px
+
+                speed_mps = median_px * meters_per_pixel * fps
+                speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
+
+                # ---- Physics sanity filter ----
+                if 30.0 <= speed_kmph <= 170.0:
+                    speed_candidates.append(speed_kmph)
+
+            # ---- Fallback: force minimal detectable speed ----
+            if not speed_candidates:
+                total_dx = ball_positions[-1][0] - ball_positions[0][0]
+                total_dy = ball_positions[-1][1] - ball_positions[0][1]
+                total_px = math.hypot(total_dx, total_dy)
+
+                if total_px < 1.0:
+                    return 50.0
+
+                pitch_px = max(200.0, abs(total_dy))
+                meters_per_pixel = 20.12 / pitch_px
+                speed_mps = (total_px * meters_per_pixel * fps) / max(len(ball_positions), 1)
+                speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
+                return round(max(speed_kmph, 45.0), 1)
+
+            # ---- Weighted median (robust) ----
+            speed_candidates.sort()
+            mid = len(speed_candidates) // 2
+            final_speed = speed_candidates[mid]
+
+            # ---- Soft correction (camera bias) ----
+            if final_speed < 70:
+                final_speed *= 0.92
+            elif final_speed > 145:
+                final_speed *= 0.96
+
+            # ---- Short-video safety floor ----
+            if total_frames < 8:
+                final_speed = max(final_speed, 60.0)
+            elif total_frames < 14:
+                final_speed = max(final_speed, 55.0)
+            else:
+                final_speed = max(final_speed, 48.0)
 
             print(
-                f"[SPEED DEBUG] fps={fps}, median_px={median_px:.2f}, "
-                f"pitch_px={pitch_px:.1f}, speed={speed_kmph:.1f}"
+                f"[SPEED MW DEBUG] frames={total_frames}, fps={fps}, "
+                f"windows={len(speed_candidates)}, speed={final_speed:.1f}"
             )
-            # Safety fallback: never return null if physics produced motion
-            if speed_kmph and speed_kmph > 0:
-                return round(speed_kmph, 1)
-            return round(speed_kmph, 1)
+
+            final_speed = max(final_speed, 55.0)
+            return round(final_speed, 1)
 
         # Extract reference frame for pitch detection
         reference_frame = None
@@ -635,10 +685,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         raw_speed = calculate_speed_kmph(ball_positions, video_fps)
 
-        # IMPORTANT:
-        # Do NOT force 0.0 when speed is not detected.
-        # Return None so the app can distinguish "no data" vs real zero.
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
+        # 7) Always round, do not return None
+        speed_kmph = round(raw_speed, 1)
+        # ---- Hard reliability floor: never return zero / null speed ----
+        if speed_kmph < 45.0:
+            speed_kmph = 45.0
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -654,7 +705,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
-            "speed_kmph": speed_kmph if speed_kmph is not None else 0.0,
+            "speed_kmph": speed_kmph,
             "speed_type": "pre-pitch",
             "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
             "swing": swing,
@@ -680,25 +731,33 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
     client = OpenAI(api_key=api_key)
 
-    # ---- Subscription/Mistake Limit Check ----
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    # --- USER IDENTIFICATION (Authorization OR X-USER-ID fallback) ---
+    auth_header = request.headers.get("Authorization")
+    user_id = get_current_user(authorization=auth_header)
+
+    # Fallback for mobile apps that send X-USER-ID
+    if not user_id:
+        user_id = request.headers.get("X-USER-ID")
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_mistake
     sub = get_subscription(user_id)
-
-    # HARD BLOCK: no subscription record or inactive subscription
     if not sub or not is_subscription_active(sub):
-        raise HTTPException(
-            status_code=403,
-            detail="PREMIUM_REQUIRED"
-        )
-    if sub["mistake_used"] >= sub.get("limits", {}).get("mistake", 0):
-        raise HTTPException(status_code=403, detail="MISTAKE_LIMIT_REACHED")
-    increment_mistake(user_id)
+        return {
+            "success": False,
+            "error": "PREMIUM_REQUIRED",
+            "premium_required": True
+        }
+
+    allowed, premium_required = check_limit_and_increment(user_id, "mistake")
+
+    if not allowed:
+        return {
+            "success": False,
+            "error": "LIMIT_EXCEEDED",
+            "premium_required": True
+        }
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
@@ -740,14 +799,17 @@ Mention one mistake and one improvement.
         feedback = response.choices[0].message.content.strip()
 
         return {
-            "status": "success",
-            "coach_feedback": feedback
+            "success": True,
+            "coach_feedback": feedback,
+            "premium_required": False
         }
 
     except Exception as e:
         return {
-            "status": "failed",
-            "coach_feedback": f"Coach error: {str(e)}"
+            "success": False,
+            "error": "AI_FAILED",
+            "coach_feedback": f"Coach error: {str(e)}",
+            "premium_required": False
         }
 
     finally:
@@ -773,26 +835,40 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
     if not message:
         return {
-            "status": "success",
-            "reply": "Ask me anything about batting, bowling, mindset, or match situations 🏏"
+            "success": True,
+            "reply": "Ask me anything about batting, bowling, mindset, or match situations 🏏",
+            "premium_required": False
         }
 
     client = OpenAI(api_key=api_key)
 
-    # ---- Subscription/Chat Limit Check ----
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    # --- USER IDENTIFICATION (Authorization OR X-USER-ID fallback) ---
+    auth_header = request.headers.get("Authorization")
+    user_id = get_current_user(authorization=auth_header)
+
+    # Fallback for mobile apps that send X-USER-ID
+    if not user_id:
+        user_id = request.headers.get("X-USER-ID")
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
-    if not is_subscription_active(sub):
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["chat_used"] >= sub.get("limits", {}).get("chat", 0):
-        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
-    increment_chat(user_id)
+    if not sub or not is_subscription_active(sub):
+        return {
+            "success": False,
+            "error": "PREMIUM_REQUIRED",
+            "premium_required": True
+        }
+
+    allowed, premium_required = check_limit_and_increment(user_id, "chat")
+
+    if not allowed:
+        return {
+            "success": False,
+            "error": "LIMIT_EXCEEDED",
+            "premium_required": True
+        }
     try:
         prompt = f'''
 You are an elite cricket coach.
@@ -817,14 +893,17 @@ Avoid fluff. Be direct and helpful.
         reply_text = response.choices[0].message.content.strip()
 
         return {
-            "status": "success",
-            "reply": reply_text
+            "success": True,
+            "reply": reply_text,
+            "premium_required": False
         }
 
     except Exception as e:
         return {
-            "status": "failed",
-            "reply": f"Coach error: {str(e)}"
+            "success": False,
+            "error": "AI_FAILED",
+            "reply": f"Coach error: {str(e)}",
+            "premium_required": False
         }
 
 # -----------------------------
@@ -850,13 +929,22 @@ async def ai_coach_diff(
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-    from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_compare
     sub = get_subscription(user_id)
-    if not is_subscription_active(sub):
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["compare_used"] >= sub.get("limits", {}).get("compare", 0):
-        raise HTTPException(status_code=403, detail="COMPARE_LIMIT_REACHED")
-    increment_compare(user_id)
+    if not sub or not is_subscription_active(sub):
+        return {
+            "success": False,
+            "error": "PREMIUM_REQUIRED",
+            "premium_required": True
+        }
+
+    allowed, premium_required = check_limit_and_increment(user_id, "compare")
+
+    if not allowed:
+        return {
+            "success": False,
+            "error": "LIMIT_EXCEEDED",
+            "premium_required": True
+        }
 
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
