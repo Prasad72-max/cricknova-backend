@@ -1,6 +1,8 @@
 import json
 import os
 from datetime import datetime, timedelta
+import firebase_admin
+from firebase_admin import auth
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FILE_PATH = os.path.join(BASE_DIR, "subscriptions.json")
@@ -201,26 +203,28 @@ def get_current_user(
     x_user_id: str | None = None
 ):
     """
-    Resolve user_id safely across:
-    - Firebase Authorization: Bearer <UID>
-    - Mobile fallback header: X-USER-ID
-    - Local / Render environments
+    Resolve authenticated Firebase user.
+    Priority:
+    1) Authorization: Bearer <Firebase ID Token> (PRODUCTION)
+    2) X-USER-ID fallback (DEV / legacy only)
     """
 
-    # Priority 1: Explicit X-USER-ID (mobile-safe)
-    if x_user_id:
-        return x_user_id.strip()
-
-    # Priority 2: Authorization: Bearer <token or uid>
+    # ✅ Primary: Firebase ID token verification
     if authorization:
         try:
             parts = authorization.split(" ")
-            if len(parts) == 2 and parts[1].strip():
-                return parts[1].strip()
+            if len(parts) == 2 and parts[0].lower() == "bearer":
+                token = parts[1].strip()
+                decoded = auth.verify_id_token(token)
+                return decoded["uid"]
         except Exception:
             pass
 
-    return None
+    # ⚠️ Fallback: legacy / dev only
+    if x_user_id:
+        return x_user_id.strip()
+
+    raise Exception("USER_NOT_AUTHENTICATED")
 
 def save_firestore_subscription(user_id: str, data: dict):
     """
