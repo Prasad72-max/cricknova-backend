@@ -6,38 +6,8 @@ import os
 from google.cloud import firestore
 from cricknova_ai_backend.subscriptions_store import get_current_user
 
-def get_current_user(authorization: str | None = None):
-    """
-    Extract user_id from Authorization header.
-    Expected format: "Bearer <FIREBASE_ID_TOKEN>"
-    """
-    if not authorization:
-        return None
-
-    try:
-        scheme, token = authorization.split(" ", 1)
-        if scheme.lower() != "bearer" or not token:
-            return None
-
-        try:
-            import firebase_admin
-            from firebase_admin import auth as firebase_auth
-
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app()
-
-            decoded = firebase_auth.verify_id_token(token)
-            return decoded.get("uid")
-        except Exception:
-            # If Firebase verification fails, do NOT silently allow access
-            return None
-
-    except Exception:
-        return None
-
 # 🔧 TEMP DEBUG FLAGS (Render stability)
 BYPASS_AUTH = os.getenv("BYPASS_AUTH", "false").lower() == "true"
-BYPASS_LIMITS = os.getenv("BYPASS_LIMITS", "false").lower() == "true"
 
 router = APIRouter()
 
@@ -127,16 +97,20 @@ def get_user_plan(user_id: str) -> str:
 # -----------------------------
 # LIMIT CHECK
 # -----------------------------
-def check_chat_limit(user_id: str):
+def check_limit(user_id: str, feature: str):
     db_client = get_db()
     doc = db_client.collection("subscriptions").document(user_id).get()
 
     if not doc.exists:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+        return False, True, {
+            "used": 0,
+            "limit": 0,
+            "remaining": 0
+        }
 
     sub = doc.to_dict() or {}
+    print("🧪 RESTORE DEBUG → raw subscription data:", sub)
 
-    # ---- EXPIRY CHECK (support all field names) ----
     expiry = (
         sub.get("expiry")
         or sub.get("expiryDate")
@@ -144,68 +118,110 @@ def check_chat_limit(user_id: str):
     )
 
     if not expiry:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+        return False, True, {
+            "used": sub.get(f"{feature}_used", 0),
+            "limit": 0,
+            "remaining": 0
+        }
 
     try:
         expiry_dt = datetime.fromisoformat(expiry.replace("Z", ""))
     except Exception:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+        return False, True, {
+            "used": sub.get(f"{feature}_used", 0),
+            "limit": 0,
+            "remaining": 0
+        }
 
     if datetime.utcnow() > expiry_dt:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+        return False, True, {
+            "used": sub.get(f"{feature}_used", 0),
+            "limit": 0,
+            "remaining": 0
+        }
 
-    plan = sub.get("plan") or "FREE"
-    used = sub.get("chat_used", 0)
+    raw_plan = (sub.get("plan") or "").upper().strip()
 
-    PLAN_CHAT_LIMITS = {
-        "IN_99": 200,
-        "IN_299": 1200,
-        "IN_499": 3000,
-        "IN_1999": 20000,
+    PLAN_LIMITS = {
+        "IN_99": {"chat": 200, "mistake": 15},
+        "IN_299": {"chat": 1200, "mistake": 30},
+        "IN_499": {"chat": 3000, "mistake": 60},
+        "IN_1999": {"chat": 20000, "mistake": 200},
+        "MONTHLY": {"chat": 200, "mistake": 15},
+        "6 MONTHS": {"chat": 1200, "mistake": 30},
+        "YEARLY": {"chat": 3000, "mistake": 60},
+        "ULTRA": {"chat": 20000, "mistake": 200},
+        "ULTRA PRO": {"chat": 20000, "mistake": 200},
     }
 
-    chat_limit = PLAN_CHAT_LIMITS.get(plan, 0)
+    limits = PLAN_LIMITS.get(raw_plan)
+    print("🧪 RESTORE DEBUG → limits found:", limits)
+    if not limits:
+        return False, True, {
+            "used": sub.get(f"{feature}_used", 0),
+            "limit": 0,
+            "remaining": 0
+        }
 
-    if chat_limit <= 0:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+    limit = limits.get(feature)
+    used_key = f"{feature}_used"
+    used = sub.get(used_key, 0)
+    print(
+        "🧪 RESTORE DEBUG → feature:", feature,
+        "| used:", used,
+        "| limit:", limit
+    )
 
-    if used >= chat_limit:
-        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
+    if used >= limit:
+        return False, True, {
+            "used": used,
+            "limit": limit,
+            "remaining": 0
+        }
 
-    # increment usage atomically
     db_client.collection("subscriptions").document(user_id).set(
-        {"chat_used": firestore.Increment(1)},
+        {used_key: firestore.Increment(1)},
         merge=True
     )
 
-    return {
+    return True, False, {
         "used": used + 1,
-        "limit": chat_limit,
-        "remaining": chat_limit - (used + 1)
+        "limit": limit,
+        "remaining": limit - (used + 1)
     }
 
 # -----------------------------
 # AI COACH ENDPOINT
 # -----------------------------
 @router.post("/coach/chat")
-async def ai_coach(req: CoachRequest, request: Request):
+async def ai_coach(
+    req: CoachRequest,
+    request: Request,
+    skip_limit: bool = False
+):
     # 🔐 Resolve authenticated user (robust multi-source)
     user_id = None
 
+    # 1️⃣ Try Authorization header (Firebase ID token)
     if not BYPASS_AUTH:
         user_id = get_current_user(
-            authorization=request.headers.get("Authorization")
+            authorization=request.headers.get("Authorization"),
+            x_user_id=request.headers.get("X-USER-ID")
         )
+
+    # 2️⃣ Fallback: accept user_id from request body (frontend safety net)
+    if not user_id and req.user_id:
+        user_id = req.user_id
 
     print("🔐 RESOLVED USER_ID:", user_id)
     print("📦 HEADERS:", dict(request.headers))
     print("🧪 BYPASS_AUTH:", BYPASS_AUTH)
 
     if not user_id and not BYPASS_AUTH:
-        raise HTTPException(
-            status_code=401,
-            detail="USER_NOT_AUTHENTICATED"
-        )
+        return {
+            "reply": "Authentication issue detected. Please reopen the app and try again.",
+            "coach_feedback": "Authentication issue detected. Please reopen the app and try again."
+        }
 
     # fallback dummy user for AI testing
     if BYPASS_AUTH and not user_id:
@@ -218,18 +234,20 @@ async def ai_coach(req: CoachRequest, request: Request):
     if not OPENAI_API_KEY:
         print("❌ OPENAI_API_KEY missing on server")
         return {
-            "reply": "AI Coach is temporarily unavailable. Please try again later."
+            "reply": "AI Coach is temporarily unavailable. Please try again later.",
+            "coach_feedback": "AI Coach is temporarily unavailable. Please try again later."
         }
 
     # 🔐 LIMIT CHECK (only after AI is ready)
-    if BYPASS_LIMITS:
-        limit_info = {
-            "used": 0,
-            "limit": 9999,
-            "remaining": 9999
-        }
-    else:
-        limit_info = check_chat_limit(user_id)
+    limit_info = None
+    if not skip_limit:
+        allowed, premium_required, limit_info = check_limit(user_id, feature="chat")
+        if not allowed:
+            return {
+                "success": False,
+                "error": "LIMIT_EXCEEDED",
+                "premium_required": premium_required
+            }
 
     try:
         prompt = f"""
@@ -271,9 +289,11 @@ Situation / Question:
         )
 
         return {
+            "success": True,
             "reply": response.choices[0].message.content.strip(),
             "usage": limit_info,
-            "plan": get_user_plan(user_id)
+            "plan": get_user_plan(user_id),
+            "premium_required": False
         }
 
     except Exception as e:
@@ -281,3 +301,56 @@ Situation / Question:
             status_code=500,
             detail=f"AI Coach error: {str(e)}"
         )
+
+# -----------------------------
+# FRONTEND COMPATIBILITY ENDPOINT
+# -----------------------------
+@router.post("/coach/analyze")
+async def ai_coach_analyze(req: CoachRequest, request: Request):
+    """
+    Compatibility wrapper for older frontend builds.
+    Internally routes to /coach/chat logic.
+    """
+
+    # 🔐 LIMIT CHECK for mistake feature
+    user_id = None
+
+    # 1️⃣ Try Authorization header (Firebase ID token)
+    if not BYPASS_AUTH:
+        user_id = get_current_user(
+            authorization=request.headers.get("Authorization"),
+            x_user_id=request.headers.get("X-USER-ID")
+        )
+
+    # 2️⃣ Fallback: accept user_id from request body (frontend safety net)
+    if not user_id and req.user_id:
+        user_id = req.user_id
+
+    if not user_id and not BYPASS_AUTH:
+        return {
+            "coach_feedback": "Authentication issue detected. Please reopen the app and try again.",
+            "reply": "Authentication issue detected. Please reopen the app and try again.",
+            "usage": None,
+            "plan": "FREE"
+        }
+
+    if BYPASS_AUTH and not user_id:
+        user_id = "render-test-user"
+
+    allowed, premium_required, limit_info = check_limit(user_id, feature="mistake")
+    if not allowed:
+        return {
+            "success": False,
+            "error": "LIMIT_EXCEEDED",
+            "premium_required": premium_required
+        }
+
+    response = await ai_coach(req, request, skip_limit=False)
+
+    # Ensure frontend always gets expected keys
+    return {
+        "coach_feedback": response.get("reply"),
+        "reply": response.get("reply"),
+        "usage": limit_info,
+        "plan": response.get("plan"),
+    }
