@@ -75,9 +75,19 @@ def verify_payment(request: Request, data: dict = Body(...)):
         if not user_id:
             raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-        plan = data.get("plan")
-        if not plan:
-            raise HTTPException(status_code=400, detail="PLAN_REQUIRED")
+        raw_plan = data.get("plan") or "monthly"
+
+        # Normalize / alias plans coming from app or Razorpay
+        PLAN_ALIAS = {
+            "monthly": "IN_99",
+            "yearly": "IN_499",
+            "INR_99": "IN_99",
+            "INR_499": "IN_499",
+            "99": "IN_99",
+            "499": "IN_499",
+        }
+
+        plan = PLAN_ALIAS.get(raw_plan, raw_plan)
 
         # 🔥 Activate subscription in backend (single source of truth)
         activate_plan_internal(

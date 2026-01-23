@@ -42,7 +42,7 @@ def verify_payment(data: VerifyRequest):
     if not mapped_plan:
         raise HTTPException(status_code=400, detail=f"Unknown plan: {data.plan}")
 
-    # ✅ PAYMENT IS REAL → ACTIVATE PLAN (single source of truth)
+    activation_error = None
     try:
         create_or_update_subscription(
             user_id=data.user_id,
@@ -51,14 +51,15 @@ def verify_payment(data: VerifyRequest):
             order_id=data.razorpay_order_id
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Plan activation failed: {e}")
-
-    # TODO: Store razorpay_payment_id in DB to prevent replay attacks
+        # Do NOT fail payment after Razorpay success
+        activation_error = str(e)
 
     return {
         "success": True,
         "status": "success",
-        "premium_activated": True,
+        "payment_verified": True,
+        "premium_activated": activation_error is None,
+        "activation_error": activation_error,
         "backend_plan": mapped_plan,
         "app_plan": data.plan,
         "user_id": data.user_id,

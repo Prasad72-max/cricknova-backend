@@ -8,23 +8,16 @@ FILE_PATH = os.path.join(BASE_DIR, "subscriptions.json")
 # -----------------------------
 # PLAN DEFINITIONS (SOURCE OF TRUTH)
 # -----------------------------
-PLANS = {
-    "monthly": {
-        "duration_days": 30,
-        "limits": {"chat": 200, "mistake": 15, "compare": 0}
-    },
-    "6_months": {
-        "duration_days": 180,
-        "limits": {"chat": 1200, "mistake": 30, "compare": 0}
-    },
-    "yearly": {
-        "duration_days": 365,
-        "limits": {"chat": 3000, "mistake": 60, "compare": 50}
-    },
-    "ultra_pro": {
-        "duration_days": 365,
-        "limits": {"chat": 20000, "mistake": 200, "compare": 200}
-    }
+PLAN_LIMITS = {
+    "IN_99": {"chat": 200, "mistake": 15, "compare": 0},
+    "IN_299": {"chat": 1200, "mistake": 30, "compare": 0},
+    "IN_499": {"chat": 3000, "mistake": 60, "compare": 50},
+    "IN_1999": {"chat": 20000, "mistake": 200, "compare": 200},
+
+    "INT_MONTHLY": {"chat": 200, "mistake": 20, "compare": 0},
+    "INT_6_MONTHS": {"chat": 1200, "mistake": 30, "compare": 5},
+    "INT_YEARLY": {"chat": 1800, "mistake": 50, "compare": 10},
+    "INT_ULTRA": {"chat": 20000, "mistake": 200, "compare": 150},
 }
 
 FREE_PLAN = {
@@ -92,20 +85,54 @@ def is_subscription_active(sub: dict) -> bool:
         return False
     return True
 
+def check_limit_and_increment(user_id: str, feature: str):
+    sub = get_subscription(user_id)
+
+    if not sub or not sub.get("active"):
+        return False, True  # premium required
+
+    plan = sub.get("plan")
+    if not plan or plan not in PLAN_LIMITS:
+        return False, True
+
+    limits = PLAN_LIMITS.get(plan, {})
+    limit = limits.get(feature, 0)
+
+    used_key = f"{feature}_used"
+    used = int(sub.get(used_key, 0))
+
+    if used >= limit:
+        return False, True  # limit exceeded
+
+    sub[used_key] = used + 1
+
+    save_firestore_subscription(user_id, sub)
+
+    return True, False
+
 def create_or_update_subscription(user_id: str, plan: str, payment_id: str, order_id: str):
-    if plan not in PLANS:
+    if plan not in PLAN_LIMITS:
         raise ValueError(f"Invalid plan: {plan}")
 
     now = datetime.utcnow()
-    plan_cfg = PLANS[plan]
-    expiry = now + timedelta(days=plan_cfg["duration_days"])
+    # Determine duration_days based on plan type (assuming 30 days for monthly, etc.)
+    # Since PLAN_LIMITS doesn't have duration_days, let's default to 30 days for simplicity
+    duration_days = 30
+    if plan in ["IN_299", "INT_6_MONTHS"]:
+        duration_days = 180
+    elif plan in ["IN_499", "INT_YEARLY"]:
+        duration_days = 365
+    elif plan in ["IN_1999", "INT_ULTRA"]:
+        duration_days = 365
+
+    expiry = now + timedelta(days=duration_days)
 
     subs = load_subscriptions()
     subs[user_id] = {
         "user_id": user_id,
         "plan": plan,
         "active": True,
-        "limits": plan_cfg["limits"],
+        "limits": PLAN_LIMITS[plan],
         "chat_used": 0,
         "mistake_used": 0,
         "compare_used": 0,
@@ -175,9 +202,8 @@ def get_current_user(authorization: str | None = None):
     Expected format: "Bearer <USER_ID>"
     """
 
-    # fallback to debug user when auth is missing
     if not authorization:
-        return "debug-user"
+        return None
 
     try:
         parts = authorization.split(" ")
@@ -186,4 +212,42 @@ def get_current_user(authorization: str | None = None):
     except Exception:
         pass
 
-    return "debug-user"
+    return None
+
+def save_firestore_subscription(user_id: str, data: dict):
+    """
+    Persist subscription back to Firestore.
+    Firestore schema is NOT modified.
+    """
+    from google.cloud import firestore
+    db = firestore.Client()
+    db.collection("subscriptions").document(user_id).set(data, merge=True)
+
+def check_limit_and_increment(user_id: str, feature: str):
+    sub = get_subscription(user_id)
+
+    # Not active or no subscription
+    if not sub or not sub.get("active"):
+        return False, True  # premium required
+
+    plan = sub.get("plan")
+    if not plan or plan not in PLAN_LIMITS:
+        return False, True
+
+    limits = PLAN_LIMITS.get(plan, {})
+    limit = limits.get(feature, 0)
+
+    used_key = f"{feature}_used"
+    used = int(sub.get(used_key, 0))
+
+    # Limit exceeded
+    if used >= limit:
+        return False, True
+
+    # Increment usage
+    sub[used_key] = used + 1
+
+    # Persist back to Firestore
+    save_firestore_subscription(user_id, sub)
+
+    return True, False

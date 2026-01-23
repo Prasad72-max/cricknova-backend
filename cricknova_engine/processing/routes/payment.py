@@ -105,18 +105,30 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
 
         backend_plan = PLAN_MAP.get(payload.plan)
         if not backend_plan:
-            raise HTTPException(status_code=400, detail="Unknown plan code")
+            # Do NOT fail payment after success – log & continue
+            return {
+                "success": True,
+                "status": "success",
+                "warning": "Unknown plan code, payment captured but plan not mapped",
+                "premium_activated": False,
+                "app_plan": payload.plan
+            }
 
-        user_subscription.activate_plan_internal(
-            user_id=payload.user_id,
-            plan=backend_plan
-        )
+        try:
+            user_subscription.activate_plan_internal(
+                user_id=payload.user_id,
+                plan=backend_plan
+            )
+            premium_activated = True
+        except Exception as e:
+            # 🔥 Critical fix: never mark payment as failed after Razorpay success
+            premium_activated = False
 
         return {
             "success": True,
             "status": "success",
-            "message": "Payment verified & premium activated",
-            "premium_activated": True,
+            "message": "Payment verified",
+            "premium_activated": premium_activated,
             "backend_plan": backend_plan,
             "app_plan": payload.plan
         }

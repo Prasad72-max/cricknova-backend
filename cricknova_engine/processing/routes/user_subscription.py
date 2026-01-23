@@ -1,12 +1,16 @@
 from fastapi import APIRouter, HTTPException, Request
 from datetime import datetime, timedelta
 from google.cloud import firestore
+from pydantic import BaseModel
 
 # 🔐 Backend is the single source of truth for subscription & limits.
 # Uses Firestore for persistence (NO in-memory loss)
 
 router = APIRouter()
 _db = None
+
+class ActivatePlanRequest(BaseModel):
+    plan: str
 
 def get_db():
     global _db
@@ -135,10 +139,12 @@ def subscription_status(request: Request):
 # ACTIVATE PLAN (after payment)
 # -----------------------------
 @router.post("/subscription/activate")
-def activate_plan(request: Request, plan: str):
+def activate_plan(request: Request, payload: ActivatePlanRequest):
     user_id = request.headers.get("X-USER-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+
+    plan = payload.plan.strip().lower()
 
     if plan in PLAN_ALIASES:
         plan = PLAN_ALIASES[plan]

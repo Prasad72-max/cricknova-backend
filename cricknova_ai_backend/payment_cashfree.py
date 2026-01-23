@@ -2,6 +2,7 @@ from fastapi import APIRouter, Body
 import requests
 import os
 from dotenv import load_dotenv
+from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
 load_dotenv()
 
@@ -92,8 +93,22 @@ def verify_cashfree_payment(data: dict = Body(...)):
     }
 
     order_id = data.get("order_id")
-    if not order_id:
-        return {"status": "failed", "reason": "order_id missing"}
+    user_id = data.get("user_id")
+    plan_raw = data.get("plan", "monthly")
+
+    if not order_id or not user_id:
+        return {"status": "failed", "reason": "order_id or user_id missing"}
+
+    # Normalize plan
+    plan_map = {
+        "monthly": "IN_99",
+        "99": "IN_99",
+        "INR_99": "IN_99",
+        "yearly": "IN_499",
+        "499": "IN_499",
+        "INR_499": "IN_499"
+    }
+    plan = plan_map.get(str(plan_raw), "IN_99")
 
     response = requests.get(
         f"{CASHFREE_BASE_URL}/orders/{order_id}",
@@ -110,13 +125,21 @@ def verify_cashfree_payment(data: dict = Body(...)):
     result = response.json()
 
     if result.get("order_status") == "PAID":
+        create_or_update_subscription(
+            user_id=user_id,
+            plan=plan,
+            provider="cashfree",
+            order_id=order_id
+        )
+
         return {
             "status": "success",
             "success": True,
             "verified": True,
             "premium_activated": True,
             "order_id": order_id,
-            "payment_status": "PAID"
+            "payment_status": "PAID",
+            "plan": plan
         }
 
     return {

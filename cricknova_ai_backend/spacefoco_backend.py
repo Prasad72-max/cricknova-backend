@@ -1,3 +1,4 @@
+print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18 🔥")
 import os
 import asyncio
 import sys
@@ -194,12 +195,15 @@ async def paypal_capture(req: PayPalCaptureRequest):
 
     sub = get_subscription(req.user_id)
 
+    expiry = sub.get("expiry")
+    if hasattr(expiry, "isoformat"):
+        expiry = expiry.isoformat()
     return {
         "status": "success",
         "premium": True,
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+        "expiry": expiry
     }
 
 # -----------------------------
@@ -237,11 +241,14 @@ async def subscription_status(request: Request):
             "expiry": None
         }
 
+    expiry = sub.get("expiry")
+    if hasattr(expiry, "isoformat"):
+        expiry = expiry.isoformat()
     return {
         "premium": is_subscription_active(sub),
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+        "expiry": expiry
     }
 
 
@@ -365,11 +372,20 @@ async def verify_payment(req: VerifyPaymentRequest):
     if not req.user_id or not req.plan:
         raise HTTPException(status_code=400, detail="Missing user_id or plan")
 
+    # --- Normalize Razorpay plan names before saving subscription ---
+    plan = (req.plan or "").lower()
+    if plan in ["monthly", "99", "inr_99"]:
+        plan = "IN_99"
+    elif plan in ["yearly", "499", "inr_499"]:
+        plan = "IN_499"
+    else:
+        raise HTTPException(status_code=400, detail=f"INVALID_PLAN:{req.plan}")
+
     from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
     create_or_update_subscription(
         user_id=req.user_id,
-        plan=req.plan,
+        plan=plan,
         payment_id=req.razorpay_payment_id,
         order_id=req.razorpay_order_id
     )
@@ -378,13 +394,16 @@ async def verify_payment(req: VerifyPaymentRequest):
 
     sub = get_subscription(req.user_id)
 
+    expiry = sub.get("expiry")
+    if hasattr(expiry, "isoformat"):
+        expiry = expiry.isoformat()
     return {
         "status": "success",
         "premium": True,
         "user_id": req.user_id,
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
+        "expiry": expiry
     }
 
 
@@ -546,52 +565,41 @@ async def analyze_training_video(file: UploadFile = File(...)):
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
         def calculate_speed_kmph(ball_positions, fps):
-            if len(ball_positions) < 8 or fps <= 1:
-                return None
+            if len(ball_positions) < 6 or fps <= 1:
+                fps = 30.0
 
-            # ---- FPS normalization ----
+            # Normalize fps
             fps = min(max(fps, 24), 60)
 
-            # ---- Use only PRE-PITCH frames ----
-            ys = [p[1] for p in ball_positions]
-            pitch_idx = int(np.argmax(ys))
-            usable = ball_positions[max(0, pitch_idx - 8):pitch_idx]
-
-            if len(usable) < 5:
-                return None
-
-            # ---- Per-frame distances ----
             distances = []
-            for i in range(1, len(usable)):
-                x1, y1 = usable[i - 1]
-                x2, y2 = usable[i]
+
+            # Use full visible trajectory (not only pre-pitch)
+            for i in range(1, len(ball_positions)):
+                x1, y1 = ball_positions[i - 1]
+                x2, y2 = ball_positions[i]
                 d = math.hypot(x2 - x1, y2 - y1)
 
-                # Tight noise rejection
-                if 1.5 < d < 35.0:
+                # Relaxed but safe noise filter
+                if 1.0 < d < 45.0:
                     distances.append(d)
 
             if len(distances) < 4:
                 return None
 
-            # ---- Trimmed median (remove extreme noise) ----
-            distances.sort()
-            trim = int(len(distances) * 0.2)
-            core = distances[trim:len(distances) - trim]
-            if not core:
-                return None
+            # Robust median
+            median_px = float(np.median(distances))
 
-            median_px = float(np.median(core))
+            # Estimate pitch pixel length
+            ys = [p[1] for p in ball_positions]
+            pitch_px = max(180.0, max(ys) - min(ys))
 
-            # ---- Pitch length scaling (camera adaptive) ----
-            pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
             meters_per_pixel = 20.12 / pitch_px
 
             speed_mps = median_px * meters_per_pixel * fps
             speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
 
-            # ICC realistic bowling range
-            if speed_kmph < 80 or speed_kmph > 160:
+            # Relaxed clamp – allow low-confidence speeds
+            if speed_kmph <= 0 or speed_kmph > 180:
                 return None
 
             return round(speed_kmph, 1)
@@ -601,9 +609,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
         cap = cv2.VideoCapture(video_path)
         video_fps = 30.0
         if cap.isOpened():
-            video_fps = cap.get(cv2.CAP_PROP_FPS)
-            if video_fps is None or video_fps <= 1:
-                video_fps = 30.0
+            fps_val = cap.get(cv2.CAP_PROP_FPS)
+            if isinstance(fps_val, (int, float)) and 5.0 <= fps_val <= 240.0:
+                video_fps = float(fps_val)
             ret, frame = cap.read()
             if ret:
                 reference_frame = frame
@@ -611,9 +619,12 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         raw_speed = calculate_speed_kmph(ball_positions, video_fps)
 
-        # IMPORTANT:
-        # Always return 0.0 for speed_kmph if not detected (never None, so frontend always shows value).
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else 0.0
+        # ---- Physics-only speed (no scripting) ----
+        if raw_speed is not None and raw_speed > 0:
+            speed_kmph = round(float(raw_speed), 1)
+        else:
+            speed_kmph = None
+
         print(f"[SPEED] raw={raw_speed}, final={speed_kmph}, fps={video_fps}, points={len(ball_positions)}")
 
         swing = detect_swing_x(ball_positions)
@@ -793,19 +804,22 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
         user_id = "debug-user"
 
     if not user_id:
-        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+        return {
+            "status": "success",
+            "reply": "Please log in again to continue chatting with AI Coach."
+        }
 
     from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
 
-    # Allow in DEV mode or when subscription record exists but active flag is delayed
-    if not is_subscription_active(sub):
-        if DEV_MODE:
-            pass
-        else:
-            raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
+    # HARD BLOCK: no subscription record or inactive subscription
+    if not sub or not is_subscription_active(sub):
+        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
     if sub["chat_used"] >= sub.get("limits", {}).get("chat", 0):
-        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
+        return {
+            "status": "success",
+            "reply": "You have reached your daily chat limit. Try again tomorrow."
+        }
     increment_chat(user_id)
     try:
         prompt = f'''
@@ -1006,13 +1020,12 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             meters_per_pixel = 20.12 / pitch_px
             speed_kmph = median_px * meters_per_pixel * fps * 3.6 * SPEED_CALIBRATION_FACTOR
 
-            if speed_kmph <= 0 or speed_kmph > 180:
-                return None
 
             return round(speed_kmph, 1)
 
         raw_speed = calculate_speed_kmph(ball_positions, fps)
-        speed_kmph = raw_speed if raw_speed is not None else 0.0
+        # Do NOT script speed. Use None when speed is not reliably detected.
+        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
         trajectory = []
