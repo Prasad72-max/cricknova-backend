@@ -65,13 +65,27 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
     // 🔒 Compare feature allowed ONLY for IN_499 and IN_1999
     if (!PremiumService.isPremium ||
         (PremiumService.plan != "IN_499" && PremiumService.plan != "IN_1999")) {
+
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const PremiumScreen(entrySource: "compare"),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "🔒 Analyse Yourself is a Pro feature. Upgrade to ₹499 or ₹1999 to unlock video comparison.",
+            ),
+            duration: Duration(seconds: 3),
+            backgroundColor: Colors.black87,
           ),
         );
+
+        Future.delayed(const Duration(milliseconds: 1200), () {
+          if (!mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PremiumScreen(entrySource: "analyse"),
+            ),
+          );
+        });
       }
       return;
     }

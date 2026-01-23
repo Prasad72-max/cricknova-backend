@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../config/api_config.dart';
+import '../premium/premium_screen.dart';
 
 
 class AICoachScreen extends StatefulWidget {
@@ -19,6 +20,8 @@ class AICoachScreen extends StatefulWidget {
 }
 
 class _AICoachScreenState extends State<AICoachScreen> {
+  bool _redirectedToPremium = false;
+
   late Uri uri;
 
   final TextEditingController controller = TextEditingController();
@@ -39,6 +42,14 @@ class _AICoachScreenState extends State<AICoachScreen> {
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        _redirectToPremiumWithReason();
+        return;
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       await loadChats();
 
       if (widget.initialQuestion != null &&
@@ -47,6 +58,47 @@ class _AICoachScreenState extends State<AICoachScreen> {
         sendMessage();
       }
     });
+  }
+
+  Future<void> _redirectToPremiumWithReason() async {
+    if (_redirectedToPremium) return;
+    _redirectedToPremium = true;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF020617),
+        title: const Text(
+          "Premium Feature",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          "AI Coach is a premium feature.\n\nUpgrade to unlock personalised cricket coaching, mistake analysis, and match-level insights.",
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text(
+              "Upgrade",
+              style: TextStyle(color: Color(0xFF38BDF8)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const PremiumScreen(entrySource: "ai_coach"),
+      ),
+    );
   }
 
   /* ---------------- STORAGE ---------------- */
@@ -92,6 +144,11 @@ class _AICoachScreenState extends State<AICoachScreen> {
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      await _redirectToPremiumWithReason();
+      return;
+    }
 
     String userMessage = controller.text.trim();
     if (userMessage.isEmpty) return;
@@ -117,9 +174,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
       if (user == null) {
         throw Exception("User not authenticated");
       }
-      String? idToken = await user.getIdToken();
-      if (idToken == null) {
-        throw Exception("Failed to get auth token");
+      final String idToken = (await user.getIdToken(true)) ?? "";
+      if (idToken.isEmpty) {
+        throw Exception("Failed to obtain Firebase ID token");
       }
 
       http.Response response = await http.post(
@@ -136,16 +193,16 @@ class _AICoachScreenState extends State<AICoachScreen> {
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 401 || response.statusCode == 403) {
-        idToken = await user.getIdToken(true);
-        if (idToken == null) {
-          throw Exception("Failed to refresh auth token");
+        final String refreshedToken = (await user.getIdToken(true)) ?? "";
+        if (refreshedToken.isEmpty) {
+          throw Exception("Failed to refresh Firebase ID token");
         }
         response = await http.post(
           uri,
           headers: {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": "Bearer $idToken",
+            "Authorization": "Bearer $refreshedToken",
             "X-USER-ID": user.uid,
           },
           body: jsonEncode({
@@ -167,13 +224,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
         debugPrint("AI COACH RESPONSE => $decoded");
         // Handle limit exceeded WITHOUT navigation
         if (decoded["error"] == "LIMIT_EXCEEDED") {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("AI limit reached. Upgrade to Premium to continue."),
-              ),
-            );
-          }
+          await _redirectToPremiumWithReason();
           return;
         }
 

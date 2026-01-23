@@ -8,14 +8,26 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+
 from fastapi import FastAPI
+
+# --- Firebase Admin Initialization ---
+import firebase_admin
+from firebase_admin import credentials, auth
+
+if not firebase_admin._apps:
+    cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if not cred_path:
+        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS not set")
+    cred = credentials.Certificate(cred_path)
+    firebase_admin.initialize_app(cred)
+    print("🔥 Firebase Admin initialized")
 
 app = FastAPI(title="CrickNova AI Backend")
 
 @app.on_event("startup")
 async def startup_log():
     import os
-    print("🔥🔥 SPACEFOCO BACKEND STARTED — SPACEFOCO FIXED BACKEND ACTIVE 🔥🤣jgyuv5trfgh7hjmdggy8n4hsrftffgnh7jguhtg3ff🔥")
     print("🧠 BOOT FILE:", __file__)
     print("📂 CWD:", os.getcwd())
     print("🐍 PYTHONPATH:", os.environ.get("PYTHONPATH"))
@@ -232,7 +244,7 @@ async def subscription_status(request: Request):
     try:
         if auth_header:
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(authorization=token)
+            user_id = get_current_user(token)
     except Exception:
         user_id = None
 
@@ -742,7 +754,7 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     try:
         if auth_header:
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(authorization=token)
+            user_id = get_current_user(token)
     except Exception:
         user_id = None
 
@@ -859,7 +871,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     try:
         if auth_header:
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(authorization=token)
+            user_id = get_current_user(token)
     except Exception:
         user_id = None
 
@@ -945,7 +957,7 @@ async def ai_coach_diff(
     try:
         if auth_header:
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(authorization=token)
+            user_id = get_current_user(token)
     except Exception:
         user_id = None
     if not user_id:

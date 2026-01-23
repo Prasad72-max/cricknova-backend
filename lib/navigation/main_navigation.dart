@@ -115,10 +115,33 @@ class _MainNavigationState extends State<MainNavigation> {
         type: BottomNavigationBarType.fixed,
 
         onTap: (i) {
-          // 🔒 Gate AI Coach tab behind premium
           if (i == 1 && !PremiumService.isPremiumActive) {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PremiumScreen()),
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text("🔒 AI Coach Locked"),
+                content: const Text(
+                  "AI Coach is a premium feature.\n\n"
+                  "Upgrade your plan to unlock personalised batting and bowling analysis."
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text("Cancel"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PremiumScreen(entrySource: "coach"),
+                        ),
+                      );
+                    },
+                    child: const Text("Upgrade"),
+                  ),
+                ],
+              ),
             );
             return;
           }

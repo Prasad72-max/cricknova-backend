@@ -318,14 +318,65 @@ class _UploadScreenState extends State<UploadScreen> {
       final bool success = data["success"] == true;
 
       if (premiumRequired && !success) {
-        if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PremiumScreen(entrySource: "coach"),
-            ),
-          );
-        }
+        if (!mounted) return;
+
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF0F172A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                "Premium Feature 🔒",
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              content: const Text(
+                "AI Coach is a premium feature.\n\nUpgrade your plan to unlock personalised batting & bowling analysis from our AI coach.",
+                style: TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      showCoach = false;
+                    });
+                  },
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.white54),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const PremiumScreen(entrySource: "coach"),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    "Upgrade",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+
         return;
       }
 
