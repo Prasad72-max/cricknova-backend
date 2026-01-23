@@ -227,9 +227,13 @@ app.include_router(
 # -----------------------------
 @app.get("/user/subscription/status")
 async def subscription_status(request: Request):
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    auth_header = request.headers.get("Authorization")
+    user_id = None
+    try:
+        if auth_header:
+            user_id = get_current_user(authorization=auth_header)
+    except Exception:
+        user_id = None
 
     # Fallback for mobile apps (India flow) using X-USER-ID
     if not user_id:
@@ -733,7 +737,12 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
 
     # --- USER IDENTIFICATION (Authorization OR X-USER-ID fallback) ---
     auth_header = request.headers.get("Authorization")
-    user_id = get_current_user(authorization=auth_header)
+    user_id = None
+    try:
+        if auth_header:
+            user_id = get_current_user(authorization=auth_header)
+    except Exception:
+        user_id = None
 
     # Fallback for mobile apps that send X-USER-ID
     if not user_id:
@@ -844,7 +853,12 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
     # --- USER IDENTIFICATION (Authorization OR X-USER-ID fallback) ---
     auth_header = request.headers.get("Authorization")
-    user_id = get_current_user(authorization=auth_header)
+    user_id = None
+    try:
+        if auth_header:
+            user_id = get_current_user(authorization=auth_header)
+    except Exception:
+        user_id = None
 
     # Fallback for mobile apps that send X-USER-ID
     if not user_id:
@@ -923,9 +937,15 @@ async def ai_coach_diff(
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Compare Limit Check ----
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    auth_header = request.headers.get("Authorization")
+    user_id = None
+    try:
+        if auth_header:
+            user_id = get_current_user(authorization=auth_header)
+    except Exception:
+        user_id = None
+    if not user_id:
+        user_id = request.headers.get("X-USER-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
