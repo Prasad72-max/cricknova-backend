@@ -544,10 +544,23 @@ def calculate_spin_real(ball_positions):
 # TRAINING VIDEO API
 # -----------------------------
 @app.post("/training/analyze")
-async def analyze_training_video(file: UploadFile = File(...)):
+async def analyze_training_video(request: Request, file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
+
+    # --- OPTIONAL USER IDENTIFICATION (DO NOT BLOCK FREE USERS) ---
+    auth_header = request.headers.get("Authorization")
+    user_id = None
+    try:
+        if auth_header:
+            token = auth_header.replace("Bearer ", "").strip()
+            user_id = get_current_user(token)
+    except Exception:
+        user_id = None
+
+    if not user_id:
+        user_id = request.headers.get("X-USER-ID")
 
     try:
         ball_positions = track_ball_positions(video_path)
@@ -562,7 +575,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "reason": "Ball not detected clearly",
                 "speed_kmph": None,
                 "swing": "unknown",
-                "spin": "unknown",
+                "spin": "none",
                 "trajectory": []
             }
 
@@ -723,8 +736,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": "pre-pitch",
-            "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -790,8 +801,9 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
 
         if not ball_positions or len(ball_positions) < 6:
             return {
-                "status": "failed",
-                "coach_feedback": "Ball not tracked clearly. Try a clearer angle."
+                "success": False,
+                "reply": "Ball not tracked clearly. Try a clearer angle.",
+                "premium_required": False
             }
 
         swing = detect_swing_x(ball_positions)
@@ -823,7 +835,7 @@ Mention one mistake and one improvement.
 
         return {
             "success": True,
-            "coach_feedback": feedback,
+            "reply": feedback,
             "premium_required": False
         }
 
@@ -831,7 +843,7 @@ Mention one mistake and one improvement.
         return {
             "success": False,
             "error": "AI_FAILED",
-            "coach_feedback": f"Coach error: {str(e)}",
+            "reply": f"Coach error: {str(e)}",
             "premium_required": False
         }
 
