@@ -22,19 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _restoreAndLoad();
-  }
-
-  Future<void> _restoreAndLoad() async {
-    // Always restore premium & usage from backend as source of truth
-    await PremiumService.restoreOnLaunch();
-
-    if (!mounted) return;
-
-    // Force UI refresh after backend sync
-    setState(() {});
-
-    await loadTrainingVideos();
+    loadTrainingVideos();
   }
 
   Future<void> loadTrainingVideos() async {
@@ -48,11 +36,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint("HOME → isPremium=${PremiumService.isPremium}");
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      body: ListView(
+          padding: EdgeInsets.zero,
           children: [
             // HEADER
             Container(
@@ -137,12 +125,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Upload Training Video",
                     subtitle: "AI will analyze your batting or bowling",
                     icon: Icons.upload_file_rounded,
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => UploadScreen()),
+                    onTap: () {
+                      debugPrint('NAVIGATE → UploadScreen');
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const UploadScreen()),
                       );
-                      await loadTrainingVideos();
                     },
                   ),
                   const SizedBox(height: 14),
@@ -150,7 +137,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Analyse Yourself",
                     subtitle: "Compare two videos and see differences",
                     icon: Icons.compare_rounded,
-                    onTap: () async {
+                    onTap: () {
+                      debugPrint('NAVIGATE → AnalyseYourself');
+
                       if (!PremiumService.canCompare()) {
                         PremiumService.showPaywall(
                           context,
@@ -160,8 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         return;
                       }
 
-                      await Navigator.push(
-                        context,
+                      Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const AnalyseYourselfScreen(),
                         ),
@@ -367,9 +355,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 40),
           ],
         ),
-      ),
-    );
-  }
+      );
+    }
 
   Widget _actionCard({
     required String title,
@@ -377,53 +364,65 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111827),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Color(0xFF1F2937)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 10,
-              spreadRadius: 2,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 36, color: const Color(0xFF38BDF8)),
-            const SizedBox(width: 18),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.poppins(
-                      fontSize: 13,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ],
+    return Material(
+      color: Colors.transparent,
+      child: InkResponse(
+        onTap: () {
+          debugPrint('ACTION CARD TAPPED → $title');
+          onTap();
+        },
+        containedInkWell: true,
+        highlightShape: BoxShape.rectangle,
+        radius: 600,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Color(0xFF1F2937)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 10,
+                spreadRadius: 2,
+                offset: Offset(0, 4),
               ),
-            ),
-            const Icon(Icons.arrow_forward_ios,
-                size: 20, color: Colors.black38),
-          ],
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 36, color: const Color(0xFF38BDF8)),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios,
+                size: 20,
+                color: Colors.black38,
+              ),
+            ],
+          ),
         ),
       ),
     );
