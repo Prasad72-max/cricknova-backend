@@ -73,6 +73,10 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     await prefs.setString("userId", user.uid);
     await prefs.setString("loginType", "phone");
 
+    // 🔐 Store Firebase ID token for backend auth
+    final idToken = await user.getIdToken(true);
+    await prefs.setString("firebase_id_token", idToken);
+
     // 🔁 Restore premium from Firestore after login
     await PremiumService.syncFromFirestore(user.uid);
 

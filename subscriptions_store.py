@@ -58,7 +58,7 @@ def get_subscription(user_id: str):
     sub = subs.get(user_id)
 
     if not sub:
-        return FREE_PLAN.copy()
+        return json.loads(json.dumps(FREE_PLAN))
 
     expiry = sub.get("expiry")
     if not expiry:
@@ -81,9 +81,9 @@ def get_subscription(user_id: str):
 def is_subscription_active(sub: dict) -> bool:
     if not sub:
         return False
-    if not sub.get("active"):
+    if not sub.get("active", False):
         return False
-    if not sub.get("limits"):
+    if not isinstance(sub.get("limits"), dict):
         return False
     return True
 
@@ -108,6 +108,9 @@ def check_limit_and_increment(user_id: str, feature: str):
 
     sub[used_key] = used + 1
 
+    subs = load_subscriptions()
+    subs[user_id] = sub
+    save_subscriptions(subs)
     save_firestore_subscription(user_id, sub)
 
     return True, False
@@ -151,49 +154,13 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
 # USAGE COUNTERS
 # -----------------------------
 def increment_chat(user_id: str):
-    subs = load_subscriptions()
-    sub = subs.get(user_id)
-    if not sub:
-        return
-
-    limit = sub.get("limits", {}).get("chat", 0)
-    used = sub.get("chat_used", 0)
-
-    if used >= limit:
-        return
-
-    sub["chat_used"] = used + 1
-    save_subscriptions(subs)
+    pass
 
 def increment_mistake(user_id: str):
-    subs = load_subscriptions()
-    sub = subs.get(user_id)
-    if not sub:
-        return
-
-    limit = sub.get("limits", {}).get("mistake", 0)
-    used = sub.get("mistake_used", 0)
-
-    if used >= limit:
-        return
-
-    sub["mistake_used"] = used + 1
-    save_subscriptions(subs)
+    pass
 
 def increment_compare(user_id: str):
-    subs = load_subscriptions()
-    sub = subs.get(user_id)
-    if not sub:
-        return
-
-    limit = sub.get("limits", {}).get("compare", 0)
-    used = sub.get("compare_used", 0)
-
-    if used >= limit:
-        return
-
-    sub["compare_used"] = used + 1
-    save_subscriptions(subs)
+    pass
 
 # -----------------------------
 # AUTH HELPER (HARDENED)

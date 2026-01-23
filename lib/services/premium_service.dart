@@ -80,6 +80,9 @@ class PremiumService {
       }
 
       final data = doc.data()!;
+      // 1) Read isPremium from Firestore
+      final bool firestorePremium = data["isPremium"] == true;
+
       DateTime? expiry;
       final rawExpiry = data["expiry"] ?? data["expiryDate"];
       if (rawExpiry is Timestamp) {
@@ -94,10 +97,12 @@ class PremiumService {
 
       final planId = data["plan"] ?? "FREE";
 
+      // 2) Read usage from nested "used" map, fallback to root-level fields
+      final usedMap = (data["used"] is Map) ? Map<String, dynamic>.from(data["used"]) : {};
       final used = {
-        "chat": data["chat_used"] ?? 0,
-        "mistake": data["mistake_used"] ?? 0,
-        "compare": data["compare_used"] ?? 0,
+        "chat": usedMap["chat"] ?? data["chat_used"] ?? 0,
+        "mistake": usedMap["mistake"] ?? data["mistake_used"] ?? 0,
+        "compare": usedMap["compare"] ?? data["compare_used"] ?? 0,
       };
 
       // 🛑 Do not overwrite newer local usage with stale server data
@@ -110,17 +115,17 @@ class PremiumService {
       }
 
       switch (planId) {
-        case "IN_99": 
-          await _cache(true, planId, 200, 15, 0);
+        case "IN_99":
+          await _cache(firestorePremium, planId, 200, 15, 0);
           break;
         case "IN_299":
-          await _cache(true, planId, 1200, 30, 0);
+          await _cache(firestorePremium, planId, 1200, 30, 0);
           break;
         case "IN_499":
-          await _cache(true, planId, 3000, 60, 50);
+          await _cache(firestorePremium, planId, 3000, 60, 50);
           break;
         case "IN_1999":
-          await _cache(true, planId, 20000, 200, 200);
+          await _cache(firestorePremium, planId, 20000, 200, 200);
           break;
         default:
           await _cache(false, "FREE", 0, 0, 0);

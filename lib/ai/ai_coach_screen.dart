@@ -42,14 +42,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        _redirectToPremiumWithReason();
-        return;
-      }
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
       await loadChats();
 
       if (widget.initialQuestion != null &&
@@ -178,6 +170,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
       if (idToken.isEmpty) {
         throw Exception("Failed to obtain Firebase ID token");
       }
+      debugPrint("🔥 FIREBASE ID TOKEN (AI COACH) ↓↓↓");
+      debugPrint(idToken);
 
       http.Response response = await http.post(
         uri,
@@ -185,7 +179,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
           "Content-Type": "application/json",
           "Accept": "application/json",
           "Authorization": "Bearer $idToken",
-          "X-USER-ID": user.uid,
         },
         body: jsonEncode({
           "message": userMessage,
@@ -203,7 +196,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": "Bearer $refreshedToken",
-            "X-USER-ID": user.uid,
           },
           body: jsonEncode({
             "message": userMessage,
@@ -254,6 +246,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
           }
         });
       } else {
+        debugPrint("AI COACH ERROR ${response.statusCode} => ${response.body}");
         loading = false;
         setState(() {});
 

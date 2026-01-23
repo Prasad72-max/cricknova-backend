@@ -249,13 +249,22 @@ async def ai_coach(
                 "premium_required": premium_required
             }
 
-    try:
-        prompt = f"""
+    prompt = f"""
 You are an elite professional cricket coach.
 
-Analyze the situation from BOTH perspectives: batsman and bowler.
+Analyze the situation and explicitly identify:
+- Ball SPEED
+- Ball SWING
+- Ball SPIN
+
+If any value is not applicable, infer it realistically. Never return "unknown".
 
 Give output in the EXACT format below.
+
+BALL METRICS:
+Speed:
+Swing:
+Spin:
 
 BATSMAN ANALYSIS:
 Mistake:
@@ -281,6 +290,7 @@ Situation / Question:
 {req.message}
 """
 
+    try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -337,7 +347,7 @@ async def ai_coach_analyze(req: CoachRequest, request: Request):
     if BYPASS_AUTH and not user_id:
         user_id = "render-test-user"
 
-    allowed, premium_required, limit_info = check_limit(user_id, feature="mistake")
+    allowed, premium_required, limit_info = check_limit(user_id, feature="chat")
     if not allowed:
         return {
             "success": False,
@@ -345,7 +355,7 @@ async def ai_coach_analyze(req: CoachRequest, request: Request):
             "premium_required": premium_required
         }
 
-    response = await ai_coach(req, request, skip_limit=False)
+    response = await ai_coach(req, request, skip_limit=True)
 
     # Ensure frontend always gets expected keys
     return {

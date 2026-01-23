@@ -23,12 +23,10 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _startFlow() async {
     await Future.delayed(const Duration(seconds: 3));
 
-    final prefs = await SharedPreferences.getInstance();
-    final isLoggedIn = prefs.getBool("is_logged_in") ?? false;
-    final userName = prefs.getString("user_name") ?? "Player";
+    final user = FirebaseAuth.instance.currentUser;
+    final userName = user?.displayName ?? "Player";
 
     // 🔄 Restore premium on every app launch (MUST await)
-    final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
         await PremiumService.restoreOnLaunch();
@@ -39,7 +37,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
 
-    if (isLoggedIn) {
+    if (user != null) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(

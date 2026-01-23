@@ -25,12 +25,6 @@ class LoginScreen extends StatelessWidget {
 
       final googleAuth = await googleUser.authentication;
 
-      final idToken = googleAuth.idToken;
-      if (idToken != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString("id_token", idToken);
-      }
-
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -45,7 +39,15 @@ class LoginScreen extends StatelessWidget {
         return;
       }
 
+      // ✅ ALWAYS store Firebase ID token (not Google ID token)
+      final firebaseIdToken = await user.getIdToken(true);
+      if (firebaseIdToken == null || firebaseIdToken.isEmpty) {
+        throw Exception("Failed to fetch Firebase ID token");
+      }
+
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("firebase_id_token", firebaseIdToken);
+
       await prefs.setBool("is_logged_in", true);
       await prefs.setString("user_id", user.uid);
       await prefs.setString("login_type", "google");

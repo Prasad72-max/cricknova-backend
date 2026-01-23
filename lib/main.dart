@@ -45,11 +45,12 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    FirebaseAuth.instance.idTokenChanges().listen((user) {
+    FirebaseAuth.instance.idTokenChanges().listen((user) async {
       if (user == null) {
         debugPrint("🔐 AUTH: user signed out / null");
       } else {
         debugPrint("🔐 AUTH: idToken changed for uid=${user.uid}");
+        await PremiumService.restoreOnLaunch();
       }
     });
     _initAppLinks();

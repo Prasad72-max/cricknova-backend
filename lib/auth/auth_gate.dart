@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/premium_service.dart';
 import '../navigation/main_navigation.dart';
 import 'login_screen.dart';
+import 'package:flutter/foundation.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -39,8 +40,12 @@ class _AuthGateState extends State<AuthGate> {
         // 💾 Store token globally for API usage
         await prefs.setString("firebase_id_token", idToken);
 
-        // 🔄 Sync premium status from backend / Firestore
-        await PremiumService.syncFromFirestore(user.uid);
+        // 🧠 IMPORTANT: wait for premium sync BEFORE entering app
+        final premiumSynced =
+            await PremiumService.syncFromFirestore(user.uid);
+
+        debugPrint(
+            "AUTH_GATE → premiumSynced=$premiumSynced uid=${user.uid}");
       }
     }
 

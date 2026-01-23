@@ -7,6 +7,7 @@ import '../ai/ai_coach_screen.dart';
 import '../premium/premium_screen.dart';
 import '../profile/profile_screen.dart';
 import '../services/premium_service.dart';
+import 'dart:async';
 
 class MainNavigation extends StatefulWidget {
   final String userName;
@@ -40,10 +41,8 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 🔒 Prevent index reset on rebuild
-    _index = _index;
+  void dispose() {
+    super.dispose();
   }
 
   Future<void> loadUser() async {
@@ -115,6 +114,8 @@ class _MainNavigationState extends State<MainNavigation> {
         type: BottomNavigationBarType.fixed,
 
         onTap: (i) {
+          debugPrint("BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}");
+
           if (i == 1 && !PremiumService.isPremiumActive) {
             showDialog(
               context: context,
@@ -146,6 +147,7 @@ class _MainNavigationState extends State<MainNavigation> {
             return;
           }
 
+          if (!mounted) return;
           setState(() {
             _index = i;
           });

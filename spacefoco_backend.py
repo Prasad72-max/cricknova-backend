@@ -23,6 +23,11 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
     print("🔥 Firebase Admin initialized")
 
+# --- Firebase token verification helper ---
+def verify_firebase_token(id_token: str) -> str:
+    decoded = auth.verify_id_token(id_token)
+    return decoded.get("uid")
+
 app = FastAPI(title="CrickNova AI Backend")
 
 @app.on_event("startup")
@@ -242,15 +247,13 @@ async def subscription_status(request: Request):
     auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header:
+        if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(token)
-    except Exception:
+            user_id = verify_firebase_token(token)
+    except Exception as e:
+        print("AUTH ERROR:", str(e))
         user_id = None
 
-    # Fallback for mobile apps (India flow) using X-USER-ID
-    if not user_id:
-        user_id = request.headers.get("X-USER-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
@@ -553,10 +556,11 @@ async def analyze_training_video(request: Request, file: UploadFile = File(...))
     auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header:
+        if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(token)
-    except Exception:
+            user_id = verify_firebase_token(token)
+    except Exception as e:
+        print("AUTH ERROR:", str(e))
         user_id = None
 
     if not user_id:
@@ -759,19 +763,16 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
     client = OpenAI(api_key=api_key)
 
-    # --- USER IDENTIFICATION (Authorization OR X-USER-ID fallback) ---
+    # --- USER IDENTIFICATION (Authorization only, no X-USER-ID fallback) ---
     auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header:
+        if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(token)
-    except Exception:
+            user_id = verify_firebase_token(token)
+    except Exception as e:
+        print("AUTH ERROR:", str(e))
         user_id = None
-
-    # Fallback for mobile apps that send X-USER-ID
-    if not user_id:
-        user_id = request.headers.get("X-USER-ID")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
@@ -877,19 +878,16 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
     client = OpenAI(api_key=api_key)
 
-    # --- USER IDENTIFICATION (Authorization OR X-USER-ID fallback) ---
+    # --- USER IDENTIFICATION (Authorization only, no X-USER-ID fallback) ---
     auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header:
+        if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(token)
-    except Exception:
+            user_id = verify_firebase_token(token)
+    except Exception as e:
+        print("AUTH ERROR:", str(e))
         user_id = None
-
-    # Fallback for mobile apps that send X-USER-ID
-    if not user_id:
-        user_id = request.headers.get("X-USER-ID")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
@@ -967,13 +965,12 @@ async def ai_coach_diff(
     auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header:
+        if auth_header and auth_header.startswith("Bearer "):
             token = auth_header.replace("Bearer ", "").strip()
-            user_id = get_current_user(token)
-    except Exception:
+            user_id = verify_firebase_token(token)
+    except Exception as e:
+        print("AUTH ERROR:", str(e))
         user_id = None
-    if not user_id:
-        user_id = request.headers.get("X-USER-ID")
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 

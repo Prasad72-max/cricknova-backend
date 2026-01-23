@@ -24,7 +24,11 @@ class GoogleAuthService {
 
       if (user == null) return false;
 
+      // 🔐 Force refresh Firebase ID token and store it
+      final idToken = await userCred.user!.getIdToken(true);
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("firebaseIdToken", idToken);
+
       await prefs.setBool("isLoggedIn", true);
       await prefs.setString("loginType", "google");
       await prefs.setString("userId", user.uid);

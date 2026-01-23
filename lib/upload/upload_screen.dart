@@ -32,10 +32,12 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  Future<bool> _checkCoachAccess() async {
-    // ❌ Frontend must NOT decide premium or limits
-    // ✅ Backend is the single source of truth
-    return true;
+  @override
+  void initState() {
+    super.initState();
+    debugPrint("UPLOAD_SCREEN initState");
+    final user = FirebaseAuth.instance.currentUser;
+    debugPrint("UPLOAD_SCREEN user=${user?.uid}");
   }
   File? video;
   VideoPlayerController? controller;
@@ -106,6 +108,7 @@ class _UploadScreenState extends State<UploadScreen> {
                   ),
                   onPressed: () {
                     Navigator.pop(context);
+                    debugPrint("UPLOAD_SCREEN → pickAndUpload triggered");
                     pickAndUpload();
                   },
                   child: const Text(
@@ -125,6 +128,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> pickAndUpload() async {
+    debugPrint("UPLOAD_SCREEN → pickAndUpload start");
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
 
@@ -148,11 +152,39 @@ class _UploadScreenState extends State<UploadScreen> {
     final uri = Uri.parse("https://cricknova-backend.onrender.com/training/analyze");
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final String idToken = (await user.getIdToken(true)) ?? "";
+      if (idToken.isNotEmpty) {
+        request.headers["Authorization"] = "Bearer $idToken";
+        request.headers["X-USER-ID"] = user.uid;
+      }
+    }
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
       final response = await request.send();
       print("UPLOAD STATUS => ${response.statusCode}");
+
+      // 🔒 Handle premium / auth failures explicitly
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        final err = await response.stream.bytesToString();
+        print("UPLOAD AUTH ERROR => $err");
+
+        if (!mounted) return;
+
+        // Redirect to premium only if backend blocks access
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "upload"),
+          ),
+        );
+
+        setState(() => uploading = false);
+        return;
+      }
+
       if (response.statusCode == 200) {
         final respStr = await response.stream.bytesToString();
         final data = jsonDecode(respStr);
@@ -233,6 +265,14 @@ class _UploadScreenState extends State<UploadScreen> {
     final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final String idToken = (await user.getIdToken(true)) ?? "";
+      if (idToken.isNotEmpty) {
+        request.headers["Authorization"] = "Bearer $idToken";
+        request.headers["X-USER-ID"] = user.uid;
+      }
+    }
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
@@ -262,6 +302,7 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> runCoach() async {
+    debugPrint("UPLOAD_SCREEN → runCoach start");
     if (video == null) {
       setState(() {
         showCoach = true;
@@ -291,8 +332,12 @@ class _UploadScreenState extends State<UploadScreen> {
       // ✅ Send Firebase ID token so backend can identify user & plan
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final token = await user.getIdToken();
+        final String token = (await user.getIdToken(true)) ?? "";
+        if (token.isEmpty) {
+          throw Exception("Firebase ID token is empty");
+        }
         request.headers["Authorization"] = "Bearer $token";
+        request.headers["X-USER-ID"] = user.uid;
       }
 
       // send video (REQUIRED by backend)
@@ -506,26 +551,14 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 10),
                         GestureDetector(
-                          onTap: () {
-                            // ⚡ Show overlay immediately (no delay)
+                          onTap: () async {
                             setState(() {
                               showCoach = true;
-                              coachReply = "Analyzing your batting...\nThis may take 10–20 seconds ⏳";
+                              coachReply =
+                                  "Analyzing your batting...\nThis may take 10–20 seconds ⏳";
                             });
 
-                            // Run access check + coach in background
-                            Future.microtask(() async {
-                              final canUse = await _checkCoachAccess();
-                              if (!canUse) {
-                                if (mounted) {
-                                  setState(() {
-                                    showCoach = false;
-                                  });
-                                }
-                                return;
-                              }
-                              await runCoach();
-                            });
+                            await runCoach();
                           },
                           child: Container(
                             width: double.infinity,

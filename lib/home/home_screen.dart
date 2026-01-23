@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../upload/upload_screen.dart';   // <-- your upload screen
 import '../compare/analyse_yourself_screen.dart';
 import '../services/premium_service.dart';
@@ -20,10 +21,25 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<String> trainingVideos = [];
 
+  void _printFirebaseToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      debugPrint("❌ USER NOT LOGGED IN");
+      return;
+    }
+
+    final token = await user.getIdToken(true);
+    debugPrint("🔥 FIREBASE ID TOKEN START");
+    debugPrint(token);
+    debugPrint("🔥 FIREBASE ID TOKEN END");
+  }
+
   @override
   void initState() {
     super.initState();
     loadTrainingVideos();
+    _printFirebaseToken();
   }
 
   Future<void> loadTrainingVideos() async {
@@ -38,10 +54,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     debugPrint("HOME → isPremium=${PremiumService.isPremium}");
-    return Scaffold(
-      backgroundColor: const Color(0xFF020617),
-      body: ListView(
-        padding: EdgeInsets.zero,
+    return Container(
+      color: const Color(0xFF020617),
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight + 24),
         children: [
             // HEADER
             Container(
@@ -127,9 +143,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     subtitle: "AI will analyze your batting or bowling",
                     icon: Icons.upload_file_rounded,
                     onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => UploadScreen()),
+                      debugPrint('NAVIGATING → UploadScreen');
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const UploadScreen()),
                       );
                       await loadTrainingVideos();
                     },
@@ -140,56 +156,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     subtitle: "Compare two videos and see differences",
                     icon: Icons.compare_rounded,
                     onTap: () async {
-                      debugPrint('ACTION CARD TAPPED → Analyse Yourself');
+                      debugPrint('NAVIGATING → AnalyseYourself');
 
-                      // Ensure premium state is loaded
-                      if (!PremiumService.isLoaded) return;
-
-                      // ❌ FREE users → go to premium (ONLY 499 / 1999)
-                      if (!PremiumService.isPremiumActive) {
-                        await Navigator.push(
-                          context,
+                      if (!PremiumService.isPremiumActive ||
+                          PremiumService.compareLimit <= 0 ||
+                          PremiumService.compareUsed >= PremiumService.compareLimit) {
+                        await Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const PremiumScreen(
-                              entrySource: "analyse",
-                            ),
+                            builder: (_) => const PremiumScreen(entrySource: "analyse"),
                           ),
                         );
                         return;
                       }
 
-                      // ❌ Premium but plan has no compare (IN_99 / IN_299)
-                      if (PremiumService.compareLimit <= 0) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PremiumScreen(
-                              entrySource: "analyse",
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-
-                      // ❌ Limit exhausted
-                      if (PremiumService.compareUsed >= PremiumService.compareLimit) {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PremiumScreen(
-                              entrySource: "analyse",
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-
-                      // ✅ Allowed users (IN_499 / IN_1999 with remaining limit)
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AnalyseYourselfScreen(),
-                        ),
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AnalyseYourselfScreen()),
                       );
                     },
                   ),
@@ -403,14 +384,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return Material(
       color: Colors.transparent,
-      child: InkResponse(
+      child: InkWell(
         onTap: () {
           debugPrint('ACTION CARD TAPPED → $title');
           onTap();
         },
-        containedInkWell: true,
-        highlightShape: BoxShape.rectangle,
-        radius: 600,
+        borderRadius: BorderRadius.circular(18),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
