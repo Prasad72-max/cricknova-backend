@@ -25,8 +25,18 @@ if not firebase_admin._apps:
 
 # --- Firebase token verification helper ---
 def verify_firebase_token(id_token: str) -> str:
-    decoded = auth.verify_id_token(id_token)
-    return decoded.get("uid")
+    if not id_token:
+        raise ValueError("Missing token")
+
+    token = id_token.strip()
+    if token.lower().startswith("bearer "):
+        token = token.split(" ", 1)[1].strip()
+
+    decoded = auth.verify_id_token(token)
+    uid = decoded.get("uid")
+    if not uid:
+        raise ValueError("UID missing in token")
+    return uid
 
 app = FastAPI(title="CrickNova AI Backend")
 
