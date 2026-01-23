@@ -4,6 +4,7 @@ from fastapi import Request
 import razorpay
 import os
 from dotenv import load_dotenv
+from cricknova_ai_backend.auth import resolve_user_id
 
 load_dotenv()
 
@@ -71,7 +72,7 @@ def verify_payment(request: Request, data: dict = Body(...)):
             "razorpay_signature": data["razorpay_signature"],
         })
 
-        user_id = request.headers.get("X-USER-ID")
+        user_id = resolve_user_id(request)
         if not user_id:
             raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
