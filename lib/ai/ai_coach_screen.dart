@@ -6,47 +6,39 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../config/api_config.dart';
-import '../premium/premium_screen.dart';
-import '../services/premium_service.dart';
+
 
 class AICoachScreen extends StatefulWidget {
-  final Map<String, dynamic>? context;
+  final Map<String, dynamic>? payloadContext;
   final String? initialQuestion;
 
-  const AICoachScreen({super.key, this.context, this.initialQuestion});
+  const AICoachScreen({super.key, this.payloadContext, this.initialQuestion});
 
   @override
   State<AICoachScreen> createState() => _AICoachScreenState();
 }
 
 class _AICoachScreenState extends State<AICoachScreen> {
-  late final Uri uri;
+  late Uri uri;
 
   final TextEditingController controller = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final ScrollController _scrollController = ScrollController();
 
   bool loading = false;
   bool isListening = false;
+  bool _chatsLoadedOnce = false;
 
   int currentChatIndex = 0;
   List<Map<String, dynamic>> chats = [];
-
-  // Helper to block free users after paywall
-  bool _blocked = false;
 
   @override
   void initState() {
     super.initState();
 
+    uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!PremiumService.isLoaded) {
-        await PremiumService.restoreOnLaunch();
-      }
-
-      // TEMP: allow AI access even if not premium (payment debug mode)
-      // Premium enforcement handled server-side for now
-
-      uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
       await loadChats();
 
       if (widget.initialQuestion != null &&
@@ -65,6 +57,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
   }
 
   Future<void> loadChats() async {
+    if (_chatsLoadedOnce) return;
+
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getString("cricknova_chats");
 
@@ -75,9 +69,13 @@ class _AICoachScreenState extends State<AICoachScreen> {
     if (chats.isEmpty) {
       createNewChat();
     }
-    currentChatIndex = 0;
 
-    setState(() {});
+    currentChatIndex = 0;
+    _chatsLoadedOnce = true;
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void createNewChat() {
@@ -90,52 +88,13 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
   }
 
-  List<Map<String, dynamic>> get messages {
-    if (chats.isEmpty) return [];
-    if (currentChatIndex < 0 || currentChatIndex >= chats.length) return [];
-    final msgs = chats[currentChatIndex]["messages"];
-    if (msgs == null) return [];
-    return List<Map<String, dynamic>>.from(msgs);
-  }
 
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
-    // 🔁 Always ensure premium data is restored before checking limits
-    if (!PremiumService.isLoaded) {
-      await PremiumService.restoreOnLaunch();
-    }
-
-    // ✅ Premium users should NEVER be blocked by local limits
-    final isPremium = PremiumService.isPremium;
-
-    if (!isPremium) {
-      final remaining = await PremiumService.getChatLimit();
-      if (remaining <= 0) {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text("Chat Limit Reached"),
-              content: const Text(
-                "You have used all AI Coach chats for your plan.\nUpgrade to continue.",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("OK"),
-                ),
-              ],
-            ),
-          );
-        }
-        return;
-      }
-    }
 
     String userMessage = controller.text.trim();
     if (userMessage.isEmpty) return;
-
     controller.clear();
 
     if (chats[currentChatIndex]["messages"].isEmpty) {
@@ -151,7 +110,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
     });
 
     loading = true;
-    saveChats();
     setState(() {});
 
     try {
@@ -159,92 +117,145 @@ class _AICoachScreenState extends State<AICoachScreen> {
       if (user == null) {
         throw Exception("User not authenticated");
       }
-      final idToken = await user.getIdToken(true);
+      String? idToken = await user.getIdToken();
+      if (idToken == null) {
+        throw Exception("Failed to get auth token");
+      }
 
-      final response = await http
-          .post(
-            uri,
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "Authorization": "Bearer ${user.uid}",
-              "X-Debug": "true"
-            },
-            body: jsonEncode({
-              "message": userMessage,
-            }),
-          )
-          .timeout(const Duration(seconds: 8));
+      http.Response response = await http.post(
+        uri,
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": "Bearer $idToken",
+          "X-USER-ID": user.uid,
+        },
+        body: jsonEncode({
+          "message": userMessage,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        idToken = await user.getIdToken(true);
+        if (idToken == null) {
+          throw Exception("Failed to refresh auth token");
+        }
+        response = await http.post(
+          uri,
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": "Bearer $idToken",
+            "X-USER-ID": user.uid,
+          },
+          body: jsonEncode({
+            "message": userMessage,
+          }),
+        ).timeout(const Duration(seconds: 30));
+      }
 
       if (response.statusCode == 401) {
+        loading = false;
+        if (mounted) {
+          // Removed SnackBar showing "Session expired"
+        }
+        return;
+      }
+
+      else if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        debugPrint("AI COACH RESPONSE => $decoded");
+        // Handle limit exceeded WITHOUT navigation
+        if (decoded["error"] == "LIMIT_EXCEEDED") {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("AI limit reached. Upgrade to Premium to continue."),
+              ),
+            );
+          }
+          return;
+        }
+
+        if (decoded["success"] != true) {
+          throw Exception("AI failed");
+        }
+
+        final coachText =
+            decoded["reply"]?.toString() ??
+            decoded["coach_feedback"]?.toString() ??
+            "No reply received from AI.";
+
         chats[currentChatIndex]["messages"].add({
           "role": "coach",
-          "text": "Session expired. Please reopen the app or login again.",
+          "text": coachText,
         });
-        loading = false;
-        saveChats();
-        setState(() {});
-        return;
-      }
 
-      String coachText;
-
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        coachText = decoded["reply"]?.toString() ??
-            decoded["coach_feedback"]?.toString() ??
-            "No reply received";
-        await PremiumService.consumeChat();
-      } 
-      else if (response.statusCode == 403) {
-        loading = false;
         saveChats();
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      } else {
+        loading = false;
         setState(() {});
 
-        // 🚫 Redirect ONLY if user is truly not premium
-        final isPremium = PremiumService.isPremium;
-        if (!isPremium && mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PremiumScreen()),
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Server error. Please try again."),
+            ),
           );
         }
         return;
       }
-      else if (response.statusCode == 404 &&
-               response.body.toLowerCase().contains("premium")) {
-        loading = false;
-        saveChats();
-        setState(() {});
 
-        final isPremium = PremiumService.isPremium;
-        if (!isPremium && mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const PremiumScreen()),
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
           );
         }
-        return;
-      }
-      else {
-        coachText =
-            "Server error ${response.statusCode}: ${response.body}";
-      }
-
-      chats[currentChatIndex]["messages"].add({
-        "role": "coach",
-        "text": coachText,
       });
     } catch (e) {
-      chats[currentChatIndex]["messages"].add({
-        "role": "coach",
-        "text": "Session expired or authentication failed. Please login again.",
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Network error. Please try again."),
+          ),
+        );
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       });
+
+      saveChats();
+      return;
+    }
+    finally {
+      if (mounted) {
+        loading = false;
+        setState(() {});
+      }
     }
 
-    loading = false;
-    saveChats();
-    setState(() {});
+    // (final loading reset and saveChats removed as per instructions)
   }
 
   /* ---------------- MIC ---------------- */
@@ -287,7 +298,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Text(
-          msg["text"],
+          msg["text"] ?? "",
           style: const TextStyle(color: Colors.white),
         ),
       ),
@@ -351,12 +362,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 🔒 HARD BLOCK FREE USERS BEFORE UI RENDERS
-    if (!PremiumService.isLoaded) {
-      return const SizedBox.shrink();
-    }
 
-    // TEMP: do not block UI for non-premium during debug
 
     return Scaffold(
       drawer: buildHistoryDrawer(),
@@ -375,7 +381,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
       body: Column(
         children: [
           Expanded(
-            child: messages.isEmpty
+            child: chats.isEmpty ||
+                    chats[currentChatIndex]["messages"].isEmpty
                 ? const Center(
                     child: Text(
                       "Start your first AI coaching session",
@@ -383,23 +390,24 @@ class _AICoachScreenState extends State<AICoachScreen> {
                     ),
                   )
                 : ListView.builder(
-                    itemCount: messages.length,
+                    controller: _scrollController,
+                    itemCount:
+                        chats[currentChatIndex]["messages"].length,
                     itemBuilder: (_, i) =>
-                        buildMessage(messages[i]),
+                        buildMessage(
+                          chats[currentChatIndex]["messages"][i],
+                        ),
                   ),
           ),
           if (loading)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: AnimatedTextKit(
-                repeatForever: true,
-                animatedTexts: [
-                  TyperAnimatedText(
-                    "CrickNova analysing...",
-                    textStyle:
-                        const TextStyle(color: Color(0xFF94A3B8)),
-                  )
-                ],
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "CrickNova analysing...",
+                  style: TextStyle(color: Colors.white54),
+                ),
               ),
             ),
           Container(

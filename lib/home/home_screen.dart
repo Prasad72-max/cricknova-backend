@@ -6,6 +6,7 @@ import '../upload/upload_screen.dart';   // <-- your upload screen
 import '../compare/analyse_yourself_screen.dart';
 import '../services/premium_service.dart';
 import '../ai/ai_coach_screen.dart';
+import '../premium/premium_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -40,8 +41,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
       body: ListView(
-          padding: EdgeInsets.zero,
-          children: [
+        padding: EdgeInsets.zero,
+        children: [
             // HEADER
             Container(
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 40),
@@ -125,11 +126,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Upload Training Video",
                     subtitle: "AI will analyze your batting or bowling",
                     icon: Icons.upload_file_rounded,
-                    onTap: () {
-                      debugPrint('NAVIGATE → UploadScreen');
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const UploadScreen()),
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => UploadScreen()),
                       );
+                      await loadTrainingVideos();
                     },
                   ),
                   const SizedBox(height: 14),
@@ -137,19 +139,54 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Analyse Yourself",
                     subtitle: "Compare two videos and see differences",
                     icon: Icons.compare_rounded,
-                    onTap: () {
-                      debugPrint('NAVIGATE → AnalyseYourself');
+                    onTap: () async {
+                      debugPrint('ACTION CARD TAPPED → Analyse Yourself');
 
-                      if (!PremiumService.canCompare()) {
-                        PremiumService.showPaywall(
+                      // Ensure premium state is loaded
+                      if (!PremiumService.isLoaded) return;
+
+                      // ❌ FREE users → go to premium (ONLY 499 / 1999)
+                      if (!PremiumService.isPremiumActive) {
+                        await Navigator.push(
                           context,
-                          source: 'analyse',
-                          allowedPlans: ['IN_499', 'IN_1999'],
+                          MaterialPageRoute(
+                            builder: (_) => const PremiumScreen(
+                              entrySource: "analyse",
+                            ),
+                          ),
                         );
                         return;
                       }
 
-                      Navigator.of(context).push(
+                      // ❌ Premium but plan has no compare (IN_99 / IN_299)
+                      if (PremiumService.compareLimit <= 0) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PremiumScreen(
+                              entrySource: "analyse",
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // ❌ Limit exhausted
+                      if (PremiumService.compareUsed >= PremiumService.compareLimit) {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const PremiumScreen(
+                              entrySource: "analyse",
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+
+                      // ✅ Allowed users (IN_499 / IN_1999 with remaining limit)
+                      await Navigator.push(
+                        context,
                         MaterialPageRoute(
                           builder: (_) => const AnalyseYourselfScreen(),
                         ),

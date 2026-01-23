@@ -6,13 +6,40 @@ class PlanService {
   // -----------------------------
   static Future<bool> isPremium() async {
     final prefs = await SharedPreferences.getInstance();
-    // If limits exist, user is premium
-    return prefs.getInt("chatLimit") != null;
+    return prefs.getBool("isPremium") ?? false;
   }
 
   // -----------------------------
   // PAYMENT SOURCE (PAYPAL / PLAY)
   // -----------------------------
+  static Future<void> setPremium(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool("isPremium", value);
+    if (!value) {
+      await prefs.setInt("chatLimit", 0);
+      await prefs.setInt("mistakeLimit", 0);
+      await prefs.setInt("diffLimit", 0);
+    }
+  }
+
+  // -----------------------------
+  // APPLY REAL PLAN LIMITS (FROM BACKEND / PAYMENT)
+  // -----------------------------
+  static Future<void> applyPlanLimits({
+    required int chatLimit,
+    required int mistakeLimit,
+    required int diffLimit,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt("chatLimit", chatLimit);
+    await prefs.setInt("mistakeLimit", mistakeLimit);
+    await prefs.setInt("diffLimit", diffLimit);
+    await prefs.setInt("chatUsed", 0);
+    await prefs.setInt("mistakeUsed", 0);
+    await prefs.setInt("diffUsed", 0);
+    await prefs.setBool("isPremium", true);
+  }
+
   static Future<void> setPaymentSource(String source) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString("paymentSource", source); // paypal | play
@@ -28,6 +55,9 @@ class PlanService {
   // -----------------------------
   static Future<bool> canUseChat() async {
     final prefs = await SharedPreferences.getInstance();
+    final isPremium = prefs.getBool("isPremium") ?? false;
+    if (!isPremium) return false;
+
     final limit = prefs.getInt("chatLimit") ?? 0;
     final used = prefs.getInt("chatUsed") ?? 0;
     return used < limit;
@@ -44,6 +74,9 @@ class PlanService {
   // -----------------------------
   static Future<bool> canUseMistake() async {
     final prefs = await SharedPreferences.getInstance();
+    final isPremium = prefs.getBool("isPremium") ?? false;
+    if (!isPremium) return false;
+
     final limit = prefs.getInt("mistakeLimit") ?? 0;
     final used = prefs.getInt("mistakeUsed") ?? 0;
     return used < limit;
@@ -60,6 +93,9 @@ class PlanService {
   // -----------------------------
   static Future<bool> canUseDiff() async {
     final prefs = await SharedPreferences.getInstance();
+    final isPremium = prefs.getBool("isPremium") ?? false;
+    if (!isPremium) return false;
+
     final limit = prefs.getInt("diffLimit") ?? 0;
     final used = prefs.getInt("diffUsed") ?? 0;
     return used < limit;
@@ -79,6 +115,5 @@ class PlanService {
     await prefs.setInt("chatUsed", 0);
     await prefs.setInt("mistakeUsed", 0);
     await prefs.setInt("diffUsed", 0);
-    await prefs.remove("paymentSource");
   }
 }

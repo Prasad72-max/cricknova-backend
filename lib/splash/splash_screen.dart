@@ -27,13 +27,13 @@ class _SplashScreenState extends State<SplashScreen> {
     final isLoggedIn = prefs.getBool("is_logged_in") ?? false;
     final userName = prefs.getString("user_name") ?? "Player";
 
-    // 🔄 Restore premium on every app launch
+    // 🔄 Restore premium on every app launch (MUST await)
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
         await PremiumService.restoreOnLaunch();
-      } catch (_) {
-        // fail-safe: do not block app if restore fails
+      } catch (e) {
+        debugPrint("⚠️ Premium restore failed: $e");
       }
     }
 

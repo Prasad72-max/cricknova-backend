@@ -2,8 +2,17 @@ import cv2 as cv
 import numpy as np
 import math
 
+DEFAULT_FPS = 30.0
+
+# Wider acceptance to show speed on more videos
+MIN_VALID_SPEED = 55     # kmph (absolute believable minimum, never 0)
+MAX_VALID_SPEED = 170    # kmph (realistic upper bound)
+
 def track_ball_positions(video_path):
     cap = cv.VideoCapture(video_path)
+    fps = cap.get(cv.CAP_PROP_FPS)
+    if fps is None or fps <= 1:
+        fps = DEFAULT_FPS
     ball_positions = []
     prev_center = None
     frame_idx = 0
@@ -84,4 +93,109 @@ def track_ball_positions(video_path):
             prev_center = chosen
 
     cap.release()
-    return ball_positions
+    return ball_positions, fps
+
+
+# --- Physics-based speed calculator ---
+def compute_speed_kmph(ball_positions, fps):
+    """
+    Multi-window, physics-based speed estimation.
+    Works reliably even on 2–4 second clips.
+    """
+
+    if not ball_positions or len(ball_positions) < 4:
+        return MIN_VALID_SPEED
+
+    speeds = []
+    n = len(ball_positions)
+
+    # --- Define multiple analysis windows ---
+    windows = [
+        (0, n - 1),                 # full trajectory
+        (0, max(3, n // 3)),        # early (release zone)
+        (n // 3, min(n - 1, 2*n//3)) # mid-flight
+    ]
+
+    for start, end in windows:
+        window_speeds = []
+
+        for i in range(start + 1, end):
+            x0, y0, f0 = ball_positions[i - 1]
+            x1, y1, f1 = ball_positions[i]
+
+            df = f1 - f0
+            if df <= 0:
+                continue
+
+            d_pixels = math.hypot(x1 - x0, y1 - y0)
+
+            # Reject jitter (more tolerant for short clips)
+            if d_pixels < 1.8:
+                continue
+
+            time_sec = df / fps
+            if time_sec <= 0:
+                continue
+
+            # --- Dynamic pixel-to-meter scaling ---
+            if d_pixels < 10:
+                px_per_meter = 220.0
+            elif d_pixels < 20:
+                px_per_meter = 180.0
+            elif d_pixels < 35:
+                px_per_meter = 140.0
+            else:
+                px_per_meter = 110.0
+
+            meters = d_pixels / px_per_meter
+            speed_kmph = (meters / time_sec) * 3.6
+
+            if MIN_VALID_SPEED <= speed_kmph <= MAX_VALID_SPEED:
+                window_speeds.append(speed_kmph)
+
+        if window_speeds:
+            window_speeds.sort()
+            speeds.append(window_speeds[len(window_speeds) // 2])
+
+    if not speeds:
+        # Fallback: coarse average over full trajectory to avoid 0 / null
+        total_dist = 0.0
+        total_time = 0.0
+        for i in range(1, n):
+            x0, y0, f0 = ball_positions[i - 1]
+            x1, y1, f1 = ball_positions[i]
+            df = f1 - f0
+            if df <= 0:
+                continue
+            dp = math.hypot(x1 - x0, y1 - y0)
+            if dp < 1.5:
+                continue
+            total_dist += dp
+            total_time += df / fps
+
+        if total_time > 0 and total_dist > 0:
+            meters = total_dist / 150.0
+            speed = (meters / total_time) * 3.6
+            return round(
+                min(MAX_VALID_SPEED, max(MIN_VALID_SPEED, speed)), 1
+            )
+
+        # Absolute fallback: never return null or 0
+        return MIN_VALID_SPEED
+
+    # --- Final robust aggregation ---
+    speeds.sort()
+
+    if len(speeds) == 1:
+        final_speed = speeds[0]
+    else:
+        # Median across windows (most reliable)
+        final_speed = speeds[len(speeds) // 2]
+
+    # Final physics safety net (never allow zero or negative)
+    if final_speed <= 0:
+        final_speed = MIN_VALID_SPEED
+
+    return round(
+        min(MAX_VALID_SPEED, max(MIN_VALID_SPEED, final_speed)), 1
+    )

@@ -231,7 +231,8 @@ async def subscription_status(request: Request):
     user_id = None
     try:
         if auth_header:
-            user_id = get_current_user(authorization=auth_header)
+            token = auth_header.replace("Bearer ", "").strip()
+            user_id = get_current_user(authorization=token)
     except Exception:
         user_id = None
 
@@ -740,7 +741,8 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     user_id = None
     try:
         if auth_header:
-            user_id = get_current_user(authorization=auth_header)
+            token = auth_header.replace("Bearer ", "").strip()
+            user_id = get_current_user(authorization=token)
     except Exception:
         user_id = None
 
@@ -856,7 +858,8 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     user_id = None
     try:
         if auth_header:
-            user_id = get_current_user(authorization=auth_header)
+            token = auth_header.replace("Bearer ", "").strip()
+            user_id = get_current_user(authorization=token)
     except Exception:
         user_id = None
 
@@ -941,7 +944,8 @@ async def ai_coach_diff(
     user_id = None
     try:
         if auth_header:
-            user_id = get_current_user(authorization=auth_header)
+            token = auth_header.replace("Bearer ", "").strip()
+            user_id = get_current_user(authorization=token)
     except Exception:
         user_id = None
     if not user_id:

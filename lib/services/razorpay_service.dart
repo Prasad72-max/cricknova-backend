@@ -38,8 +38,8 @@ class RazorpayService {
     final Map<String, Object> options = {
       "key": key, // Pass the key dynamically
       "order_id": orderId,
-      // Razorpay expects amount in paise
-      "amount": amount * 100,
+      /// amount must already be in paise (backend-controlled)
+      "amount": amount,
       "currency": "INR",
       "name": "CrickNova AI",
       "description": "Premium Subscription",

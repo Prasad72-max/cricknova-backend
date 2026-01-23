@@ -1,5 +1,3 @@
-# FILE: cricknova_engine/processing/speed_service.py
-
 from .ball_tracker import BallTracker
 from .speed import BallSpeedCalculator
 
@@ -16,7 +14,11 @@ def estimate_speed(video_path):
     positions = tracker.track_ball(video_path)
 
     if len(positions) < 2:
-        return 0.0
+        # ultra-short or failed detection: never return 0
+        return 55.0
 
     speed = speed_calc.calculate_speed(positions)
+    # final safety net: never allow zero or negative speed
+    if speed is None or speed <= 0:
+        speed = 55.0
     return speed

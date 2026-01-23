@@ -1,10 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../premium/premium_screen.dart';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:CrickNova_Ai/config/api_config.dart';
 class PremiumService {
@@ -18,6 +17,11 @@ class PremiumService {
 
   // Single source of truth for UI
   static bool isPremium = false;
+  /// 🔐 Premium validity = premium flag only
+  /// Limits are enforced strictly by backend
+  static bool get isPremiumActive {
+    return isPremium;
+  }
   // Backward-compat alias (used by UI)
   static bool? get cachedIsPremium => isPremium;
   static String plan = "FREE";
@@ -90,7 +94,11 @@ class PremiumService {
 
       final planId = data["plan"] ?? "FREE";
 
-      final used = data["used"] ?? {};
+      final used = {
+        "chat": data["chat_used"] ?? 0,
+        "mistake": data["mistake_used"] ?? 0,
+        "compare": data["compare_used"] ?? 0,
+      };
 
       // 🛑 Do not overwrite newer local usage with stale server data
       if (_usageDirty && _lastLocalUsageUpdate != null) {
@@ -102,7 +110,7 @@ class PremiumService {
       }
 
       switch (planId) {
-        case "IN_99":
+        case "IN_99": 
           await _cache(true, planId, 200, 15, 0);
           break;
         case "IN_299":
@@ -185,18 +193,45 @@ class PremiumService {
       throw Exception("User not logged in");
     }
 
+    final idToken = await user.getIdToken();
+
+    // 🔁 Normalize UI plan to backend plan ID
+    String normalizedPlan;
+    switch (plan) {
+      case "monthly":
+      case "99":
+      case "IN_99":
+        normalizedPlan = "IN_99";
+        break;
+      case "299":
+      case "IN_299":
+        normalizedPlan = "IN_299";
+        break;
+      case "499":
+      case "IN_499":
+        normalizedPlan = "IN_499";
+        break;
+      case "1999":
+      case "IN_1999":
+        normalizedPlan = "IN_1999";
+        break;
+      default:
+        throw Exception("Invalid plan selected: $plan");
+    }
+
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/payment/verify-payment"),
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "razorpay_payment_id": paymentId,
         "razorpay_order_id": orderId,
         "razorpay_signature": signature,
         "user_id": user.uid,
-        "plan": plan,
+        "plan": normalizedPlan,
       }),
     );
 
@@ -254,34 +289,33 @@ class PremiumService {
   // ACCESS GUARDS (SINGLE TRUTH)
   // -----------------------------
   static bool canChat() {
-    if (!isLoaded) return true; // allow while restoring
-    if (isPremium) return true; // premium users are never blocked locally
-    return false;
+    if (!isLoaded) return true;
+    return isPremium && chatUsed < chatLimit;
   }
 
   static bool canMistake() {
-    if (!isLoaded) return true;
-    if (isPremium) return true;
-    return false;
+    if (!isLoaded) return false;
+    if (!isPremium) return false;
+    return mistakeUsed < mistakeLimit;
   }
 
   static bool canCompare() {
     if (!isLoaded) return true;
-    if (isPremium) return true;
-    return false;
+    return isPremiumActive && compareUsed < compareLimit;
   }
 
   // -----------------------------
   // CHAT HELPERS
   // -----------------------------
   static Future<int> getChatLimit() async {
-    if (!isLoaded) return 999999;
-    if (isPremium) return 999999;
-    return 0;
+    if (!isLoaded) return 0;
+    if (!isPremium) return 0;
+    final remaining = chatLimit - chatUsed;
+    return remaining > 0 ? remaining : 0;
   }
 
   static Future<void> consumeChat() async {
-    if (!canChat()) return;
+    if (!isLoaded) return; // never block, backend decides
     chatUsed++;
     _usageDirty = true;
     _lastLocalUsageUpdate = DateTime.now();
@@ -292,7 +326,7 @@ class PremiumService {
           .collection("subscriptions")
           .doc(user.uid)
           .update({
-        "used.chat": FieldValue.increment(1),
+        "chat_used": FieldValue.increment(1),
         "updatedAt": FieldValue.serverTimestamp(),
       });
     }
@@ -301,14 +335,20 @@ class PremiumService {
   // -----------------------------
   // MISTAKE HELPERS
   // -----------------------------
-  static Future<int> getMistakeLimit() async {
+  static Future<int> getMistakeRemaining() async {
+    if (!isLoaded) return 0;
     if (!isPremium) return 0;
-    return mistakeLimit - mistakeUsed;
+
+    final remaining = mistakeLimit - mistakeUsed;
+    return remaining > 0 ? remaining : 0;
   }
 
   static Future<void> consumeMistake() async {
+    if (!isLoaded) return;
     if (!canMistake()) return;
+
     mistakeUsed++;
+
     _usageDirty = true;
     _lastLocalUsageUpdate = DateTime.now();
 
@@ -318,7 +358,7 @@ class PremiumService {
           .collection("subscriptions")
           .doc(user.uid)
           .update({
-        "used.mistake": FieldValue.increment(1),
+        "mistake_used": FieldValue.increment(1),
         "updatedAt": FieldValue.serverTimestamp(),
       });
     }
@@ -344,7 +384,7 @@ class PremiumService {
           .collection("subscriptions")
           .doc(user.uid)
           .update({
-        "used.compare": FieldValue.increment(1),
+        "compare_used": FieldValue.increment(1),
         "updatedAt": FieldValue.serverTimestamp(),
       });
     }
@@ -352,22 +392,13 @@ class PremiumService {
   // -----------------------------
   // PAYWALL HELPER
   // -----------------------------
+  // UI-only helper. Must be called ONLY from explicit user actions.
   static void showPaywall(
     BuildContext context, {
     String? source,
     List<String>? allowedPlans,
   }) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const PremiumScreen(),
-        settings: RouteSettings(
-          arguments: {
-            if (source != null) 'source': source,
-            if (allowedPlans != null) 'allowedPlans': allowedPlans,
-          },
-        ),
-      ),
-    );
+    // Intentionally empty: navigation is controlled by UI, not service
   }
 
   // -----------------------------
@@ -384,6 +415,7 @@ class PremiumService {
       Uri.parse("${ApiConfig.baseUrl}/paypal/create-order"),
       headers: {
         "Content-Type": "application/json",
+        "Authorization": "Bearer ${FirebaseAuth.instance.currentUser?.uid ?? ""}",
       },
       body: jsonEncode({
         "amount": amount,
@@ -453,6 +485,7 @@ class PremiumService {
       Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
       headers: {
         "Content-Type": "application/json",
+        "Authorization": "Bearer $userId",
       },
       body: jsonEncode({
         "order_id": orderId,
@@ -480,12 +513,15 @@ class PremiumService {
       throw Exception("User not logged in");
     }
 
+    final idToken = await user.getIdToken();
+
     // Plan can be inferred later or passed via query if needed
     // For now backend already knows plan from order mapping
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
       headers: {
         "Content-Type": "application/json",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": orderId,

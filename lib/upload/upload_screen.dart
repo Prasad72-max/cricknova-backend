@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -32,66 +33,8 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   Future<bool> _checkCoachAccess() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    int limit = prefs.getInt("mistake_limit") ?? 0;
-    int used = prefs.getInt("mistakeUsed") ?? 0;
-
-    // 🔁 If app reinstalled OR local usage wiped, restore from backend
-    if (limit <= 0 || used == 0) {
-      try {
-        final userId = prefs.getString("user_id");
-
-        // ❗ Do NOT attempt restore without user_id
-        if (userId == null || userId.isEmpty) {
-          return false;
-        }
-
-        final uri = Uri.parse(
-          "https://cricknova-backend.onrender.com/user/subscription/status",
-        );
-
-        final res = await http.get(
-          uri,
-          headers: {
-            "Accept": "application/json",
-            "X-USER-ID": userId,
-          },
-        );
-
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-
-          final premium = data["premium"] == true;
-          final backendLimit = data["limits"]?["mistake"];
-          final backendUsed = data["used"]?["mistake"] ?? 0;
-
-          // ✅ Restore from backend (SOURCE OF TRUTH)
-          if (premium && backendLimit != null && backendLimit > 0) {
-            await prefs.setInt("mistake_limit", backendLimit);
-            await prefs.setInt("mistakeUsed", backendUsed);
-            print("RESTORE FROM BACKEND => limit=$backendLimit used=$backendUsed");
-            limit = backendLimit;
-            used = backendUsed;
-          }
-        }
-      } catch (_) {}
-    }
-
-    // ❌ No premium OR limit finished → redirect to Premium
-    if (limit <= 0 || used >= limit) {
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const PremiumScreen(entrySource: "coach"),
-          ),
-        );
-      }
-      return false;
-    }
-
-    // ✅ Premium active and limit available
+    // ❌ Frontend must NOT decide premium or limits
+    // ✅ Backend is the single source of truth
     return true;
   }
   File? video;
@@ -218,19 +161,24 @@ class _UploadScreenState extends State<UploadScreen> {
           final analysis = data["analysis"] ?? data;
           print("ANALYSIS KEYS => ${analysis.keys}");
 
-          final rawSpeed =
-              analysis["speed_kmph"] ??
-              analysis["speed_mph"] ??
-              analysis["speed"];
+          final rawSpeed = analysis["speed_kmph"];
 
-          double parsedSpeed = 0.0;
-
+          // Parse backend speed (physics-based)
+          double? parsedSpeed;
           if (rawSpeed is num) {
             parsedSpeed = rawSpeed.toDouble();
           } else if (rawSpeed is String) {
-            parsedSpeed = double.tryParse(rawSpeed) ?? 0.0;
+            parsedSpeed = double.tryParse(rawSpeed);
+          } else {
+            parsedSpeed = null;
           }
-          speed = parsedSpeed;
+
+          // UI safety: never show 0.0 km/h
+          if (parsedSpeed == null || parsedSpeed <= 0) {
+            speed = null;
+          } else {
+            speed = parsedSpeed;
+          }
 
           final swingVal = analysis["swing"]?.toString().toLowerCase();
 
@@ -314,8 +262,6 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> runCoach() async {
-    final canUse = await _checkCoachAccess();
-    if (!canUse) return;
     if (video == null) {
       setState(() {
         showCoach = true;
@@ -342,13 +288,12 @@ class _UploadScreenState extends State<UploadScreen> {
       final request = http.MultipartRequest("POST", uri);
       request.headers["Accept"] = "application/json";
 
-      // Add Authorization and debug headers so the AI backend can identify the user
-      final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString("user_id");
-      if (userId != null && userId.isNotEmpty) {
-        request.headers["Authorization"] = "Bearer $userId";
+      // ✅ Send Firebase ID token so backend can identify user & plan
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final token = await user.getIdToken();
+        request.headers["Authorization"] = "Bearer $token";
       }
-      request.headers["X-Debug"] = "true";
 
       // send video (REQUIRED by backend)
       request.files.add(
@@ -364,37 +309,33 @@ class _UploadScreenState extends State<UploadScreen> {
       print("COACH STATUS => ${response.statusCode}");
 
       final respStr = await response.stream.bytesToString();
+      print("COACH RAW RESPONSE => $respStr");
 
-      if (response.statusCode == 403) {
-        final data = jsonDecode(respStr);
-        final detail = data["detail"] ?? "";
+      final data = jsonDecode(respStr);
 
-        setState(() {
-          showCoach = false;
-        });
+      // 🔐 Redirect ONLY if backend explicitly blocks access
+      final bool premiumRequired = data["premium_required"] == true;
+      final bool success = data["success"] == true;
 
-        if (detail.contains("PLAN")) {
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PremiumScreen()),
-            );
-          }
-          return;
+      if (premiumRequired && !success) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PremiumScreen(entrySource: "coach"),
+            ),
+          );
         }
+        return;
       }
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(respStr);
+      if (response.statusCode == 200 && data["success"] == true) {
         setState(() {
-          coachReply =
-              data["coach_feedback"] ??
-              "No coaching feedback received";
+          coachReply = data["reply"] ?? "No coaching feedback received";
         });
-        await PremiumService.consumeMistake();
       } else {
         setState(() {
-          coachReply = "Coach unavailable. Server error.";
+          coachReply = "Coach unavailable. Please try again.";
         });
       }
     } catch (e) {
@@ -479,7 +420,12 @@ class _UploadScreenState extends State<UploadScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _metric("Speed", speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "--"),
+                        _metric(
+                          "Speed",
+                          speed != null
+                              ? "${speed!.toStringAsFixed(1)} km/h"
+                              : "--",
+                        ),
                         const SizedBox(height: 10),
                         _metric(
                           "Swing",
@@ -513,7 +459,7 @@ class _UploadScreenState extends State<UploadScreen> {
                             // ⚡ Show overlay immediately (no delay)
                             setState(() {
                               showCoach = true;
-                              coachReply = "Analyzing your batting...\nThis may take 10–15 seconds ⏳";
+                              coachReply = "Analyzing your batting...\nThis may take 10–20 seconds ⏳";
                             });
 
                             // Run access check + coach in background

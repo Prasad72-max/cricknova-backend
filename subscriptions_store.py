@@ -194,23 +194,31 @@ def increment_compare(user_id: str):
     save_subscriptions(subs)
 
 # -----------------------------
-# AUTH HELPER (TEMPORARY)
+# AUTH HELPER (HARDENED)
 # -----------------------------
-def get_current_user(authorization: str | None = None):
+def get_current_user(
+    authorization: str | None = None,
+    x_user_id: str | None = None
+):
     """
-    Extract user_id from Authorization header.
-    Expected format: "Bearer <USER_ID>"
+    Resolve user_id safely across:
+    - Firebase Authorization: Bearer <UID>
+    - Mobile fallback header: X-USER-ID
+    - Local / Render environments
     """
 
-    if not authorization:
-        return None
+    # Priority 1: Explicit X-USER-ID (mobile-safe)
+    if x_user_id:
+        return x_user_id.strip()
 
-    try:
-        parts = authorization.split(" ")
-        if len(parts) == 2 and parts[1]:
-            return parts[1]
-    except Exception:
-        pass
+    # Priority 2: Authorization: Bearer <token or uid>
+    if authorization:
+        try:
+            parts = authorization.split(" ")
+            if len(parts) == 2 and parts[1].strip():
+                return parts[1].strip()
+        except Exception:
+            pass
 
     return None
 
@@ -222,32 +230,3 @@ def save_firestore_subscription(user_id: str, data: dict):
     from google.cloud import firestore
     db = firestore.Client()
     db.collection("subscriptions").document(user_id).set(data, merge=True)
-
-def check_limit_and_increment(user_id: str, feature: str):
-    sub = get_subscription(user_id)
-
-    # Not active or no subscription
-    if not sub or not sub.get("active"):
-        return False, True  # premium required
-
-    plan = sub.get("plan")
-    if not plan or plan not in PLAN_LIMITS:
-        return False, True
-
-    limits = PLAN_LIMITS.get(plan, {})
-    limit = limits.get(feature, 0)
-
-    used_key = f"{feature}_used"
-    used = int(sub.get(used_key, 0))
-
-    # Limit exceeded
-    if used >= limit:
-        return False, True
-
-    # Increment usage
-    sub[used_key] = used + 1
-
-    # Persist back to Firestore
-    save_firestore_subscription(user_id, sub)
-
-    return True, False

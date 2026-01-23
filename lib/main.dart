@@ -16,12 +16,6 @@ void main() async {
     await Firebase.initializeApp();
   }
 
-  // 🔐 Load premium once at app startup (only if logged in)
-  final user = FirebaseAuth.instance.currentUser;
-  if (user != null) {
-    await PremiumService.restoreOnLaunch();
-  }
-
   runApp(const MyApp());
 }
 
@@ -51,11 +45,11 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    FirebaseAuth.instance.authStateChanges().listen((user) async {
-      if (user != null) {
-        debugPrint("🔄 Auth changed → restoring premium");
-        await PremiumService.restoreOnLaunch();
-        setState(() {});
+    FirebaseAuth.instance.idTokenChanges().listen((user) {
+      if (user == null) {
+        debugPrint("🔐 AUTH: user signed out / null");
+      } else {
+        debugPrint("🔐 AUTH: idToken changed for uid=${user.uid}");
       }
     });
     _initAppLinks();

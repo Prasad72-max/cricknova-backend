@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   const AnalyseYourselfScreen({super.key});
@@ -60,7 +62,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   }
 
   Future<void> runCompare() async {
-    if (!PremiumService.isPremium) {
+    // 🔒 Compare feature allowed ONLY for IN_499 and IN_1999
+    if (!PremiumService.isPremium ||
+        (PremiumService.plan != "IN_499" && PremiumService.plan != "IN_1999")) {
       if (mounted) {
         Navigator.push(
           context,
@@ -78,7 +82,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => const PremiumScreen(entrySource: "compare"),
+            builder: (_) => const PremiumScreen(entrySource: "compare_limit"),
           ),
         );
       }
@@ -95,7 +99,18 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
     final uri = Uri.parse("https://cricknova-backend.onrender.com/coach/diff");
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
-    request.headers["Authorization"] = "Bearer ${PremiumService.userId}";
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() {
+        diffResult = "User not logged in. Please reopen the app.";
+      });
+      comparing = false;
+      return;
+    }
+
+    final idToken = await user.getIdToken(true);
+    request.headers["Authorization"] = "Bearer $idToken";
 
     request.files.add(await http.MultipartFile.fromPath("left", leftVideo!.path));
     request.files.add(await http.MultipartFile.fromPath("right", rightVideo!.path));
@@ -111,8 +126,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         });
         await PremiumService.consumeCompare();
       } else {
+        final data = jsonDecode(body);
         setState(() {
-          diffResult = "Compare failed (${response.statusCode}). Server error.";
+          diffResult = data["detail"] ?? data["difference"] ?? "Compare failed.";
         });
       }
     } catch (e) {
@@ -172,22 +188,26 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                 ],
               ),
               const SizedBox(height: 30),
-              GestureDetector(
-                onTap: canCompare ? runCompare : null,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: canCompare ? Colors.greenAccent : Colors.white24,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(
-                    child: Text(
-                      'COMPARE',
-                      style: TextStyle(
-                        color: canCompare ? Colors.black : Colors.white54,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: canCompare ? runCompare : null,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: canCompare ? Colors.greenAccent : Colors.white24,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'COMPARE',
+                        style: TextStyle(
+                          color: canCompare ? Colors.black : Colors.white54,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),

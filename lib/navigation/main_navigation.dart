@@ -37,18 +37,13 @@ class _MainNavigationState extends State<MainNavigation> {
   void initState() {
     super.initState();
     loadUser();
+  }
 
-    // 🔁 Always sync premium & usage from backend on app start / relogin
-    Future.microtask(() async {
-      try {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          await PremiumService.syncFromBackend(user.uid);
-        }
-      } catch (e) {
-        debugPrint("Premium sync failed: $e");
-      }
-    });
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 🔒 Prevent index reset on rebuild
+    _index = _index;
   }
 
   Future<void> loadUser() async {
@@ -107,7 +102,10 @@ class _MainNavigationState extends State<MainNavigation> {
               ),
               centerTitle: true,
             ),
-      body: screens[_index],
+      body: IndexedStack(
+        index: _index,
+        children: screens,
+      ),
 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
@@ -117,20 +115,11 @@ class _MainNavigationState extends State<MainNavigation> {
         type: BottomNavigationBarType.fixed,
 
         onTap: (i) {
-          // AI Coach tab index = 1
-          if (i == 1 && !PremiumService.isPremium) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  "AI Coach is a Premium feature. Upgrade to unlock AI coaching.",
-                ),
-                duration: Duration(seconds: 2),
-              ),
+          // 🔒 Gate AI Coach tab behind premium
+          if (i == 1 && !PremiumService.isPremiumActive) {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PremiumScreen()),
             );
-
-            setState(() {
-              _index = 2; // Premium tab
-            });
             return;
           }
 

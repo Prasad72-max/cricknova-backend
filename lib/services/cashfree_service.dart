@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RazorpayService {
   late Razorpay _razorpay;
@@ -15,13 +16,20 @@ class RazorpayService {
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
         (PaymentSuccessResponse response) async {
       try {
+        final user = FirebaseAuth.instance.currentUser;
+        final token = await user?.getIdToken();
+
         final verifyRes = await http.post(
           Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
-          headers: {"Content-Type": "application/json"},
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
           body: jsonEncode({
             "razorpay_order_id": response.orderId,
             "razorpay_payment_id": response.paymentId,
             "razorpay_signature": response.signature,
+            "plan": "monthly"
           }),
         );
 
@@ -79,11 +87,18 @@ class RazorpayService {
     }
 
     // 2️⃣ Create order on backend
+    final user = FirebaseAuth.instance.currentUser;
+    final token = await user?.getIdToken();
+
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
       body: jsonEncode({
-        "amount": amountInPaise ~/ 100, // backend expects INR
+        "amount": amountInPaise ~/ 100,
+        "plan": "monthly"
       }),
     );
 

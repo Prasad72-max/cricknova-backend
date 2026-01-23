@@ -67,15 +67,17 @@ class PayPalWebViewScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
+    final idToken = await user.getIdToken();
+
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": orderId,
-        "user_id": user.uid,
         "plan": planId,
       }),
     );
@@ -154,26 +156,32 @@ class _PremiumScreenState extends State<PremiumScreen>
 void _handlePaymentSuccess(PaymentSuccessResponse response) async {
   try {
     final planCode = _lastPlanPrice == "₹99"
-        ? "monthly"
+        ? "IN_99"
         : _lastPlanPrice == "₹299"
-            ? "6_months"
+            ? "IN_299"
             : _lastPlanPrice == "₹499"
-                ? "yearly"
+                ? "IN_499"
                 : _lastPlanPrice == "₹1999"
-                    ? "ultra_pro"
+                    ? "IN_1999"
                     : null;
+    if (planCode == null) {
+      throw Exception("Invalid plan selected");
+    }
+
+    final user = FirebaseAuth.instance.currentUser!;
+    final idToken = await user.getIdToken();
 
     final verifyRes = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "razorpay_order_id": response.orderId,
         "razorpay_payment_id": response.paymentId,
         "razorpay_signature": response.signature,
-        "user_id": FirebaseAuth.instance.currentUser?.uid,
         "plan": planCode,
       }),
     );
@@ -181,11 +189,6 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     final data = jsonDecode(verifyRes.body);
 
     if (verifyRes.statusCode == 200 && data["status"] == "success") {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception("User not logged in");
-      }
-
       await PremiumService.syncFromBackend(user.uid);
 
       if (!mounted) return;
@@ -437,15 +440,17 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     if (user == null) return;
 
     try {
+      final idToken = await user.getIdToken();
+
       final res = await http.post(
         Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
+          "Authorization": "Bearer $idToken",
         },
         body: jsonEncode({
           "order_id": orderId,
-          "user_id": user.uid,
           "plan": planId,
         }),
       );
@@ -490,6 +495,14 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String? sourceFromArgs = args?['source'] as String?;
+    // ✅ Guard: auto-close ONLY if user opened paywall manually
+    if (PremiumService.isPremiumActive && widget.entrySource == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
+    }
     return Scaffold(
       backgroundColor: const Color(0xFF020A1F),
 
