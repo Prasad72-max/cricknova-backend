@@ -28,13 +28,14 @@ class PaymentService {
           headers: {
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "Authorization": "Bearer ${await FirebaseAuth.instance.currentUser?.getIdToken()}",
           },
           body: jsonEncode({
             "razorpay_order_id": response.orderId,
             "razorpay_payment_id": response.paymentId,
             "razorpay_signature": response.signature,
             "user_id": FirebaseAuth.instance.currentUser?.uid,
-            "plan": "IN_1999",
+            "plan": "monthly",
           }),
         );
 
@@ -105,6 +106,7 @@ class PaymentService {
         Uri.parse("$backendBaseUrl/paypal/create-order"),
         headers: {
           "Content-Type": "application/json",
+          "Authorization": "Bearer ${await FirebaseAuth.instance.currentUser!.getIdToken()}",
         },
         body: jsonEncode({
           "amount_usd": amountUsd,
@@ -162,6 +164,7 @@ class PaymentService {
       Uri.parse("$backendBaseUrl/paypal/capture"),
       headers: {
         "Content-Type": "application/json",
+        "Authorization": "Bearer ${await FirebaseAuth.instance.currentUser!.getIdToken()}",
       },
       body: jsonEncode({
         "order_id": _pendingPayPalOrderId,
