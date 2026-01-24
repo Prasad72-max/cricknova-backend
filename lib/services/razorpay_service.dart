@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 class RazorpayService {
   late Razorpay _razorpay;
+  bool _checkoutInProgress = false;
 
   /// Initialize Razorpay and register callbacks
   void init({
@@ -14,15 +15,16 @@ class RazorpayService {
     _razorpay = Razorpay();
 
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) {
+      _checkoutInProgress = false;
       debugPrint("✅ Razorpay payment success: ${response.paymentId}");
       debugPrint("🧾 orderId=${response.orderId}, signature=${response.signature}");
-
-      // ❗ Do NOT activate premium here
-      // Premium must be activated ONLY after backend verification
-
       onPaymentSuccess(response);
     });
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, onPaymentError);
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {
+      _checkoutInProgress = false;
+      debugPrint("❌ Razorpay payment error: code=${response.code}, message=${response.message}");
+      onPaymentError(response);
+    });
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternalWallet);
   }
 
@@ -43,7 +45,6 @@ class RazorpayService {
       "currency": "INR",
       "name": "CrickNova AI",
       "description": "Premium Subscription",
-      "timeout": 180, // seconds
 
       "prefill": {
         "email": email,
@@ -61,11 +62,13 @@ class RazorpayService {
     };
 
     debugPrint("🚀 Razorpay options → $options");
+    _checkoutInProgress = true;
     _razorpay.open(options);
   }
 
   /// Clear listeners
   void dispose() {
+    _checkoutInProgress = false;
     _razorpay.clear();
   }
 }
