@@ -38,7 +38,7 @@ def verify_firebase_token(id_token: str) -> str:
     if not uid:
         raise ValueError("UID missing in token")
     return uid
-
+    print("hello from cricknova_ai_backend.spacefoco_backend")
 app = FastAPI(title="CrickNova AI Backend")
 security = HTTPBearer(auto_error=False)
 

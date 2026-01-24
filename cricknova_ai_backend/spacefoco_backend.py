@@ -10,9 +10,12 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 app = FastAPI(title="CrickNova AI Backend")
+
+security = HTTPBearer(auto_error=False)
 
 @app.get("/__alive")
 def alive():
@@ -221,10 +224,19 @@ app.include_router(
 # SUBSCRIPTION STATUS (RESTORE PREMIUM ON APP START)
 # -----------------------------
 @app.get("/user/subscription/status")
-async def subscription_status(request: Request):
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+async def subscription_status(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    user_id = None
+    try:
+        if credentials:
+            user_id = get_current_user(
+                authorization=f"Bearer {credentials.credentials}"
+            )
+    except Exception:
+        user_id = None
+
     if not user_id and DEV_MODE:
         user_id = "debug-user"
 
@@ -660,7 +672,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
 # AI COACH ANALYSIS API
 # -----------------------------
 @app.post("/coach/analyze")
-async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
+async def ai_coach_analyze(
+    request: Request,
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -668,9 +684,14 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Mistake Limit Check ----
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    user_id = None
+    try:
+        if credentials:
+            user_id = get_current_user(
+                authorization=f"Bearer {credentials.credentials}"
+            )
+    except Exception:
+        user_id = None
 
     # Allow Swagger / local testing without auth
     if not user_id and request.headers.get("X-Debug") == "true":
@@ -774,7 +795,11 @@ async def _openai_chat_with_timeout(client, messages, timeout_seconds=15):
     )
 
 @app.post("/coach/chat")
-async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
+async def ai_coach_chat(
+    request: Request,
+    req: CoachChatRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     from openai import OpenAI
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -792,9 +817,14 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Chat Limit Check ----
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    user_id = None
+    try:
+        if credentials:
+            user_id = get_current_user(
+                authorization=f"Bearer {credentials.credentials}"
+            )
+    except Exception:
+        user_id = None
 
     # Allow Swagger / local testing without auth
     if not user_id and request.headers.get("X-Debug") == "true":
@@ -864,7 +894,8 @@ Avoid fluff. Be direct and helpful.
 async def ai_coach_diff(
     request: Request,
     left: UploadFile = File(...),
-    right: UploadFile = File(...)
+    right: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
@@ -874,9 +905,14 @@ async def ai_coach_diff(
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Compare Limit Check ----
-    user_id = get_current_user(
-        authorization=request.headers.get("Authorization")
-    )
+    user_id = None
+    try:
+        if credentials:
+            user_id = get_current_user(
+                authorization=f"Bearer {credentials.credentials}"
+            )
+    except Exception:
+        user_id = None
 
     # Allow Swagger / local testing without auth
     if not user_id and request.headers.get("X-Debug") == "true":
