@@ -1,4 +1,4 @@
-print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18😭✌🏻 🔥")
+print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18😭✌🏻 1234567890987654321🔥")
 import os
 import asyncio
 import sys
@@ -352,11 +352,13 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
-    user_id: str | None = None
-    plan: str | None = None
+    plan: str
 
 @app.post("/payment/verify-payment")
-async def verify_payment(req: VerifyPaymentRequest):
+async def verify_payment(
+    req: VerifyPaymentRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     key_secret = os.getenv("RAZORPAY_KEY_SECRET")
 
     if not key_secret:
@@ -380,9 +382,18 @@ async def verify_payment(req: VerifyPaymentRequest):
             "reason": "Invalid payment signature"
         }
 
-    # ✅ Payment verified successfully – persist subscription
-    if not req.user_id or not req.plan:
-        raise HTTPException(status_code=400, detail="Missing user_id or plan")
+    # 🔐 Identify user from Firebase token
+    user_id = None
+    try:
+        if credentials:
+            user_id = get_current_user(
+                authorization=f"Bearer {credentials.credentials}"
+            )
+    except Exception:
+        user_id = None
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     # --- Normalize Razorpay plan names before saving subscription ---
     plan = (req.plan or "").lower()
@@ -396,7 +407,7 @@ async def verify_payment(req: VerifyPaymentRequest):
     from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
     create_or_update_subscription(
-        user_id=req.user_id,
+        user_id=user_id,
         plan=plan,
         payment_id=req.razorpay_payment_id,
         order_id=req.razorpay_order_id
@@ -404,7 +415,7 @@ async def verify_payment(req: VerifyPaymentRequest):
 
     from cricknova_ai_backend.subscriptions_store import get_subscription
 
-    sub = get_subscription(req.user_id)
+    sub = get_subscription(user_id)
 
     expiry = sub.get("expiry")
     if hasattr(expiry, "isoformat"):
@@ -412,7 +423,7 @@ async def verify_payment(req: VerifyPaymentRequest):
     return {
         "status": "success",
         "premium": True,
-        "user_id": req.user_id,
+        "user_id": user_id,
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
         "expiry": expiry
@@ -834,10 +845,10 @@ async def ai_coach_chat(
         user_id = "debug-user"
 
     if not user_id:
-        return {
-            "status": "success",
-            "reply": "Please log in again to continue chatting with AI Coach."
-        }
+        raise HTTPException(
+            status_code=401,
+            detail="USER_NOT_AUTHENTICATED"
+        )
 
     from cricknova_ai_backend.subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
@@ -846,10 +857,10 @@ async def ai_coach_chat(
     if not sub or not is_subscription_active(sub):
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
     if sub["chat_used"] >= sub.get("limits", {}).get("chat", 0):
-        return {
-            "status": "success",
-            "reply": "You have reached your daily chat limit. Try again tomorrow."
-        }
+        raise HTTPException(
+            status_code=403,
+            detail="CHAT_LIMIT_REACHED"
+        )
     increment_chat(user_id)
     try:
         prompt = f'''
