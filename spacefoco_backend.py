@@ -115,7 +115,8 @@ from cricknova_ai_backend.subscriptions_store import (
     increment_mistake,
     increment_compare,
     create_or_update_subscription,
-    check_limit_and_increment
+    check_limit_and_increment,
+    save_firestore_subscription
 )
 
 
@@ -224,6 +225,14 @@ async def paypal_capture(req: PayPalCaptureRequest):
         payment_id=capture_id,
         order_id=req.order_id
     )
+
+    # --- Firestore sync ---
+    try:
+        sub = get_subscription(req.user_id)
+        if sub:
+            save_firestore_subscription(req.user_id, sub)
+    except Exception as e:
+        print("FIRESTORE SAVE FAILED:", str(e))
 
     sub = get_subscription(req.user_id)
 
@@ -416,6 +425,14 @@ async def verify_payment(req: VerifyPaymentRequest):
         payment_id=req.razorpay_payment_id,
         order_id=req.razorpay_order_id
     )
+
+    # --- Firestore sync ---
+    try:
+        sub = get_subscription(req.user_id)
+        if sub:
+            save_firestore_subscription(req.user_id, sub)
+    except Exception as e:
+        print("FIRESTORE SAVE FAILED:", str(e))
 
     from cricknova_ai_backend.subscriptions_store import get_subscription
 
