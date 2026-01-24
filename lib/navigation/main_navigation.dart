@@ -9,6 +9,9 @@ import '../profile/profile_screen.dart';
 import '../services/premium_service.dart';
 import 'dart:async';
 
+import '../upload/upload_screen.dart';
+import '../compare/analyse_yourself_screen.dart';
+
 class MainNavigation extends StatefulWidget {
   final String userName;
 
@@ -34,10 +37,30 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
+  void setTab(int index) {
+    if (!mounted) return;
+    setState(() {
+      _index = index;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
-    loadUser();
+    _bootstrapSession();
+  }
+
+  Future<void> _bootstrapSession() async {
+    // 🔐 Ensure Firebase auth & ID token are ready
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.getIdToken(true);
+    }
+
+    await loadUser();
+
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
@@ -55,10 +78,10 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      HomeScreen(userName: userName),
-      const AICoachScreen(),
-      const PremiumScreen(),
-      const ProfileScreen(),
+      HomeScreen(userName: userName),        // 0
+      const AICoachScreen(),                 // 1 (premium)
+      const PremiumScreen(entrySource: "tab"), // 2
+      const ProfileScreen(),                 // 3
     ];
 
     return Scaffold(
@@ -113,17 +136,19 @@ class _MainNavigationState extends State<MainNavigation> {
         unselectedItemColor: Colors.white70,
         type: BottomNavigationBarType.fixed,
 
-        onTap: (i) {
+        onTap: (i) async {
           debugPrint("BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}");
 
+          // AI Coach tab (index 1) is premium-only
           if (i == 1 && !PremiumService.isPremiumActive) {
+            if (!mounted) return;
             showDialog(
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const Text("🔒 AI Coach Locked"),
                 content: const Text(
                   "AI Coach is a premium feature.\n\n"
-                  "Upgrade your plan to unlock personalised batting and bowling analysis."
+                  "Upgrade your plan to unlock personalised batting and bowling analysis.",
                 ),
                 actions: [
                   TextButton(
@@ -135,7 +160,8 @@ class _MainNavigationState extends State<MainNavigation> {
                       Navigator.pop(ctx);
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const PremiumScreen(entrySource: "coach"),
+                          builder: (_) =>
+                              const PremiumScreen(entrySource: "coach"),
                         ),
                       );
                     },
@@ -148,15 +174,13 @@ class _MainNavigationState extends State<MainNavigation> {
           }
 
           if (!mounted) return;
-          setState(() {
-            _index = i;
-          });
+          setTab(i);
         },
 
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.auto_awesome), label: "AI Coach"),
-          BottomNavigationBarItem(icon: Icon(Icons.workspace_premium), label: "Premium"),
+          BottomNavigationBarItem(icon: Icon(Icons.star), label: "Premium"),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),

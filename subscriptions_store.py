@@ -4,6 +4,18 @@ from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import auth
 
+# -----------------------------
+# FIREBASE INIT (SAFE GUARD)
+# -----------------------------
+if not firebase_admin._apps:
+    try:
+        # Render uses GOOGLE_APPLICATION_CREDENTIALS env automatically
+        firebase_admin.initialize_app()
+        print("🔥 FIREBASE ADMIN INITIALIZED (subscriptions_store)")
+    except Exception as e:
+        print("❌ FIREBASE INIT FAILED (subscriptions_store):", e)
+        raise RuntimeError("Firebase Admin init failed")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FILE_PATH = os.path.join(BASE_DIR, "subscriptions.json")
 
@@ -171,27 +183,43 @@ def get_current_user(
 ):
     """
     Resolve authenticated Firebase user.
-    Priority:
-    1) Authorization: Bearer <Firebase ID Token> (PRODUCTION)
-    2) X-USER-ID fallback (DEV / legacy only)
+    STRICT RULES:
+    - Only Firebase ID token is trusted in production
+    - X-USER-ID is allowed ONLY if token is missing (legacy safety)
     """
 
-    # ✅ Primary: Firebase ID token verification
+    # 1️⃣ Firebase ID token (PRIMARY)
     if authorization:
         try:
-            parts = authorization.split(" ")
-            if len(parts) == 2 and parts[0].lower() == "bearer":
-                token = parts[1].strip()
-                decoded = auth.verify_id_token(token)
-                return decoded["uid"]
-        except Exception:
-            pass
+            auth_header = authorization.strip()
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header.split(" ", 1)[1].strip()
+            else:
+                token = auth_header
 
-    # ⚠️ Fallback: legacy / dev only
+            if not token:
+                raise ValueError("EMPTY_TOKEN")
+
+            decoded = auth.verify_id_token(token)
+            uid = decoded.get("uid")
+
+            if not uid:
+                raise ValueError("UID_MISSING")
+
+            return uid
+
+        except Exception as e:
+            print("❌ FIREBASE TOKEN VERIFY FAILED:", str(e))
+
+    # 2️⃣ Fallback ONLY if explicitly provided (dev / backward compatibility)
     if x_user_id:
-        return x_user_id.strip()
+        uid = x_user_id.strip()
+        if uid:
+            print("⚠️ AUTH FALLBACK USED (X-USER-ID):", uid)
+            return uid
 
-    raise Exception("USER_NOT_AUTHENTICATED")
+    # 3️⃣ Hard fail
+    raise ValueError("USER_NOT_AUTHENTICATED")
 
 def save_firestore_subscription(user_id: str, data: dict):
     """

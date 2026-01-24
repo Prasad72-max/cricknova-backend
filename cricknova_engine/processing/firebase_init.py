@@ -14,13 +14,22 @@ if not firebase_admin._apps:
 # Firestore client
 db = firestore.client()
 
-def verify_firebase_token(id_token: str):
+def verify_firebase_token(auth_header: str):
     """
-    Verifies Firebase ID token sent from the client.
-    Returns decoded token if valid, raises Exception otherwise.
+    Verifies Firebase ID token from Authorization header.
+    Expected format: 'Bearer <firebase_id_token>'
     """
-    if not id_token:
-        raise ValueError("Missing Firebase ID token")
+    if not auth_header:
+        raise PermissionError("Authorization header missing")
+
+    if not auth_header.startswith("Bearer "):
+        raise PermissionError("Invalid Authorization header format")
+
+    id_token = auth_header.replace("Bearer ", "").strip()
+
+    # Debug safety: token must have 3 segments
+    if id_token.count(".") != 2:
+        raise PermissionError("Malformed Firebase token (wrong segments)")
 
     try:
         decoded_token = auth.verify_id_token(id_token)

@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../upload/upload_screen.dart';   // <-- your upload screen
-import '../compare/analyse_yourself_screen.dart';
 import '../services/premium_service.dart';
-import '../ai/ai_coach_screen.dart';
 import '../premium/premium_screen.dart';
+import '../upload/upload_screen.dart';
+import '../compare/analyse_yourself_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -21,25 +20,22 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<String> trainingVideos = [];
 
-  void _printFirebaseToken() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      debugPrint("❌ USER NOT LOGGED IN");
-      return;
-    }
-
-    final token = await user.getIdToken(true);
-    debugPrint("🔥 FIREBASE ID TOKEN START");
-    debugPrint(token);
-    debugPrint("🔥 FIREBASE ID TOKEN END");
-  }
 
   @override
   void initState() {
     super.initState();
-    loadTrainingVideos();
-    _printFirebaseToken();
+    _bootstrapAuthAndData();
+  }
+
+  Future<void> _bootstrapAuthAndData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // 🔐 Ensure Firebase ID token is ready before premium checks
+      await user.getIdToken();
+    }
+    await loadTrainingVideos();
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> loadTrainingVideos() async {
@@ -142,12 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Upload Training Video",
                     subtitle: "AI will analyze your batting or bowling",
                     icon: Icons.upload_file_rounded,
-                    onTap: () async {
-                      debugPrint('NAVIGATING → UploadScreen');
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const UploadScreen()),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const UploadScreen(),
+                        ),
                       );
-                      await loadTrainingVideos();
                     },
                   ),
                   const SizedBox(height: 14),
@@ -155,13 +151,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: "Analyse Yourself",
                     subtitle: "Compare two videos and see differences",
                     icon: Icons.compare_rounded,
-                    onTap: () async {
-                      debugPrint('NAVIGATING → AnalyseYourself');
-
-                      if (!PremiumService.isPremiumActive ||
-                          PremiumService.compareLimit <= 0 ||
-                          PremiumService.compareUsed >= PremiumService.compareLimit) {
-                        await Navigator.of(context).push(
+                    onTap: () {
+                      if (!PremiumService.isPremium) {
+                        Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) => const PremiumScreen(entrySource: "analyse"),
                           ),
@@ -169,8 +161,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         return;
                       }
 
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AnalyseYourselfScreen()),
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AnalyseYourselfScreen(),
+                        ),
                       );
                     },
                   ),
@@ -255,10 +249,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                               return;
                                             }
 
-                                            Navigator.push(
-                                              context,
+                                            Navigator.of(context).push(
                                               MaterialPageRoute(
-                                                builder: (_) => UploadScreen(),
+                                                builder: (_) => const AnalyseYourselfScreen(),
                                               ),
                                             );
                                           },

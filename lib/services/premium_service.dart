@@ -37,6 +37,7 @@ class PremiumService {
 
   // Init guard
   static bool isLoaded = false;
+  static bool _initialized = false;
 
   static const String _premiumKey = "is_premium";
   static const String _planKey = "premium_plan";
@@ -75,7 +76,10 @@ class PremiumService {
           .get(const GetOptions(source: Source.server));
 
       if (!doc.exists) {
-        await _cache(false, "FREE", 0, 0, 0);
+        // Do NOT force downgrade during runtime
+        if (!isLoaded) {
+          await _cache(false, "FREE", 0, 0, 0);
+        }
         return;
       }
 
@@ -91,7 +95,9 @@ class PremiumService {
         expiry = DateTime.tryParse(rawExpiry);
       }
       if (expiry != null && DateTime.now().isAfter(expiry)) {
-        await _cache(false, "FREE", 0, 0, 0);
+        if (!isLoaded) {
+          await _cache(false, "FREE", 0, 0, 0);
+        }
         return;
       }
 
@@ -139,21 +145,17 @@ class PremiumService {
 
   /// 🔁 Call this on every app launch (Splash / main)
   static Future<void> restoreOnLaunch() async {
+    if (_initialized) return;
+    _initialized = true;
+
     final user = FirebaseAuth.instance.currentUser;
 
-    // 🔴 No user = FREE
+    // If user is not available yet, do NOT downgrade to FREE.
     if (user == null) {
-      isPremium = false;
-      plan = "FREE";
-      chatLimit = 0;
-      mistakeLimit = 0;
-      compareLimit = 0;
-      // ❌ DO NOT touch usage counters here
-      isLoaded = true;
+      debugPrint("⚠️ restoreOnLaunch skipped (user not ready)");
       return;
     }
 
-    // 🔒 Always trust server, never cache
     await loadPremiumFromUid(user.uid);
     isLoaded = true;
   }

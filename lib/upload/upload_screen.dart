@@ -154,11 +154,12 @@ class _UploadScreenState extends State<UploadScreen> {
     request.headers["Accept"] = "application/json";
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final String idToken = (await user.getIdToken(true)) ?? "";
-      if (idToken.isNotEmpty) {
-        request.headers["Authorization"] = "Bearer $idToken";
-        request.headers["X-USER-ID"] = user.uid;
+      final String idToken = await user.getIdToken(true);
+      if (idToken.isEmpty) {
+        throw Exception("Firebase ID token missing");
       }
+      request.headers["Authorization"] = "Bearer $idToken";
+      request.headers["X-USER-ID"] = user.uid;
     }
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
@@ -169,17 +170,24 @@ class _UploadScreenState extends State<UploadScreen> {
       // 🔒 Handle premium / auth failures explicitly
       if (response.statusCode == 401 || response.statusCode == 403) {
         final err = await response.stream.bytesToString();
-        print("UPLOAD AUTH ERROR => $err");
+        debugPrint("UPLOAD AUTH ERROR => $err");
 
         if (!mounted) return;
 
-        // Redirect to premium only if backend blocks access
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const PremiumScreen(entrySource: "upload"),
-          ),
-        );
+        if (!PremiumService.isPremiumActive) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const PremiumScreen(entrySource: "upload"),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Something went wrong. Please try again."),
+            ),
+          );
+        }
 
         setState(() => uploading = false);
         return;
@@ -267,11 +275,12 @@ class _UploadScreenState extends State<UploadScreen> {
     request.headers["Accept"] = "application/json";
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final String idToken = (await user.getIdToken(true)) ?? "";
-      if (idToken.isNotEmpty) {
-        request.headers["Authorization"] = "Bearer $idToken";
-        request.headers["X-USER-ID"] = user.uid;
+      final String idToken = await user.getIdToken(true);
+      if (idToken.isEmpty) {
+        throw Exception("Firebase ID token missing");
       }
+      request.headers["Authorization"] = "Bearer $idToken";
+      request.headers["X-USER-ID"] = user.uid;
     }
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
@@ -332,7 +341,7 @@ class _UploadScreenState extends State<UploadScreen> {
       // ✅ Send Firebase ID token so backend can identify user & plan
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final String token = (await user.getIdToken(true)) ?? "";
+        final String token = await user.getIdToken(true);
         if (token.isEmpty) {
           throw Exception("Firebase ID token is empty");
         }

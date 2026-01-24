@@ -57,6 +57,13 @@ class LoginScreen extends StatelessWidget {
       // This MUST complete before Home is shown
       await PremiumService.restoreOnLaunch();
 
+      // 🔁 Force token refresh AFTER premium sync (critical for backend auth)
+      final refreshedToken = await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      if (refreshedToken == null || refreshedToken.isEmpty) {
+        throw Exception("Failed to refresh Firebase ID token after premium sync");
+      }
+      await prefs.setString("firebase_id_token", refreshedToken);
+
       // Close loader
       Navigator.pop(context);
 

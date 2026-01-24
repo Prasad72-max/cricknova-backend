@@ -26,6 +26,11 @@ class _SplashScreenState extends State<SplashScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final userName = user?.displayName ?? "Player";
 
+    // 🔐 Stabilize Firebase ID token (do NOT force refresh)
+    if (user != null) {
+      await user.getIdToken();
+    }
+
     // 🔄 Restore premium on every app launch (MUST await)
     if (user != null) {
       try {

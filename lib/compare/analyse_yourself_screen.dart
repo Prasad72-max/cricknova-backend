@@ -123,14 +123,29 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(body);
+
+        // Backend auth-safe response
+        if (data["detail"] == "USER_NOT_AUTHENTICATED") {
+          setState(() {
+            diffResult = "Session expired. Please log in again.";
+          });
+          return;
+        }
+
         setState(() {
           diffResult = data["difference"] ?? "No difference returned.";
         });
+
         await PremiumService.consumeCompare();
+      } else if (response.statusCode == 401) {
+        setState(() {
+          diffResult = "Session expired. Please log in again.";
+        });
       } else {
         final data = jsonDecode(body);
         setState(() {
-          diffResult = data["detail"] ?? data["difference"] ?? "Compare failed.";
+          diffResult =
+              data["detail"] ?? data["difference"] ?? "Compare failed.";
         });
       }
     } catch (e) {
