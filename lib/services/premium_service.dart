@@ -68,6 +68,18 @@ class PremiumService {
     }
   }
 
+  /// 🔄 Force refresh premium state (used after login / app resume)
+  static Future<void> refresh() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Force token refresh to avoid stale auth
+    await user.getIdToken(true);
+
+    await loadPremiumFromUid(user.uid);
+    isLoaded = true;
+  }
+
   static Future<void> loadPremiumFromUid(String uid) async {
     try {
       final doc = await FirebaseFirestore.instance
@@ -156,6 +168,8 @@ class PremiumService {
       return;
     }
 
+    // Ensure fresh token before restoring premium
+    await user.getIdToken(true);
     await loadPremiumFromUid(user.uid);
     isLoaded = true;
   }
