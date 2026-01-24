@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from cricknova_engine.processing.routes import user_subscription
 from fastapi import Request
+from firebase_admin import auth as firebase_auth
 
 router = APIRouter()
 
@@ -76,8 +77,21 @@ def create_order(payload: CreateOrderRequest):
 @router.post("/verify-payment")
 def verify_payment(payload: VerifyPaymentRequest, request: Request):
     try:
-        if not payload.plan or not payload.user_id:
-            raise HTTPException(status_code=400, detail="Invalid payment payload")
+        # 🔐 Enforce Firebase Authentication
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+
+        id_token = auth_header.replace("Bearer ", "").strip()
+
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token)
+            verified_user_id = decoded_token.get("uid")
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+        if not verified_user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
 
         secret = os.getenv("RAZORPAY_KEY_SECRET")
         if not secret:
@@ -111,12 +125,13 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
                 "status": "success",
                 "warning": "Unknown plan code, payment captured but plan not mapped",
                 "premium_activated": False,
-                "app_plan": payload.plan
+                "app_plan": payload.plan,
+                "user_id": verified_user_id
             }
 
         try:
             user_subscription.activate_plan_internal(
-                user_id=payload.user_id,
+                user_id=verified_user_id,
                 plan=backend_plan
             )
             premium_activated = True
@@ -130,7 +145,8 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
             "message": "Payment verified",
             "premium_activated": premium_activated,
             "backend_plan": backend_plan,
-            "app_plan": payload.plan
+            "app_plan": payload.plan,
+            "user_id": verified_user_id
         }
 
     except HTTPException:
