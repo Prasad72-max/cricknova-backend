@@ -232,7 +232,7 @@ async def subscription_status(
     try:
         if credentials:
             user_id = get_current_user(
-                authorization=f"Bearer {credentials.credentials}"
+                authorization=credentials.credentials
             )
     except Exception:
         user_id = None
@@ -387,7 +387,7 @@ async def verify_payment(
     try:
         if credentials:
             user_id = get_current_user(
-                authorization=f"Bearer {credentials.credentials}"
+                authorization=credentials.credentials
             )
     except Exception:
         user_id = None
@@ -699,7 +699,7 @@ async def ai_coach_analyze(
     try:
         if credentials:
             user_id = get_current_user(
-                authorization=f"Bearer {credentials.credentials}"
+                authorization=credentials.credentials
             )
     except Exception:
         user_id = None
@@ -832,7 +832,7 @@ async def ai_coach_chat(
     try:
         if credentials:
             user_id = get_current_user(
-                authorization=f"Bearer {credentials.credentials}"
+                authorization=credentials.credentials
             )
     except Exception:
         user_id = None
@@ -920,7 +920,7 @@ async def ai_coach_diff(
     try:
         if credentials:
             user_id = get_current_user(
-                authorization=f"Bearer {credentials.credentials}"
+                authorization=credentials.credentials
             )
     except Exception:
         user_id = None
