@@ -17,7 +17,14 @@ class RazorpayService {
         (PaymentSuccessResponse response) async {
       try {
         final user = FirebaseAuth.instance.currentUser;
-        final token = await user?.getIdToken();
+        if (user == null) {
+          onError({
+            "code": "USER_NOT_LOGGED_IN",
+            "message": "User not logged in during payment verification",
+          });
+          return;
+        }
+        final String token = await user.getIdToken(true);
 
         final verifyRes = await http.post(
           Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
@@ -88,7 +95,10 @@ class RazorpayService {
 
     // 2️⃣ Create order on backend
     final user = FirebaseAuth.instance.currentUser;
-    final token = await user?.getIdToken();
+    if (user == null) {
+      throw Exception("User not logged in");
+    }
+    final String token = await user.getIdToken(true);
 
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),

@@ -67,7 +67,8 @@ class PayPalWebViewScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final idToken = await user.getIdToken();
+    final String idToken = (await user.getIdToken(true)) ?? "";
+    if (idToken.isEmpty) return;
 
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
@@ -118,7 +119,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     super.initState();
     _razorpay = Razorpay();
     debugPrint("Razorpay initialized");
-    _prefetchRazorpayKey();
 
     _razorpay.on(
       Razorpay.EVENT_PAYMENT_SUCCESS,
@@ -169,7 +169,10 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     }
 
     final user = FirebaseAuth.instance.currentUser!;
-    final idToken = await user.getIdToken();
+    final String idToken = (await user.getIdToken(true)) ?? "";
+    if (idToken.isEmpty) {
+      throw Exception("Firebase ID token missing");
+    }
 
     final verifyRes = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
@@ -252,11 +255,20 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
 
     try {
       if (_razorpayKey == null) {
-        await _prefetchRazorpayKey();
-      }
+        final keyRes = await http.get(
+          Uri.parse("https://cricknova-backend.onrender.com/payment/config"),
+        ).timeout(const Duration(seconds: 15));
 
-      if (_razorpayKey == null) {
-        throw Exception("Razorpay key not available");
+        if (keyRes.statusCode != 200) {
+          throw Exception("Failed to load Razorpay key");
+        }
+
+        final keyData = jsonDecode(keyRes.body);
+        _razorpayKey = keyData['key_id'];
+
+        if (_razorpayKey == null || _razorpayKey!.isEmpty) {
+          throw Exception("Razorpay key missing from backend");
+        }
       }
 
       final res = await http.post(
@@ -295,6 +307,10 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         },
         'theme': {
           'color': '#00A8FF',
+        },
+        'retry': {
+          'enabled': true,
+          'max_count': 1,
         },
       };
 
@@ -440,7 +456,10 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     if (user == null) return;
 
     try {
-      final idToken = await user.getIdToken();
+      final String idToken = (await user.getIdToken(true)) ?? "";
+      if (idToken.isEmpty) {
+        throw Exception("Firebase ID token missing");
+      }
 
       final res = await http.post(
         Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),

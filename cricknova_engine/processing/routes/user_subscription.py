@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
 from google.cloud import firestore
 from pydantic import BaseModel
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 # Uses Firestore for persistence (NO in-memory loss)
 
 router = APIRouter()
+security = HTTPBearer(auto_error=False)
 _db = None
 
 class ActivatePlanRequest(BaseModel):
@@ -104,8 +106,14 @@ def save_user(user_id: str, data: dict):
 # SUBSCRIPTION STATUS
 # -----------------------------
 @router.get("/subscription")
-def subscription_status(request: Request):
-    user_id = request.headers.get("X-USER-ID")
+def subscription_status(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    user_id = None
+    if credentials:
+        user_id = credentials.credentials
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
@@ -139,8 +147,15 @@ def subscription_status(request: Request):
 # ACTIVATE PLAN (after payment)
 # -----------------------------
 @router.post("/subscription/activate")
-def activate_plan(request: Request, payload: ActivatePlanRequest):
-    user_id = request.headers.get("X-USER-ID")
+def activate_plan(
+    request: Request,
+    payload: ActivatePlanRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    user_id = None
+    if credentials:
+        user_id = credentials.credentials
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
@@ -193,24 +208,42 @@ def _check_access(user_id: str, key: str):
     return {"remaining": limit - user[used_key]}
 
 @router.post("/use/chat")
-def use_chat(request: Request):
-    user_id = request.headers.get("X-USER-ID")
+def use_chat(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    user_id = None
+    if credentials:
+        user_id = credentials.credentials
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
     return _check_access(user_id, "chat")
 
 
 @router.post("/use/mistake")
-def use_mistake(request: Request):
-    user_id = request.headers.get("X-USER-ID")
+def use_mistake(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    user_id = None
+    if credentials:
+        user_id = credentials.credentials
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
     return _check_access(user_id, "mistake")
 
 
 @router.post("/use/compare")
-def use_compare(request: Request):
-    user_id = request.headers.get("X-USER-ID")
+def use_compare(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    user_id = None
+    if credentials:
+        user_id = credentials.credentials
+
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
     return _check_access(user_id, "compare")

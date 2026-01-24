@@ -23,12 +23,20 @@ class PaymentService {
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS,
         (PaymentSuccessResponse response) async {
       try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user == null) {
+          throw StateError("User not logged in");
+        }
+        final idToken = await user.getIdToken(true);
+        if (idToken == null) {
+          throw StateError("Failed to obtain Firebase ID token");
+        }
         final verifyRes = await http.post(
           Uri.parse("$backendBaseUrl/payment/verify-payment"),
           headers: {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Authorization": "Bearer ${await FirebaseAuth.instance.currentUser?.getIdToken()}",
+            "Authorization": "Bearer $idToken",
           },
           body: jsonEncode({
             "razorpay_order_id": response.orderId,
@@ -102,11 +110,15 @@ class PaymentService {
     }
 
     try {
+      final idToken = await user.getIdToken(true);
+      if (idToken == null) {
+        throw StateError("Failed to obtain Firebase ID token");
+      }
       final res = await http.post(
         Uri.parse("$backendBaseUrl/paypal/create-order"),
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer ${await FirebaseAuth.instance.currentUser!.getIdToken()}",
+          "Authorization": "Bearer $idToken",
         },
         body: jsonEncode({
           "amount_usd": amountUsd,
@@ -160,11 +172,15 @@ class PaymentService {
       throw StateError("No pending PayPal order to capture");
     }
 
+    final idToken = await user.getIdToken(true);
+    if (idToken == null) {
+      throw StateError("Failed to obtain Firebase ID token");
+    }
     final res = await http.post(
       Uri.parse("$backendBaseUrl/paypal/capture"),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer ${await FirebaseAuth.instance.currentUser!.getIdToken()}",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": _pendingPayPalOrderId,

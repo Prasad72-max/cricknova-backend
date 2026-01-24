@@ -9,7 +9,8 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # --- Firebase Admin Initialization ---
 import firebase_admin
@@ -39,6 +40,7 @@ def verify_firebase_token(id_token: str) -> str:
     return uid
 
 app = FastAPI(title="CrickNova AI Backend")
+security = HTTPBearer(auto_error=False)
 
 @app.on_event("startup")
 async def startup_log():
@@ -262,13 +264,14 @@ app.include_router(
 # SUBSCRIPTION STATUS (RESTORE PREMIUM ON APP START)
 # -----------------------------
 @app.get("/user/subscription/status")
-async def subscription_status(request: Request):
-    auth_header = request.headers.get("Authorization")
+async def subscription_status(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     user_id = None
     try:
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.replace("Bearer ", "").strip()
-            user_id = verify_firebase_token(token)
+        if credentials:
+            user_id = verify_firebase_token(credentials.credentials)
     except Exception as e:
         print("AUTH ERROR:", str(e))
         user_id = None
@@ -783,7 +786,11 @@ async def analyze_training_video(request: Request, file: UploadFile = File(...))
 # AI COACH ANALYSIS API
 # -----------------------------
 @app.post("/coach/analyze")
-async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
+async def ai_coach_analyze(
+    request: Request,
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
@@ -791,12 +798,10 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     client = OpenAI(api_key=api_key)
 
     # --- USER IDENTIFICATION (Authorization only, no X-USER-ID fallback) ---
-    auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.replace("Bearer ", "").strip()
-            user_id = verify_firebase_token(token)
+        if credentials:
+            user_id = verify_firebase_token(credentials.credentials)
     except Exception as e:
         print("AUTH ERROR:", str(e))
         user_id = None
@@ -887,7 +892,11 @@ class CoachChatRequest(BaseModel):
     message: str | None = None
 
 @app.post("/coach/chat")
-async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
+async def ai_coach_chat(
+    request: Request,
+    req: CoachChatRequest = Body(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     from openai import OpenAI
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -906,12 +915,10 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     client = OpenAI(api_key=api_key)
 
     # --- USER IDENTIFICATION (Authorization only, no X-USER-ID fallback) ---
-    auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.replace("Bearer ", "").strip()
-            user_id = verify_firebase_token(token)
+        if credentials:
+            user_id = verify_firebase_token(credentials.credentials)
     except Exception as e:
         print("AUTH ERROR:", str(e))
         user_id = None
@@ -979,7 +986,8 @@ Avoid fluff. Be direct and helpful.
 async def ai_coach_diff(
     request: Request,
     left: UploadFile = File(...),
-    right: UploadFile = File(...)
+    right: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     from openai import OpenAI
     api_key = os.getenv("OPENAI_API_KEY")
@@ -989,12 +997,10 @@ async def ai_coach_diff(
     client = OpenAI(api_key=api_key)
 
     # ---- Subscription/Compare Limit Check ----
-    auth_header = request.headers.get("Authorization")
     user_id = None
     try:
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.replace("Bearer ", "").strip()
-            user_id = verify_firebase_token(token)
+        if credentials:
+            user_id = verify_firebase_token(credentials.credentials)
     except Exception as e:
         print("AUTH ERROR:", str(e))
         user_id = None

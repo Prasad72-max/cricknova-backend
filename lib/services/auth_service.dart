@@ -37,8 +37,14 @@ class AuthService {
         );
         await prefs.setString("uid", user.uid);
 
-        // 🔐 Sync premium & limits from Firestore after login
-        await PremiumService.syncFromFirestore(user.uid);
+        // 🔐 Force-refresh Firebase ID token
+        final idToken = await user.getIdToken(true);
+        if (idToken == null) {
+          throw Exception("Failed to obtain Firebase ID token after login");
+        }
+
+        // 🔐 Sync premium & limits from backend (authoritative)
+        await PremiumService.syncFromBackend();
       }
 
       return user;

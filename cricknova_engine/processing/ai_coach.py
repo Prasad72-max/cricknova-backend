@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from openai import OpenAI
 from datetime import datetime
@@ -10,6 +11,8 @@ from cricknova_ai_backend.subscriptions_store import get_current_user
 BYPASS_AUTH = os.getenv("BYPASS_AUTH", "false").lower() == "true"
 
 router = APIRouter()
+
+security = HTTPBearer(auto_error=False)
 
 db = None
 
@@ -197,6 +200,7 @@ def check_limit(user_id: str, feature: str):
 async def ai_coach(
     req: CoachRequest,
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     skip_limit: bool = False
 ):
     # 🔐 Resolve authenticated user (robust multi-source)
@@ -204,8 +208,12 @@ async def ai_coach(
 
     # 1️⃣ Try Authorization header (Firebase ID token)
     if not BYPASS_AUTH:
+        auth_header = None
+        if credentials:
+            auth_header = f"Bearer {credentials.credentials}"
+
         user_id = get_current_user(
-            authorization=request.headers.get("Authorization"),
+            authorization=auth_header,
             x_user_id=request.headers.get("X-USER-ID")
         )
 
@@ -218,10 +226,10 @@ async def ai_coach(
     print("🧪 BYPASS_AUTH:", BYPASS_AUTH)
 
     if not user_id and not BYPASS_AUTH:
-        return {
-            "reply": "Authentication issue detected. Please reopen the app and try again.",
-            "coach_feedback": "Authentication issue detected. Please reopen the app and try again."
-        }
+        raise HTTPException(
+            status_code=401,
+            detail="USER_NOT_AUTHENTICATED"
+        )
 
     # fallback dummy user for AI testing
     if BYPASS_AUTH and not user_id:
@@ -316,7 +324,11 @@ Situation / Question:
 # FRONTEND COMPATIBILITY ENDPOINT
 # -----------------------------
 @router.post("/coach/analyze")
-async def ai_coach_analyze(req: CoachRequest, request: Request):
+async def ai_coach_analyze(
+    req: CoachRequest,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """
     Compatibility wrapper for older frontend builds.
     Internally routes to /coach/chat logic.
@@ -327,8 +339,12 @@ async def ai_coach_analyze(req: CoachRequest, request: Request):
 
     # 1️⃣ Try Authorization header (Firebase ID token)
     if not BYPASS_AUTH:
+        auth_header = None
+        if credentials:
+            auth_header = f"Bearer {credentials.credentials}"
+
         user_id = get_current_user(
-            authorization=request.headers.get("Authorization"),
+            authorization=auth_header,
             x_user_id=request.headers.get("X-USER-ID")
         )
 
@@ -337,12 +353,10 @@ async def ai_coach_analyze(req: CoachRequest, request: Request):
         user_id = req.user_id
 
     if not user_id and not BYPASS_AUTH:
-        return {
-            "coach_feedback": "Authentication issue detected. Please reopen the app and try again.",
-            "reply": "Authentication issue detected. Please reopen the app and try again.",
-            "usage": None,
-            "plan": "FREE"
-        }
+        raise HTTPException(
+            status_code=401,
+            detail="USER_NOT_AUTHENTICATED"
+        )
 
     if BYPASS_AUTH and not user_id:
         user_id = "render-test-user"

@@ -116,4 +116,31 @@ class PlanService {
     await prefs.setInt("mistakeUsed", 0);
     await prefs.setInt("diffUsed", 0);
   }
+
+  // -----------------------------
+  // SYNC PLAN FROM BACKEND (SOURCE OF TRUTH)
+  // -----------------------------
+  static Future<void> syncFromBackend({
+    required bool isPremium,
+    required int chatLimit,
+    required int mistakeLimit,
+    required int diffLimit,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (!isPremium) {
+      await prefs.setBool("isPremium", false);
+      await prefs.setInt("chatLimit", 0);
+      await prefs.setInt("mistakeLimit", 0);
+      await prefs.setInt("diffLimit", 0);
+      await resetUsage();
+      return;
+    }
+
+    await prefs.setBool("isPremium", true);
+    await prefs.setInt("chatLimit", chatLimit);
+    await prefs.setInt("mistakeLimit", mistakeLimit);
+    await prefs.setInt("diffLimit", diffLimit);
+    await resetUsage();
+  }
 }

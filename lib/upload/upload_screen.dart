@@ -154,7 +154,7 @@ class _UploadScreenState extends State<UploadScreen> {
     request.headers["Accept"] = "application/json";
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final String idToken = await user.getIdToken(true);
+      final String idToken = (await user.getIdToken(true))!;
       if (idToken.isEmpty) {
         throw Exception("Firebase ID token missing");
       }
@@ -275,7 +275,7 @@ class _UploadScreenState extends State<UploadScreen> {
     request.headers["Accept"] = "application/json";
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final String idToken = await user.getIdToken(true);
+      final String idToken = (await user.getIdToken(true))!;
       if (idToken.isEmpty) {
         throw Exception("Firebase ID token missing");
       }
@@ -341,7 +341,7 @@ class _UploadScreenState extends State<UploadScreen> {
       // ✅ Send Firebase ID token so backend can identify user & plan
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final String token = await user.getIdToken(true);
+        final String token = (await user.getIdToken(true))!;
         if (token.isEmpty) {
           throw Exception("Firebase ID token is empty");
         }

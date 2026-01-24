@@ -199,8 +199,10 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-
-    final idToken = await user.getIdToken();
+    final String idToken = (await user.getIdToken(true)) ?? "";
+    if (idToken.isEmpty) {
+      throw Exception("Failed to obtain Firebase ID token");
+    }
 
     // 🔁 Normalize UI plan to backend plan ID
     String normalizedPlan;
@@ -237,7 +239,6 @@ class PremiumService {
         "razorpay_payment_id": paymentId,
         "razorpay_order_id": orderId,
         "razorpay_signature": signature,
-        "user_id": user.uid,
         "plan": normalizedPlan,
       }),
     );
@@ -418,11 +419,19 @@ class PremiumService {
     required double amount,
     required String plan,
   }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception("User not authenticated");
+    }
+    final String idToken = (await user.getIdToken(true)) ?? "";
+    if (idToken.isEmpty) {
+      throw Exception("Failed to obtain Firebase ID token");
+    }
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/paypal/create-order"),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer ${FirebaseAuth.instance.currentUser?.uid ?? ""}",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "amount": amount,
@@ -488,11 +497,19 @@ class PremiumService {
     required String plan,
     required String userId,
   }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception("User not authenticated");
+    }
+    final String idToken = (await user.getIdToken(true)) ?? "";
+    if (idToken.isEmpty) {
+      throw Exception("Failed to obtain Firebase ID token");
+    }
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $userId",
+        "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": orderId,
@@ -519,8 +536,10 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-
-    final idToken = await user.getIdToken();
+    final String idToken = (await user.getIdToken(true)) ?? "";
+    if (idToken.isEmpty) {
+      throw Exception("Failed to obtain Firebase ID token");
+    }
 
     // Plan can be inferred later or passed via query if needed
     // For now backend already knows plan from order mapping
