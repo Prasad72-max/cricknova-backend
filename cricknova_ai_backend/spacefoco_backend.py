@@ -6,24 +6,26 @@ import math
 import time
 import tempfile
 
-# --- Firebase Admin initialization (RENDER SAFE, STRICT) ---
+# --- Firebase Admin initialization (RENDER SAFE, BASE64) ---
 import json
+import base64
 import firebase_admin
 from firebase_admin import credentials
 
 if not firebase_admin._apps:
-    service_account = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+    service_account_b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64")
 
-    if not service_account:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT env variable is not set")
+    if not service_account_b64:
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_B64 env variable is not set")
 
-    cred = credentials.Certificate(json.loads(service_account))
+    service_account_json = base64.b64decode(service_account_b64).decode("utf-8")
+    cred = credentials.Certificate(json.loads(service_account_json))
     firebase_admin.initialize_app(
         cred,
         {"projectId": "cricknova-5f94f"}
     )
 
-    print("✅ Firebase Admin initialized WITH service account")
+    print("✅ Firebase Admin initialized via BASE64 env")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
