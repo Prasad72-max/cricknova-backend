@@ -30,8 +30,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _bootstrapAuthAndData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      // 🔐 Ensure Firebase ID token is ready before premium checks
-      await user.getIdToken();
+      // 🔐 Force refresh Firebase ID token so backend always receives a valid one
+      final String? token = await user.getIdToken(true);
+      if (token != null && token.isNotEmpty) {
+        // ⚠️ DEBUG ONLY: log full token to test backend auth
+        debugPrint("🔥 FULL_FIREBASE_TOKEN=$token");
+      } else {
+        debugPrint("⚠️ HOME SCREEN: Firebase token is null or empty");
+      }
     }
     await loadTrainingVideos();
     if (!mounted) return;

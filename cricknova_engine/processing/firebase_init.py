@@ -16,23 +16,27 @@ db = firestore.client()
 
 def verify_firebase_token(auth_header: str):
     """
-    Verifies Firebase ID token from Authorization header.
-    Expected format: 'Bearer <firebase_id_token>'
+    Verifies Firebase ID token.
+    Accepts:
+    - 'Bearer <firebase_id_token>'
+    - '<firebase_id_token>' (Swagger / quick tests)
+    Returns: uid (str)
     """
     if not auth_header:
         raise PermissionError("Authorization header missing")
 
-    if not auth_header.startswith("Bearer "):
-        raise PermissionError("Invalid Authorization header format")
+    # Accept both formats
+    if auth_header.startswith("Bearer "):
+        id_token = auth_header.split(" ", 1)[1].strip()
+    else:
+        id_token = auth_header.strip()
 
-    id_token = auth_header.replace("Bearer ", "").strip()
-
-    # Debug safety: token must have 3 segments
+    # Basic sanity check
     if id_token.count(".") != 2:
-        raise PermissionError("Malformed Firebase token (wrong segments)")
+        raise PermissionError("Malformed Firebase token")
 
     try:
         decoded_token = auth.verify_id_token(id_token)
-        return decoded_token
+        return decoded_token.get("uid")
     except Exception as e:
         raise PermissionError(f"Invalid Firebase token: {str(e)}")

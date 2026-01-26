@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
 from google.cloud import firestore
 from pydantic import BaseModel
+from cricknova_engine.processing.firebase_init import verify_firebase_token
 
 # 🔐 Backend is the single source of truth for subscription & limits.
 # Uses Firestore for persistence (NO in-memory loss)
@@ -111,8 +112,11 @@ def subscription_status(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     user_id = None
-    if credentials:
-        user_id = credentials.credentials
+    if credentials and credentials.credentials:
+        try:
+            user_id = verify_firebase_token(credentials.credentials)
+        except Exception:
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
@@ -153,8 +157,11 @@ def activate_plan(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     user_id = None
-    if credentials:
-        user_id = credentials.credentials
+    if credentials and credentials.credentials:
+        try:
+            user_id = verify_firebase_token(credentials.credentials)
+        except Exception:
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
@@ -213,8 +220,11 @@ def use_chat(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     user_id = None
-    if credentials:
-        user_id = credentials.credentials
+    if credentials and credentials.credentials:
+        try:
+            user_id = verify_firebase_token(credentials.credentials)
+        except Exception:
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
@@ -227,8 +237,11 @@ def use_mistake(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     user_id = None
-    if credentials:
-        user_id = credentials.credentials
+    if credentials and credentials.credentials:
+        try:
+            user_id = verify_firebase_token(credentials.credentials)
+        except Exception:
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
@@ -241,8 +254,11 @@ def use_compare(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     user_id = None
-    if credentials:
-        user_id = credentials.credentials
+    if credentials and credentials.credentials:
+        try:
+            user_id = verify_firebase_token(credentials.credentials)
+        except Exception:
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")

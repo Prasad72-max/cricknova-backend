@@ -177,13 +177,12 @@ def get_current_user(
             detail="USER_NOT_AUTHENTICATED",
         )
 
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="INVALID_AUTH_HEADER",
-        )
+    # Accept both: "Bearer <token>" and "<token>" (Swagger / quick tests)
+    if authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    else:
+        token = authorization.strip()
 
-    token = authorization.split(" ", 1)[1]
     user_id = verify_firebase_token(token)
 
     if not user_id:

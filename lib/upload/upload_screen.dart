@@ -153,14 +153,17 @@ class _UploadScreenState extends State<UploadScreen> {
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final String idToken = (await user.getIdToken(true))!;
-      if (idToken.isEmpty) {
-        throw Exception("Firebase ID token missing");
-      }
-      request.headers["Authorization"] = "Bearer $idToken";
-      request.headers["X-USER-ID"] = user.uid;
+    if (user == null) {
+      throw Exception("USER_NOT_AUTHENTICATED");
     }
+
+    final String idToken = await user.getIdToken(true);
+    if (idToken.isEmpty) {
+      throw Exception("USER_NOT_AUTHENTICATED");
+    }
+
+    // Canonical Authorization header only
+    request.headers["Authorization"] = "Bearer $idToken";
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
@@ -274,14 +277,16 @@ class _UploadScreenState extends State<UploadScreen> {
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      final String idToken = (await user.getIdToken(true))!;
-      if (idToken.isEmpty) {
-        throw Exception("Firebase ID token missing");
-      }
-      request.headers["Authorization"] = "Bearer $idToken";
-      request.headers["X-USER-ID"] = user.uid;
+    if (user == null) {
+      throw Exception("USER_NOT_AUTHENTICATED");
     }
+
+    final String idToken = await user.getIdToken(true);
+    if (idToken.isEmpty) {
+      throw Exception("USER_NOT_AUTHENTICATED");
+    }
+
+    request.headers["Authorization"] = "Bearer $idToken";
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
@@ -340,14 +345,16 @@ class _UploadScreenState extends State<UploadScreen> {
 
       // ✅ Send Firebase ID token so backend can identify user & plan
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final String token = (await user.getIdToken(true))!;
-        if (token.isEmpty) {
-          throw Exception("Firebase ID token is empty");
-        }
-        request.headers["Authorization"] = "Bearer $token";
-        request.headers["X-USER-ID"] = user.uid;
+      if (user == null) {
+        throw Exception("USER_NOT_AUTHENTICATED");
       }
+
+      final String token = await user.getIdToken(true);
+      if (token.isEmpty) {
+        throw Exception("USER_NOT_AUTHENTICATED");
+      }
+
+      request.headers["Authorization"] = "Bearer $token";
 
       // send video (REQUIRED by backend)
       request.files.add(

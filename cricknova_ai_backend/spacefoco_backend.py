@@ -1,4 +1,4 @@
-print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18😭✌🏻 1234567890987654321🔥")
+print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18😭✌🏻@@@@@@@@ 1234567890987654321🔥")
 import os
 import asyncio
 import sys
@@ -231,8 +231,9 @@ async def subscription_status(
     user_id = None
     try:
         if credentials:
+            auth_header = request.headers.get("Authorization")
             user_id = get_current_user(
-                authorization=credentials.credentials
+                authorization=auth_header
             )
     except Exception:
         user_id = None
@@ -357,7 +358,8 @@ class VerifyPaymentRequest(BaseModel):
 @app.post("/payment/verify-payment")
 async def verify_payment(
     req: VerifyPaymentRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request = None
 ):
     key_secret = os.getenv("RAZORPAY_KEY_SECRET")
 
@@ -386,8 +388,9 @@ async def verify_payment(
     user_id = None
     try:
         if credentials:
+            auth_header = request.headers.get("Authorization")
             user_id = get_current_user(
-                authorization=credentials.credentials
+                authorization=auth_header
             )
     except Exception:
         user_id = None
@@ -698,8 +701,9 @@ async def ai_coach_analyze(
     user_id = None
     try:
         if credentials:
+            auth_header = request.headers.get("Authorization")
             user_id = get_current_user(
-                authorization=credentials.credentials
+                authorization=auth_header
             )
     except Exception:
         user_id = None
@@ -831,8 +835,9 @@ async def ai_coach_chat(
     user_id = None
     try:
         if credentials:
+            auth_header = request.headers.get("Authorization")
             user_id = get_current_user(
-                authorization=credentials.credentials
+                authorization=auth_header
             )
     except Exception:
         user_id = None
@@ -919,8 +924,9 @@ async def ai_coach_diff(
     user_id = None
     try:
         if credentials:
+            auth_header = request.headers.get("Authorization")
             user_id = get_current_user(
-                authorization=credentials.credentials
+                authorization=auth_header
             )
     except Exception:
         user_id = None

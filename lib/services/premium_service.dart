@@ -213,9 +213,9 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String idToken = (await user.getIdToken(true)) ?? "";
+    final String idToken = await user.getIdToken(true);
     if (idToken.isEmpty) {
-      throw Exception("Failed to obtain Firebase ID token");
+      throw Exception("USER_NOT_AUTHENTICATED");
     }
 
     // 🔁 Normalize UI plan to backend plan ID
@@ -437,9 +437,9 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not authenticated");
     }
-    final String idToken = (await user.getIdToken(true)) ?? "";
+    final String idToken = await user.getIdToken(true);
     if (idToken.isEmpty) {
-      throw Exception("Failed to obtain Firebase ID token");
+      throw Exception("USER_NOT_AUTHENTICATED");
     }
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/paypal/create-order"),
@@ -515,9 +515,9 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not authenticated");
     }
-    final String idToken = (await user.getIdToken(true)) ?? "";
+    final String idToken = await user.getIdToken(true);
     if (idToken.isEmpty) {
-      throw Exception("Failed to obtain Firebase ID token");
+      throw Exception("USER_NOT_AUTHENTICATED");
     }
     final response = await http.post(
       Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
@@ -550,9 +550,9 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String idToken = (await user.getIdToken(true)) ?? "";
+    final String idToken = await user.getIdToken(true);
     if (idToken.isEmpty) {
-      throw Exception("Failed to obtain Firebase ID token");
+      throw Exception("USER_NOT_AUTHENTICATED");
     }
 
     // Plan can be inferred later or passed via query if needed

@@ -195,47 +195,40 @@ def increment_compare(user_id: str):
 # -----------------------------
 def get_current_user(
     authorization: str | None = None,
-    x_user_id: str | None = None
 ):
     """
     Resolve authenticated Firebase user.
-    STRICT RULES:
-    - Only Firebase ID token is trusted in production
-    - X-USER-ID is allowed ONLY if token is missing (legacy safety)
+    Rules:
+    - Firebase ID token is mandatory
+    - Accepts both: 'Bearer <token>' and '<token>'
+    - Always returns Firebase UID
     """
 
-    # 1️⃣ Firebase ID token (PRIMARY)
-    if authorization:
-        try:
-            auth_header = authorization.strip()
-            if auth_header.lower().startswith("bearer "):
-                token = auth_header.split(" ", 1)[1].strip()
-            else:
-                token = auth_header
+    if not authorization:
+        raise ValueError("USER_NOT_AUTHENTICATED")
 
-            if not token:
-                raise ValueError("EMPTY_TOKEN")
+    try:
+        auth_header = authorization.strip()
 
-            decoded = auth.verify_id_token(token)
-            uid = decoded.get("uid")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+        else:
+            token = auth_header
 
-            if not uid:
-                raise ValueError("UID_MISSING")
+        if not token or token.count(".") != 2:
+            raise ValueError("MALFORMED_TOKEN")
 
-            return uid
+        decoded = auth.verify_id_token(token)
+        uid = decoded.get("uid")
 
-        except Exception as e:
-            print("❌ FIREBASE TOKEN VERIFY FAILED:", str(e))
+        if not uid:
+            raise ValueError("UID_MISSING")
 
-    # 2️⃣ Fallback ONLY if explicitly provided (dev / backward compatibility)
-    if x_user_id:
-        uid = x_user_id.strip()
-        if uid:
-            print("⚠️ AUTH FALLBACK USED (X-USER-ID):", uid)
-            return uid
+        return uid
 
-    # 3️⃣ Hard fail
-    raise ValueError("USER_NOT_AUTHENTICATED")
+    except Exception as e:
+        print("❌ FIREBASE TOKEN VERIFY FAILED:", str(e))
+        raise ValueError("USER_NOT_AUTHENTICATED")
 
 def save_firestore_subscription(user_id: str, data: dict):
     """

@@ -157,16 +157,41 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      final String? idToken = user != null ? await user.getIdToken(true) : null;
+      if (user == null) {
+        loading = false;
+        setState(() {});
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("You are logged out. Please sign in again."),
+            ),
+          );
+        }
+        return;
+      }
+      final String? idToken = await user.getIdToken(true);
 
-      debugPrint("🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken?.substring(0, 20)}");
+      if (idToken == null || idToken.isEmpty) {
+        loading = false;
+        setState(() {});
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Authentication failed. Please log in again."),
+            ),
+          );
+        }
+        return;
+      }
+
+      debugPrint("🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken.substring(0, 20)}");
 
       http.Response response = await http.post(
         uri,
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          if (idToken != null) "Authorization": "Bearer $idToken",
+          "Authorization": "Bearer $idToken",
         },
         body: jsonEncode({
           "message": userMessage,
@@ -185,31 +210,30 @@ class _AICoachScreenState extends State<AICoachScreen> {
         }
         return;
       }
+      else if (response.statusCode == 403) {
+        loading = false;
+        setState(() {});
 
+        try {
+          final decoded = jsonDecode(response.body);
+          if (decoded["detail"] == "CHAT_LIMIT_REACHED") {
+            await _redirectToPremiumWithReason();
+            return;
+          }
+        } catch (_) {}
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Usage limit reached."),
+            ),
+          );
+        }
+        return;
+      }
       else if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         debugPrint("AI COACH RESPONSE => $decoded");
-
-        // 🔐 Auth expired or missing token (backend may still return 200)
-        if (decoded["detail"] == "USER_NOT_AUTHENTICATED" ||
-            decoded["reply"] == "Please log in again to continue chatting with AI Coach.") {
-          loading = false;
-          setState(() {});
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Session expired. Please reopen the app."),
-              ),
-            );
-          }
-          return;
-        }
-
-        // 💳 Premium limit exceeded
-        if (decoded["error"] == "LIMIT_EXCEEDED") {
-          await _redirectToPremiumWithReason();
-          return;
-        }
 
         // ❌ Any other unexpected failure
         if (decoded["success"] != true &&

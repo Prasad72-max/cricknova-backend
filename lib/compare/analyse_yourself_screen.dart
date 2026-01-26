@@ -112,6 +112,16 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
     }
 
     final idToken = await user.getIdToken(true);
+
+    if (idToken.isEmpty) {
+      setState(() {
+        diffResult = "Session expired. Please log in again.";
+        comparing = false;
+      });
+      return;
+    }
+
+    // Canonical Authorization header
     request.headers["Authorization"] = "Bearer $idToken";
 
     request.files.add(await http.MultipartFile.fromPath("left", leftVideo!.path));
@@ -124,14 +134,6 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(body);
 
-        // Backend auth-safe response
-        if (data["detail"] == "USER_NOT_AUTHENTICATED") {
-          setState(() {
-            diffResult = "Session expired. Please log in again.";
-          });
-          return;
-        }
-
         setState(() {
           diffResult = data["difference"] ?? "No difference returned.";
         });
@@ -140,6 +142,20 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       } else if (response.statusCode == 401) {
         setState(() {
           diffResult = "Session expired. Please log in again.";
+        });
+      } else if (response.statusCode == 403) {
+        try {
+          final data = jsonDecode(body);
+          if (data["detail"] == "COMPARE_LIMIT_REACHED") {
+            await Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const PremiumScreen()),
+            );
+            return;
+          }
+        } catch (_) {}
+
+        setState(() {
+          diffResult = "Compare limit reached.";
         });
       } else {
         final data = jsonDecode(body);

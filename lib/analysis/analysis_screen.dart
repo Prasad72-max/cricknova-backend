@@ -167,7 +167,28 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     setState(() => _loading = true);
 
-    final responseData = await _sendToBackend(file);
+    Map<String, dynamic>? responseData;
+
+    try {
+      responseData = await _sendToBackend(file);
+    } catch (e) {
+      setState(() => _loading = false);
+
+      if (e.toString().contains("USER_NOT_AUTHENTICATED")) {
+        _showError(context, "Session expired. Please reopen the app.");
+        return;
+      }
+
+      if (e.toString().contains("TRAINING_LIMIT_REACHED")) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const PremiumScreen()),
+        );
+        return;
+      }
+
+      _showError(context, "Server error. Try again.");
+      return;
+    }
 
     setState(() => _loading = false);
 
@@ -228,6 +249,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         Uri.parse(backendUrl),
       );
 
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString("idToken");
+
+      if (token == null || token.isEmpty) {
+        throw Exception("USER_NOT_AUTHENTICATED");
+      }
+
+      // Canonical Authorization header
+      request.headers["Authorization"] = "Bearer $token";
+
       request.files.add(
         await http.MultipartFile.fromPath("file", file.path),
       );
@@ -242,6 +273,10 @@ print("=========== BACKEND RESPONSE END ===========");
 
       if (streamed.statusCode == 200) {
         return json.decode(responseString);
+      } else if (streamed.statusCode == 401) {
+        throw Exception("USER_NOT_AUTHENTICATED");
+      } else if (streamed.statusCode == 403) {
+        throw Exception("TRAINING_LIMIT_REACHED");
       } else {
         debugPrint("SERVER ERROR: ${streamed.statusCode}");
         return null;
