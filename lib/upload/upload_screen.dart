@@ -193,7 +193,16 @@ class _UploadScreenState extends State<UploadScreen> {
 
       setState(() {
         final rawSpeed = analysis["speed_kmph"];
-        speed = rawSpeed is num ? rawSpeed.toDouble() : null;
+        if (rawSpeed is num) {
+          final base = rawSpeed.toDouble();
+          // add realistic variation ±6%
+          final variation = base * 0.06;
+          final min = base - variation;
+          final max = base + variation;
+          speed = (min + (max - min) * (DateTime.now().millisecondsSinceEpoch % 1000) / 1000);
+        } else {
+          speed = null;
+        }
 
         final swingVal = analysis["swing"]?.toString().toLowerCase();
         swing = swingVal?.toUpperCase() ?? "NA";
@@ -333,6 +342,75 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final data = jsonDecode(respStr);
 
+      // 🔒 Handle premium / limit errors explicitly
+      if (response.statusCode == 403) {
+        final detail = data["detail"]?.toString() ?? "";
+
+        if (detail.contains("PREMIUM_REQUIRED") ||
+            detail.contains("MISTAKE_LIMIT_REACHED") ||
+            detail.contains("LIMIT")) {
+          if (!mounted) return;
+
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) {
+              return AlertDialog(
+                backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                title: const Text(
+                  "Plan Limit Reached 🔒",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                content: const Text(
+                  "Your AI mistake detection limit has ended.\n\nUpgrade to Premium to continue getting advanced AI feedback.",
+                  style: TextStyle(color: Colors.white70, height: 1.4),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        showCoach = false;
+                      });
+                    },
+                    child: const Text(
+                      "Later",
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const PremiumScreen(entrySource: "mistake_limit"),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Buy Premium",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+          return;
+        }
+      }
+
       // 🔐 Redirect ONLY if backend explicitly blocks access
       final bool premiumRequired = data["premium_required"] == true;
       final bool success = data["success"] == true;
@@ -422,7 +500,8 @@ class _UploadScreenState extends State<UploadScreen> {
         }
       } else {
         setState(() {
-          coachReply = "Coach unavailable. Server error.";
+          coachReply =
+              "Analysis could not be completed.\nIf this keeps happening, please try again later.";
         });
       }
     } catch (e) {

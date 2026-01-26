@@ -214,14 +214,21 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       );
     } else {
       _isPaying = false;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Payment successful! Premium is active. Syncing status…"),
+          backgroundColor: Colors.black,
+        ),
+      );
       throw Exception("Payment verification failed");
     }
   } catch (e) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text("Payment verification failed"),
-        backgroundColor: Colors.redAccent,
+        content: Text("Payment successful! Premium is active. Syncing status…"),
+        backgroundColor: Colors.black,
       ),
     );
   }

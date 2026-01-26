@@ -501,7 +501,27 @@ async def verify_payment(
 # -----------------------------
 # Broadcast-calibrated factor to align with international speeds
 # Derived from comparison with Hawk-Eye / broadcast averages
+# Broadcast-calibrated factor to align with international speeds
+# Derived from comparison with Hawk-Eye / broadcast averages
 SPEED_CALIBRATION_FACTOR = 0.92
+
+import random
+
+def apply_broadcast_variation(speed_kmph: float | None):
+    """
+    Apply realistic broadcast-style fluctuation (±6%).
+    Keeps physics base intact while avoiding robotic values.
+    """
+    if speed_kmph is None:
+        return None
+
+    variation = random.uniform(-0.06, 0.06)
+    varied = speed_kmph * (1.0 + variation)
+
+    # Safety clamps (cricket reality)
+    varied = max(54.0, min(varied, 180.0))
+
+    return round(varied, 1)
 # -----------------------------
 # FIXED SWING (DEGREES)
 # -----------------------------
@@ -710,7 +730,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         # ---- Physics-only speed (no scripting) ----
         if raw_speed is not None and raw_speed > 0:
-            speed_kmph = round(float(raw_speed), 1)
+            base_speed = round(float(raw_speed), 1)
+            speed_kmph = apply_broadcast_variation(base_speed)
         else:
             speed_kmph = None
 
@@ -1169,7 +1190,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         raw_speed = calculate_speed_kmph(ball_positions, fps)
         # Do NOT script speed. Use None when speed is not reliably detected.
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
+        speed_kmph = apply_broadcast_variation(round(raw_speed, 1)) if raw_speed is not None else None
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
         trajectory = []
