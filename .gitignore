@@ -91,6 +91,8 @@ windows/
 openai>=1.0.0
 firebase_key.json
 # Firebase secrets
+secrets/firebase_service_account.json
+secrets/
 cricknova_ai_backend/*.json
 __pycache__/
 *.pyc

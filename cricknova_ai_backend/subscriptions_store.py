@@ -65,29 +65,38 @@ def save_subscriptions(data):
 # -----------------------------
 # CORE LOGIC
 # -----------------------------
+
+def get_firestore_subscription(user_id: str):
+    try:
+        from google.cloud import firestore
+        db = firestore.Client()
+        doc = db.collection("subscriptions").document(user_id).get()
+        if not doc.exists:
+            return None
+        return doc.to_dict()
+    except Exception as e:
+        print("❌ FIRESTORE READ FAILED:", e)
+        return None
 def get_subscription(user_id: str):
+    # 🔥 Always prefer Firestore (single source of truth)
+    fs_sub = get_firestore_subscription(user_id)
+    if fs_sub:
+        expiry = fs_sub.get("expiry")
+        if expiry:
+            try:
+                expiry_dt = datetime.fromisoformat(expiry)
+                fs_sub["active"] = datetime.utcnow() < expiry_dt
+            except Exception:
+                fs_sub["active"] = False
+        else:
+            fs_sub["active"] = False
+        return fs_sub
+
+    # ⛔ fallback only if Firestore missing (should not happen in prod)
     subs = load_subscriptions()
     sub = subs.get(user_id)
-
     if not sub:
         return json.loads(json.dumps(FREE_PLAN))
-
-    expiry = sub.get("expiry")
-    if not expiry:
-        sub["active"] = False
-        return sub
-
-    try:
-        expiry_dt = datetime.fromisoformat(expiry)
-    except Exception:
-        sub["active"] = False
-        return sub
-
-    if datetime.utcnow() >= expiry_dt:
-        sub["active"] = False
-    else:
-        sub["active"] = True
-
     return sub
 
 def is_subscription_active(sub: dict) -> bool:

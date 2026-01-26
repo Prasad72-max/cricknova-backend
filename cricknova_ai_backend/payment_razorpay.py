@@ -76,7 +76,17 @@ def verify_payment(request: Request, data: dict = Body(...)):
         if not user_id:
             raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-        raw_plan = data.get("plan") or "monthly"
+        raw_plan = data.get("plan")
+
+        # Fallback: infer plan from amount if plan not sent by app
+        if not raw_plan:
+            amount = data.get("amount")
+            if amount in (99, "99", 9900, "9900"):
+                raw_plan = "monthly"
+            elif amount in (499, "499", 49900, "49900"):
+                raw_plan = "yearly"
+            else:
+                raw_plan = "monthly"
 
         # Normalize / alias plans coming from app or Razorpay
         PLAN_ALIAS = {

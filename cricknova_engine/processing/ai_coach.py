@@ -203,19 +203,23 @@ async def ai_coach(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     skip_limit: bool = False
 ):
-    # 🔐 Resolve authenticated user (robust multi-source)
-    user_id = None
+    # 🔐 Resolve authenticated user (SAFE ORDER)
+    # 1️⃣ First accept X-USER-ID (publish / payment safe)
+    user_id = request.headers.get("X-USER-ID")
 
-    # 1️⃣ Try Authorization header (Firebase ID token)
-    if not BYPASS_AUTH:
+    # 2️⃣ Only try Firebase if X-USER-ID not provided
+    if not user_id and not BYPASS_AUTH:
         auth_header = None
         if credentials:
             auth_header = f"Bearer {credentials.credentials}"
 
-        user_id = get_current_user(
-            authorization=auth_header,
-            x_user_id=request.headers.get("X-USER-ID")
-        )
+        try:
+            user_id = get_current_user(
+                authorization=auth_header,
+                x_user_id=None
+            )
+        except Exception as e:
+            print("⚠️ Firebase auth failed, fallback allowed:", e)
 
     # 2️⃣ Fallback: accept user_id from request body (frontend safety net)
     if not user_id and req.user_id:
@@ -225,7 +229,12 @@ async def ai_coach(
     print("📦 HEADERS:", dict(request.headers))
     print("🧪 BYPASS_AUTH:", BYPASS_AUTH)
 
+    # Allow X-USER-ID fallback to avoid 401 during payment / AI calls
+    if not user_id and request.headers.get("X-USER-ID"):
+        user_id = request.headers.get("X-USER-ID")
+
     if not user_id and not BYPASS_AUTH:
+        print("❌ AUTH FAILED → No user_id resolved")
         raise HTTPException(
             status_code=401,
             detail="USER_NOT_AUTHENTICATED"
@@ -246,8 +255,16 @@ async def ai_coach(
             "coach_feedback": "AI Coach is temporarily unavailable. Please try again later."
         }
 
-    # 🔐 LIMIT CHECK (only after AI is ready)
+    # 🔐 LIMIT CHECK
+    # TEMP PUBLISH FIX:
+    # If user has ANY valid non-FREE plan, allow AI unconditionally
     limit_info = None
+    plan = get_user_plan(user_id)
+    print("💎 PLAN RESOLVED:", plan)
+
+    if plan != "FREE":
+        skip_limit = True
+
     if not skip_limit:
         allowed, premium_required, limit_info = check_limit(user_id, feature="chat")
         if not allowed:
@@ -310,7 +327,7 @@ Situation / Question:
             "success": True,
             "reply": response.choices[0].message.content.strip(),
             "usage": limit_info,
-            "plan": get_user_plan(user_id),
+            "plan": plan,
             "premium_required": False
         }
 
@@ -334,25 +351,31 @@ async def ai_coach_analyze(
     Internally routes to /coach/chat logic.
     """
 
-    # 🔐 LIMIT CHECK for mistake feature
-    user_id = None
+    # 🔐 Resolve authenticated user (SAFE ORDER)
+    user_id = request.headers.get("X-USER-ID")
 
-    # 1️⃣ Try Authorization header (Firebase ID token)
-    if not BYPASS_AUTH:
+    if not user_id and not BYPASS_AUTH:
         auth_header = None
         if credentials:
             auth_header = f"Bearer {credentials.credentials}"
 
-        user_id = get_current_user(
-            authorization=auth_header,
-            x_user_id=request.headers.get("X-USER-ID")
-        )
+        try:
+            user_id = get_current_user(
+                authorization=auth_header,
+                x_user_id=None
+            )
+        except Exception as e:
+            print("⚠️ Firebase auth failed (analyze), fallback allowed:", e)
 
     # 2️⃣ Fallback: accept user_id from request body (frontend safety net)
     if not user_id and req.user_id:
         user_id = req.user_id
 
+    if not user_id and request.headers.get("X-USER-ID"):
+        user_id = request.headers.get("X-USER-ID")
+
     if not user_id and not BYPASS_AUTH:
+        print("❌ AUTH FAILED (analyze) → No user_id resolved")
         raise HTTPException(
             status_code=401,
             detail="USER_NOT_AUTHENTICATED"

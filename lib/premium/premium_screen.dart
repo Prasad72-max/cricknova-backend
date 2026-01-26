@@ -191,7 +191,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
 
     final data = jsonDecode(verifyRes.body);
 
-    if (verifyRes.statusCode == 200 && data["status"] == "success") {
+    if (verifyRes.statusCode == 200 && data["success"] == true) {
       await PremiumService.syncFromBackend(user.uid);
 
       if (!mounted) return;

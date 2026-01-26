@@ -6,22 +6,24 @@ import math
 import time
 import tempfile
 
-# --- Robust Firebase Admin initialization ---
+# --- Firebase Admin initialization (RENDER SAFE, STRICT) ---
+import json
 import firebase_admin
 from firebase_admin import credentials
 
 if not firebase_admin._apps:
-    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    service_account = os.getenv("FIREBASE_SERVICE_ACCOUNT")
 
-    if cred_path and os.path.exists(cred_path):
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-        print("✅ Firebase Admin initialized with service account")
-    else:
-        # Allow backend to start even without credentials
-        # Auth will fail gracefully with 401 instead of crashing
-        firebase_admin.initialize_app()
-        print("⚠️ Firebase Admin initialized WITHOUT service account")
+    if not service_account:
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT env variable is not set")
+
+    cred = credentials.Certificate(json.loads(service_account))
+    firebase_admin.initialize_app(
+        cred,
+        {"projectId": "cricknova-5f94f"}
+    )
+
+    print("✅ Firebase Admin initialized WITH service account")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
