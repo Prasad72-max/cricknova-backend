@@ -25,22 +25,20 @@ if not firebase_admin._apps:
     print("🔥 Firebase Admin initialized")
 
 # --- Firebase token verification helper ---
-def verify_firebase_token(id_token: str) -> str:
-    if not id_token:
+def verify_firebase_token(token: str) -> str:
+    if not token:
         raise ValueError("Missing token")
 
-    token = id_token.strip()
-    if token.lower().startswith("bearer "):
-        token = token.split(" ", 1)[1].strip()
-
+    # Token MUST already be raw JWT (no 'Bearer ')
     decoded = auth.verify_id_token(token)
+
     uid = decoded.get("uid")
     if not uid:
         raise ValueError("UID missing in token")
+
     return uid
-    print("hello from cricknova_ai_backend.spacefoco_backend")
 app = FastAPI(title="CrickNova AI Backend")
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer(auto_error=True)
 
 @app.on_event("startup")
 async def startup_log():
