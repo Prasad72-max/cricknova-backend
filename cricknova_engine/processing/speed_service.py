@@ -4,8 +4,8 @@ from .speed import BallSpeedCalculator
 def estimate_speed(video_path):
     """
     Physics-based ball speed estimation.
-    Returns None if tracking confidence is insufficient.
-    No hardcoded or fallback speeds.
+    Allows low-confidence estimation for short clips.
+    No hardcoded fallback values.
     """
 
     tracker = BallTracker()
@@ -13,14 +13,22 @@ def estimate_speed(video_path):
 
     positions = tracker.track_ball(video_path)
 
-    # If tracking failed or too few points, do NOT guess speed
-    if positions is None or len(positions) < 5:
+    # If tracking completely failed
+    if positions is None or len(positions) < 3:
         return None
 
+    # Calculate speed even for low-confidence (short clips)
     speed = speed_calc.calculate_speed(positions)
 
-    # If calculation fails or is non-physical, return None
-    if speed is None or speed <= 0 or speed > 180:
+    # Validate physical bounds
+    if speed is None:
         return None
 
-    return speed
+    if speed <= 0:
+        return None
+
+    # Upper bound safety (international fast bowling max ~170 km/h)
+    if speed > 190:
+        return None
+
+    return round(speed, 1)
