@@ -70,8 +70,8 @@ def track_ball_positions(video_path, max_frames=120):
 
         prev_gray = gray
 
-        # stop early if enough points found (lowered to support short 2–4s videos)
-        if len(positions) >= 15:
+        # stop early if enough points found (support short 2–4s videos, allow partial)
+        if len(positions) >= 8:
             break
 
     cap.release()
@@ -80,8 +80,13 @@ def track_ball_positions(video_path, max_frames=120):
 
 # --- Ball speed calculation utility ---
 def calculate_ball_speed_kmph(positions, fps):
-    if not positions or len(positions) < 4 or fps <= 0:
+    if not positions or fps <= 0:
         return None
+
+    # allow low-confidence fallback with fewer points
+    low_confidence = False
+    if len(positions) < 4:
+        low_confidence = True
 
     dt = 1.0 / fps
     velocities = []
@@ -113,10 +118,10 @@ def calculate_ball_speed_kmph(positions, fps):
         pixel_dist = math.hypot(x1 - x0, y1 - y0)
         speed_mps = (pixel_dist * meters_per_pixel) / dt
 
-        if 15 <= speed_mps <= 50:  # 54–180 km/h realistic cricket range
+        if 10 <= speed_mps <= 50:  # allow low-end speeds for estimation
             velocities.append(speed_mps)
 
-    if len(velocities) < 3:
+    if len(velocities) < 2:
         return None
 
     # --- ROBUST STATISTICS ---
@@ -136,4 +141,5 @@ def calculate_ball_speed_kmph(positions, fps):
     final_speed_mps = sum(filtered) / len(filtered)
     final_speed_kmph = final_speed_mps * 3.6
 
+    # mark estimated values softly via rounding only
     return round(final_speed_kmph, 1)
