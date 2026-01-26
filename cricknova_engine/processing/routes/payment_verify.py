@@ -2,7 +2,7 @@ import hmac, hashlib, os
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
-from cricknova_ai_backend.auth import get_current_user
+from cricknova_ai_backend.subscriptions_store import get_current_user
 
 router = APIRouter()
 
