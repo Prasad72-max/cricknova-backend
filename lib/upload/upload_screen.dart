@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
@@ -38,6 +39,9 @@ class _UploadScreenState extends State<UploadScreen> {
     debugPrint("UPLOAD_SCREEN initState");
     final user = FirebaseAuth.instance.currentUser;
     debugPrint("UPLOAD_SCREEN user=${user?.uid}");
+    PremiumService.premiumNotifier.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
   File? video;
   VideoPlayerController? controller;
@@ -129,9 +133,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Future<void> pickAndUpload() async {
     debugPrint("UPLOAD_SCREEN → pickAndUpload start");
+
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
-
     if (picked == null) return;
 
     video = File(picked.path);
@@ -139,130 +143,85 @@ class _UploadScreenState extends State<UploadScreen> {
     controller?.dispose();
     controller = VideoPlayerController.file(video!)
       ..initialize().then((_) {
-        setState(() {});
+        if (mounted) setState(() {});
       });
 
-    setState(() {
-      uploading = true;
-      showTrajectory = false;
-      showDRS = false;
-      drsResult = null;
-    });
-
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/analyze");
-    final request = http.MultipartRequest("POST", uri);
-    request.headers["Accept"] = "application/json";
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception("USER_NOT_AUTHENTICATED");
+    if (mounted) {
+      setState(() {
+        uploading = true;
+        showTrajectory = false;
+        showDRS = false;
+        drsResult = null;
+      });
     }
 
-    final String? idToken = await user.getIdToken(true);
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception("USER_NOT_AUTHENTICATED");
-    }
-
-    // Canonical Authorization header only
-    request.headers["Authorization"] = "Bearer $idToken";
-    request.files.add(await http.MultipartFile.fromPath("file", video!.path));
+    final uri = Uri.parse(
+      "https://cricknova-backend.onrender.com/training/analyze",
+    );
 
     try {
-      final response = await request.send();
-      print("UPLOAD STATUS => ${response.statusCode}");
+      final request = http.MultipartRequest("POST", uri);
+      request.headers["Accept"] = "application/json";
 
-      // 🔒 Handle premium / auth failures explicitly
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        final err = await response.stream.bytesToString();
-        debugPrint("UPLOAD AUTH ERROR => $err");
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception("USER_NOT_AUTHENTICATED");
 
-        if (!mounted) return;
-
-        if (!PremiumService.isPremiumActive) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const PremiumScreen(entrySource: "upload"),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Something went wrong. Please try again."),
-            ),
-          );
-        }
-
-        setState(() => uploading = false);
-        return;
+      final token = await user.getIdToken(true);
+      if (token == null || token.isEmpty) {
+        throw Exception("USER_NOT_AUTHENTICATED");
       }
 
-      if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
-        final data = jsonDecode(respStr);
-        print("ANALYSIS RESPONSE => $data");
-        setState(() {
-          final analysis = data["analysis"] ?? data;
-          print("ANALYSIS KEYS => ${analysis.keys}");
+      request.headers["Authorization"] = "Bearer $token";
+      request.files.add(
+        await http.MultipartFile.fromPath("file", video!.path),
+      );
 
-          final rawSpeed = analysis["speed_kmph"];
+      final response = await request.send()
+          .timeout(const Duration(seconds: 40));
 
-          // Parse backend speed (physics-based)
-          double? parsedSpeed;
-          if (rawSpeed is num) {
-            parsedSpeed = rawSpeed.toDouble();
-          } else if (rawSpeed is String) {
-            parsedSpeed = double.tryParse(rawSpeed);
-          } else {
-            parsedSpeed = null;
-          }
+      final respStr = await response.stream.bytesToString();
+      debugPrint("UPLOAD RESPONSE ${response.statusCode} => $respStr");
 
-          // UI safety: never show 0.0 km/h
-          if (parsedSpeed == null || parsedSpeed <= 0) {
-            speed = null;
-          } else {
-            speed = parsedSpeed;
-          }
-
-          final swingVal = analysis["swing"]?.toString().toLowerCase();
-
-          // SAFETY CAMERA-CORRECTION (display only)
-          if (swingVal == "inswing") {
-            swing = "OUTSWING";
-          } else if (swingVal == "outswing") {
-            swing = "INSWING";
-          } else {
-            swing = swingVal?.toUpperCase() ?? "NA";
-          }
-
-          final spinValRaw = analysis["spin"]?.toString().toLowerCase();
-
-          if (spinValRaw == "offspin" || spinValRaw == "off spin") {
-            spin = "OFF SPIN";
-          } else if (spinValRaw == "legspin" || spinValRaw == "leg spin") {
-            spin = "LEG SPIN";
-          } else if (spinValRaw == "doosra") {
-            spin = "DOOSRA";
-          } else if (spinValRaw == "googly") {
-            spin = "GOOGLY";
-          } else {
-            spin = spinValRaw?.toUpperCase() ?? "NA";
-          }
-
-          trajectory = const [];
-          showTrajectory = false;
-
-          print("UI STATE => speed=$speed swing=$swing spin=$spin");
-          controller?.play();
-        });
-      } else {
-        final err = await response.stream.bytesToString();
-        print("UPLOAD ERROR => $err");
+      if (response.statusCode != 200) {
+        throw Exception("UPLOAD_FAILED");
       }
+
+      final decoded = jsonDecode(respStr);
+      final analysis = decoded["analysis"] ?? decoded;
+
+      if (!mounted) return;
+
+      setState(() {
+        final rawSpeed = analysis["speed_kmph"];
+        speed = rawSpeed is num ? rawSpeed.toDouble() : null;
+
+        final swingVal = analysis["swing"]?.toString().toLowerCase();
+        swing = swingVal?.toUpperCase() ?? "NA";
+
+        final spinVal = analysis["spin"]?.toString().toLowerCase();
+        spin = spinVal?.toUpperCase() ?? "NA";
+
+        trajectory = const [];
+        showTrajectory = false;
+
+        controller?.play();
+      });
     } catch (e) {
-      print("UPLOAD EXCEPTION => $e");
+      debugPrint("UPLOAD ERROR => $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Analysis failed. Please try again."),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          uploading = false;
+        });
+      }
     }
-
-    setState(() => uploading = false);
   }
 
   Future<void> runDRS() async {
@@ -441,13 +400,29 @@ class _UploadScreenState extends State<UploadScreen> {
         return;
       }
 
-      if (response.statusCode == 200 && data["success"] == true) {
-        setState(() {
-          coachReply = data["reply"] ?? "No coaching feedback received";
-        });
+      if (response.statusCode == 200) {
+        // Normal successful coaching reply
+        if (data["success"] == true && data["reply"] != null) {
+          setState(() {
+            coachReply = data["reply"];
+          });
+        }
+        // Vision / tracking failed but coach feedback exists
+        else if (data["coach_feedback"] != null) {
+          setState(() {
+            coachReply = data["coach_feedback"];
+          });
+        }
+        // Fallback when no usable fields are present
+        else {
+          setState(() {
+            coachReply =
+                "Analysis completed, but no clear coaching feedback was generated.";
+          });
+        }
       } else {
         setState(() {
-          coachReply = "Coach unavailable. Please try again.";
+          coachReply = "Coach unavailable. Server error.";
         });
       }
     } catch (e) {
@@ -568,12 +543,24 @@ class _UploadScreenState extends State<UploadScreen> {
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: () async {
+                            // Step 1: show preparation message
                             setState(() {
                               showCoach = true;
                               coachReply =
-                                  "Analyzing your batting...\nThis may take 10–20 seconds ⏳";
+                                  "This may take 1–2 minutes...\nPlease keep the app open ⏳";
                             });
 
+                            // Artificial delay so user understands processing time
+                            await Future.delayed(const Duration(seconds: 6));
+
+                            if (!mounted) return;
+
+                            // Step 2: show actual analyzing message
+                            setState(() {
+                              coachReply = "Analyzing your batting... 🏏";
+                            });
+
+                            // Step 3: start backend coach analysis
                             await runCoach();
                           },
                           child: Container(

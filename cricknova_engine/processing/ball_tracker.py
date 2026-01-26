@@ -5,8 +5,8 @@ import math
 DEFAULT_FPS = 30.0
 
 # Wider acceptance to show speed on more videos
-MIN_VALID_SPEED = 55     # kmph (absolute believable minimum, never 0)
-MAX_VALID_SPEED = 170    # kmph (realistic upper bound)
+MIN_VALID_SPEED = 54     # kmph (lowest realistic cricket delivery)
+MAX_VALID_SPEED = 180    # kmph (elite fast bowling upper bound)
 
 def track_ball_positions(video_path):
     cap = cv.VideoCapture(video_path)
@@ -104,7 +104,7 @@ def compute_speed_kmph(ball_positions, fps):
     """
 
     if not ball_positions or len(ball_positions) < 4:
-        return MIN_VALID_SPEED
+        return None
 
     speeds = []
     n = len(ball_positions)
@@ -176,12 +176,10 @@ def compute_speed_kmph(ball_positions, fps):
         if total_time > 0 and total_dist > 0:
             meters = total_dist / 150.0
             speed = (meters / total_time) * 3.6
-            return round(
-                min(MAX_VALID_SPEED, max(MIN_VALID_SPEED, speed)), 1
-            )
+            if MIN_VALID_SPEED <= speed <= MAX_VALID_SPEED:
+                return round(speed, 1)
 
-        # Absolute fallback: never return null or 0
-        return MIN_VALID_SPEED
+        return None
 
     # --- Final robust aggregation ---
     speeds.sort()
@@ -192,10 +190,7 @@ def compute_speed_kmph(ball_positions, fps):
         # Median across windows (most reliable)
         final_speed = speeds[len(speeds) // 2]
 
-    # Final physics safety net (never allow zero or negative)
-    if final_speed <= 0:
-        final_speed = MIN_VALID_SPEED
+    if MIN_VALID_SPEED <= final_speed <= MAX_VALID_SPEED:
+        return round(final_speed, 1)
 
-    return round(
-        min(MAX_VALID_SPEED, max(MIN_VALID_SPEED, final_speed)), 1
-    )
+    return None

@@ -32,6 +32,11 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   @override
   void initState() {
     super.initState();
+    // 🔥 Ensure premium state is loaded before using limits
+    Future.microtask(() async {
+      await PremiumService.restoreOnLaunch();
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> pickVideo({required bool isLeft}) async {
@@ -63,7 +68,8 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
   Future<void> runCompare() async {
     // 🔒 Compare feature allowed ONLY for IN_499 and IN_1999
-    if (!PremiumService.isPremium ||
+    if (!PremiumService.isLoaded ||
+        !PremiumService.isPremium ||
         (PremiumService.plan != "IN_499" && PremiumService.plan != "IN_1999")) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -249,7 +255,20 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
               const SizedBox(height: 20),
 
               if (comparing)
-                const Center(child: CircularProgressIndicator()),
+                Column(
+                  children: const [
+                    SizedBox(height: 12),
+                    LinearProgressIndicator(minHeight: 3),
+                    SizedBox(height: 8),
+                    Text(
+                      "Analyzing videos… this may take 1–2 minutes ⏳",
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
 
               if (diffResult != null)
                 Container(

@@ -17,6 +17,7 @@ class PremiumService {
 
   // Single source of truth for UI
   static bool isPremium = false;
+  static final ValueNotifier<bool> premiumNotifier = ValueNotifier<bool>(false);
   /// 🔐 Premium validity = premium flag only
   /// Limits are enforced strictly by backend
   static bool get isPremiumActive {
@@ -294,6 +295,7 @@ class PremiumService {
 
     // In-memory state (single source for UI)
     isPremium = premium;
+    premiumNotifier.value = premium;
     plan = planId;
 
     chatLimit = chat;
@@ -308,6 +310,7 @@ class PremiumService {
   // -----------------------------
   static Future<void> clearPremium() async {
     isPremium = false;
+    premiumNotifier.value = false;
     plan = "FREE";
     chatLimit = 0;
     mistakeLimit = 0;

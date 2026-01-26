@@ -3,9 +3,9 @@ from .speed import BallSpeedCalculator
 
 def estimate_speed(video_path):
     """
-    Pipeline for ball speed:
-    1. Detect ball per frame
-    2. Convert positions into real speed
+    Physics-based ball speed estimation.
+    Returns None if tracking confidence is insufficient.
+    No hardcoded or fallback speeds.
     """
 
     tracker = BallTracker()
@@ -13,12 +13,14 @@ def estimate_speed(video_path):
 
     positions = tracker.track_ball(video_path)
 
-    if len(positions) < 2:
-        # ultra-short or failed detection: never return 0
-        return 55.0
+    # If tracking failed or too few points, do NOT guess speed
+    if positions is None or len(positions) < 5:
+        return None
 
     speed = speed_calc.calculate_speed(positions)
-    # final safety net: never allow zero or negative speed
-    if speed is None or speed <= 0:
-        speed = 55.0
+
+    # If calculation fails or is non-physical, return None
+    if speed is None or speed <= 0 or speed > 180:
+        return None
+
     return speed

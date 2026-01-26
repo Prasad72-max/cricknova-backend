@@ -38,16 +38,16 @@ class SwingDetector:
         Returns:
             float swing_angle_deg
         """
-        if len(positions) < 6:
+        if not positions or len(positions) < 8:
             return 0.0
 
         # Fix mirrored camera coordinates before angle calculation
         positions = unmirror_positions(positions)
 
-        # AUTO SPLIT POINT (pitch impact)
-        # The largest drop in vertical speed = bounce
+        # Detect pitch using maximum vertical acceleration (more stable)
         diffs = [positions[i+1][1] - positions[i][1] for i in range(len(positions)-1)]
-        pitch_index = np.argmax(diffs)  # y-increase is biggest at bounce
+        accel = [abs(diffs[i+1] - diffs[i]) for i in range(len(diffs)-1)]
+        pitch_index = np.argmax(accel)
 
         # protect boundaries
         pitch_index = max(1, min(pitch_index, len(positions)-2))
@@ -91,7 +91,7 @@ def classify_swing(swing_deg: float):
     """
     Cricket-correct swing classification after unmirroring.
     """
-    if abs(swing_deg) < 1.0:
+    if abs(swing_deg) < 1.2:
         return "straight"
 
     # NOTE:
@@ -102,3 +102,4 @@ def classify_swing(swing_deg: float):
         return "inswing"
     else:
         return "outswing"
+    return "straight"

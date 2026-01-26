@@ -6,7 +6,6 @@ import cv2
 # -----------------------------
 # CONFIG
 # -----------------------------
-MIN_SPEED = 55.0  # absolute minimum believable speed (never show 0.0)
 MAX_SPEED = 158.0
 PITCH_LENGTH_METERS = 20.12
 PITCH_WIDTH_METERS = 3.05
@@ -44,9 +43,9 @@ def calculate_speed_pro(
     """
 
     # 0. Basic sanity checks (relaxed for short clips)
-    if not ball_positions or len(ball_positions) < 2:
-        # ultra-short or failed detection: still return believable speed
-        return MIN_SPEED
+    if not ball_positions or len(ball_positions) < 4:
+        # insufficient data for physics-based speed
+        return None
 
     # Allow low FPS videos but note reduced accuracy
     fps = max(15, fps)
@@ -66,19 +65,14 @@ def calculate_speed_pro(
         distances.append(d)
 
     if len(distances) < 2:
-        # fallback for ultra-short (≈2 sec) clips
-        approx = np.mean(distances) if len(distances) else 0
-        estimated = approx * fps * 3.6
-        if estimated <= 0:
-            estimated = MIN_SPEED
-        return max(estimated, MIN_SPEED)
+        return None
 
     distances = np.array(distances)
 
     # 4. Hybrid noise filtering (IQR + positive-only)
     distances = distances[distances > 0]
     if len(distances) < 2:
-        return MIN_SPEED
+        return None
 
     Q1, Q3 = np.percentile(distances, [25, 75])
     iqr = max(Q3 - Q1, 1e-6)
@@ -104,13 +98,7 @@ def calculate_speed_pro(
             speed_estimates.append(avg_mpf * fps * 3.6)
 
     if not speed_estimates:
-        # absolute fallback: estimate from total displacement (2-sec safe)
-        total_dist = np.sum(clean_distances)
-        time_sec = max(len(clean_distances) / fps, 0.05)
-        fallback_speed = (total_dist / time_sec) * 3.6
-        if fallback_speed <= 0:
-            fallback_speed = MIN_SPEED
-        return max(fallback_speed, MIN_SPEED)
+        return None
 
     # Use median of window speeds to avoid spikes
     raw_kmph = float(np.median(speed_estimates))
@@ -131,19 +119,12 @@ def calculate_speed_pro(
 
     final_kmph = raw_kmph * angle_correction * ball_factor
 
-    # Final hard safety net (never allow zero or negative)
-    if final_kmph <= 0:
-        final_kmph = MIN_SPEED
-
-    # 8. Safety Clamps
-    # Allow slow balls but never drop to zero
-    if final_kmph < MIN_SPEED:
-        final_kmph = MIN_SPEED
-
     final_kmph = min(final_kmph, MAX_SPEED)
 
-    # 9. Formatting: int for high speed, 1 decimal for lower
-    print("SPEED DEBUG => raw:", raw_kmph, "final:", final_kmph, "fps:", fps, "points:", len(ball_positions))
+    if final_kmph <= 0 or math.isnan(final_kmph):
+        return None
+
+    print("SPEED PHYSICS => raw:", raw_kmph, "final:", final_kmph, "fps:", fps, "points:", len(ball_positions))
     if final_kmph < 120:
         return round(final_kmph, 1)
     else:

@@ -53,9 +53,11 @@ class LoginScreen extends StatelessWidget {
       await prefs.setString("login_type", "google");
       await prefs.setString("user_name", user.displayName ?? "Player");
 
-      // 🔥 HARD BLOCK: backend is source of truth
-      // This MUST complete before Home is shown
-      await PremiumService.restoreOnLaunch();
+      // 🔒 IMPORTANT: Clear any cached premium from previous user
+      await PremiumService.clearPremium();
+
+      // 🔥 Restore premium strictly for THIS user UID from Firestore
+      await PremiumService.syncFromFirestore(user.uid);
 
       // 🔁 Force token refresh AFTER premium sync (critical for backend auth)
       final refreshedToken = await FirebaseAuth.instance.currentUser?.getIdToken(true);

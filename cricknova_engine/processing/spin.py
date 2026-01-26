@@ -2,11 +2,11 @@ import math
 import numpy as np
 
 """
-NEARBY SPIN ESTIMATION FROM VIDEO TRAJECTORY
-- Data-driven (no scripted values)
-- Uses real trajectory deviation after bounce
-- Camera-aware lateral movement
-- Returns NONE if spin cannot be reliably inferred
+PHYSICS-ONLY SPIN ESTIMATION FROM VIDEO TRAJECTORY
+- Fully data-driven (no scripted or forced values)
+- Uses real post-bounce trajectory deviation
+- Camera-aware lateral movement only
+- Returns NONE when spin is not physically reliable
 """
 
 def calculate_spin(ball_positions, fps=30):
@@ -16,12 +16,10 @@ def calculate_spin(ball_positions, fps=30):
     empty_result = {
         "type": "none",
         "name": "none",
-        "turn_px": 0.0,
-        "turn_est_deg": 0.0,
         "confidence": "low"
     }
 
-    if not ball_positions or len(ball_positions) < 10:
+    if not ball_positions or len(ball_positions) < 8:
         return empty_result
 
     # Detect bounce (max Y)
@@ -29,7 +27,7 @@ def calculate_spin(ball_positions, fps=30):
     pitch_idx = int(np.argmax(ys))
 
     # Need enough frames after bounce
-    if pitch_idx < 2 or pitch_idx + 5 >= len(ball_positions):
+    if pitch_idx < 3 or pitch_idx + 4 >= len(ball_positions):
         return empty_result
 
     # Collect post-bounce trajectory
@@ -46,7 +44,7 @@ def calculate_spin(ball_positions, fps=30):
     forward_disp = post_y[-1] - post_y[0]
 
     # Avoid math explosion
-    if abs(forward_disp) < 5:
+    if abs(forward_disp) < 8:
         return empty_result
 
     # Geometry-based turn angle using stable atan2
@@ -55,18 +53,18 @@ def calculate_spin(ball_positions, fps=30):
 
     # ---- Cricket-realistic nearby spin bands ----
     # Allow very slight but real spin to be reported
-    if turn_deg < 0.15:
+    if turn_deg < 0.25:
         return empty_result
 
-    if turn_deg < 1.5:
+    if turn_deg < 1.2:
         confidence = "low"
-    elif turn_deg < 4.0:
+    elif turn_deg < 3.5:
         confidence = "medium"
     else:
         confidence = "high"
 
     # Hard clamp: mobile single-camera cannot exceed this
-    turn_deg = min(turn_deg, 6.0)
+    turn_deg = min(turn_deg, 8.0)
 
     # Spin direction based purely on post-bounce lateral movement
     # Positive X movement (to the right on screen) -> leg-spin
@@ -77,7 +75,7 @@ def calculate_spin(ball_positions, fps=30):
         spin_name = "off-spin"
 
     return {
-        "type": "spin_estimate",
-        "name": spin_name,
+        "type": "spin",
+        "name": spin_name.replace("-", " "),
         "confidence": confidence
     }

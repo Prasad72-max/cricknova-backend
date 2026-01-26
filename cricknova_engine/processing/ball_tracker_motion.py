@@ -80,73 +80,60 @@ def track_ball_positions(video_path, max_frames=120):
 
 # --- Ball speed calculation utility ---
 def calculate_ball_speed_kmph(positions, fps):
-    # Accept very short clips (2–4 sec)
-    if not positions or len(positions) < 3 or fps <= 0:
-        return 55.0  # physics-safe minimum, never 0
+    if not positions or len(positions) < 4 or fps <= 0:
+        return None
 
     dt = 1.0 / fps
-    speeds = []
+    velocities = []
 
-    # ---------- MULTI-WINDOW SPEED (PRIMARY) ----------
-    # Sliding windows improve detection on short & shaky clips
-    window_sizes = [2, 3, 4]
+    # --- PHYSICS-BASED PIXEL TO METER SCALING ---
+    # Cricket ball diameter ≈ 0.072 m
+    BALL_DIAMETER_M = 0.072
 
-    for w in window_sizes:
-        for i in range(w, len(positions)):
-            x0, y0 = positions[i - w]
-            x1, y1 = positions[i]
+    # Estimate pixel diameter from motion blur span
+    xs = [p[0] for p in positions]
+    ys = [p[1] for p in positions]
 
-            pixel_dist = math.hypot(x1 - x0, y1 - y0)
-            time_elapsed = w * dt
+    span_pixels = max(
+        max(xs) - min(xs),
+        max(ys) - min(ys),
+        1
+    )
 
-            if pixel_dist < 0.8 or time_elapsed <= 0:
-                continue
+    # Empirical: visible ball usually travels 18–22 ball diameters in clear clips
+    pixels_per_meter = span_pixels / (20 * BALL_DIAMETER_M)
 
-            # Dynamic pixel→meter scaling based on motion span
-            motion_span = max(
-                abs(positions[-1][0] - positions[0][0]),
-                abs(positions[-1][1] - positions[0][1]),
-                1
-            )
+    meters_per_pixel = 1.0 / pixels_per_meter
 
-            meters_per_pixel = 0.003 + min(0.005, motion_span / 8500.0)
+    # --- FRAME-TO-FRAME VELOCITY ---
+    for i in range(1, len(positions)):
+        x0, y0 = positions[i - 1]
+        x1, y1 = positions[i]
 
-            speed_kmph = (pixel_dist * meters_per_pixel / time_elapsed) * 3.6
+        pixel_dist = math.hypot(x1 - x0, y1 - y0)
+        speed_mps = (pixel_dist * meters_per_pixel) / dt
 
-            if 55 <= speed_kmph <= 160:
-                speeds.append(speed_kmph)
+        if 15 <= speed_mps <= 50:  # 54–180 km/h realistic cricket range
+            velocities.append(speed_mps)
 
-    # ---------- FALLBACK: WHOLE TRAJECTORY ----------
-    if not speeds:
-        x0, y0 = positions[0]
-        x1, y1 = positions[-1]
+    if len(velocities) < 3:
+        return None
 
-        total_pixels = math.hypot(x1 - x0, y1 - y0)
-        total_time = (len(positions) - 1) * dt
+    # --- ROBUST STATISTICS ---
+    velocities.sort()
+    q1 = velocities[len(velocities) // 4]
+    q3 = velocities[(3 * len(velocities)) // 4]
+    iqr = q3 - q1
 
-        if total_pixels > 0.8 and total_time > 0:
-            meters_per_pixel = 0.004
-            speed_kmph = (total_pixels * meters_per_pixel / total_time) * 3.6
-            return round(max(55.0, min(160.0, speed_kmph)), 1)
+    filtered = [
+        v for v in velocities
+        if (q1 - 1.5 * iqr) <= v <= (q3 + 1.5 * iqr)
+    ]
 
-        # Absolute fallback (never return 0/null)
-        return 55.0
+    if not filtered:
+        filtered = velocities
 
-    # ---------- ROBUST AGGREGATION ----------
-    speeds.sort()
+    final_speed_mps = sum(filtered) / len(filtered)
+    final_speed_kmph = final_speed_mps * 3.6
 
-    # Median is most stable for cricket videos
-    mid = len(speeds) // 2
-    if len(speeds) % 2 == 0:
-        final_speed = (speeds[mid - 1] + speeds[mid]) / 2
-    else:
-        final_speed = speeds[mid]
-
-    # Cricket-realistic clamp
-    final_speed = max(55.0, min(160.0, final_speed))
-
-    # Final hard safety net (never allow zero or negative)
-    if final_speed <= 0:
-        final_speed = 55.0
-
-    return round(final_speed, 1)
+    return round(final_speed_kmph, 1)

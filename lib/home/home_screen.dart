@@ -24,6 +24,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    PremiumService.restoreOnLaunch();
     _bootstrapAuthAndData();
   }
 
@@ -158,6 +159,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     subtitle: "Compare two videos and see differences",
                     icon: Icons.compare_rounded,
                     onTap: () {
+                      if (!PremiumService.isLoaded) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Checking premium status...")),
+                        );
+                        return;
+                      }
+
                       if (!PremiumService.isPremium) {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -473,38 +481,40 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _premiumBadge() {
     if (!PremiumService.isPremium) return const SizedBox.shrink();
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 10,
-            offset: Offset(0, 4),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(left: 20, top: 4, bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(Icons.workspace_premium, color: Colors.black, size: 22),
-          SizedBox(width: 8),
-          Text(
-            "PREMIUM",
-            style: TextStyle(
-              color: Colors.black,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              letterSpacing: 1.2,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 6,
+              offset: Offset(0, 2),
             ),
-          ),
-        ],
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.workspace_premium, color: Colors.black, size: 14),
+            SizedBox(width: 4),
+            Text(
+              "PREMIUM USER",
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

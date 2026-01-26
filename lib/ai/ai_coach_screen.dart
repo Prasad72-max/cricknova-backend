@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
+import '../services/premium_service.dart';
 
 
 class AICoachScreen extends StatefulWidget {
@@ -50,6 +51,18 @@ class _AICoachScreenState extends State<AICoachScreen> {
         sendMessage();
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _redirectToPremiumWithReason() async {
@@ -139,6 +152,12 @@ class _AICoachScreenState extends State<AICoachScreen> {
     String userMessage = controller.text.trim();
     if (userMessage.isEmpty) return;
     controller.clear();
+
+    // 🔒 Real-time premium gate (single source of truth)
+    if (!PremiumService.isPremiumActive) {
+      await _redirectToPremiumWithReason();
+      return;
+    }
 
     if (chats[currentChatIndex]["messages"].isEmpty) {
       chats[currentChatIndex]["title"] =
@@ -460,15 +479,37 @@ class _AICoachScreenState extends State<AICoachScreen> {
                         ),
                   ),
           ),
+          // Animated bottom loader (moved here, just above input)
           if (loading)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "CrickNova analysing...",
-                  style: TextStyle(color: Colors.white54),
-                ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    height: 9,
+                    child: LinearProgressIndicator(
+                      backgroundColor: Color(0xFF020617),
+                      valueColor: AlwaysStoppedAnimation(Color(0xFF38BDF8)),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  AnimatedTextKit(
+                    repeatForever: true,
+                    animatedTexts: [
+                      FadeAnimatedText(
+                        "CrickNova is analyzing your message…",
+                        textStyle: TextStyle(color: Colors.white70, fontSize: 13),
+                        duration: Duration(milliseconds: 1800),
+                      ),
+                      FadeAnimatedText(
+                        "This may take 1–2 minutes. Please wait…",
+                        textStyle: TextStyle(color: Colors.white54, fontSize: 12),
+                        duration: Duration(milliseconds: 1800),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           Container(

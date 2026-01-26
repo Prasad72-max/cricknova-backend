@@ -1,6 +1,13 @@
 import numpy as np
 import librosa
 
+def _get_xy(p):
+    if isinstance(p, dict):
+        return p.get("x", 0.0), p.get("y", 0.0)
+    if isinstance(p, (list, tuple)) and len(p) >= 2:
+        return float(p[0]), float(p[1])
+    return 0.0, 0.0
+
 # FIXED: Static class variable bug
 ball_near_bat_cache = False  # Global instead of ._ball_near_bat
 
@@ -10,7 +17,7 @@ def ball_near_bat(trajectory):
         return False
     
     for p in trajectory:
-        x, y = p.get("x", 0), p.get("y", 0)
+        x, y = _get_xy(p)
         # TIGHTER bat zone (realistic swing path)
         if 0.45 <= x <= 0.55 and 0.25 <= y <= 0.38:  # Was too wide
             return True
@@ -45,7 +52,7 @@ def detect_stump_hit(trajectory):
         return 0.0
     
     # Ball MUST pitch first (post-bounce frames only)
-    y_positions = [p.get("y", 0) for p in trajectory]
+    y_positions = [_get_xy(p)[1] for p in trajectory]
     pitch_frame = np.argmax(y_positions)  # Lowest point = bounce
     post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
     
@@ -54,7 +61,7 @@ def detect_stump_hit(trajectory):
     
     hits = 0
     for p in post_pitch:
-        x, y = p.get("x", 0), p.get("y", 0)
+        x, y = _get_xy(p)
         # REAL stump zone (3 stumps width, top 30% height)
         if 0.46 <= x <= 0.54 and 0.68 <= y <= 0.92:  # Tighter + higher
             hits += 1
@@ -92,6 +99,6 @@ def analyze_training(data):
             "stump_confidence": round(stump_confidence, 2),
             "decision": decision,
             "reason": reason,
-            "pitch_frame": np.argmax([p.get("y", 0) for p in trajectory]) if trajectory else 0
+            "pitch_frame": int(np.argmax([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
         }
     }
