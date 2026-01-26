@@ -18,6 +18,18 @@ class RazorpayService {
       _checkoutInProgress = false;
       debugPrint("✅ Razorpay payment success: ${response.paymentId}");
       debugPrint("🧾 orderId=${response.orderId}, signature=${response.signature}");
+
+      // IMPORTANT: Trigger backend premium verification immediately
+      try {
+        PremiumService().verifyAndActivatePremium(
+          paymentId: response.paymentId!,
+          orderId: response.orderId!,
+          signature: response.signature!,
+        );
+      } catch (e) {
+        debugPrint("⚠️ Premium verification trigger failed: $e");
+      }
+
       onPaymentSuccess(response);
     });
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {

@@ -1,8 +1,10 @@
 import json
+print("PRASAD72💕")
 import os
 from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import auth
+from fastapi import Header, HTTPException
 
 # -----------------------------
 # FIREBASE INIT (SAFE GUARD)
@@ -82,13 +84,15 @@ def get_subscription(user_id: str):
     fs_sub = get_firestore_subscription(user_id)
     if fs_sub:
         expiry = fs_sub.get("expiry")
-        if expiry:
-            try:
+        try:
+            if hasattr(expiry, "to_datetime"):
+                expiry_dt = expiry.to_datetime()
+            elif isinstance(expiry, str):
                 expiry_dt = datetime.fromisoformat(expiry)
-                fs_sub["active"] = datetime.utcnow() < expiry_dt
-            except Exception:
-                fs_sub["active"] = False
-        else:
+            else:
+                expiry_dt = None
+            fs_sub["active"] = expiry_dt is not None and datetime.utcnow() < expiry_dt
+        except Exception:
             fs_sub["active"] = False
         return fs_sub
 
@@ -137,6 +141,11 @@ def check_limit_and_increment(user_id: str, feature: str):
     return True, False
 
 def create_or_update_subscription(user_id: str, plan: str, payment_id: str, order_id: str):
+    plan_raw = str(plan).upper()
+    if plan_raw.isdigit():
+        plan = f"IN_{plan_raw}"
+    else:
+        plan = plan_raw
     if plan not in PLAN_LIMITS:
         raise ValueError(f"Invalid plan: {plan}")
 
@@ -157,6 +166,7 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
     subs[user_id] = {
         "user_id": user_id,
         "plan": plan,
+        "isPremium": True,
         "active": True,
         "limits": PLAN_LIMITS[plan],
         "chat_used": 0,
@@ -164,13 +174,18 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
         "compare_used": 0,
         "payment_id": payment_id,
         "order_id": order_id,
-        "started_at": now.isoformat(),
-        "expiry": expiry.isoformat()
+        "started_at": now,
+        "expiry": expiry
     }
 
     save_subscriptions(subs)
     save_firestore_subscription(user_id, subs[user_id])
-    return subs[user_id]
+    return {
+        "success": True,
+        "status": "verified",
+        "plan": plan,
+        "user_id": user_id,
+    }
 
 # -----------------------------
 # USAGE COUNTERS
@@ -203,41 +218,44 @@ def increment_compare(user_id: str):
 # AUTH HELPER (HARDENED)
 # -----------------------------
 def get_current_user(
-    authorization: str | None = None,
+    authorization: str | None = Header(default=None),
 ):
     """
     Resolve authenticated Firebase user.
     Rules:
     - Firebase ID token is mandatory
-    - Accepts both: 'Bearer <token>' and '<token>'
-    - Always returns Firebase UID
+    - Accepts: 'Authorization: Bearer <token>'
+    - Returns Firebase UID
     """
 
     if not authorization:
-        raise ValueError("USER_NOT_AUTHENTICATED")
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     try:
         auth_header = authorization.strip()
 
+        # Accept both "Bearer <token>" and raw token (fallback)
         if auth_header.lower().startswith("bearer "):
             token = auth_header.split(" ", 1)[1].strip()
         else:
             token = auth_header
 
+        # Basic JWT sanity check
         if not token or token.count(".") != 2:
-            raise ValueError("MALFORMED_TOKEN")
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
-        decoded = auth.verify_id_token(token)
+        # Verify Firebase ID token (do NOT revoke-check to avoid false negatives)
+        decoded = auth.verify_id_token(token, check_revoked=False)
+
         uid = decoded.get("uid")
-
         if not uid:
-            raise ValueError("UID_MISSING")
+            raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
         return uid
 
     except Exception as e:
         print("❌ FIREBASE TOKEN VERIFY FAILED:", str(e))
-        raise ValueError("USER_NOT_AUTHENTICATED")
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
 def save_firestore_subscription(user_id: str, data: dict):
     """
@@ -246,4 +264,9 @@ def save_firestore_subscription(user_id: str, data: dict):
     """
     from google.cloud import firestore
     db = firestore.Client()
-    db.collection("subscriptions").document(user_id).set(data, merge=True)
+    db.collection("subscriptions").document(user_id).set({
+        **data,
+        "isPremium": True,
+        "active": True,
+        "updatedAt": firestore.SERVER_TIMESTAMP,
+    }, merge=True)

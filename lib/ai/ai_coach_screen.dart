@@ -169,7 +169,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
         }
         return;
       }
-      final String? idToken = await user.getIdToken(true);
+      final String? idToken = await user.getIdToken();
 
       if (idToken == null || idToken.isEmpty) {
         loading = false;
@@ -184,14 +184,14 @@ class _AICoachScreenState extends State<AICoachScreen> {
         return;
       }
 
-      debugPrint("🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken.substring(0, 20)}");
+      debugPrint("🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken.substring(0, 30)}");
 
       http.Response response = await http.post(
         uri,
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "Authorization": "Bearer $idToken",
+          "authorization": "Bearer ${idToken.trim()}",
         },
         body: jsonEncode({
           "message": userMessage,

@@ -43,6 +43,9 @@ class AuthService {
           throw Exception("Failed to obtain Firebase ID token after login");
         }
 
+        // 🧪 DEBUG: Print Firebase ID token (remove in production)
+        print("🔥 FULL_FIREBASE_TOKEN=$idToken");
+
         // 🔐 Sync premium & limits from backend (authoritative)
         await PremiumService.syncFromBackend();
       }

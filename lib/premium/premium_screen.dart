@@ -67,15 +67,15 @@ class PayPalWebViewScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final String idToken = (await user.getIdToken(true)) ?? "";
-    if (idToken.isEmpty) return;
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) return;
 
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Authorization": "Bearer $idToken",
+        "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": orderId,
@@ -169,8 +169,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     }
 
     final user = FirebaseAuth.instance.currentUser!;
-    final String idToken = (await user.getIdToken(true)) ?? "";
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("Firebase ID token missing");
     }
 
@@ -179,7 +179,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Authorization": "Bearer $idToken",
+        "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "razorpay_order_id": response.orderId,
@@ -456,8 +456,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     if (user == null) return;
 
     try {
-      final String idToken = (await user.getIdToken(true)) ?? "";
-      if (idToken.isEmpty) {
+      final String? idToken = await user.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
         throw Exception("Firebase ID token missing");
       }
 
@@ -466,7 +466,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "Authorization": "Bearer $idToken",
+          "authorization": "Bearer $idToken",
         },
         body: jsonEncode({
           "order_id": orderId,

@@ -62,6 +62,14 @@ DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 from cricknova_ai_backend.paypal_service import router as paypal_router
 
 from cricknova_ai_backend.subscriptions_store import get_current_user
+
+# Helper to extract Bearer token from Authorization header
+def extract_bearer_token(auth_header: str | None):
+    if not auth_header:
+        return None
+    if auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return auth_header.strip()
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
 import razorpay
@@ -252,9 +260,10 @@ async def subscription_status(
     user_id = None
     try:
         if credentials:
-            auth_header = request.headers.get("Authorization")
+            raw_auth = request.headers.get("Authorization")
+            token = extract_bearer_token(raw_auth)
             user_id = get_current_user(
-                authorization=auth_header
+                authorization=token
             )
     except Exception:
         user_id = None
@@ -409,9 +418,12 @@ async def verify_payment(
     user_id = None
     try:
         if credentials:
-            auth_header = request.headers.get("Authorization")
+            raw_auth = request.headers.get("Authorization")
+            # Debug log for Authorization header
+            print("🔐 AUTH HEADER =", request.headers.get("Authorization"))
+            token = extract_bearer_token(raw_auth)
             user_id = get_current_user(
-                authorization=auth_header
+                authorization=token
             )
     except Exception:
         user_id = None
@@ -420,13 +432,21 @@ async def verify_payment(
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     # --- Normalize Razorpay plan names before saving subscription ---
-    plan = (req.plan or "").lower()
-    if plan in ["monthly", "99", "inr_99"]:
+    plan = (req.plan or "").upper()
+
+    if plan in ["IN_99", "99", "MONTHLY", "INR_99"]:
         plan = "IN_99"
-    elif plan in ["yearly", "499", "inr_499"]:
+    elif plan in ["IN_299", "299"]:
+        plan = "IN_299"
+    elif plan in ["IN_499", "499", "YEARLY", "INR_499"]:
         plan = "IN_499"
+    elif plan in ["IN_1999", "1999"]:
+        plan = "IN_1999"
     else:
-        raise HTTPException(status_code=400, detail=f"INVALID_PLAN:{req.plan}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"INVALID_PLAN:{req.plan}"
+        )
 
     from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 
@@ -722,9 +742,10 @@ async def ai_coach_analyze(
     user_id = None
     try:
         if credentials:
-            auth_header = request.headers.get("Authorization")
+            raw_auth = request.headers.get("Authorization")
+            token = extract_bearer_token(raw_auth)
             user_id = get_current_user(
-                authorization=auth_header
+                authorization=token
             )
     except Exception:
         user_id = None
@@ -856,9 +877,10 @@ async def ai_coach_chat(
     user_id = None
     try:
         if credentials:
-            auth_header = request.headers.get("Authorization")
+            raw_auth = request.headers.get("Authorization")
+            token = extract_bearer_token(raw_auth)
             user_id = get_current_user(
-                authorization=auth_header
+                authorization=token
             )
     except Exception:
         user_id = None
@@ -945,9 +967,10 @@ async def ai_coach_diff(
     user_id = None
     try:
         if credentials:
-            auth_header = request.headers.get("Authorization")
+            raw_auth = request.headers.get("Authorization")
+            token = extract_bearer_token(raw_auth)
             user_id = get_current_user(
-                authorization=auth_header
+                authorization=token
             )
     except Exception:
         user_id = None

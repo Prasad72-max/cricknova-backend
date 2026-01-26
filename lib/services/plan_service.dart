@@ -6,13 +6,15 @@ class PlanService {
   // -----------------------------
   static Future<bool> isPremium() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool("isPremium") ?? false;
+    // Do NOT trust local flag alone; backend sync must set this
+    return prefs.getBool("isPremium") == true;
   }
 
   // -----------------------------
   // PAYMENT SOURCE (PAYPAL / PLAY)
   // -----------------------------
   static Future<void> setPremium(bool value) async {
+    // ⚠️ WARNING: This should ONLY be called after backend verification
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool("isPremium", value);
     if (!value) {
@@ -141,6 +143,10 @@ class PlanService {
     await prefs.setInt("chatLimit", chatLimit);
     await prefs.setInt("mistakeLimit", mistakeLimit);
     await prefs.setInt("diffLimit", diffLimit);
-    await resetUsage();
+
+    // Reset usage ONLY when plan actually changes
+    await prefs.setInt("chatUsed", 0);
+    await prefs.setInt("mistakeUsed", 0);
+    await prefs.setInt("diffUsed", 0);
   }
 }

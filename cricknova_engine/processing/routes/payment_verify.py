@@ -14,14 +14,23 @@ class VerifyRequest(BaseModel):
 
 @router.post("/payment/verify-payment")
 def verify_payment(data: VerifyRequest, request: Request):
+    print("🧾 VERIFY PAYLOAD =", data.dict())
     auth_header = request.headers.get("Authorization")
-    user_id = get_current_user(authorization=auth_header)
+    if auth_header and auth_header.lower().startswith("bearer "):
+        auth_header = auth_header.split(" ", 1)[1]
+    print("🔐 VERIFY_PAYMENT Authorization =", auth_header)
 
-    if not user_id or not data.plan:
+    token = auth_header.strip() if auth_header else None
+    print("🔑 TOKEN PRESENT =", bool(token))
+    user_id = get_current_user(authorization=token)
+
+    if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    if not data.plan:
+        raise HTTPException(status_code=400, detail="PLAN_MISSING")
 
     secret = os.getenv("RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_SECRET")
-    secret = secret.strip()
+    secret = secret.strip() if secret else None
     if not secret:
         raise HTTPException(status_code=500, detail="Razorpay secret not configured")
 
@@ -31,17 +40,38 @@ def verify_payment(data: VerifyRequest, request: Request):
         hashlib.sha256
     ).hexdigest()
 
+    if not data.razorpay_signature:
+        raise HTTPException(status_code=400, detail="SIGNATURE_MISSING")
+
     if not hmac.compare_digest(generated_signature, data.razorpay_signature.strip()):
+        print("❌ SIGNATURE MISMATCH")
+        print("EXPECTED =", generated_signature)
+        print("RECEIVED =", data.razorpay_signature)
         raise HTTPException(status_code=400, detail="Payment verification failed")
 
     PLAN_MAP = {
+        # legacy labels
         "monthly": "IN_99",
         "6_months": "IN_299",
         "yearly": "IN_499",
         "ultra_pro": "IN_1999",
+
+        # numeric strings
+        "99": "IN_99",
+        "299": "IN_299",
+        "499": "IN_499",
+        "1999": "IN_1999",
+
+        # already-normalized
+        "IN_99": "IN_99",
+        "IN_299": "IN_299",
+        "IN_499": "IN_499",
+        "IN_1999": "IN_1999",
     }
 
-    mapped_plan = PLAN_MAP.get(data.plan)
+    incoming_plan = data.plan.strip()
+    incoming_plan_norm = incoming_plan.lower()
+    mapped_plan = PLAN_MAP.get(incoming_plan) or PLAN_MAP.get(incoming_plan_norm)
     if not mapped_plan:
         raise HTTPException(status_code=400, detail=f"Unknown plan: {data.plan}")
 
@@ -53,6 +83,7 @@ def verify_payment(data: VerifyRequest, request: Request):
             payment_id=data.razorpay_payment_id,
             order_id=data.razorpay_order_id
         )
+        print(f"✅ SUBSCRIPTION ACTIVATED user={user_id} plan={mapped_plan}")
     except Exception as e:
         # Do NOT fail payment after Razorpay success
         activation_error = str(e)

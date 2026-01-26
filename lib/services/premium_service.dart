@@ -74,7 +74,7 @@ class PremiumService {
     if (user == null) return;
 
     // Force token refresh to avoid stale auth
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
@@ -172,7 +172,7 @@ class PremiumService {
     }
 
     // Ensure fresh token before restoring premium
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
@@ -219,7 +219,7 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
@@ -253,7 +253,7 @@ class PremiumService {
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Authorization": "Bearer $idToken",
+        "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "razorpay_payment_id": paymentId,
@@ -445,7 +445,7 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not authenticated");
     }
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
@@ -453,7 +453,7 @@ class PremiumService {
       Uri.parse("${ApiConfig.baseUrl}/paypal/create-order"),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $idToken",
+        "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "amount": amount,
@@ -523,7 +523,7 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not authenticated");
     }
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
@@ -531,7 +531,7 @@ class PremiumService {
       Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $idToken",
+        "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": orderId,
@@ -558,7 +558,7 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
@@ -569,7 +569,7 @@ class PremiumService {
       Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $idToken",
+        "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": orderId,

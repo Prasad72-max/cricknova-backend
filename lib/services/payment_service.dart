@@ -42,8 +42,7 @@ class PaymentService {
             "razorpay_order_id": response.orderId,
             "razorpay_payment_id": response.paymentId,
             "razorpay_signature": response.signature,
-            "user_id": FirebaseAuth.instance.currentUser?.uid,
-            "plan": "monthly",
+            "plan": "IN_99",
           }),
         );
 
@@ -121,9 +120,8 @@ class PaymentService {
           "Authorization": "Bearer $idToken",
         },
         body: jsonEncode({
-          "amount_usd": amountUsd,
-          "plan": plan,
-          "user_id": user.uid,
+          "amount": amountUsd,
+          "currency": "USD",
         }),
       );
 
@@ -177,15 +175,15 @@ class PaymentService {
       throw StateError("Failed to obtain Firebase ID token");
     }
     final res = await http.post(
-      Uri.parse("$backendBaseUrl/paypal/capture"),
+      Uri.parse("$backendBaseUrl/paypal/capture-order"),
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer $idToken",
       },
       body: jsonEncode({
         "order_id": _pendingPayPalOrderId,
-        "user_id": user.uid,
         "plan": plan,
+        "user_id": user.uid,
       }),
     );
 
@@ -195,6 +193,7 @@ class PaymentService {
       await PremiumService.syncFromBackend(
         FirebaseAuth.instance.currentUser!.uid,
       );
+      await PremiumService.refresh();
     }
   }
 
