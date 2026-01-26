@@ -50,19 +50,10 @@ FREE_PLAN = {
 # FILE HELPERS
 # -----------------------------
 def load_subscriptions():
-    if not os.path.exists(FILE_PATH):
-        return {}
-    try:
-        with open(FILE_PATH, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return {}
 
 def save_subscriptions(data):
-    tmp_path = FILE_PATH + ".tmp"
-    with open(tmp_path, "w") as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp_path, FILE_PATH)
+    return
 
 # -----------------------------
 # CORE LOGIC
@@ -96,12 +87,7 @@ def get_subscription(user_id: str):
             fs_sub["active"] = False
         return fs_sub
 
-    # ⛔ fallback only if Firestore missing (should not happen in prod)
-    subs = load_subscriptions()
-    sub = subs.get(user_id)
-    if not sub:
-        return json.loads(json.dumps(FREE_PLAN))
-    return sub
+    return json.loads(json.dumps(FREE_PLAN))
 
 def is_subscription_active(sub: dict) -> bool:
     if not sub:
@@ -133,9 +119,6 @@ def check_limit_and_increment(user_id: str, feature: str):
 
     sub[used_key] = used + 1
 
-    subs = load_subscriptions()
-    subs[user_id] = sub
-    save_subscriptions(subs)
     save_firestore_subscription(user_id, sub)
 
     return True, False
@@ -162,8 +145,7 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
 
     expiry = now + timedelta(days=duration_days)
 
-    subs = load_subscriptions()
-    subs[user_id] = {
+    data = {
         "user_id": user_id,
         "plan": plan,
         "isPremium": True,
@@ -174,12 +156,11 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
         "compare_used": 0,
         "payment_id": payment_id,
         "order_id": order_id,
-        "started_at": now,
-        "expiry": expiry
+        "started_at": now.isoformat(),
+        "expiry": expiry.isoformat()
     }
 
-    save_subscriptions(subs)
-    save_firestore_subscription(user_id, subs[user_id])
+    save_firestore_subscription(user_id, data)
     return {
         "success": True,
         "status": "verified",
