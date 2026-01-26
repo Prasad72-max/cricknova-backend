@@ -74,7 +74,10 @@ class PremiumService {
     if (user == null) return;
 
     // Force token refresh to avoid stale auth
-    await user.getIdToken(true);
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
+      throw Exception("USER_NOT_AUTHENTICATED");
+    }
 
     await loadPremiumFromUid(user.uid);
     isLoaded = true;
@@ -169,7 +172,10 @@ class PremiumService {
     }
 
     // Ensure fresh token before restoring premium
-    await user.getIdToken(true);
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
+      throw Exception("USER_NOT_AUTHENTICATED");
+    }
     await loadPremiumFromUid(user.uid);
     isLoaded = true;
   }
@@ -213,8 +219,8 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String idToken = await user.getIdToken(true);
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 
@@ -263,6 +269,8 @@ class PremiumService {
 
     // ✅ Always resync from backend after verification
     await syncFromBackend(user.uid);
+    // 🔥 FORCE local premium refresh so UI updates instantly
+    await refresh();
   }
 
   // -----------------------------
@@ -437,8 +445,8 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not authenticated");
     }
-    final String idToken = await user.getIdToken(true);
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
     final response = await http.post(
@@ -515,8 +523,8 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not authenticated");
     }
-    final String idToken = await user.getIdToken(true);
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
     final response = await http.post(
@@ -550,8 +558,8 @@ class PremiumService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String idToken = await user.getIdToken(true);
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 

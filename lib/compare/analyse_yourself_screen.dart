@@ -111,9 +111,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       return;
     }
 
-    final idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken(true);
 
-    if (idToken.isEmpty) {
+    if (idToken == null || idToken.isEmpty) {
       setState(() {
         diffResult = "Session expired. Please log in again.";
         comparing = false;

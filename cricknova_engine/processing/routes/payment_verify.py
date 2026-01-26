@@ -1,7 +1,8 @@
 import hmac, hashlib, os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
+from cricknova_ai_backend.auth import get_current_user
 
 router = APIRouter()
 
@@ -9,13 +10,15 @@ class VerifyRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
-    user_id: str
     plan: str
 
 @router.post("/payment/verify-payment")
-def verify_payment(data: VerifyRequest):
-    if not data.user_id or not data.plan:
-        raise HTTPException(status_code=400, detail="Invalid payment payload")
+def verify_payment(data: VerifyRequest, request: Request):
+    auth_header = request.headers.get("Authorization")
+    user_id = get_current_user(authorization=auth_header)
+
+    if not user_id or not data.plan:
+        raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
 
     secret = os.getenv("RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_SECRET")
     secret = secret.strip()
@@ -45,7 +48,7 @@ def verify_payment(data: VerifyRequest):
     activation_error = None
     try:
         create_or_update_subscription(
-            user_id=data.user_id,
+            user_id=user_id,
             plan=mapped_plan,
             payment_id=data.razorpay_payment_id,
             order_id=data.razorpay_order_id
@@ -57,11 +60,9 @@ def verify_payment(data: VerifyRequest):
     return {
         "success": True,
         "status": "success",
-        "payment_verified": True,
+        "premium": activation_error is None,
         "premium_activated": activation_error is None,
-        "activation_error": activation_error,
-        "backend_plan": mapped_plan,
-        "app_plan": data.plan,
-        "user_id": data.user_id,
+        "plan": mapped_plan,
+        "user_id": user_id,
         "razorpay_payment_id": data.razorpay_payment_id
     }

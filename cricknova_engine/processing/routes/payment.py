@@ -41,7 +41,6 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_order_id: str
     razorpay_payment_id: str
     razorpay_signature: str
-    user_id: str
     plan: str
 
 
@@ -123,10 +122,11 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
             return {
                 "success": True,
                 "status": "success",
-                "warning": "Unknown plan code, payment captured but plan not mapped",
+                "premium": False,
                 "premium_activated": False,
-                "app_plan": payload.plan,
-                "user_id": verified_user_id
+                "plan": payload.plan,
+                "user_id": verified_user_id,
+                "warning": "Unknown plan code"
             }
 
         try:
@@ -142,10 +142,9 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
         return {
             "success": True,
             "status": "success",
-            "message": "Payment verified",
+            "premium": premium_activated,
             "premium_activated": premium_activated,
-            "backend_plan": backend_plan,
-            "app_plan": payload.plan,
+            "plan": backend_plan,
             "user_id": verified_user_id
         }
 

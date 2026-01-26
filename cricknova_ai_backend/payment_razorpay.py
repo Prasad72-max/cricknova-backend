@@ -99,9 +99,13 @@ def verify_payment(request: Request, data: dict = Body(...)):
         return {
             "success": True,
             "verified": True,
+            "premium": True,
             "premium_activated": True,
-            "plan": plan
+            "plan": plan,
+            "user_id": user_id
         }
 
     except razorpay.errors.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid payment signature")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -157,8 +157,8 @@ class _UploadScreenState extends State<UploadScreen> {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 
-    final String idToken = await user.getIdToken(true);
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 
@@ -281,8 +281,8 @@ class _UploadScreenState extends State<UploadScreen> {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 
-    final String idToken = await user.getIdToken(true);
-    if (idToken.isEmpty) {
+    final String? idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 
@@ -349,8 +349,8 @@ class _UploadScreenState extends State<UploadScreen> {
         throw Exception("USER_NOT_AUTHENTICATED");
       }
 
-      final String token = await user.getIdToken(true);
-      if (token.isEmpty) {
+      final String? token = await user.getIdToken(true);
+      if (token == null || token.isEmpty) {
         throw Exception("USER_NOT_AUTHENTICATED");
       }
 

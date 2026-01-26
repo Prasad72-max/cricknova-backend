@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Request
 import requests
 import os
 from dotenv import load_dotenv
 from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
+from cricknova_ai_backend.auth import get_current_user
 
 load_dotenv()
 
@@ -77,7 +78,7 @@ def create_cashfree_order(data: dict = Body(...)):
 
 # Payment verification endpoint
 @router.post("/verify-payment")
-def verify_cashfree_payment(data: dict = Body(...)):
+def verify_cashfree_payment(data: dict = Body(...), request: Request = None):
     """
     Expected data from app:
     {
@@ -93,11 +94,13 @@ def verify_cashfree_payment(data: dict = Body(...)):
     }
 
     order_id = data.get("order_id")
-    user_id = data.get("user_id")
     plan_raw = data.get("plan", "monthly")
 
+    auth_header = request.headers.get("Authorization") if request else None
+    user_id = get_current_user(authorization=auth_header)
+
     if not order_id or not user_id:
-        return {"status": "failed", "reason": "order_id or user_id missing"}
+        return {"status": "failed", "reason": "USER_NOT_AUTHENTICATED"}
 
     # Normalize plan
     plan_map = {
@@ -136,10 +139,12 @@ def verify_cashfree_payment(data: dict = Body(...)):
             "status": "success",
             "success": True,
             "verified": True,
+            "premium": True,
             "premium_activated": True,
             "order_id": order_id,
             "payment_status": "PAID",
-            "plan": plan
+            "plan": plan,
+            "user_id": user_id
         }
 
     return {
