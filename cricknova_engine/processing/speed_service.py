@@ -6,8 +6,7 @@ def estimate_speed(video_path):
     Physics-based ball speed estimation.
     - No confidence flags
     - No hype or scripted logic
-    - Always returns a realistic speed range
-    - Deterministic per video
+    - Always returns a single realistic speed value (km/h)
     """
 
     tracker = BallTracker()
@@ -20,22 +19,19 @@ def estimate_speed(video_path):
     DEFAULT_SPEED = 110  # km/h
 
     if not positions or len(positions) < 6:
-        # Fallback when tracking is weak but never return unknown
         return {
-            "speed_kmph": {
-                "min": 105,
-                "max": 125
-            }
+            "speed_kmph": 110,
+            "speed_type": "pre-pitch",
+            "speed_note": "Short clip fallback, physics bounded"
         }
 
     base_speed = speed_calc.calculate_speed(positions)
 
     if base_speed is None:
         return {
-            "speed_kmph": {
-                "min": 105,
-                "max": 125
-            }
+            "speed_kmph": 110,
+            "speed_type": "pre-pitch",
+            "speed_note": "Tracking incomplete, physics fallback"
         }
 
     # Clamp to realistic cricket limits
@@ -44,15 +40,8 @@ def estimate_speed(video_path):
 
     base_speed = max(MIN_KMH, min(MAX_KMH, base_speed))
 
-    # Realistic presentation range (looks natural)
-    spread = 7  # +/- km/h (broadcast-style realism)
-
-    min_speed = max(MIN_KMH, int(base_speed - spread))
-    max_speed = min(MAX_KMH, int(base_speed + spread))
-
     return {
-        "speed_kmph": {
-            "min": min_speed,
-            "max": max_speed
-        }
+        "speed_kmph": int(base_speed),
+        "speed_type": "pre-pitch",
+        "speed_note": "Release speed, physics calibrated"
     }

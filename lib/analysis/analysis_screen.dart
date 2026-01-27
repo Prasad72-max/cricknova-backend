@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../premium/premium_screen.dart';
 
 import 'analysis_result_screen.dart';
@@ -22,6 +22,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   bool _showTrajectoryAfterVideo = false;
 
   double? speedKmph;
+  String? speedRangeLabel;
   String? swingName;
   double? swingDegree;
   String? spinType;
@@ -56,7 +57,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Ball Speed",
-              value: speedKmph == null ? "NA km/h" : "${speedKmph!.toStringAsFixed(1)} km/h",
+              value: speedRangeLabel ??
+                  (speedKmph == null ? "CALCULATING" : "${speedKmph!.toStringAsFixed(1)} km/h"),
               icon: Icons.speed,
               color: Colors.blueAccent,
             ),
@@ -206,23 +208,30 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           ? Map<String, dynamic>.from(responseData["data"])
           : responseData;
 
-  // ---------- SPEED (REAL, NO CONFIDENCE, NO RANDOM) ----------
-  final rawSpeed =
-      src["speed_kmph"] ??
-      src["speed"] ??
-      src["speed_mph"];
+  // ---------- SPEED (SUPPORT RANGE + VALUE) ----------
+  speedRangeLabel = null;
+  speedKmph = null;
 
-  if (rawSpeed is num && rawSpeed > 0) {
-    speedKmph = src.containsKey("speed_mph")
-        ? rawSpeed.toDouble() * 1.60934
-        : rawSpeed.toDouble();
-  } else if (rawSpeed is String) {
-    final parsed = double.tryParse(rawSpeed);
-    speedKmph = (parsed != null && parsed > 0)
-        ? (src.containsKey("speed_mph") ? parsed * 1.60934 : parsed)
-        : null;
-  } else {
-    speedKmph = null;
+  final speedVal =
+      src["speed_value"] ??
+      src["speed_kmph"] ??
+      src["speed"];
+
+  if (speedVal is Map) {
+    final minV = speedVal["min"];
+    final maxV = speedVal["max"];
+
+    if (minV is num && maxV is num) {
+      speedRangeLabel = "${minV.round()}–${maxV.round()} km/h";
+      speedKmph = ((minV + maxV) / 2).toDouble();
+    }
+  } else if (speedVal is num && speedVal > 0) {
+    speedKmph = speedVal.toDouble();
+  } else if (speedVal is String) {
+    final parsed = double.tryParse(speedVal);
+    if (parsed != null && parsed > 0) {
+      speedKmph = parsed;
+    }
   }
 
   // ---------- SWING ----------
@@ -232,7 +241,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       src["swingName"];
 
   swingName =
-      (swingVal is String && swingVal.isNotEmpty) ? swingVal : null;
+      (swingVal is String && swingVal.isNotEmpty)
+          ? swingVal.toUpperCase()
+          : "NONE";
 
   // ---------- SPIN ----------
   final spinVal =
@@ -241,7 +252,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       src["spinType"];
 
   spinType =
-      (spinVal is String && spinVal.isNotEmpty) ? spinVal : null;
+      (spinVal is String && spinVal.isNotEmpty)
+          ? spinVal.toUpperCase()
+          : "NONE";
 
   // ---------- TRAJECTORY ----------
   trajectory = src["trajectory"] is List
@@ -260,10 +273,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         Uri.parse(backendUrl),
       );
 
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString("idToken");
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception("USER_NOT_AUTHENTICATED");
+      }
 
-      if (token == null || token.isEmpty) {
+      final token = await user.getIdToken(true);
+      if (token.isEmpty) {
         throw Exception("USER_NOT_AUTHENTICATED");
       }
 

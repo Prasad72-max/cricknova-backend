@@ -27,7 +27,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     String speed = "CALCULATING";
 
     final dynamic rawSpeed =
+        src["speed_value"] ??
         src["speed_kmph"] ??
+        src["analysis"]?["speed_value"] ??
         src["analysis"]?["speed_kmph"] ??
         src["speed"] ??
         src["speed_mph"];
@@ -53,21 +55,17 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     }
 
     // ---------- SAFE SWING ----------
-    String swing = "—";
+    String swing = "NONE";
     final rawSwing = src["swing"];
-    if (rawSwing is String &&
-        rawSwing.isNotEmpty &&
-        rawSwing != "unknown") {
-      swing = rawSwing;
+    if (rawSwing is String && rawSwing.isNotEmpty) {
+      swing = rawSwing.toUpperCase();
     }
 
     // ---------- SAFE SPIN ----------
-    String spin = "—";
+    String spin = "NONE";
     final rawSpin = src["spin"];
-    if (rawSpin is String &&
-        rawSpin.isNotEmpty &&
-        rawSpin != "none") {
-      spin = rawSpin;
+    if (rawSpin is String && rawSpin.isNotEmpty) {
+      spin = rawSpin.toUpperCase();
     }
 
     final List trajectory =
@@ -94,7 +92,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         children: [
           _metric(
             "Ball Speed",
-            speed == "CALCULATING" ? "Calculating…" : "$speed km/h",
+            speed == "CALCULATING" ? "CALCULATING" : "$speed km/h",
           ),
           _metric("Swing", swing),
           _metric("Spin", spin),

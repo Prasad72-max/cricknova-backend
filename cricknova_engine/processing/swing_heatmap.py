@@ -21,5 +21,5 @@ class SwingHeatmap:
         return {
             "swing_points": self.swing_points,
             "impact_points": self.impact_points,
-            "avg_power": sum(self.power_map)/len(self.power_map) if self.power_map else 0
+            "avg_power": (sum(self.power_map) / len(self.power_map)) if self.power_map else None
         }

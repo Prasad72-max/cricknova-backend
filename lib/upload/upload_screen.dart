@@ -9,7 +9,6 @@ import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class TrajectoryPainter extends CustomPainter {
   final List<dynamic> points;
@@ -49,7 +48,7 @@ class _UploadScreenState extends State<UploadScreen> {
   bool uploading = false;
   bool showTrajectory = false;
 
-  double speed = 0;
+  double? speed;
   String spin = "NA";
   String swing = "NA";
 
@@ -190,29 +189,34 @@ class _UploadScreenState extends State<UploadScreen> {
       final analysis = decoded["analysis"] ?? decoded;
 
       // --- Speed extraction logic (strict, physics-only) ---
+      // --- Speed extraction logic (UI-safe, backend-compatible) ---
       double? extractedSpeed;
 
-      final dynamic speedVal =
-          analysis["speed_kmph"] ??
-          analysis["speed"] ??
-          analysis["speed_mph"] ??
-          decoded["speed_kmph"] ??
-          decoded["speed"] ??
-          decoded["speed_mph"];
+      // Preferred: direct numeric value for UI
+      final dynamic speedValue =
+          analysis["speed_value"] ??
+          decoded["speed_value"];
 
-      if (speedVal is num) {
-        // If backend already sends km/h, use directly
-        if (analysis.containsKey("speed_kmph") ||
-            decoded.containsKey("speed_kmph")) {
-          extractedSpeed = speedVal.toDouble();
-        } else {
-          // assume mph → convert to km/h
-          extractedSpeed = speedVal.toDouble() * 1.60934;
-        }
-      } else if (speedVal is String) {
-        final parsed = double.tryParse(speedVal);
-        if (parsed != null) {
-          extractedSpeed = parsed;
+      if (speedValue is num) {
+        extractedSpeed = speedValue.toDouble();
+      } else if (speedValue is String) {
+        extractedSpeed = double.tryParse(speedValue);
+      }
+
+      // Fallback: older backend numeric fields
+      if (extractedSpeed == null) {
+        final dynamic legacySpeed =
+            analysis["speed_kmph"] ??
+            analysis["speed"] ??
+            analysis["speed_mph"] ??
+            decoded["speed_kmph"] ??
+            decoded["speed"] ??
+            decoded["speed_mph"];
+
+        if (legacySpeed is num) {
+          extractedSpeed = legacySpeed.toDouble();
+        } else if (legacySpeed is String) {
+          extractedSpeed = double.tryParse(legacySpeed);
         }
       }
       // --- End speed extraction ---
@@ -220,7 +224,7 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        speed = extractedSpeed ?? 0;
+        speed = extractedSpeed;
 
         final swingVal = analysis["swing"];
         swing = (swingVal != null && swingVal.toString().isNotEmpty)
@@ -352,7 +356,7 @@ class _UploadScreenState extends State<UploadScreen> {
       );
 
       // optional metadata (safe)
-      request.fields["speed_kmph"] = speed?.toString() ?? "";
+      request.fields["speed_kmph"] = speed != null ? speed!.toString() : "";
       request.fields["swing"] = swing ?? "";
       request.fields["spin"] = spin ?? "";
 
@@ -610,7 +614,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         _metric(
                           "Speed",
-                          speed > 0 ? "${speed.round()} km/h" : "CALCULATING",
+                          speed != null ? "${speed!.round()} km/h" : "CALCULATING",
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),

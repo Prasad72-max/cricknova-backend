@@ -81,47 +81,93 @@ def track_ball_positions(video_path, max_frames=120):
 # --- Ball speed calculation utility ---
 def calculate_ball_speed_kmph(positions, fps):
     """
-    Robust, physics-based speed calculation.
-    No AI, no confidence tricks, no dependency on other modules.
+    Pure physics-based ball speed calculation.
+    No confidence labels, no min/max ranges, no artificial boosting.
     """
 
     if not positions or fps <= 0 or len(positions) < 4:
         return None
 
     dt = 1.0 / fps
-    distances = []
+    velocities = []
 
-    # ---- STEP 1: compute per-frame pixel distances ----
+    # STEP 1: compute per-frame pixel velocity
     for i in range(1, len(positions)):
         x0, y0 = positions[i - 1]
         x1, y1 = positions[i]
         d = math.hypot(x1 - x0, y1 - y0)
-        if d > 1.5:  # ignore micro-jitter
-            distances.append(d)
+        if d > 2.0:  # reject jitter
+            velocities.append(d / dt)
 
-    if len(distances) < 3:
+    if len(velocities) < 3:
         return None
 
-    # ---- STEP 2: robust median pixel velocity ----
-    distances.sort()
-    mid = len(distances) // 2
-    core = distances[max(0, mid - 1): min(len(distances), mid + 2)]
-    pixel_velocity = sum(core) / len(core)
+    # STEP 2: median velocity (robust against noise)
+    velocities.sort()
+    mid = len(velocities) // 2
+    pixel_velocity = velocities[mid]
 
-    # ---- STEP 3: pixel → meter scaling (cricket-safe) ----
-    # Empirical but stable: assumes ball travels ~17–22 m in visible frames
-    # This keeps results realistic even without pitch detection
-    PIXELS_PER_METER = max(20.0, min(60.0, pixel_velocity * 0.85))
-    meters_per_pixel = 1.0 / PIXELS_PER_METER
+    # STEP 3: pixel → meter conversion
+    # Assumption: visible ball travel ~18.5 meters (pitch release to bounce)
+    total_pixel_dist = sum(
+        math.hypot(
+            positions[i][0] - positions[i - 1][0],
+            positions[i][1] - positions[i - 1][1],
+        )
+        for i in range(1, len(positions))
+    )
 
-    # ---- STEP 4: physics conversion ----
-    speed_mps = (pixel_velocity * meters_per_pixel) / dt
+    meters_per_pixel = 18.5 / max(total_pixel_dist, 1.0)
+
+    # STEP 4: physics conversion
+    speed_mps = pixel_velocity * meters_per_pixel
     speed_kmph = speed_mps * 3.6
 
-    # ---- STEP 5: hard physical clamps (no confidence) ----
-    if speed_kmph < 70:
-        speed_kmph = 70 + (speed_kmph * 0.15)
-    elif speed_kmph > 155:
-        speed_kmph = 155 - (speed_kmph * 0.1)
+    # STEP 5: realistic hard bounds (safety only)
+    if speed_kmph < 60 or speed_kmph > 170:
+        return None
 
     return round(speed_kmph, 1)
+
+# --- Swing & Spin detection (physics-based, no heuristics UI-side) ---
+
+def calculate_swing_type(positions):
+    """
+    Detects swing using lateral deviation during flight.
+    Returns: 'inswing', 'outswing', or 'none'
+    """
+    if not positions or len(positions) < 6:
+        return "none"
+
+    xs = [p[0] for p in positions]
+
+    early_mean = np.mean(xs[: len(xs)//3])
+    late_mean = np.mean(xs[-len(xs)//3 :])
+
+    dx = late_mean - early_mean
+
+    if abs(dx) < 6:
+        return "none"
+    return "inswing" if dx < 0 else "outswing"
+
+
+def calculate_spin_type(positions):
+    """
+    Detects spin using post-pitch sideways drift.
+    Returns: 'off spin', 'leg spin', or 'none'
+    """
+    if not positions or len(positions) < 8:
+        return "none"
+
+    ys = [p[1] for p in positions]
+    pitch_idx = int(np.argmax(ys))
+
+    if pitch_idx >= len(positions) - 4:
+        return "none"
+
+    xs_after = [positions[i][0] for i in range(pitch_idx, len(positions))]
+    drift = xs_after[-1] - xs_after[0]
+
+    if abs(drift) < 5:
+        return "none"
+    return "off spin" if drift < 0 else "leg spin"

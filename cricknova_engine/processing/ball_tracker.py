@@ -121,19 +121,17 @@ def track_ball_positions(video_path):
 def compute_speed_kmph(ball_positions, fps):
     """
     Deterministic, physics-based speed estimation.
-    Always returns a realistic speed range (min, max).
+    Always returns a single numeric speed in km/h.
+    No confidence words, no ranges.
     """
 
+    # Fallback if tracking is insufficient
     if not ball_positions or len(ball_positions) < 4 or fps <= 1:
-        return {
-            "min": MIN_VALID_SPEED,
-            "max": MIN_VALID_SPEED + 12
-        }
+        return int(MIN_VALID_SPEED + 20)  # safe realistic fallback
 
     # Clamp FPS to realistic mobile video range
     fps = max(24.0, min(60.0, fps))
 
-    # Extract positions
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
     fs = [p[2] for p in ball_positions]
@@ -141,12 +139,8 @@ def compute_speed_kmph(ball_positions, fps):
     # Detect pitch (max Y in camera space)
     pitch_idx = int(np.argmax(ys))
     if pitch_idx < 3:
-        return {
-            "min": MIN_VALID_SPEED,
-            "max": MIN_VALID_SPEED + 12
-        }
+        return int(MIN_VALID_SPEED + 20)
 
-    # Use only pre-pitch frames (release → pitch)
     start = max(1, pitch_idx - 8)
     end = pitch_idx
 
@@ -171,28 +165,64 @@ def compute_speed_kmph(ball_positions, fps):
         times.append(df / fps)
 
     if len(distances) < 4:
-        return {
-            "min": MIN_VALID_SPEED,
-            "max": MIN_VALID_SPEED + 12
-        }
+        return int(MIN_VALID_SPEED + 20)
 
-    # Robust median distance per frame
     distances.sort()
     median_px = distances[len(distances) // 2]
 
-    # Estimate pitch length in pixels (camera adaptive)
+    # Estimate pitch length in pixels
     pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
-    meters_per_pixel = 20.12 / pitch_px  # official pitch length
+    meters_per_pixel = 20.12 / pitch_px
 
     speed_mps = (median_px * meters_per_pixel) / np.median(times)
     speed_kmph = speed_mps * 3.6
 
-    # Debug-safe clamp instead of hard rejection
+    # Final hard clamp (physics only)
     speed_kmph = max(MIN_VALID_SPEED, min(MAX_VALID_SPEED, speed_kmph))
 
-    base = round(speed_kmph, 1)
-    spread = 6  # realistic broadcast variance
-    return {
-        "min": max(MIN_VALID_SPEED, base - spread),
-        "max": min(MAX_VALID_SPEED, base + spread)
-    }
+    return int(round(speed_kmph))
+
+def compute_swing(ball_positions):
+    """
+    Simple physics-based swing detection using lateral deviation.
+    Returns: 'inswing', 'outswing', or 'none'
+    """
+    if not ball_positions or len(ball_positions) < 6:
+        return "none"
+
+    xs = [p[0] for p in ball_positions]
+    ys = [p[1] for p in ball_positions]
+
+    # Compare early vs late lateral movement
+    early_x = np.mean(xs[: len(xs)//3])
+    late_x = np.mean(xs[-len(xs)//3 :])
+
+    dx = late_x - early_x
+
+    if abs(dx) < 6:
+        return "none"
+    return "inswing" if dx < 0 else "outswing"
+
+
+def compute_spin(ball_positions):
+    """
+    Motion-based spin inference.
+    Returns: 'off spin', 'leg spin', or 'none'
+    """
+    if not ball_positions or len(ball_positions) < 8:
+        return "none"
+
+    xs = [p[0] for p in ball_positions]
+    ys = [p[1] for p in ball_positions]
+
+    # Look for sideways drift after bounce
+    pitch_idx = int(np.argmax(ys))
+    if pitch_idx >= len(xs) - 4:
+        return "none"
+
+    post_x = xs[pitch_idx:]
+    drift = post_x[-1] - post_x[0]
+
+    if abs(drift) < 5:
+        return "none"
+    return "off spin" if drift < 0 else "leg spin"

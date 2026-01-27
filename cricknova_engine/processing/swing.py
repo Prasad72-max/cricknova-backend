@@ -36,10 +36,10 @@ class SwingDetector:
         positions: list of (x, y) from ball_tracker.
 
         Returns:
-            float swing_angle_deg
+            float swing_angle_deg - numeric degrees of swing angle
         """
         if not positions or len(positions) < 8:
-            return 0.0
+            return None
 
         # Fix mirrored camera coordinates before angle calculation
         positions = unmirror_positions(positions)
@@ -77,6 +77,8 @@ def calculate_swing(ball_positions):
     """
     detector = SwingDetector()
     swing_deg = detector.detect_swing(ball_positions)
+    if swing_deg is None:
+        return "unknown"
     return classify_swing(swing_deg)
 
 def calculate_swing_name(ball_positions):
@@ -85,6 +87,8 @@ def calculate_swing_name(ball_positions):
     """
     detector = SwingDetector()
     swing_deg = detector.detect_swing(ball_positions)
+    if swing_deg is None:
+        return "unknown"
     return classify_swing(swing_deg)
 
 def classify_swing(swing_deg: float):
@@ -103,3 +107,26 @@ def classify_swing(swing_deg: float):
     else:
         return "outswing"
     return "straight"
+
+def calculate_swing_full(ball_positions):
+    """
+    Returns swing data without confidence or labels.
+    Output:
+    {
+        "swing": inswing / outswing / straight,
+        "swing_degree": float
+    }
+    """
+    detector = SwingDetector()
+    swing_deg = detector.detect_swing(ball_positions)
+
+    if swing_deg is None:
+        return {
+            "swing": "unknown",
+            "swing_degree": None
+        }
+
+    return {
+        "swing": classify_swing(swing_deg),
+        "swing_degree": swing_deg
+    }

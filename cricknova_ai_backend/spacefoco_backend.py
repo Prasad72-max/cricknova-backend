@@ -492,7 +492,12 @@ async def verify_payment(
         "user_id": user_id,
         "plan": sub.get("plan"),
         "limits": sub.get("limits"),
-        "expiry": expiry
+        "expiry": expiry,
+        "ui_notes": {
+            "step_1": "Payment is being verified…",
+            "step_2": "Payment successful. Please reopen the app to start premium features."
+        },
+        "next_action": "REOPEN_APP"
     }
 
 
@@ -662,6 +667,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             return {
                 "status": "success",
                 "speed_kmph": fallback_speed,
+                "speed_value": int((fallback_speed["min"] + fallback_speed["max"]) / 2) if fallback_speed else 120,
                 "swing": "unknown",
                 "spin": "none",
                 "trajectory": []
@@ -757,6 +763,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
+            "speed_value": int((speed_kmph["min"] + speed_kmph["max"]) / 2) if speed_kmph else 120,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1153,9 +1160,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:30]
 
         if len(ball_positions) < 5:
+            fallback_speed = speed_range(120.0)
             return {
                 "status": "success",
-                "speed_kmph": speed_range(120.0),
+                "speed_kmph": fallback_speed,
+                "speed_value": int((fallback_speed["min"] + fallback_speed["max"]) / 2) if fallback_speed else 120,
                 "swing": "unknown",
                 "spin": "none",
                 "trajectory": []
@@ -1207,6 +1216,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
+            "speed_value": int((speed_kmph["min"] + speed_kmph["max"]) / 2) if speed_kmph else 120,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []

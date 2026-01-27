@@ -201,13 +201,14 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 4),
           backgroundColor: Colors.black,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
           ),
           content: const Text(
-            "🎉 Premium Activated Successfully!",
+            "🔐 Payment verified successfully.\n🚀 Premium activated. Please reopen the app to start premium features.",
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w600,

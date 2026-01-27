@@ -91,9 +91,37 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     else:
         swing_angle = 0
 
+    # -----------------------------
+    # NORMALIZED OUTPUT (ALWAYS VISIBLE IN UI)
+    # -----------------------------
+    speed_value = None
+    if speed_range:
+        speed_value = int((speed_range["min"] + speed_range["max"]) / 2)
+
+    # Swing direction (cricket-friendly)
+    if swing_angle > 6:
+        swing = "outswing"
+    elif swing_angle < -6:
+        swing = "inswing"
+    else:
+        swing = "none"
+
+    # Simple spin inference (non-scripted, motion-based)
+    spin = "none"
+    if len(last_pos) >= 8:
+        x_changes = [last_pos[i+1][0] - last_pos[i][0] for i in range(len(last_pos)-1)]
+        curve = sum(x_changes[-4:])
+        if curve > 6:
+            spin = "off spin"
+        elif curve < -6:
+            spin = "leg spin"
+
     return {
         "found": True,
-        "speed_kmph": speed_range,
-        "swing_angle": round(swing_angle, 2),
-        "path": last_pos
+        "speed_kmph": speed_value,
+        "speed_type": "pre-pitch",
+        "speed_note": "Physics-based release speed",
+        "swing": swing,
+        "spin": spin,
+        "trajectory": last_pos
     }

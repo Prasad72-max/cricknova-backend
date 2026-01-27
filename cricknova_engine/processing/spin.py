@@ -16,7 +16,7 @@ def calculate_spin(ball_positions, fps=30):
     empty_result = {
         "type": "none",
         "name": "none",
-        "confidence": "low"
+        "spin_degree": None
     }
 
     if not ball_positions or len(ball_positions) < 8:
@@ -51,17 +51,9 @@ def calculate_spin(ball_positions, fps=30):
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
 
-    # ---- Cricket-realistic nearby spin bands ----
-    # Allow very slight but real spin to be reported
-    if turn_deg < 0.25:
+    # Allow very light but still physically plausible spin
+    if turn_deg < 0.1:
         return empty_result
-
-    if turn_deg < 1.2:
-        confidence = "low"
-    elif turn_deg < 3.5:
-        confidence = "medium"
-    else:
-        confidence = "high"
 
     # Hard clamp: mobile single-camera cannot exceed this
     turn_deg = min(turn_deg, 8.0)
@@ -77,5 +69,5 @@ def calculate_spin(ball_positions, fps=30):
     return {
         "type": "spin",
         "name": spin_name.replace("-", " "),
-        "confidence": confidence
+        "spin_degree": round(turn_deg, 2)
     }

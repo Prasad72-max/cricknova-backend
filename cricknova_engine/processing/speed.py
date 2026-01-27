@@ -8,8 +8,6 @@ import cv2
 # -----------------------------
 MAX_SPEED = 158.0
 MIN_SPEED = 60.0
-DEFAULT_SPEED = 95.0
-SPEED_RANGE_DELTA = 7.0
 PITCH_LENGTH_METERS = 20.12
 PITCH_WIDTH_METERS = 3.05
 
@@ -47,10 +45,10 @@ def calculate_speed_pro(
 
     # 0. Basic sanity checks (always return speed)
     if not ball_positions or len(ball_positions) < 4:
-        base = DEFAULT_SPEED
         return {
-            "min": int(base - SPEED_RANGE_DELTA),
-            "max": int(base + SPEED_RANGE_DELTA)
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Insufficient tracking data"
         }
 
     # Allow low FPS videos but note reduced accuracy
@@ -68,7 +66,11 @@ def calculate_speed_pro(
                 pixel_dists.append(d)
 
         if len(pixel_dists) < 2:
-            base = DEFAULT_SPEED
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "Insufficient tracking data"
+            }
         else:
             avg_px = np.mean(pixel_dists)
             fps = max(15, fps)
@@ -76,8 +78,9 @@ def calculate_speed_pro(
 
         base = max(MIN_SPEED, min(base, MAX_SPEED))
         return {
-            "min": int(base - SPEED_RANGE_DELTA),
-            "max": int(base + SPEED_RANGE_DELTA)
+            "speed_kmph": round(float(base), 1),
+            "speed_type": "pre-pitch",
+            "speed_note": "Pixel-calibrated release speed"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -94,10 +97,10 @@ def calculate_speed_pro(
         distances.append(d)
 
     if len(distances) < 2:
-        base = DEFAULT_SPEED
         return {
-            "min": int(base - SPEED_RANGE_DELTA),
-            "max": int(base + SPEED_RANGE_DELTA)
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Insufficient tracking data"
         }
 
     distances = np.array(distances)
@@ -105,10 +108,10 @@ def calculate_speed_pro(
     # 4. Hybrid noise filtering (IQR + positive-only)
     distances = distances[distances > 0]
     if len(distances) < 2:
-        base = DEFAULT_SPEED
         return {
-            "min": int(base - SPEED_RANGE_DELTA),
-            "max": int(base + SPEED_RANGE_DELTA)
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Insufficient tracking data"
         }
 
     Q1, Q3 = np.percentile(distances, [25, 75])
@@ -135,10 +138,10 @@ def calculate_speed_pro(
             speed_estimates.append(avg_mpf * fps * 3.6)
 
     if not speed_estimates:
-        base = DEFAULT_SPEED
         return {
-            "min": int(base - SPEED_RANGE_DELTA),
-            "max": int(base + SPEED_RANGE_DELTA)
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Insufficient tracking data"
         }
 
     # Use median of window speeds to avoid spikes
@@ -166,19 +169,21 @@ def calculate_speed_pro(
     final_kmph = max(MIN_SPEED, min(final_kmph, MAX_SPEED))
 
     if final_kmph <= 0 or math.isnan(final_kmph):
-        final_kmph = DEFAULT_SPEED
+        return {
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Insufficient tracking data"
+        }
 
     print("SPEED PHYSICS => raw:", raw_kmph, "final:", final_kmph, "fps:", fps, "points:", len(ball_positions))
 
     # Broadcast-style rounding (natural, not perfect)
-    final_kmph = int(round(float(final_kmph)))
-
-    # Optional: force even-number feel (comment out if not needed)
-    # final_kmph = int(round(final_kmph / 2) * 2)
+    final_kmph = round(float(final_kmph), 1)
 
     return {
-        "min": int(final_kmph - SPEED_RANGE_DELTA),
-        "max": int(final_kmph + SPEED_RANGE_DELTA)
+        "speed_kmph": final_kmph,
+        "speed_type": "pre-pitch",
+        "speed_note": "Pre-pitch release speed, physics calibrated"
     }
 
 
