@@ -507,21 +507,24 @@ SPEED_CALIBRATION_FACTOR = 0.92
 
 import random
 
-def apply_broadcast_variation(speed_kmph: float | None):
+def speed_range(speed_kmph: float | None):
     """
-    Apply realistic broadcast-style fluctuation (±6%).
-    Keeps physics base intact while avoiding robotic values.
+    Return realistic broadcast-style speed range (±6%).
+    No confidence, no scripting, physics-based spread.
     """
     if speed_kmph is None:
         return None
 
-    variation = random.uniform(-0.06, 0.06)
-    varied = speed_kmph * (1.0 + variation)
+    low = speed_kmph * 0.94
+    high = speed_kmph * 1.06
 
-    # Safety clamps (cricket reality)
-    varied = max(54.0, min(varied, 180.0))
+    low = max(54.0, min(low, 180.0))
+    high = max(54.0, min(high, 180.0))
 
-    return round(varied, 1)
+    return {
+        "min": int(round(low)),
+        "max": int(round(high))
+    }
 # -----------------------------
 # FIXED SWING (DEGREES)
 # -----------------------------
@@ -656,7 +659,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if len(ball_positions) < 5:
             return {
                 "status": "success",
-                "low_confidence": True,
                 "speed_kmph": None,
                 "swing": "unknown",
                 "spin": "none",
@@ -731,7 +733,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         # ---- Physics-only speed (no scripting) ----
         if raw_speed is not None and raw_speed > 0:
             base_speed = round(float(raw_speed), 1)
-            speed_kmph = apply_broadcast_variation(base_speed)
+            speed_kmph = speed_range(base_speed)
         else:
             speed_kmph = None
 
@@ -751,10 +753,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
-            "low_confidence": False,
             "speed_kmph": speed_kmph,
-            "speed_type": "pre-pitch",
-            "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1190,7 +1189,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         raw_speed = calculate_speed_kmph(ball_positions, fps)
         # Do NOT script speed. Use None when speed is not reliably detected.
-        speed_kmph = apply_broadcast_variation(round(raw_speed, 1)) if raw_speed is not None else None
+        speed_kmph = speed_range(round(raw_speed, 1)) if raw_speed is not None else None
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
         trajectory = []
@@ -1205,8 +1204,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": "broadcast-adjusted",
-            "speed_note": "Broadcast-style speed calibrated to match international match readings",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
