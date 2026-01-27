@@ -81,6 +81,11 @@ class PremiumService {
     }
 
     await loadPremiumFromUid(user.uid);
+
+    // 🔔 Force immediate UI update
+    premiumNotifier.value = isPremium;
+    premiumNotifier.notifyListeners();
+
     isLoaded = true;
   }
 
@@ -143,10 +148,10 @@ class PremiumService {
         case "IN_299":
           await _cache(firestorePremium, planId, 1200, 30, 0);
           break;
-        case "IN_599":
+        case "IN_499":
           await _cache(firestorePremium, planId, 3000, 60, 50);
           break;
-        case "IN_2999":
+        case "IN_1999":
           await _cache(firestorePremium, planId, 20000, 200, 200);
           break;
         default:
@@ -161,24 +166,32 @@ class PremiumService {
 
   /// 🔁 Call this on every app launch (Splash / main)
   static Future<void> restoreOnLaunch() async {
-    if (_initialized) return;
-    _initialized = true;
-
     final user = FirebaseAuth.instance.currentUser;
 
-    // If user is not available yet, do NOT downgrade to FREE.
     if (user == null) {
-      debugPrint("⚠️ restoreOnLaunch skipped (user not ready)");
+      debugPrint("⏳ Auth not ready, premium restore deferred");
       return;
     }
 
-    // Ensure fresh token before restoring premium
-    final String? idToken = await user.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception("USER_NOT_AUTHENTICATED");
+    try {
+      // Force fresh token to avoid cached auth state
+      final String? idToken = await user.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
+        debugPrint("❌ No valid token during premium restore");
+        return;
+      }
+
+      await loadPremiumFromUid(user.uid);
+
+      // Mark loaded and notify UI immediately
+      isLoaded = true;
+      premiumNotifier.value = isPremium;
+      premiumNotifier.notifyListeners();
+
+      debugPrint("✅ Premium restored on launch: $isPremium ($plan)");
+    } catch (e) {
+      debugPrint("❌ restoreOnLaunch failed: $e");
     }
-    await loadPremiumFromUid(user.uid);
-    isLoaded = true;
   }
 
   /// ✅ CALL THIS AFTER PAYMENT SUCCESS
@@ -237,13 +250,13 @@ class PremiumService {
       case "IN_299":
         normalizedPlan = "IN_299";
         break;
-      case "599":
-      case "IN_599":
-        normalizedPlan = "IN_599";
+      case "499":
+      case "IN_499":
+        normalizedPlan = "IN_499";
         break;
-      case "2999":
-      case "IN_2999":
-        normalizedPlan = "IN_2999";
+      case "1999":
+      case "IN_1999":
+        normalizedPlan = "IN_1999";
         break;
       default:
         throw Exception("Invalid plan selected: $plan");
@@ -272,6 +285,10 @@ class PremiumService {
     await syncFromBackend(user.uid);
     // 🔥 FORCE local premium refresh so UI updates instantly
     await refresh();
+
+    // 🔔 Notify UI immediately after payment
+    premiumNotifier.value = isPremium;
+    premiumNotifier.notifyListeners();
   }
 
   // -----------------------------
@@ -569,6 +586,10 @@ class PremiumService {
     await syncFromBackend(userId);
     // 🔥 Force instant UI update after PayPal payment
     await refresh();
+
+    // 🔔 Notify UI immediately after PayPal payment
+    premiumNotifier.value = isPremium;
+    premiumNotifier.notifyListeners();
   }
 
   // -----------------------------
@@ -607,5 +628,9 @@ class PremiumService {
     await syncFromBackend(user.uid);
     // 🔥 Force instant UI update after PayPal return
     await refresh();
+
+    // 🔔 Notify UI immediately after PayPal return
+    premiumNotifier.value = isPremium;
+    premiumNotifier.notifyListeners();
   }
 }

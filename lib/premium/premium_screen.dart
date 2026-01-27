@@ -87,8 +87,10 @@ class PayPalWebViewScreen extends StatelessWidget {
 
     if (res.statusCode == 200 && data["status"] == "success") {
       await PremiumService.syncFromBackend(user.uid);
+      await PremiumService.refresh();
+      PremiumService.premiumNotifier.notifyListeners();
       if (!context.mounted) return;
-      Navigator.pop(context);
+      Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("🎉 Premium Activated Successfully!"),
@@ -159,10 +161,10 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         ? "IN_99"
         : _lastPlanPrice == "₹299"
             ? "IN_299"
-            : _lastPlanPrice == "₹599"
-                ? "IN_599"
-                : _lastPlanPrice == "₹2999"
-                    ? "IN_2999"
+            : _lastPlanPrice == "₹499"
+                ? "IN_499"
+                : _lastPlanPrice == "₹1999"
+                    ? "IN_1999"
                     : null;
     if (planCode == null) {
       throw Exception("Invalid plan selected");
@@ -193,7 +195,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
 
     if (verifyRes.statusCode == 200 && data["success"] == true) {
       await PremiumService.syncFromBackend(user.uid);
-
+      await PremiumService.refresh();
+      PremiumService.premiumNotifier.notifyListeners();
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
@@ -212,25 +215,13 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
           ),
         ),
       );
+      Navigator.pop(context, true);
     } else {
       _isPaying = false;
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Payment successful! Premium is active. Syncing status…"),
-          backgroundColor: Colors.black,
-        ),
-      );
       throw Exception("Payment verification failed");
     }
   } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Payment successful! Premium is active. Syncing status…"),
-        backgroundColor: Colors.black,
-      ),
-    );
+    debugPrint("❌ Payment verify exception: $e");
   }
   _isPaying = false;
 }
@@ -493,6 +484,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
             backgroundColor: Colors.black,
           ),
         );
+        Navigator.pop(context, true);
       } else {
         throw Exception("Capture failed");
       }
@@ -521,8 +513,12 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String? sourceFromArgs = args?['source'] as String?;
-    // ✅ Guard: auto-close ONLY if user opened paywall manually
-    if (PremiumService.isPremiumActive && widget.entrySource == null) {
+    // ✅ Guard: auto-close ONLY if user opened paywall as a forced paywall,
+    // and NOT when user explicitly opens from Profile or Features tab.
+    if (PremiumService.isPremiumActive &&
+        widget.entrySource == null &&
+        sourceFromArgs != "profile" &&
+        sourceFromArgs != "features") {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (Navigator.canPop(context)) {
           Navigator.pop(context);
@@ -660,7 +656,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "Yearly",
-        price: "₹599",
+        price: "₹499",
         tag: "Best Value 💎",
         glowColor: Colors.greenAccent,
         features: [
@@ -674,7 +670,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "ULTRA PRO",
-        price: "₹2999",
+        price: "₹1999",
         tag: "Elite Access 👑",
         glowColor: Colors.redAccent,
         features: [
@@ -693,7 +689,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     return [
       sexyPlanCard(
         title: "Yearly",
-        price: "₹599",
+        price: "₹499",
         tag: "Analyse Pro 🎯",
         glowColor: Colors.greenAccent,
         features: [
@@ -706,7 +702,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "ULTRA PRO",
-        price: "₹2999",
+        price: "₹1999",
         tag: "Unlimited Analysis 🚀",
         glowColor: Colors.redAccent,
         features: [

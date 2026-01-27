@@ -35,7 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    PremiumService.restoreOnLaunch();
     _bootstrapAuthAndData();
   }
 
@@ -50,7 +49,11 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         debugPrint("⚠️ HOME SCREEN: Firebase token is null or empty");
       }
+
+      // ✅ Restore premium ONLY after auth is fully ready
+      await PremiumService.restoreOnLaunch();
     }
+
     await loadTrainingVideos();
     if (!mounted) return;
     setState(() {});

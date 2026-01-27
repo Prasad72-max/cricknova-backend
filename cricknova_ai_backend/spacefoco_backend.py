@@ -460,10 +460,10 @@ async def verify_payment(
         plan = "IN_99"
     elif plan in ["IN_299", "299"]:
         plan = "IN_299"
-    elif plan in ["IN_599", "599", "YEARLY", "INR_599"]:
-        plan = "IN_599"
-    elif plan in ["IN_2999", "2999"]:
-        plan = "IN_2999"
+    elif plan in ["IN_499", "499", "YEARLY", "INR_499"]:
+        plan = "IN_499"
+    elif plan in ["IN_1999", "1999"]:
+        plan = "IN_1999"
     else:
         raise HTTPException(
             status_code=400,
@@ -661,11 +661,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
             fallback_speed = speed_range(120.0)
             return {
                 "status": "success",
-                "analysis": {
-                    "speed_kmph": fallback_speed,
-                    "swing": "unknown",
-                    "spin": "none"
-                },
+                "speed_kmph": fallback_speed,
+                "swing": "unknown",
+                "spin": "none",
                 "trajectory": []
             }
 
@@ -758,11 +756,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
-            "analysis": {
-                "speed_kmph": speed_kmph,
-                "swing": swing,
-                "spin": spin_label
-            },
+            "speed_kmph": speed_kmph,
+            "swing": swing,
+            "spin": spin_label,
             "trajectory": []
         }
 

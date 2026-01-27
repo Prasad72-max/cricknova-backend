@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,9 +17,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController nameController = TextEditingController();
-  final TextEditingController dobController = TextEditingController();
-  final TextEditingController battingRoleController = TextEditingController();
-  final TextEditingController bowlingRoleController = TextEditingController();
 
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
@@ -28,25 +24,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   File? profileImage;
   final ImagePicker _picker = ImagePicker();
-
-  final List<String> battingRoles = [
-    "Right-hand Batsman",
-    "Left-hand Batsman",
-    "Right-hand All-rounder",
-    "Left-hand All-rounder",
-  ];
-
-  final List<String> bowlingRoles = [
-    "Right-arm Fast",
-    "Right-arm Medium",
-    "Right-arm Medium Pace",
-    "Right-arm Off Spin",
-    "Right-arm Leg Spin",
-    "Left-arm Fast",
-    "Left-arm Medium",
-    "Left-arm Orthodox Spin",
-    "Left-arm Chinaman",
-  ];
 
   @override
   void initState() {
@@ -57,9 +34,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
     nameController.text = prefs.getString("profileName") ?? "Player";
-    dobController.text = prefs.getString("profileDOB") ?? "";
-    battingRoleController.text = prefs.getString("battingRole") ?? "";
-    bowlingRoleController.text = prefs.getString("bowlingRole") ?? "";
     final imagePath = prefs.getString("profileImagePath");
     if (imagePath != null && imagePath.isNotEmpty) {
       profileImage = File(imagePath);
@@ -72,9 +46,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> saveName() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString("profileName", nameController.text);
-    await prefs.setString("profileDOB", dobController.text);
-    await prefs.setString("battingRole", battingRoleController.text);
-    await prefs.setString("bowlingRole", bowlingRoleController.text);
     if (profileImage != null) {
       await prefs.setString("profileImagePath", profileImage!.path);
     }
@@ -96,62 +67,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void showPremiumPopup() {
-    showDialog(
-      context: context,
-      builder: (_) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("Premium Features"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: const [
-                ListTile(
-                  leading: Icon(Icons.chat_bubble_outline, color: Colors.blue),
-                  title: Text("AI Coach (Chat-based Coaching)"),
-                ),
-                ListTile(
-                  leading: Icon(Icons.video_camera_back, color: Colors.green),
-                  title: Text("AI Mistake Analysis (Video)"),
-                ),
-                ListTile(
-                  leading: Icon(Icons.compare, color: Colors.orange),
-                  title: Text("Diff / Video Compare Analysis"),
-                ),
-                ListTile(
-                  leading: Icon(Icons.insights, color: Colors.purple),
-                  title: Text("Advanced Cricket Insights with Limits"),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Close"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.amber,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PremiumScreen()),
-                );
-              },
-              child: const Text(
-                "Go Premium",
-                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PremiumScreen()),
     );
   }
 
@@ -259,46 +177,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: nameController,
                     style: const TextStyle(color: Colors.white),
                     decoration: inputStyle("Full Name"),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: dobController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: inputStyle("Date of Birth (DD/MM/YYYY)"),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    style: const TextStyle(color: Colors.white),
-                    value: battingRoleController.text.isNotEmpty
-                        ? battingRoleController.text
-                        : null,
-                    items: battingRoles
-                        .map((role) => DropdownMenuItem(
-                              value: role,
-                              child: Text(role),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      battingRoleController.text = value ?? "";
-                    },
-                    decoration: inputStyle("Batting Role"),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    style: const TextStyle(color: Colors.white),
-                    value: bowlingRoleController.text.isNotEmpty
-                        ? bowlingRoleController.text
-                        : null,
-                    items: bowlingRoles
-                        .map((role) => DropdownMenuItem(
-                              value: role,
-                              child: Text(role),
-                            ))
-                        .toList(),
-                    onChanged: (value) {
-                      bowlingRoleController.text = value ?? "";
-                    },
-                    decoration: inputStyle("Bowling Role"),
                   ),
                   const SizedBox(height: 15),
                   elevatedButton("Save Profile", saveName),

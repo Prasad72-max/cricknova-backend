@@ -26,8 +26,8 @@ FILE_PATH = os.path.join(BASE_DIR, "subscriptions.json")
 PLAN_LIMITS = {
     "IN_99": {"chat": 200, "mistake": 15, "compare": 0},
     "IN_299": {"chat": 1200, "mistake": 30, "compare": 0},
-    "IN_599": {"chat": 3000, "mistake": 60, "compare": 50},
-    "IN_2999": {"chat": 20000, "mistake": 200, "compare": 200},
+    "IN_499": {"chat": 3000, "mistake": 60, "compare": 50},
+    "IN_1999": {"chat": 20000, "mistake": 200, "compare": 200},
 
     "INT_MONTHLY": {"chat": 200, "mistake": 20, "compare": 0},
     "INT_6_MONTHS": {"chat": 1200, "mistake": 30, "compare": 5},
@@ -138,9 +138,9 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
     duration_days = 30
     if plan in ["IN_299", "INT_6_MONTHS"]:
         duration_days = 180
-    elif plan in ["IN_599", "INT_YEARLY"]:
+    elif plan in ["IN_499", "INT_YEARLY"]:
         duration_days = 365
-    elif plan in ["IN_2999", "INT_ULTRA"]:
+    elif plan in ["IN_1999", "INT_ULTRA"]:
         duration_days = 365
 
     expiry = now + timedelta(days=duration_days)

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 class RazorpayService {
   late Razorpay _razorpay;
   bool _checkoutInProgress = false;
+  String? _selectedPlan;
 
   /// Initialize Razorpay and register callbacks
   void init({
@@ -19,18 +20,27 @@ class RazorpayService {
       debugPrint("✅ Razorpay payment success: ${response.paymentId}");
       debugPrint("🧾 orderId=${response.orderId}, signature=${response.signature}");
 
-      // IMPORTANT: Trigger backend premium verification immediately
-      try {
-        PremiumService().verifyAndActivatePremium(
-          paymentId: response.paymentId!,
-          orderId: response.orderId!,
-          signature: response.signature!,
-        );
-      } catch (e) {
-        debugPrint("⚠️ Premium verification trigger failed: $e");
-      }
+      () async {
+        try {
+          await PremiumService.verifyRazorpayPayment(
+            paymentId: response.paymentId!,
+            orderId: response.orderId!,
+            signature: response.signature!,
+            plan: _selectedPlan ?? "IN_99",
+          );
 
-      onPaymentSuccess(response);
+          debugPrint("🔥 Premium verification completed successfully");
+          onPaymentSuccess(response);
+        } catch (e) {
+          debugPrint("❌ Premium verification failed: $e");
+          onPaymentError(
+            PaymentFailureResponse(
+              code: -1,
+              message: "Premium activation failed. Please contact support.",
+            ),
+          );
+        }
+      }();
     });
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {
       _checkoutInProgress = false;
@@ -47,6 +57,7 @@ class RazorpayService {
     required String orderId,
     required int amount, // amount in paise
     required String email,
+    required String plan,
     String? contact, // ✅ OPTIONAL (global safe)
   }) {
     final Map<String, Object> options = {
@@ -75,6 +86,7 @@ class RazorpayService {
 
     debugPrint("🚀 Razorpay options → $options");
     _checkoutInProgress = true;
+    _selectedPlan = plan;
     _razorpay.open(options);
   }
 

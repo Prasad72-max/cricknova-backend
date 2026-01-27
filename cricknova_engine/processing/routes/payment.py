@@ -115,11 +115,33 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
             print("❌ SIGNATURE MISMATCH")
             print("EXPECTED:", generated_signature)
             print("RECEIVED:", payload.razorpay_signature)
-            raise HTTPException(status_code=400, detail="Invalid payment signature")
+            raise HTTPException(
+                status_code=409,
+                detail="Payment signature mismatch. Please retry verification."
+            )
 
-        # TODO: store razorpay_payment_id in DB to prevent reuse
+        # 🔁 Prevent Razorpay payment_id reuse
+        db = firestore.client()
 
-        # ✅ Activate premium plan in backend (single source of truth)
+        existing_payment = (
+            db.collection("subscriptions")
+            .where("payment_id", "==", payload.razorpay_payment_id)
+            .limit(1)
+            .get()
+        )
+        if existing_payment:
+            raise HTTPException(
+                status_code=409,
+                detail="Payment already processed"
+            )
+
+        # 🔍 Log subscription state
+        existing_doc = db.collection("subscriptions").document(verified_user_id).get()
+        if existing_doc.exists:
+            print("ℹ️ Existing subscription found, overwriting safely")
+        else:
+            print("🆕 No subscription found, creating fresh document")
+
         # Accept both app-normalized plan codes and legacy UI labels
         PLAN_MAP = {
             "IN_99": "IN_99",
@@ -143,14 +165,7 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
                 detail=f"Unknown plan code received: {payload.plan}"
             )
 
-        print("🧾 ACTIVATING PLAN:", backend_plan, "FOR USER:", verified_user_id)
-        user_subscription.activate_plan_internal(
-            user_id=verified_user_id,
-            plan=backend_plan
-        )
-
         # 🔥 Persist premium status in Firestore (source of truth)
-        db = firestore.client()
 
         PLAN_DURATION_DAYS = {
             "IN_99": 30,
@@ -184,6 +199,17 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
         )
 
         print("🔥 PREMIUM STORED IN FIRESTORE FOR:", verified_user_id)
+
+        # ✅ Activate premium plan AFTER Firestore write (idempotent & recoverable)
+        try:
+            print("🧾 ACTIVATING PLAN:", backend_plan, "FOR USER:", verified_user_id)
+            user_subscription.activate_plan_internal(
+                user_id=verified_user_id,
+                plan=backend_plan
+            )
+        except Exception as e:
+            # Do NOT rollback Firestore if activation logic fails
+            print("⚠️ activate_plan_internal failed, Firestore already updated:", str(e))
 
         premium_activated = True
 

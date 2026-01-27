@@ -33,14 +33,15 @@ PLAN_LIMITS = {
     "FREE": 5,   # allow limited free trial chats
     "IN_99": 200,
     "IN_299": 1200,
-    "IN_599": 3000,
-    "IN_2999": 20000,
+    "IN_499": 3000,
+    "IN_1999": 20000,
 }
 
 # -----------------------------
 # TEMP OVERRIDE FLAG
 # -----------------------------
 ALLOW_FREE_AI = os.getenv("ALLOW_FREE_AI", "false").lower() == "true"
+
 # -----------------------------
 # REQUEST MODEL
 # -----------------------------

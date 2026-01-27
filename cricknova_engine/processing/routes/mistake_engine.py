@@ -23,11 +23,11 @@ PLAN_LIMITS = {
         "mistake_limit": 30,
         "duration_days": 180,
     },
-    "IN_599": {
+    "IN_499": {
         "mistake_limit": 60,
         "duration_days": 365,
     },
-    "IN_2999": {
+    "IN_1999": {
         "mistake_limit": 200,
         "duration_days": 365,
     },

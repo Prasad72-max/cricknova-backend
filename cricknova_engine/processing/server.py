@@ -7,6 +7,9 @@ import time
 
 app = FastAPI()
 
+app.state.last_pos = []
+app.state.last_time = []
+
 model = YOLO("yolo11n.pt")  # cricket ball trained model
 
 # Realistic pitch-based scaling (22 yards ≈ 20.12 meters)
@@ -32,10 +35,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     cy = int((y1 + y2) / 2)
 
     # track previous positions
-    global last_pos
-    if "last_pos" not in globals():
-        last_pos = []
-
+    last_pos = app.state.last_pos
     last_pos.append((cx, cy))
     if len(last_pos) > 12:
         last_pos.pop(0)
@@ -43,10 +43,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # REAL PHYSICS SPEED (NON-SCRIPTED)
     # -----------------------------
-    global last_time
-    if "last_time" not in globals():
-        last_time = []
-
+    last_time = app.state.last_time
     now = time.time()
     last_time.append(now)
     if len(last_time) > 12:

@@ -107,9 +107,9 @@ def verify_cashfree_payment(data: dict = Body(...), request: Request = None):
         "monthly": "IN_99",
         "99": "IN_99",
         "INR_99": "IN_99",
-        "yearly": "IN_599",
-        "599": "IN_599",
-        "INR_599": "IN_599"
+        "yearly": "IN_499",
+        "499": "IN_499",
+        "INR_499": "IN_499"
     }
     plan = plan_map.get(str(plan_raw), "IN_99")
 

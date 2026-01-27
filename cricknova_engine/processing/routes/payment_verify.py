@@ -3,6 +3,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from cricknova_ai_backend.subscriptions_store import create_or_update_subscription
 from cricknova_ai_backend.subscriptions_store import get_current_user
+from firebase_admin import firestore
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -61,7 +63,7 @@ def verify_payment(data: VerifyRequest, request: Request):
         print("EXPECTED_1 =", gen_sig_1)
         print("EXPECTED_2 =", gen_sig_2)
         print("RECEIVED =", data.razorpay_signature)
-        raise HTTPException(status_code=400, detail="Payment verification failed")
+        raise HTTPException(status_code=409, detail="PAYMENT_SIGNATURE_MISMATCH")
 
     PLAN_MAP = {
         # legacy labels
@@ -89,6 +91,19 @@ def verify_payment(data: VerifyRequest, request: Request):
     if not mapped_plan:
         raise HTTPException(status_code=400, detail=f"Unknown plan: {data.plan}")
 
+    # --- Prevent Razorpay payment_id reuse ---
+    db = firestore.client()
+    sub_ref = db.collection("subscriptions").document(user_id)
+    sub_doc = sub_ref.get()
+
+    if sub_doc.exists:
+        existing_payment = sub_doc.to_dict().get("payment_id")
+        if existing_payment == data.razorpay_payment_id:
+            raise HTTPException(
+                status_code=409,
+                detail="PAYMENT_ALREADY_PROCESSED"
+            )
+
     activation_error = None
     try:
         create_or_update_subscription(
@@ -97,6 +112,31 @@ def verify_payment(data: VerifyRequest, request: Request):
             payment_id=data.razorpay_payment_id,
             order_id=data.razorpay_order_id
         )
+        # Ensure Firestore subscription doc exists even if deleted earlier
+        if not sub_doc.exists:
+            PLAN_DAYS = {
+                "IN_99": 30,
+                "IN_299": 180,
+                "IN_499": 365,
+                "IN_1999": 365,
+            }
+            days = PLAN_DAYS.get(mapped_plan, 30)
+            sub_ref.set(
+                {
+                    "isPremium": True,
+                    "plan": mapped_plan,
+                    "provider": "razorpay",
+                    "payment_id": data.razorpay_payment_id,
+                    "expiry": datetime.utcnow() + timedelta(days=days),
+                    "used": {"chat": 0, "mistake": 0, "compare": 0},
+                    "chat_used": 0,
+                    "mistake_used": 0,
+                    "compare_used": 0,
+                    "activatedAt": firestore.SERVER_TIMESTAMP,
+                    "updatedAt": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True
+            )
         print(f"✅ SUBSCRIPTION ACTIVATED user={user_id} plan={mapped_plan}")
     except Exception as e:
         # Do NOT fail payment after Razorpay success

@@ -83,7 +83,7 @@ def verify_payment(request: Request, data: dict = Body(...)):
             amount = data.get("amount")
             if amount in (99, "99", 9900, "9900"):
                 raw_plan = "monthly"
-            elif amount in (599, "599", 59900, "59900"):
+            elif amount in (499, "499", 49900, "49900"):
                 raw_plan = "yearly"
             else:
                 raw_plan = "monthly"
@@ -91,11 +91,11 @@ def verify_payment(request: Request, data: dict = Body(...)):
         # Normalize / alias plans coming from app or Razorpay
         PLAN_ALIAS = {
             "monthly": "IN_99",
-            "yearly": "IN_599",
+            "yearly": "IN_499",
             "INR_99": "IN_99",
-            "INR_599": "IN_599",
+            "INR_499": "IN_499",
             "99": "IN_99",
-            "599": "IN_599",
+            "499": "IN_499",
         }
 
         plan = PLAN_ALIAS.get(raw_plan, raw_plan)

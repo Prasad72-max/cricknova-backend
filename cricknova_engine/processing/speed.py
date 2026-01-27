@@ -1,7 +1,6 @@
 import math
 import numpy as np
 import cv2
-import random
 
 
 # -----------------------------
@@ -163,11 +162,6 @@ def calculate_speed_pro(
 
     final_kmph = min(final_kmph, MAX_SPEED)
 
-    # Deterministic realism clamp (no randomness)
-    # Keeps output match-like but stable across runs
-    lower_bound = final_kmph * 0.94
-    upper_bound = final_kmph * 1.05
-    final_kmph = max(lower_bound, min(final_kmph, upper_bound))
 
     final_kmph = max(MIN_SPEED, min(final_kmph, MAX_SPEED))
 

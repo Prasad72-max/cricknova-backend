@@ -23,11 +23,23 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SAFE SPEED ----------
+    // ---------- SAFE SPEED (robust, backend-truth only) ----------
     String speed = "—";
-    final rawSpeed = src["speed_kmph"];
+    final dynamic rawSpeed =
+        src["speed_kmph"] ??
+        src["analysis"]?["speed_kmph"] ??
+        src["speed"] ??
+        src["speed_mph"];
+
     if (rawSpeed is num && rawSpeed > 0) {
-      speed = rawSpeed.toStringAsFixed(1);
+      speed = src.containsKey("speed_mph")
+          ? (rawSpeed * 1.60934).toStringAsFixed(1)
+          : rawSpeed.toStringAsFixed(1);
+    } else if (rawSpeed is String) {
+      final parsed = double.tryParse(rawSpeed);
+      if (parsed != null && parsed > 0) {
+        speed = parsed.toStringAsFixed(1);
+      }
     }
 
     // ---------- SAFE SWING ----------

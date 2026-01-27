@@ -49,9 +49,9 @@ class _UploadScreenState extends State<UploadScreen> {
   bool uploading = false;
   bool showTrajectory = false;
 
-  double? speed;
-  String? spin;
-  String? swing;
+  double speed = 0;
+  String spin = "NA";
+  String swing = "NA";
 
   List<dynamic>? trajectory = const [];
 
@@ -189,30 +189,48 @@ class _UploadScreenState extends State<UploadScreen> {
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
-      // --- Speed extraction logic (always show numeric speed if present) ---
+      // --- Speed extraction logic (strict, physics-only) ---
       double? extractedSpeed;
+
       final dynamic speedVal =
           analysis["speed_kmph"] ??
+          analysis["speed"] ??
+          analysis["speed_mph"] ??
           decoded["speed_kmph"] ??
-          decoded["analysis"]?["speed_kmph"];
+          decoded["speed"] ??
+          decoded["speed_mph"];
 
       if (speedVal is num) {
-        extractedSpeed = speedVal.toDouble();
+        // If backend already sends km/h, use directly
+        if (analysis.containsKey("speed_kmph") ||
+            decoded.containsKey("speed_kmph")) {
+          extractedSpeed = speedVal.toDouble();
+        } else {
+          // assume mph → convert to km/h
+          extractedSpeed = speedVal.toDouble() * 1.60934;
+        }
       } else if (speedVal is String) {
-        extractedSpeed = double.tryParse(speedVal);
+        final parsed = double.tryParse(speedVal);
+        if (parsed != null) {
+          extractedSpeed = parsed;
+        }
       }
       // --- End speed extraction ---
 
       if (!mounted) return;
 
       setState(() {
-        speed = extractedSpeed;
+        speed = extractedSpeed ?? 0;
 
-        final swingVal = analysis["swing"]?.toString().toLowerCase();
-        swing = swingVal?.toUpperCase() ?? "NA";
+        final swingVal = analysis["swing"];
+        swing = (swingVal != null && swingVal.toString().isNotEmpty)
+            ? swingVal.toString().toUpperCase()
+            : "NONE";
 
-        final spinVal = analysis["spin"]?.toString().toLowerCase();
-        spin = spinVal?.toUpperCase() ?? "NA";
+        final spinVal = analysis["spin"];
+        spin = (spinVal != null && spinVal.toString().isNotEmpty)
+            ? spinVal.toString().toUpperCase()
+            : "NONE";
 
         trajectory = const [];
         showTrajectory = false;
@@ -592,16 +610,11 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         _metric(
                           "Speed",
-                          speed != null
-                              ? "${speed!.round()} km/h"
-                              : "--",
+                          speed > 0 ? "${speed.round()} km/h" : "CALCULATING",
                         ),
                         const SizedBox(height: 10),
-                        _metric(
-                          "Swing",
-                          swing != null ? swing!.toUpperCase() : "--",
-                        ),
-                        _metric("Spin", spin != null ? spin!.toUpperCase() : "--"),
+                        _metric("Swing", swing),
+                        _metric("Spin", spin),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,
