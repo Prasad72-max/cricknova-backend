@@ -53,20 +53,20 @@ def verify_payment(data: VerifyRequest, request: Request):
         # legacy labels
         "monthly": "IN_99",
         "6_months": "IN_299",
-        "yearly": "IN_599",
-        "ultra_pro": "IN_2999",
+        "yearly": "IN_499",
+        "ultra_pro": "IN_1999",
 
         # numeric strings
         "99": "IN_99",
         "299": "IN_299",
-        "599": "IN_599",
-        "2999": "IN_2999",
+        "499": "IN_499",
+        "1999": "IN_1999",
 
         # already-normalized
         "IN_99": "IN_99",
         "IN_299": "IN_299",
-        "IN_599": "IN_599",
-        "IN_2999": "IN_2999",
+        "IN_499": "IN_499",
+        "IN_1999": "IN_1999",
     }
 
     incoming_plan = data.plan.strip()
