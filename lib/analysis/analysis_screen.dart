@@ -200,41 +200,52 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     debugPrint("ANALYSIS RESPONSE => $responseData");
 
     setState(() {
-  /// ---------- SPEED (robust parsing from backend) ----------
-  final speedVal =
-      responseData["speed_mph"] ??
-      responseData["speed"] ??
-      responseData["speed_kmph"];
+  // ---------- NORMALIZE SOURCE ----------
+  final Map<String, dynamic> src =
+      (responseData["data"] is Map<String, dynamic>)
+          ? Map<String, dynamic>.from(responseData["data"])
+          : responseData;
 
-  if (speedVal is num) {
-    speedKmph = responseData.containsKey("speed_kmph")
-        ? speedVal.toDouble()
-        : speedVal.toDouble() * 1.60934;
+  // ---------- SPEED (REAL, NO CONFIDENCE, NO RANDOM) ----------
+  final rawSpeed =
+      src["speed_kmph"] ??
+      src["speed"] ??
+      src["speed_mph"];
+
+  if (rawSpeed is num && rawSpeed > 0) {
+    speedKmph = src.containsKey("speed_mph")
+        ? rawSpeed.toDouble() * 1.60934
+        : rawSpeed.toDouble();
+  } else if (rawSpeed is String) {
+    final parsed = double.tryParse(rawSpeed);
+    speedKmph = (parsed != null && parsed > 0)
+        ? (src.containsKey("speed_mph") ? parsed * 1.60934 : parsed)
+        : null;
   } else {
     speedKmph = null;
   }
 
-  /// ---------- SWING ----------
+  // ---------- SWING ----------
   final swingVal =
-      responseData["swing"] ??
-      responseData["swing_type"] ??
-      responseData["swingName"];
+      src["swing"] ??
+      src["swing_type"] ??
+      src["swingName"];
 
   swingName =
-      (swingVal is String && swingVal.isNotEmpty) ? swingVal : "unknown";
+      (swingVal is String && swingVal.isNotEmpty) ? swingVal : null;
 
-  /// ---------- SPIN ----------
+  // ---------- SPIN ----------
   final spinVal =
-      responseData["spin"] ??
-      responseData["spin_type"] ??
-      responseData["spinType"];
+      src["spin"] ??
+      src["spin_type"] ??
+      src["spinType"];
 
   spinType =
-      (spinVal is String && spinVal.isNotEmpty) ? spinVal : "none";
+      (spinVal is String && spinVal.isNotEmpty) ? spinVal : null;
 
-  /// ---------- TRAJECTORY ----------
-  trajectory = responseData["trajectory"] is List
-      ? List<dynamic>.from(responseData["trajectory"])
+  // ---------- TRAJECTORY ----------
+  trajectory = src["trajectory"] is List
+      ? List<dynamic>.from(src["trajectory"])
       : [];
 
   _showTrajectoryAfterVideo = trajectory!.isNotEmpty;
