@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from cricknova_engine.processing.routes import user_subscription
 from fastapi import Request
 from firebase_admin import auth as firebase_auth
+from firebase_admin import firestore
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -122,16 +124,16 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
         PLAN_MAP = {
             "IN_99": "IN_99",
             "IN_299": "IN_299",
-            "IN_599": "IN_599",
-            "IN_2999": "IN_2999",
+            "IN_499": "IN_499",
+            "IN_1999": "IN_1999",
             "monthly": "IN_99",
             "6_months": "IN_299",
-            "yearly": "IN_599",
-            "ultra_pro": "IN_2999",
+            "yearly": "IN_499",
+            "ultra_pro": "IN_1999",
             "99": "IN_99",
             "299": "IN_299",
-            "599": "IN_599",
-            "2999": "IN_2999",
+            "499": "IN_499",
+            "1999": "IN_1999",
         }
 
         backend_plan = PLAN_MAP.get(payload.plan)
@@ -146,6 +148,43 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
             user_id=verified_user_id,
             plan=backend_plan
         )
+
+        # 🔥 Persist premium status in Firestore (source of truth)
+        db = firestore.client()
+
+        PLAN_DURATION_DAYS = {
+            "IN_99": 30,
+            "IN_299": 180,
+            "IN_499": 365,
+            "IN_1999": 365,
+        }
+
+        days = PLAN_DURATION_DAYS.get(backend_plan, 30)
+        expires_at = datetime.utcnow() + timedelta(days=days)
+
+        db.collection("subscriptions").document(verified_user_id).set(
+            {
+                "isPremium": True,
+                "plan": backend_plan,
+                "provider": "razorpay",
+                "payment_id": payload.razorpay_payment_id,
+                "expiry": expires_at,
+                "used": {
+                    "chat": 0,
+                    "mistake": 0,
+                    "compare": 0,
+                },
+                "chat_used": 0,
+                "mistake_used": 0,
+                "compare_used": 0,
+                "activatedAt": firestore.SERVER_TIMESTAMP,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True
+        )
+
+        print("🔥 PREMIUM STORED IN FIRESTORE FOR:", verified_user_id)
+
         premium_activated = True
 
         return {
