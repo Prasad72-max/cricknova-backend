@@ -189,20 +189,24 @@ class _UploadScreenState extends State<UploadScreen> {
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
+      // --- Speed extraction logic (always show numeric speed if present) ---
+      double? extractedSpeed;
+      final dynamic speedVal =
+          analysis["speed_kmph"] ??
+          decoded["speed_kmph"] ??
+          decoded["analysis"]?["speed_kmph"];
+
+      if (speedVal is num) {
+        extractedSpeed = speedVal.toDouble();
+      } else if (speedVal is String) {
+        extractedSpeed = double.tryParse(speedVal);
+      }
+      // --- End speed extraction ---
+
       if (!mounted) return;
 
       setState(() {
-        final rawSpeed = analysis["speed_kmph"];
-        if (rawSpeed is num) {
-          final base = rawSpeed.toDouble();
-          // add realistic variation ±6%
-          final variation = base * 0.06;
-          final min = base - variation;
-          final max = base + variation;
-          speed = (min + (max - min) * (DateTime.now().millisecondsSinceEpoch % 1000) / 1000);
-        } else {
-          speed = null;
-        }
+        speed = extractedSpeed;
 
         final swingVal = analysis["swing"]?.toString().toLowerCase();
         swing = swingVal?.toUpperCase() ?? "NA";
@@ -589,7 +593,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         _metric(
                           "Speed",
                           speed != null
-                              ? "${speed!.toStringAsFixed(1)} km/h"
+                              ? "${speed!.round()} km/h"
                               : "--",
                         ),
                         const SizedBox(height: 10),

@@ -661,9 +661,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
             fallback_speed = speed_range(120.0)
             return {
                 "status": "success",
-                "speed_kmph": fallback_speed,
-                "swing": "unknown",
-                "spin": "none",
+                "analysis": {
+                    "speed_kmph": fallback_speed,
+                    "swing": "unknown",
+                    "spin": "none"
+                },
                 "trajectory": []
             }
 
@@ -756,9 +758,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
-            "speed_kmph": speed_kmph,
-            "swing": swing,
-            "spin": spin_label,
+            "analysis": {
+                "speed_kmph": speed_kmph,
+                "swing": swing,
+                "spin": spin_label
+            },
             "trajectory": []
         }
 

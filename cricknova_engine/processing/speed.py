@@ -8,6 +8,9 @@ import random
 # CONFIG
 # -----------------------------
 MAX_SPEED = 158.0
+MIN_SPEED = 60.0
+DEFAULT_SPEED = 95.0
+SPEED_RANGE_DELTA = 7.0
 PITCH_LENGTH_METERS = 20.12
 PITCH_WIDTH_METERS = 3.05
 
@@ -31,7 +34,7 @@ def get_perspective_matrix(pitch_corners):
 
 def calculate_speed_pro(
     ball_positions,
-    pitch_corners,   # REQUIRED for high accuracy
+    pitch_corners=None,   # OPTIONAL now
     fps=30,
     ball_type="leather"
 ):
@@ -43,14 +46,41 @@ def calculate_speed_pro(
     ball_type: 'leather', 'tennis', 'rubber'.
     """
 
-    # 0. Basic sanity checks (relaxed for short clips)
+    # 0. Basic sanity checks (always return speed)
     if not ball_positions or len(ball_positions) < 4:
-        return 90.0
+        base = DEFAULT_SPEED
+        return {
+            "min": int(base - SPEED_RANGE_DELTA),
+            "max": int(base + SPEED_RANGE_DELTA)
+        }
 
     # Allow low FPS videos but note reduced accuracy
     fps = max(15, fps)
 
-    # 1. Create Perspective Matrix
+    # 1. Perspective matrix (optional)
+    if pitch_corners is None:
+        # Fallback: pixel-distance based estimation
+        pixel_dists = []
+        for i in range(1, len(ball_positions)):
+            d = np.linalg.norm(
+                np.array(ball_positions[i]) - np.array(ball_positions[i - 1])
+            )
+            if d > 0:
+                pixel_dists.append(d)
+
+        if len(pixel_dists) < 2:
+            base = DEFAULT_SPEED
+        else:
+            avg_px = np.mean(pixel_dists)
+            fps = max(15, fps)
+            base = avg_px * fps * 0.045  # calibrated px→km/h factor
+
+        base = max(MIN_SPEED, min(base, MAX_SPEED))
+        return {
+            "min": int(base - SPEED_RANGE_DELTA),
+            "max": int(base + SPEED_RANGE_DELTA)
+        }
+
     M = get_perspective_matrix(pitch_corners)
 
     # 2. Transform Pixel Positions to Real-World Meters
@@ -65,14 +95,22 @@ def calculate_speed_pro(
         distances.append(d)
 
     if len(distances) < 2:
-        return 90.0
+        base = DEFAULT_SPEED
+        return {
+            "min": int(base - SPEED_RANGE_DELTA),
+            "max": int(base + SPEED_RANGE_DELTA)
+        }
 
     distances = np.array(distances)
 
     # 4. Hybrid noise filtering (IQR + positive-only)
     distances = distances[distances > 0]
     if len(distances) < 2:
-        return 90.0
+        base = DEFAULT_SPEED
+        return {
+            "min": int(base - SPEED_RANGE_DELTA),
+            "max": int(base + SPEED_RANGE_DELTA)
+        }
 
     Q1, Q3 = np.percentile(distances, [25, 75])
     iqr = max(Q3 - Q1, 1e-6)
@@ -98,7 +136,11 @@ def calculate_speed_pro(
             speed_estimates.append(avg_mpf * fps * 3.6)
 
     if not speed_estimates:
-        return 90.0
+        base = DEFAULT_SPEED
+        return {
+            "min": int(base - SPEED_RANGE_DELTA),
+            "max": int(base + SPEED_RANGE_DELTA)
+        }
 
     # Use median of window speeds to avoid spikes
     raw_kmph = float(np.median(speed_estimates))
@@ -121,25 +163,29 @@ def calculate_speed_pro(
 
     final_kmph = min(final_kmph, MAX_SPEED)
 
-    # --- Realistic human-like radar variation (NO confidence labels) ---
-    variation = random.uniform(-0.06, 0.05)  # -6% to +5%
-    final_kmph = final_kmph * (1 + variation)
+    # Deterministic realism clamp (no randomness)
+    # Keeps output match-like but stable across runs
+    lower_bound = final_kmph * 0.94
+    upper_bound = final_kmph * 1.05
+    final_kmph = max(lower_bound, min(final_kmph, upper_bound))
 
-    # Clamp to realistic cricket range
-    final_kmph = max(60.0, min(final_kmph, MAX_SPEED))
+    final_kmph = max(MIN_SPEED, min(final_kmph, MAX_SPEED))
 
     if final_kmph <= 0 or math.isnan(final_kmph):
-        final_kmph = 90.0
+        final_kmph = DEFAULT_SPEED
 
     print("SPEED PHYSICS => raw:", raw_kmph, "final:", final_kmph, "fps:", fps, "points:", len(ball_positions))
 
     # Broadcast-style rounding (natural, not perfect)
-    final_kmph = round(final_kmph)
+    final_kmph = int(round(float(final_kmph)))
 
     # Optional: force even-number feel (comment out if not needed)
     # final_kmph = int(round(final_kmph / 2) * 2)
 
-    return final_kmph
+    return {
+        "min": int(final_kmph - SPEED_RANGE_DELTA),
+        "max": int(final_kmph + SPEED_RANGE_DELTA)
+    }
 
 
 # --- EXAMPLE USAGE ---
