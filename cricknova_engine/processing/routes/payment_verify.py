@@ -34,18 +34,32 @@ def verify_payment(data: VerifyRequest, request: Request):
     if not secret:
         raise HTTPException(status_code=500, detail="Razorpay secret not configured")
 
-    generated_signature = hmac.new(
-        secret.encode(),
-        f"{data.razorpay_order_id}|{data.razorpay_payment_id}".encode(),
-        hashlib.sha256
-    ).hexdigest()
-
+    # --- Razorpay signature verification (robust) ---
     if not data.razorpay_signature:
         raise HTTPException(status_code=400, detail="SIGNATURE_MISSING")
 
-    if not hmac.compare_digest(generated_signature, data.razorpay_signature.strip()):
+    payload_1 = f"{data.razorpay_order_id}|{data.razorpay_payment_id}"
+    payload_2 = f"{data.razorpay_payment_id}|{data.razorpay_order_id}"
+
+    gen_sig_1 = hmac.new(
+        secret.encode(),
+        payload_1.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    gen_sig_2 = hmac.new(
+        secret.encode(),
+        payload_2.encode(),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not (
+        hmac.compare_digest(gen_sig_1, data.razorpay_signature.strip()) or
+        hmac.compare_digest(gen_sig_2, data.razorpay_signature.strip())
+    ):
         print("❌ SIGNATURE MISMATCH")
-        print("EXPECTED =", generated_signature)
+        print("EXPECTED_1 =", gen_sig_1)
+        print("EXPECTED_2 =", gen_sig_2)
         print("RECEIVED =", data.razorpay_signature)
         raise HTTPException(status_code=400, detail="Payment verification failed")
 
