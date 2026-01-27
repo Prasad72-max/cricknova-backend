@@ -23,19 +23,29 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SAFE SPEED (robust, backend-truth only) ----------
-    String speed = "—";
+    // ---------- SAFE SPEED (supports exact & range) ----------
+    String speed = "CALCULATING";
+
     final dynamic rawSpeed =
         src["speed_kmph"] ??
         src["analysis"]?["speed_kmph"] ??
         src["speed"] ??
         src["speed_mph"];
 
-    if (rawSpeed is num && rawSpeed > 0) {
-      speed = src.containsKey("speed_mph")
-          ? (rawSpeed * 1.60934).toStringAsFixed(1)
-          : rawSpeed.toStringAsFixed(1);
-    } else if (rawSpeed is String) {
+    // Case 1: backend sends range {min, max}
+    if (rawSpeed is Map &&
+        rawSpeed["min"] is num &&
+        rawSpeed["max"] is num) {
+      final min = rawSpeed["min"].round();
+      final max = rawSpeed["max"].round();
+      speed = "$min–$max";
+    }
+    // Case 2: backend sends single number
+    else if (rawSpeed is num && rawSpeed > 0) {
+      speed = rawSpeed.toStringAsFixed(1);
+    }
+    // Case 3: backend sends string number
+    else if (rawSpeed is String) {
       final parsed = double.tryParse(rawSpeed);
       if (parsed != null && parsed > 0) {
         speed = parsed.toStringAsFixed(1);
@@ -82,7 +92,10 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _metric("Ball Speed", speed == "—" ? "—" : "$speed km/h"),
+          _metric(
+            "Ball Speed",
+            speed == "CALCULATING" ? "Calculating…" : "$speed km/h",
+          ),
           _metric("Swing", swing),
           _metric("Spin", spin),
           const SizedBox(height: 25),
