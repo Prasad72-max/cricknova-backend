@@ -2,11 +2,9 @@ import cv2 as cv
 import numpy as np
 import math
 
-DEFAULT_FPS = 30.0
-
-# Wider acceptance to show speed on more videos
-MIN_VALID_SPEED = 54     # kmph (lowest realistic cricket delivery)
-MAX_VALID_SPEED = 180    # kmph (elite fast bowling upper bound)
+# No hard speed validity limits – physics + confidence decide
+MIN_VALID_SPEED = None
+MAX_VALID_SPEED = None
 
 def filter_positions(ball_positions):
     """
@@ -120,17 +118,17 @@ def track_ball_positions(video_path):
 # --- Physics-based speed calculator ---
 def compute_speed_kmph(ball_positions, fps):
     """
-    Deterministic, physics-based speed estimation.
-    Always returns a single numeric speed in km/h.
-    No confidence words, no ranges.
+    Physics-based speed estimation from frame-to-frame motion.
+    Returns speed and confidence.
+    No scripted fallbacks or clamps.
     """
 
     # Fallback if tracking is insufficient
     if not ball_positions or len(ball_positions) < 4 or fps <= 1:
-        return int(MIN_VALID_SPEED + 20)  # safe realistic fallback
-
-    # Clamp FPS to realistic mobile video range
-    fps = max(24.0, min(60.0, fps))
+        return {
+            "speed_kmph": None,
+            "confidence": 0.0
+        }
 
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
@@ -139,7 +137,10 @@ def compute_speed_kmph(ball_positions, fps):
     # Detect pitch (max Y in camera space)
     pitch_idx = int(np.argmax(ys))
     if pitch_idx < 3:
-        return int(MIN_VALID_SPEED + 20)
+        return {
+            "speed_kmph": None,
+            "confidence": 0.0
+        }
 
     start = max(1, pitch_idx - 8)
     end = pitch_idx
@@ -165,7 +166,10 @@ def compute_speed_kmph(ball_positions, fps):
         times.append(df / fps)
 
     if len(distances) < 4:
-        return int(MIN_VALID_SPEED + 20)
+        return {
+            "speed_kmph": None,
+            "confidence": 0.0
+        }
 
     distances.sort()
     median_px = distances[len(distances) // 2]
@@ -175,12 +179,15 @@ def compute_speed_kmph(ball_positions, fps):
     meters_per_pixel = 20.12 / pitch_px
 
     speed_mps = (median_px * meters_per_pixel) / np.median(times)
+
     speed_kmph = speed_mps * 3.6
+    # Confidence based on number of clean distance samples
+    confidence = min(1.0, len(distances) / 6.0)
 
-    # Final hard clamp (physics only)
-    speed_kmph = max(MIN_VALID_SPEED, min(MAX_VALID_SPEED, speed_kmph))
-
-    return int(round(speed_kmph))
+    return {
+        "speed_kmph": round(float(speed_kmph), 1),
+        "confidence": round(confidence, 2)
+    }
 
 def compute_swing(ball_positions):
     """
@@ -188,7 +195,7 @@ def compute_swing(ball_positions):
     Returns: 'inswing', 'outswing', or 'none'
     """
     if not ball_positions or len(ball_positions) < 6:
-        return "none"
+        return {"swing": "none", "confidence": 0.0}
 
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
@@ -199,9 +206,14 @@ def compute_swing(ball_positions):
 
     dx = late_x - early_x
 
-    if abs(dx) < 6:
-        return "none"
-    return "inswing" if dx < 0 else "outswing"
+    if abs(dx) < 2:
+        return {"swing": "none", "confidence": 0.0}
+
+    confidence = min(1.0, abs(dx) / 12.0)
+    return {
+        "swing": "inswing" if dx < 0 else "outswing",
+        "confidence": round(confidence, 2)
+    }
 
 
 def compute_spin(ball_positions):
@@ -210,7 +222,7 @@ def compute_spin(ball_positions):
     Returns: 'off spin', 'leg spin', or 'none'
     """
     if not ball_positions or len(ball_positions) < 8:
-        return "none"
+        return {"spin": "none", "confidence": 0.0}
 
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
@@ -218,11 +230,16 @@ def compute_spin(ball_positions):
     # Look for sideways drift after bounce
     pitch_idx = int(np.argmax(ys))
     if pitch_idx >= len(xs) - 4:
-        return "none"
+        return {"spin": "none", "confidence": 0.0}
 
     post_x = xs[pitch_idx:]
     drift = post_x[-1] - post_x[0]
 
-    if abs(drift) < 5:
-        return "none"
-    return "off spin" if drift < 0 else "leg spin"
+    if abs(drift) < 2:
+        return {"spin": "none", "confidence": 0.0}
+
+    confidence = min(1.0, abs(drift) / 10.0)
+    return {
+        "spin": "off spin" if drift < 0 else "leg spin",
+        "confidence": round(confidence, 2)
+    }

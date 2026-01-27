@@ -49,7 +49,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     if len(last_time) > 12:
         last_time.pop(0)
 
-    speed_range = None
+    speed_value = None
+    speed_confidence = 0.0
 
     if len(last_pos) >= 6 and len(last_time) >= 6:
         # Use last 5 segments for stability
@@ -74,13 +75,10 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             speed_mps = avg_px_per_sec * meters_per_pixel
             speed_kmh_calc = speed_mps * 3.6
 
-            # Cricket-realistic envelope (physics-based, no confidence, no scripting)
-            if 60 <= speed_kmh_calc <= 165:
-                spread = max(6.0, speed_kmh_calc * 0.06)
-                speed_range = {
-                    "min": int(round(speed_kmh_calc - spread)),
-                    "max": int(round(speed_kmh_calc + spread))
-                }
+            # Confidence based on number of stable segments used
+            usable_segments = len(distances)
+            speed_confidence = min(1.0, usable_segments / 5.0)
+            speed_value = round(float(speed_kmh_calc), 1)
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -91,37 +89,33 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     else:
         swing_angle = 0
 
-    # -----------------------------
-    # NORMALIZED OUTPUT (ALWAYS VISIBLE IN UI)
-    # -----------------------------
-    speed_value = None
-    if speed_range:
-        speed_value = int((speed_range["min"] + speed_range["max"]) / 2)
-
-    # Swing direction (cricket-friendly)
-    if swing_angle > 6:
-        swing = "outswing"
-    elif swing_angle < -6:
-        swing = "inswing"
-    else:
+    if abs(swing_angle) < 1.5:
         swing = "none"
+    elif swing_angle > 0:
+        swing = "outswing"
+    else:
+        swing = "inswing"
 
-    # Simple spin inference (non-scripted, motion-based)
+    swing_confidence = min(1.0, len(last_pos) / 10.0)
+
     spin = "none"
+    spin_confidence = 0.0
     if len(last_pos) >= 8:
         x_changes = [last_pos[i+1][0] - last_pos[i][0] for i in range(len(last_pos)-1)]
         curve = sum(x_changes[-4:])
-        if curve > 6:
-            spin = "off spin"
-        elif curve < -6:
-            spin = "leg spin"
+        if abs(curve) > 2:
+            spin = "off spin" if curve > 0 else "leg spin"
+            spin_confidence = min(1.0, abs(curve) / 10.0)
 
     return {
         "found": True,
         "speed_kmph": speed_value,
+        "speed_confidence": round(speed_confidence, 2),
         "speed_type": "pre-pitch",
-        "speed_note": "Physics-based release speed",
+        "speed_note": "Frame-distance physics speed",
         "swing": swing,
+        "swing_confidence": round(swing_confidence, 2),
         "spin": spin,
+        "spin_confidence": round(spin_confidence, 2),
         "trajectory": last_pos
     }

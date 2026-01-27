@@ -31,6 +31,31 @@ class SwingDetector:
         angle = math.degrees(math.atan2(dy, dx))
         return angle
 
+    def _swing_confidence(self, positions, pitch_index):
+        """
+        Confidence based on smoothness and consistency of lateral deviation.
+        Returns value between 0.0 and 1.0
+        """
+        if pitch_index < 4 or pitch_index + 4 >= len(positions):
+            return 0.0
+
+        pre = positions[:pitch_index]
+        post = positions[pitch_index+1:]
+
+        def lateral_variance(seq):
+            xs = [p[0] for p in seq]
+            return np.var(xs) if len(xs) > 2 else 0.0
+
+        var_pre = lateral_variance(pre)
+        var_post = lateral_variance(post)
+
+        total_var = var_pre + var_post
+        if total_var == 0:
+            return 0.0
+
+        confidence = min(total_var / 150.0, 1.0)
+        return round(confidence, 2)
+
     def detect_swing(self, positions):
         """
         positions: list of (x, y) from ball_tracker.
@@ -51,6 +76,7 @@ class SwingDetector:
 
         # protect boundaries
         pitch_index = max(1, min(pitch_index, len(positions)-2))
+        confidence = self._swing_confidence(positions, pitch_index)
 
         # pre-bounce (frames before pitch)
         pre1 = positions[pitch_index - 2]
@@ -66,10 +92,8 @@ class SwingDetector:
 
         swing_angle = angle_post - angle_pre
 
-        # Clamp swing to realistic cricket range (-8° to +8°)
-        swing_angle = max(min(swing_angle, 8.0), -8.0)
-
-        return round(swing_angle, 2)
+        # No artificial clamping: return observed trajectory change
+        return float(round(swing_angle, 3))
 
 def calculate_swing(ball_positions):
     """
@@ -110,12 +134,8 @@ def classify_swing(swing_deg: float):
 
 def calculate_swing_full(ball_positions):
     """
-    Returns swing data without confidence or labels.
-    Output:
-    {
-        "swing": inswing / outswing / straight,
-        "swing_degree": float
-    }
+    Returns observed swing data based purely on trajectory physics.
+    No scripted limits. Includes confidence score.
     """
     detector = SwingDetector()
     swing_deg = detector.detect_swing(ball_positions)
@@ -126,7 +146,10 @@ def calculate_swing_full(ball_positions):
             "swing_degree": None
         }
 
+    confidence = detector._swing_confidence(ball_positions, len(ball_positions)//2)
+
     return {
         "swing": classify_swing(swing_deg),
-        "swing_degree": swing_deg
+        "swing_degree": swing_deg,
+        "confidence": confidence
     }

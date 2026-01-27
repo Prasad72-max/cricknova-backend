@@ -48,9 +48,11 @@ class _UploadScreenState extends State<UploadScreen> {
   bool uploading = false;
   bool showTrajectory = false;
 
-  double? speed;
-  String spin = "NA";
-  String swing = "NA";
+double? speed;
+Map<String, dynamic>? speedRange; // {min, max}
+double speedConfidence = 0.0;
+String spin = "NA";
+String swing = "NA";
 
   List<dynamic>? trajectory = const [];
 
@@ -151,6 +153,7 @@ class _UploadScreenState extends State<UploadScreen> {
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
+        speedRange = null;
       });
     }
 
@@ -188,9 +191,18 @@ class _UploadScreenState extends State<UploadScreen> {
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
-      // --- Speed extraction logic (strict, physics-only) ---
-      // --- Speed extraction logic (UI-safe, backend-compatible) ---
       double? extractedSpeed;
+      // Capture speed range if provided by backend
+      final dynamic rawRange = analysis["speed_kmph"];
+      Map<String, dynamic>? extractedRange;
+      if (rawRange is Map &&
+          rawRange["min"] is num &&
+          rawRange["max"] is num) {
+        extractedRange = {
+          "min": rawRange["min"],
+          "max": rawRange["max"],
+        };
+      }
 
       // Preferred: direct numeric value for UI
       final dynamic speedValue =
@@ -225,6 +237,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
       setState(() {
         speed = extractedSpeed;
+        speedRange = extractedRange;
 
         final swingVal = analysis["swing"];
         swing = (swingVal != null && swingVal.toString().isNotEmpty)
@@ -614,7 +627,11 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         _metric(
                           "Speed",
-                          speed != null ? "${speed!.round()} km/h" : "CALCULATING",
+                          speedRange != null
+                              ? "${speedRange!["min"]}-${speedRange!["max"]} km/h"
+                              : speed != null
+                                  ? "${speed!.round()} km/h"
+                                  : "CALCULATING",
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),

@@ -502,35 +502,6 @@ async def verify_payment(
 
 
 # -----------------------------
-# SPEED CALIBRATION (REALISTIC)
-# -----------------------------
-# Broadcast-calibrated factor to align with international speeds
-# Derived from comparison with Hawk-Eye / broadcast averages
-# Broadcast-calibrated factor to align with international speeds
-# Derived from comparison with Hawk-Eye / broadcast averages
-SPEED_CALIBRATION_FACTOR = 0.92
-
-import random
-
-def speed_range(speed_kmph: float | None):
-    """
-    Return realistic broadcast-style speed range (±6%).
-    No confidence, no scripting, physics-based spread.
-    """
-    if speed_kmph is None:
-        return None
-
-    low = speed_kmph * 0.94
-    high = speed_kmph * 1.06
-
-    low = max(54.0, min(low, 180.0))
-    high = max(54.0, min(high, 180.0))
-
-    return {
-        "min": int(round(low)),
-        "max": int(round(high))
-    }
-# -----------------------------
 # FIXED SWING (DEGREES)
 # -----------------------------
 def detect_swing_x(ball_positions):
@@ -662,12 +633,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:30]
 
         if len(ball_positions) < 5:
-            # Fallback realistic speed range when tracking is weak
-            fallback_speed = speed_range(120.0)
             return {
                 "status": "success",
-                "speed_kmph": fallback_speed,
-                "speed_value": int((fallback_speed["min"] + fallback_speed["max"]) / 2) if fallback_speed else 120,
+                "speed_kmph": None,
+                "speed_confidence": 0.0,
                 "swing": "unknown",
                 "spin": "none",
                 "trajectory": []
@@ -683,46 +652,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
-        def calculate_speed_kmph(ball_positions, fps):
-            if len(ball_positions) < 6 or fps <= 1:
-                fps = 30.0
-
-            # Normalize fps
-            fps = min(max(fps, 24), 60)
-
-            distances = []
-
-            # Use full visible trajectory (not only pre-pitch)
-            for i in range(1, len(ball_positions)):
-                x1, y1 = ball_positions[i - 1]
-                x2, y2 = ball_positions[i]
-                d = math.hypot(x2 - x1, y2 - y1)
-
-                # Relaxed but safe noise filter
-                if 1.0 < d < 45.0:
-                    distances.append(d)
-
-            if len(distances) < 4:
-                return None
-
-            # Robust median
-            median_px = float(np.median(distances))
-
-            # Estimate pitch pixel length
-            ys = [p[1] for p in ball_positions]
-            pitch_px = max(180.0, max(ys) - min(ys))
-
-            meters_per_pixel = 20.12 / pitch_px
-
-            speed_mps = median_px * meters_per_pixel * fps
-            speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
-
-            # Relaxed clamp – allow low-confidence speeds
-            if speed_kmph <= 0 or speed_kmph > 180:
-                return None
-
-            return round(speed_kmph, 1)
-
         # Extract reference frame for pitch detection
         reference_frame = None
         cap = cv2.VideoCapture(video_path)
@@ -736,17 +665,12 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 reference_frame = frame
             cap.release()
 
-        raw_speed = calculate_speed_kmph(ball_positions, video_fps)
+        from cricknova_engine.processing.speed import calculate_speed
+        speed_result = calculate_speed(ball_positions, fps=video_fps)
+        speed_kmph = speed_result.get("speed_kmph")
+        speed_confidence = speed_result.get("confidence", 0.0)
 
-        # ---- Physics-only speed (no scripting) ----
-        if raw_speed is not None and raw_speed > 0:
-            base_speed = round(float(raw_speed), 1)
-            speed_kmph = speed_range(base_speed)
-        else:
-            # Never return null speed – use realistic broadcast fallback
-            speed_kmph = speed_range(120.0)
-
-        print(f"[SPEED] raw={raw_speed}, final={speed_kmph}, fps={video_fps}, points={len(ball_positions)}")
+        print(f"[SPEED] speed_kmph={speed_kmph}, confidence={speed_confidence}, fps={video_fps}, points={len(ball_positions)}")
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -763,7 +687,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_value": int((speed_kmph["min"] + speed_kmph["max"]) / 2) if speed_kmph else 120,
+            "speed_confidence": speed_confidence,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1160,11 +1084,10 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:30]
 
         if len(ball_positions) < 5:
-            fallback_speed = speed_range(120.0)
             return {
                 "status": "success",
-                "speed_kmph": fallback_speed,
-                "speed_value": int((fallback_speed["min"] + fallback_speed["max"]) / 2) if fallback_speed else 120,
+                "speed_kmph": None,
+                "speed_confidence": 0.0,
                 "swing": "unknown",
                 "spin": "none",
                 "trajectory": []
@@ -1179,29 +1102,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
-        def calculate_speed_kmph(ball_positions, fps):
-            distances = []
-            for i in range(1, len(ball_positions)):
-                x1, y1 = ball_positions[i - 1]
-                x2, y2 = ball_positions[i]
-                d = math.hypot(x2 - x1, y2 - y1)
-                if 1.0 < d < 40.0:
-                    distances.append(d)
+        from cricknova_engine.processing.speed import calculate_speed
+        speed_result = calculate_speed(ball_positions, fps=fps)
+        speed_kmph = speed_result.get("speed_kmph")
+        speed_confidence = speed_result.get("confidence", 0.0)
 
-            if len(distances) < 4:
-                return None
-
-            median_px = float(np.median(distances))
-            ys = [p[1] for p in ball_positions]
-            pitch_px = max(200.0, np.percentile(ys, 90) - np.percentile(ys, 10))
-            meters_per_pixel = 20.12 / pitch_px
-            speed_kmph = median_px * meters_per_pixel * fps * 3.6 * SPEED_CALIBRATION_FACTOR
-
-            return round(speed_kmph, 1)
-
-        raw_speed = calculate_speed_kmph(ball_positions, fps)
-        # Do NOT script speed. Use None when speed is not reliably detected.
-        speed_kmph = speed_range(round(raw_speed, 1)) if raw_speed is not None else speed_range(120.0)
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
         trajectory = []
@@ -1216,7 +1121,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_value": int((speed_kmph["min"] + speed_kmph["max"]) / 2) if speed_kmph else 120,
+            "speed_confidence": speed_confidence,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []

@@ -6,8 +6,9 @@ import cv2
 # -----------------------------
 # CONFIG
 # -----------------------------
-MAX_SPEED = 158.0
-MIN_SPEED = 60.0
+# No hard speed clamps – physics decides
+MAX_SPEED = None
+MIN_SPEED = None
 PITCH_LENGTH_METERS = 20.12
 PITCH_WIDTH_METERS = 3.05
 
@@ -36,7 +37,8 @@ def calculate_speed_pro(
     ball_type="leather"
 ):
     """
-    Calculates release speed using Homography for 'Behind the Bowler' views.
+    Calculates release speed from frame-to-frame distance over time.
+    Returns confidence based on usable tracking frames.
     ball_positions: list of (x, y) pixel coordinates per frame (ordered in time).
     pitch_corners: 4 pitch corner points in image pixels.
     fps: frames per second of the video.
@@ -74,13 +76,14 @@ def calculate_speed_pro(
         else:
             avg_px = np.mean(pixel_dists)
             fps = max(15, fps)
-            base = avg_px * fps * 0.045  # calibrated px→km/h factor
+            # Pixel-only fallback (low confidence)
+            base = avg_px * fps
 
-        base = max(MIN_SPEED, min(base, MAX_SPEED))
         return {
             "speed_kmph": round(float(base), 1),
             "speed_type": "pre-pitch",
-            "speed_note": "Pixel-calibrated release speed"
+            "confidence": 0.25,
+            "speed_note": "Pixel-only speed (low confidence)"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -120,6 +123,7 @@ def calculate_speed_pro(
     upper = Q3 + 1.2 * iqr
 
     clean_distances = distances[(distances >= lower) & (distances <= upper)]
+    confidence = min(1.0, len(clean_distances) / max(len(distances), 1))
     if len(clean_distances) < 2:
         clean_distances = distances
 
@@ -147,26 +151,9 @@ def calculate_speed_pro(
     # Use median of window speeds to avoid spikes
     raw_kmph = float(np.median(speed_estimates))
 
-    # 7. Realistic Physics Compensation
-    # Behind-the-bowler views often miss some vertical component
-    # Dynamic angle correction (short clips need more compensation)
-    clip_factor = 1.0 + min(0.08, 5 / max(len(ball_positions), 5))
-    angle_correction = 1.02 * clip_factor
+    # Pure physics: distance / time only
+    final_kmph = raw_kmph
 
-    # Air resistance / ball type adjustment
-    ball_factor_map = {
-        "leather": 1.0,
-        "tennis": 0.85,
-        "rubber": 0.78
-    }
-    ball_factor = ball_factor_map.get(ball_type.lower(), 1.0)
-
-    final_kmph = raw_kmph * angle_correction * ball_factor
-
-    final_kmph = min(final_kmph, MAX_SPEED)
-
-
-    final_kmph = max(MIN_SPEED, min(final_kmph, MAX_SPEED))
 
     if final_kmph <= 0 or math.isnan(final_kmph):
         return {
@@ -183,7 +170,8 @@ def calculate_speed_pro(
     return {
         "speed_kmph": final_kmph,
         "speed_type": "pre-pitch",
-        "speed_note": "Pre-pitch release speed, physics calibrated"
+        "confidence": round(confidence, 2),
+        "speed_note": "Frame-distance physics speed"
     }
 
 

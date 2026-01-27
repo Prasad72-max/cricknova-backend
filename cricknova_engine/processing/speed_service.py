@@ -3,10 +3,10 @@ from .speed import BallSpeedCalculator
 
 def estimate_speed(video_path):
     """
-    Physics-based ball speed estimation.
-    - No confidence flags
-    - No hype or scripted logic
-    - Always returns a single realistic speed value (km/h)
+    Physics-based ball speed estimation from video frames.
+    - No scripted limits or fake realism
+    - Returns speed with confidence when available
+    - Honest fallback when tracking is insufficient
     """
 
     tracker = BallTracker()
@@ -15,33 +15,30 @@ def estimate_speed(video_path):
 
     positions = tracker.track_ball(video_path)
 
-    # Hard fallback if tracking fails
-    DEFAULT_SPEED = 110  # km/h
-
     if not positions or len(positions) < 6:
         return {
-            "speed_kmph": 110,
+            "speed_kmph": None,
             "speed_type": "pre-pitch",
-            "speed_note": "Short clip fallback, physics bounded"
+            "confidence": 0.0,
+            "speed_note": "Insufficient frames for physics-based speed"
         }
 
     base_speed = speed_calc.calculate_speed(positions)
 
     if base_speed is None:
         return {
-            "speed_kmph": 110,
+            "speed_kmph": None,
             "speed_type": "pre-pitch",
-            "speed_note": "Tracking incomplete, physics fallback"
+            "confidence": 0.0,
+            "speed_note": "Tracking incomplete, speed not reliable"
         }
 
-    # Clamp to realistic cricket limits
-    MIN_KMH = 80
-    MAX_KMH = 155
-
-    base_speed = max(MIN_KMH, min(MAX_KMH, base_speed))
+    if isinstance(base_speed, dict):
+        return base_speed
 
     return {
-        "speed_kmph": int(base_speed),
+        "speed_kmph": round(float(base_speed), 1),
         "speed_type": "pre-pitch",
-        "speed_note": "Release speed, physics calibrated"
+        "confidence": 1.0,
+        "speed_note": "Physics-based speed (confidence assumed high)"
     }

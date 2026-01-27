@@ -6,7 +6,7 @@ PHYSICS-ONLY SPIN ESTIMATION FROM VIDEO TRAJECTORY
 - Fully data-driven (no scripted or forced values)
 - Uses real post-bounce trajectory deviation
 - Camera-aware lateral movement only
-- Returns NONE when spin is not physically reliable
+- Returns NONE or low confidence when spin is not physically reliable
 """
 
 def calculate_spin(ball_positions, fps=30):
@@ -16,7 +16,8 @@ def calculate_spin(ball_positions, fps=30):
     empty_result = {
         "type": "none",
         "name": "none",
-        "spin_degree": None
+        "spin_degree": None,
+        "confidence": 0.0
     }
 
     if not ball_positions or len(ball_positions) < 8:
@@ -55,8 +56,15 @@ def calculate_spin(ball_positions, fps=30):
     if turn_deg < 0.1:
         return empty_result
 
-    # Hard clamp: mobile single-camera cannot exceed this
-    turn_deg = min(turn_deg, 8.0)
+    # Confidence based on smoothness of post-bounce lateral movement
+    post_x_arr = np.array(post_x)
+    lateral_deltas = np.diff(post_x_arr)
+
+    if len(lateral_deltas) < 2:
+        confidence = 0.0
+    else:
+        variance = np.var(lateral_deltas)
+        confidence = max(0.0, min(1.0, 1.0 - (variance / 25.0)))
 
     # Spin direction based purely on post-bounce lateral movement
     # Positive X movement (to the right on screen) -> leg-spin
@@ -69,5 +77,6 @@ def calculate_spin(ball_positions, fps=30):
     return {
         "type": "spin",
         "name": spin_name.replace("-", " "),
-        "spin_degree": round(turn_deg, 2)
+        "spin_degree": round(turn_deg, 2),
+        "confidence": round(confidence, 2)
     }
