@@ -20,6 +20,17 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<String> trainingVideos = [];
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    PremiumService.premiumNotifier.addListener(_onPremiumChanged);
+  }
+
+  void _onPremiumChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
 
   @override
   void initState() {
@@ -517,5 +528,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+  @override
+  void dispose() {
+    PremiumService.premiumNotifier.removeListener(_onPremiumChanged);
+    super.dispose();
   }
 }

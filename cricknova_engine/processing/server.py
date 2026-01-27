@@ -3,13 +3,14 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 import math
+import time
 
 app = FastAPI()
 
 model = YOLO("yolo11n.pt")  # cricket ball trained model
 
-# Convert pixels to meters correctly
-PIXEL_TO_METER = 0.0021  # (adjust after calibration)
+# Realistic pitch-based scaling (22 yards ≈ 20.12 meters)
+PITCH_LENGTH_METERS = 20.12
 
 
 @app.post("/analyze_live_frame")
@@ -39,13 +40,50 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     if len(last_pos) > 12:
         last_pos.pop(0)
 
-    # SPEED CALCULATION
-    speed_kmh = 0
-    if len(last_pos) > 2:
-        dist_pixels = math.dist(last_pos[-1], last_pos[-2])
-        dist_meters = dist_pixels * PIXEL_TO_METER
-        speed_mps = dist_meters * 30  # 30 FPS
-        speed_kmh = speed_mps * 3.6
+    # -----------------------------
+    # REAL PHYSICS SPEED (NON-SCRIPTED)
+    # -----------------------------
+    global last_time
+    if "last_time" not in globals():
+        last_time = []
+
+    now = time.time()
+    last_time.append(now)
+    if len(last_time) > 12:
+        last_time.pop(0)
+
+    speed_range = None
+
+    if len(last_pos) >= 6 and len(last_time) >= 6:
+        # Use last 5 segments for stability
+        distances = []
+        times = []
+
+        for i in range(-5, -1):
+            d_px = math.dist(last_pos[i], last_pos[i + 1])
+            dt = last_time[i + 1] - last_time[i]
+            if dt > 0:
+                distances.append(d_px)
+                times.append(dt)
+
+        if distances and times:
+            avg_px_per_sec = (sum(distances) / sum(times))
+
+            # Estimate pitch pixel length dynamically
+            ys = [p[1] for p in last_pos]
+            pitch_px = max(200.0, max(ys) - min(ys))
+            meters_per_pixel = PITCH_LENGTH_METERS / pitch_px
+
+            speed_mps = avg_px_per_sec * meters_per_pixel
+            speed_kmh_calc = speed_mps * 3.6
+
+            # Cricket-realistic envelope (physics-based, no confidence, no scripting)
+            if 60 <= speed_kmh_calc <= 165:
+                spread = max(6.0, speed_kmh_calc * 0.06)
+                speed_range = {
+                    "min": int(round(speed_kmh_calc - spread)),
+                    "max": int(round(speed_kmh_calc + spread))
+                }
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -58,7 +96,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
     return {
         "found": True,
-        "speed_kmh": round(speed_kmh, 2),
+        "speed_kmph": speed_range,
         "swing_angle": round(swing_angle, 2),
         "path": last_pos
     }

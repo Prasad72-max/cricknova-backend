@@ -83,19 +83,12 @@ def calculate_ball_speed_kmph(positions, fps):
     if not positions or fps <= 0:
         return None
 
-    # allow low-confidence fallback with fewer points
-    low_confidence = False
-    if len(positions) < 4:
-        low_confidence = True
-
     dt = 1.0 / fps
     velocities = []
 
-    # --- PHYSICS-BASED PIXEL TO METER SCALING ---
     # Cricket ball diameter ≈ 0.072 m
     BALL_DIAMETER_M = 0.072
 
-    # Estimate pixel diameter from motion blur span
     xs = [p[0] for p in positions]
     ys = [p[1] for p in positions]
 
@@ -105,12 +98,10 @@ def calculate_ball_speed_kmph(positions, fps):
         1
     )
 
-    # Empirical: visible ball usually travels 18–22 ball diameters in clear clips
-    pixels_per_meter = span_pixels / (20 * BALL_DIAMETER_M)
-
+    # More tolerant empirical scaling
+    pixels_per_meter = span_pixels / (18 * BALL_DIAMETER_M)
     meters_per_pixel = 1.0 / pixels_per_meter
 
-    # --- FRAME-TO-FRAME VELOCITY ---
     for i in range(1, len(positions)):
         x0, y0 = positions[i - 1]
         x1, y1 = positions[i]
@@ -118,35 +109,26 @@ def calculate_ball_speed_kmph(positions, fps):
         pixel_dist = math.hypot(x1 - x0, y1 - y0)
         speed_mps = (pixel_dist * meters_per_pixel) / dt
 
-        if 10 <= speed_mps <= 50:  # allow low-end speeds for estimation
+        # Wide physics-safe bounds
+        if 6 <= speed_mps <= 55:
             velocities.append(speed_mps)
 
-    if len(velocities) < 2:
+    if not velocities:
         return None
 
-    # --- ROBUST STATISTICS ---
     velocities.sort()
-    q1 = velocities[len(velocities) // 4]
-    q3 = velocities[(3 * len(velocities)) // 4]
-    iqr = q3 - q1
 
-    filtered = [
-        v for v in velocities
-        if (q1 - 1.5 * iqr) <= v <= (q3 + 1.5 * iqr)
-    ]
+    # Robust median-based estimate
+    mid = len(velocities) // 2
+    if len(velocities) >= 3:
+        core = velocities[max(0, mid - 1): min(len(velocities), mid + 2)]
+    else:
+        core = velocities
 
-    if not filtered:
-        filtered = velocities
-
-    final_speed_mps = sum(filtered) / len(filtered)
+    final_speed_mps = sum(core) / len(core)
     final_speed_kmph = final_speed_mps * 3.6
 
-    # --- BROADCAST-STYLE REALISTIC VARIATION ---
-    # Apply small human/broadcast fluctuation (±6–7%)
-    variation_pct = np.random.uniform(-0.06, 0.06)
-    display_speed = final_speed_kmph * (1.0 + variation_pct)
+    # Realistic cricket speed window
+    final_speed_kmph = max(65.0, min(final_speed_kmph, 160.0))
 
-    # Hard clamp to realistic cricket limits
-    display_speed = max(54.0, min(display_speed, 180.0))
-
-    return round(display_speed, 1)
+    return round(final_speed_kmph, 1)

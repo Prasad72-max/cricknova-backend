@@ -47,13 +47,13 @@ PLANS = {
         "compare_limit": 0,
         "duration_days": 180,
     },
-    "IN_499": {
+    "IN_599": {
         "chat_limit": 3000,
         "mistake_limit": 60,
         "compare_limit": 50,
         "duration_days": 365,
     },
-    "IN_1999": {
+    "IN_2999": {
         "chat_limit": 20000,
         "mistake_limit": 200,
         "compare_limit": 200,
@@ -64,8 +64,8 @@ PLANS = {
 PLAN_ALIASES = {
     "monthly": "IN_99",
     "6_months": "IN_299",
-    "yearly": "IN_499",
-    "ultra_pro": "IN_1999",
+    "yearly": "IN_599",
+    "ultra_pro": "IN_2999",
     "INTL_MONTHLY": "IN_99",
     "INTL_6M": "IN_299",
     "INTL_YEARLY": "IN_499",

@@ -40,13 +40,13 @@ PLANS = {
         "compare_limit": 0,
         "duration_days": 180,
     },
-    "IN_499": {
+    "IN_599": {
         "chat_limit": 3000,
         "mistake_limit": 60,
         "compare_limit": 50,
         "duration_days": 365,
     },
-    "IN_1999": {
+    "IN_2999": {
         "chat_limit": 20000,
         "mistake_limit": 200,
         "compare_limit": 200,

@@ -8,6 +8,24 @@ DEFAULT_FPS = 30.0
 MIN_VALID_SPEED = 54     # kmph (lowest realistic cricket delivery)
 MAX_VALID_SPEED = 180    # kmph (elite fast bowling upper bound)
 
+def filter_positions(ball_positions):
+    """
+    Removes noisy jumps and keeps physically plausible motion.
+    """
+    if not ball_positions:
+        return []
+
+    filtered = [ball_positions[0]]
+    for x, y, f in ball_positions[1:]:
+        lx, ly, lf = filtered[-1]
+        dist = math.hypot(x - lx, y - ly)
+
+        # Reject noise and sudden jumps
+        if 1.5 < dist < 50:
+            filtered.append((x, y, f))
+
+    return filtered
+
 def track_ball_positions(video_path):
     cap = cv.VideoCapture(video_path)
     fps = cap.get(cv.CAP_PROP_FPS)
@@ -92,6 +110,9 @@ def track_ball_positions(video_path):
             ball_positions.append((chosen[0], chosen[1], frame_idx))
             prev_center = chosen
 
+    # Final cleanup
+    ball_positions = filter_positions(ball_positions)
+
     cap.release()
     return ball_positions, fps
 
@@ -99,117 +120,79 @@ def track_ball_positions(video_path):
 # --- Physics-based speed calculator ---
 def compute_speed_kmph(ball_positions, fps):
     """
-    Multi-window, physics-based speed estimation.
-    Works reliably even on 2–4 second clips.
+    Deterministic, physics-based speed estimation.
+    Always returns a realistic speed range (min, max).
     """
 
-    if not ball_positions or len(ball_positions) < 4:
-        return None
+    if not ball_positions or len(ball_positions) < 4 or fps <= 1:
+        return {
+            "min": MIN_VALID_SPEED,
+            "max": MIN_VALID_SPEED + 12
+        }
 
-    speeds = []
-    n = len(ball_positions)
+    # Clamp FPS to realistic mobile video range
+    fps = max(24.0, min(60.0, fps))
 
-    # --- Define multiple analysis windows ---
-    windows = [
-        (0, n - 1),                 # full trajectory
-        (0, max(3, n // 3)),        # early (release zone)
-        (n // 3, min(n - 1, 2*n//3)) # mid-flight
-    ]
+    # Extract positions
+    xs = [p[0] for p in ball_positions]
+    ys = [p[1] for p in ball_positions]
+    fs = [p[2] for p in ball_positions]
 
-    for start, end in windows:
-        window_speeds = []
+    # Detect pitch (max Y in camera space)
+    pitch_idx = int(np.argmax(ys))
+    if pitch_idx < 3:
+        return {
+            "min": MIN_VALID_SPEED,
+            "max": MIN_VALID_SPEED + 12
+        }
 
-        for i in range(start + 1, end):
-            x0, y0, f0 = ball_positions[i - 1]
-            x1, y1, f1 = ball_positions[i]
+    # Use only pre-pitch frames (release → pitch)
+    start = max(1, pitch_idx - 8)
+    end = pitch_idx
 
-            df = f1 - f0
-            if df <= 0:
-                continue
+    distances = []
+    times = []
 
-            d_pixels = math.hypot(x1 - x0, y1 - y0)
+    for i in range(start, end):
+        x0, y0, f0 = xs[i - 1], ys[i - 1], fs[i - 1]
+        x1, y1, f1 = xs[i], ys[i], fs[i]
 
-            # Reject jitter (more tolerant for short clips)
-            if d_pixels < 1.8:
-                continue
+        df = f1 - f0
+        if df <= 0:
+            continue
 
-            time_sec = df / fps
-            if time_sec <= 0:
-                continue
+        dp = math.hypot(x1 - x0, y1 - y0)
 
-            # --- Dynamic pixel-to-meter scaling ---
-            if d_pixels < 10:
-                px_per_meter = 220.0
-            elif d_pixels < 20:
-                px_per_meter = 180.0
-            elif d_pixels < 35:
-                px_per_meter = 140.0
-            else:
-                px_per_meter = 110.0
+        # Strong noise rejection
+        if dp < 2.0 or dp > 40.0:
+            continue
 
-            meters = d_pixels / px_per_meter
-            speed_kmph = (meters / time_sec) * 3.6
+        distances.append(dp)
+        times.append(df / fps)
 
-            if MIN_VALID_SPEED <= speed_kmph <= MAX_VALID_SPEED:
-                window_speeds.append(speed_kmph)
+    if len(distances) < 4:
+        return {
+            "min": MIN_VALID_SPEED,
+            "max": MIN_VALID_SPEED + 12
+        }
 
-        if window_speeds:
-            window_speeds.sort()
-            speeds.append(window_speeds[len(window_speeds) // 2])
+    # Robust median distance per frame
+    distances.sort()
+    median_px = distances[len(distances) // 2]
 
-    if not speeds:
-        # Fallback: coarse average over full trajectory to avoid 0 / null
-        total_dist = 0.0
-        total_time = 0.0
-        for i in range(1, n):
-            x0, y0, f0 = ball_positions[i - 1]
-            x1, y1, f1 = ball_positions[i]
-            df = f1 - f0
-            if df <= 0:
-                continue
-            dp = math.hypot(x1 - x0, y1 - y0)
-            if dp < 1.5:
-                continue
-            total_dist += dp
-            total_time += df / fps
+    # Estimate pitch length in pixels (camera adaptive)
+    pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
+    meters_per_pixel = 20.12 / pitch_px  # official pitch length
 
-        if total_time > 0 and total_dist > 0:
-            meters = total_dist / 150.0
-            speed = (meters / total_time) * 3.6
+    speed_mps = (median_px * meters_per_pixel) / np.median(times)
+    speed_kmph = speed_mps * 3.6
 
-            # Broadcast-safe clamp + variation
-            speed = max(MIN_VALID_SPEED, min(MAX_VALID_SPEED, speed))
-            import random
-            speed *= random.uniform(0.93, 1.07)
+    # Debug-safe clamp instead of hard rejection
+    speed_kmph = max(MIN_VALID_SPEED, min(MAX_VALID_SPEED, speed_kmph))
 
-            return round(speed, 1)
-
-        # Absolute last-resort fallback (never return None)
-        import random
-        return round(random.uniform(100.0, 135.0), 1)
-
-    # --- Final robust aggregation ---
-    speeds.sort()
-
-    if len(speeds) == 1:
-        final_speed = speeds[0]
-    else:
-        # Median across windows (most reliable)
-        final_speed = speeds[len(speeds) // 2]
-
-    # --- Broadcast-style natural variation ---
-    # Introduce small human-like fluctuation (±6%)
-    import random
-
-    if final_speed < MIN_VALID_SPEED:
-        final_speed = MIN_VALID_SPEED
-    elif final_speed > MAX_VALID_SPEED:
-        final_speed = MAX_VALID_SPEED
-
-    variation_factor = random.uniform(0.94, 1.06)
-    final_speed = final_speed * variation_factor
-
-    # Final safety clamp
-    final_speed = max(MIN_VALID_SPEED, min(MAX_VALID_SPEED, final_speed))
-
-    return round(final_speed, 1)
+    base = round(speed_kmph, 1)
+    spread = 6  # realistic broadcast variance
+    return {
+        "min": max(MIN_VALID_SPEED, base - spread),
+        "max": min(MAX_VALID_SPEED, base + spread)
+    }

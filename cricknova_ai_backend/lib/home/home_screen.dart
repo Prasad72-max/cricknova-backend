@@ -155,7 +155,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         PremiumService.showPaywall(
                           context,
                           source: 'analyse',
-                          allowedPlans: ['IN_499', 'IN_1999'],
+                          allowedPlans: ['IN_599', 'IN_2999'],
                         );
                         return;
                       }

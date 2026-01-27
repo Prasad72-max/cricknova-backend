@@ -122,16 +122,16 @@ def verify_payment(payload: VerifyPaymentRequest, request: Request):
         PLAN_MAP = {
             "IN_99": "IN_99",
             "IN_299": "IN_299",
-            "IN_499": "IN_499",
-            "IN_1999": "IN_1999",
+            "IN_599": "IN_599",
+            "IN_2999": "IN_2999",
             "monthly": "IN_99",
             "6_months": "IN_299",
-            "yearly": "IN_499",
-            "ultra_pro": "IN_1999",
+            "yearly": "IN_599",
+            "ultra_pro": "IN_2999",
             "99": "IN_99",
             "299": "IN_299",
-            "499": "IN_499",
-            "1999": "IN_1999",
+            "599": "IN_599",
+            "2999": "IN_2999",
         }
 
         backend_plan = PLAN_MAP.get(payload.plan)

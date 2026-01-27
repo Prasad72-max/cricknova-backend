@@ -21,11 +21,11 @@ PLAN_LIMITS = {
         "compare_limit": 0,
         "duration_days": 180,
     },
-    "IN_499": {
+    "IN_599": {
         "compare_limit": 50,
         "duration_days": 365,
     },
-    "IN_1999": {
+    "IN_2999": {
         "compare_limit": 200,
         "duration_days": 365,
     },

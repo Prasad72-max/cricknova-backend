@@ -67,15 +67,15 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   }
 
   Future<void> runCompare() async {
-    // 🔒 Compare feature allowed ONLY for IN_499 and IN_1999
+    // 🔒 Compare feature allowed ONLY for IN_599 and IN_2999
     if (!PremiumService.isLoaded ||
         !PremiumService.isPremium ||
-        (PremiumService.plan != "IN_499" && PremiumService.plan != "IN_1999")) {
+        (PremiumService.plan != "IN_599" && PremiumService.plan != "IN_2999")) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              "🔒 Analyse Yourself is available in ₹499 / ₹1999 plans.",
+              "🔒 Analyse Yourself is available in ₹599 / ₹2999 plans.",
             ),
             backgroundColor: Colors.black87,
           ),

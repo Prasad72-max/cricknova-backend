@@ -159,10 +159,10 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         ? "IN_99"
         : _lastPlanPrice == "₹299"
             ? "IN_299"
-            : _lastPlanPrice == "₹499"
-                ? "IN_499"
-                : _lastPlanPrice == "₹1999"
-                    ? "IN_1999"
+            : _lastPlanPrice == "₹599"
+                ? "IN_599"
+                : _lastPlanPrice == "₹2999"
+                    ? "IN_2999"
                     : null;
     if (planCode == null) {
       throw Exception("Invalid plan selected");
@@ -660,7 +660,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "Yearly",
-        price: "₹499",
+        price: "₹599",
         tag: "Best Value 💎",
         glowColor: Colors.greenAccent,
         features: [
@@ -674,7 +674,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "ULTRA PRO",
-        price: "₹1999",
+        price: "₹2999",
         tag: "Elite Access 👑",
         glowColor: Colors.redAccent,
         features: [
@@ -693,7 +693,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     return [
       sexyPlanCard(
         title: "Yearly",
-        price: "₹499",
+        price: "₹599",
         tag: "Analyse Pro 🎯",
         glowColor: Colors.greenAccent,
         features: [
@@ -706,7 +706,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "ULTRA PRO",
-        price: "₹1999",
+        price: "₹2999",
         tag: "Unlimited Analysis 🚀",
         glowColor: Colors.redAccent,
         features: [
@@ -949,6 +949,3 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     );
   }
 }
-
-
-

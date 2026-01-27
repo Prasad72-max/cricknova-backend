@@ -108,10 +108,10 @@ class PremiumService {
         case "IN_299":
           await _cache(true, planId, 1200, 30, 0);
           break;
-        case "IN_499":
+        case "IN_599":
           await _cache(true, planId, 3000, 60, 50);
           break;
-        case "IN_1999":
+        case "IN_2999":
           await _cache(true, planId, 20000, 200, 200);
           break;
         default:

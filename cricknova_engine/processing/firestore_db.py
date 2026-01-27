@@ -59,8 +59,8 @@ def init_firebase_admin():
 PLAN_LIMITS = {
     "IN_99":   {"chat": 200,   "mistake": 15,  "compare": 0,   "days": 30},
     "IN_299":  {"chat": 1200,  "mistake": 30,  "compare": 0,   "days": 180},
-    "IN_499":  {"chat": 3000,  "mistake": 60,  "compare": 50,  "days": 365},
-    "IN_1999": {"chat": 20000, "mistake": 200, "compare": 200, "days": 365},
+    "IN_599":  {"chat": 3000,  "mistake": 60,  "compare": 50,  "days": 365},
+    "IN_2999": {"chat": 20000, "mistake": 200, "compare": 200, "days": 365},
 }
 
 

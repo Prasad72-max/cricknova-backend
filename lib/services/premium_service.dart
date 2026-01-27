@@ -143,10 +143,10 @@ class PremiumService {
         case "IN_299":
           await _cache(firestorePremium, planId, 1200, 30, 0);
           break;
-        case "IN_499":
+        case "IN_599":
           await _cache(firestorePremium, planId, 3000, 60, 50);
           break;
-        case "IN_1999":
+        case "IN_2999":
           await _cache(firestorePremium, planId, 20000, 200, 200);
           break;
         default:
@@ -237,13 +237,13 @@ class PremiumService {
       case "IN_299":
         normalizedPlan = "IN_299";
         break;
-      case "499":
-      case "IN_499":
-        normalizedPlan = "IN_499";
+      case "599":
+      case "IN_599":
+        normalizedPlan = "IN_599";
         break;
-      case "1999":
-      case "IN_1999":
-        normalizedPlan = "IN_1999";
+      case "2999":
+      case "IN_2999":
+        normalizedPlan = "IN_2999";
         break;
       default:
         throw Exception("Invalid plan selected: $plan");
@@ -321,6 +321,19 @@ class PremiumService {
   // -----------------------------
   // ACCESS GUARDS (SINGLE TRUTH)
   // -----------------------------
+  // -----------------------------
+  // 🔄 FORCE USAGE SYNC AFTER EVERY AI USE
+  // -----------------------------
+  static Future<void> syncAfterUsage() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Re-fetch latest usage + limits from Firestore
+    await loadPremiumFromUid(user.uid);
+
+    // Notify UI listeners immediately
+    premiumNotifier.notifyListeners();
+  }
   static bool canChat() {
     if (!isLoaded) return true;
     return isPremium && chatUsed < chatLimit;
@@ -363,6 +376,7 @@ class PremiumService {
         "updatedAt": FieldValue.serverTimestamp(),
       });
     }
+    await syncAfterUsage();
   }
 
   // -----------------------------
@@ -395,6 +409,7 @@ class PremiumService {
         "updatedAt": FieldValue.serverTimestamp(),
       });
     }
+    await syncAfterUsage();
   }
 
   // -----------------------------
@@ -421,6 +436,7 @@ class PremiumService {
         "updatedAt": FieldValue.serverTimestamp(),
       });
     }
+    await syncAfterUsage();
   }
   // -----------------------------
   // PAYWALL HELPER
@@ -551,6 +567,8 @@ class PremiumService {
 
     // ✅ Sync premium from backend / Firestore
     await syncFromBackend(userId);
+    // 🔥 Force instant UI update after PayPal payment
+    await refresh();
   }
 
   // -----------------------------
@@ -587,5 +605,7 @@ class PremiumService {
 
     // 🔥 Sync premium state after successful capture
     await syncFromBackend(user.uid);
+    // 🔥 Force instant UI update after PayPal return
+    await refresh();
   }
 }
