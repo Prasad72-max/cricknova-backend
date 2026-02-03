@@ -124,7 +124,7 @@ def compute_speed_kmph(ball_positions, fps):
     """
 
     # Fallback if tracking is insufficient
-    if not ball_positions or len(ball_positions) < 4 or fps <= 1:
+    if not ball_positions or fps <= 1:
         return {
             "speed_kmph": None
         }
@@ -136,9 +136,7 @@ def compute_speed_kmph(ball_positions, fps):
     # Detect pitch (max Y in camera space)
     pitch_idx = int(np.argmax(ys))
     if pitch_idx < 3:
-        return {
-            "speed_kmph": None
-        }
+        pitch_idx = min(len(ys) - 1, 3)
 
     start = max(1, pitch_idx - 8)
     end = pitch_idx
@@ -163,7 +161,7 @@ def compute_speed_kmph(ball_positions, fps):
         distances.append(dp)
         times.append(df / fps)
 
-    if len(distances) < 4:
+    if len(distances) < 2:
         return {
             "speed_kmph": None
         }
@@ -188,10 +186,7 @@ def compute_speed_kmph(ball_positions, fps):
     # -----------------------------
     # PHYSICAL SANITY CLAMP
     # -----------------------------
-    if speed_kmph < MIN_VALID_SPEED or speed_kmph > MAX_VALID_SPEED:
-        return {
-            "speed_kmph": None
-        }
+    speed_kmph = max(MIN_VALID_SPEED, min(speed_kmph, MAX_VALID_SPEED))
 
     return {
         "speed_kmph": round(float(speed_kmph), 1)

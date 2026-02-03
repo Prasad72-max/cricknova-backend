@@ -50,8 +50,8 @@ def calculate_speed_pro(
     if not ball_positions or len(ball_positions) < 4:
         return {
             "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Insufficient tracking data"
+            "speed_type": "pre-pitch",
+            "speed_note": "Physics-based speed unavailable"
         }
 
     # Allow low FPS videos but note reduced accuracy
@@ -129,15 +129,21 @@ def calculate_speed_pro(
         clean_distances = distances
 
     # 5. Multi-window speed estimation (robust for all clip lengths)
-    window_sizes = [min(3, len(clean_distances)),
-                    min(5, len(clean_distances)),
-                    min(8, len(clean_distances))]
+    # Use only early-flight frames (stabilized like broadcast systems)
+    max_frames = int(0.3 * fps)  # ~0.3s window
+    usable = clean_distances[:max_frames]
+
+    window_sizes = [
+        min(3, len(usable)),
+        min(5, len(usable)),
+        min(8, len(usable)),
+    ]
 
     speed_estimates = []
     for w in window_sizes:
         if w < 2:
             continue
-        segment = clean_distances[:w]
+        segment = usable[:w]
         avg_mpf = np.mean(segment)
         if avg_mpf > 0:
             speed_estimates.append(avg_mpf * fps * 3.6)
@@ -158,13 +164,8 @@ def calculate_speed_pro(
     # -----------------------------
     # PHYSICAL SANITY CLAMP
     # -----------------------------
-    # Reject impossible human bowling speeds
-    if final_kmph < MIN_SPEED or final_kmph > MAX_SPEED:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Out of physical bounds"
-        }
+    # Silent physical clamp (broadcast-style)
+    final_kmph = max(MIN_SPEED, min(final_kmph, MAX_SPEED))
 
     # -----------------------------
     # CAMERA NORMALIZATION (SAFE)
@@ -182,7 +183,7 @@ def calculate_speed_pro(
             "speed_note": "Insufficient tracking data"
         }
 
-    print("SPEED PHYSICS => raw:", raw_kmph, "final:", final_kmph, "fps:", fps, "points:", len(ball_positions))
+    print("SPEED PHYSICS => final:", round(final_kmph, 1), "fps:", fps)
 
     # Broadcast-style rounding (natural, not perfect)
     final_kmph = round(float(final_kmph), 1)

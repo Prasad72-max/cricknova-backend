@@ -14,11 +14,11 @@ def estimate_speed(video_path):
 
     positions, fps = tracker.track_ball(video_path)
 
-    if not positions or len(positions) < 6:
+    if not positions:
         return {
             "speed_kmph": None,
             "speed_type": "pre-pitch",
-            "speed_note": "Insufficient frames for physics-based speed"
+            "speed_note": "Physics-based speed unavailable"
         }
 
     base_speed_result = calculate_speed_pro(
@@ -30,7 +30,7 @@ def estimate_speed(video_path):
         return {
             "speed_kmph": None,
             "speed_type": "pre-pitch",
-            "speed_note": "Tracking incomplete, speed not reliable"
+            "speed_note": "Physics-based speed unavailable"
         }
 
     speed_kmph = base_speed_result.get("speed_kmph")

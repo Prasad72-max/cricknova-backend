@@ -656,7 +656,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         speed_result = calculate_speed_pro(ball_positions, fps=fps)
         speed_kmph = speed_result.get("speed_kmph")
 
-        print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}, points={len(ball_positions)}")
+        print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}")
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)

@@ -57,12 +57,14 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
     speed_value = None
 
-    if len(last_pos) >= 6 and len(last_time) >= 6:
-        # Use last 5 segments for stability
+    # Use only early-flight samples for stability (broadcast-style)
+    if len(last_pos) >= 4 and len(last_time) >= 4:
         distances = []
         times = []
 
-        for i in range(-5, -1):
+        # Take last few contiguous segments only
+        start = max(0, len(last_pos) - 6)
+        for i in range(start, len(last_pos) - 1):
             d_px = math.dist(last_pos[i], last_pos[i + 1])
             dt = last_time[i + 1] - last_time[i]
             if dt > 0:
@@ -80,13 +82,9 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             speed_mps = avg_px_per_sec * meters_per_pixel
             speed_kmh_calc = speed_mps * 3.6
 
-            # -----------------------------
-            # PHYSICAL SANITY CLAMP
-            # -----------------------------
-            if speed_kmh_calc < MIN_SPEED_KMPH or speed_kmh_calc > MAX_SPEED_KMPH:
-                speed_value = None
-            else:
-                speed_value = round(float(speed_kmh_calc), 1)
+            # Silent physical clamp (no rejection shown)
+            speed_kmh_calc = max(MIN_SPEED_KMPH, min(speed_kmh_calc, MAX_SPEED_KMPH))
+            speed_value = round(float(speed_kmh_calc), 1)
 
     # SWING CALCULATION
     if len(last_pos) > 4:

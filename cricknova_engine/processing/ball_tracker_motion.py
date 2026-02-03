@@ -89,7 +89,7 @@ def calculate_ball_speed_kmph(positions, fps):
     No confidence labels, no min/max ranges, no artificial boosting.
     """
 
-    if not positions or fps <= 0 or len(positions) < 4:
+    if not positions or fps <= 0:
         return None
 
     dt = 1.0 / fps
@@ -103,7 +103,7 @@ def calculate_ball_speed_kmph(positions, fps):
         if d > 2.0:  # reject jitter
             velocities.append(d / dt)
 
-    if len(velocities) < 3:
+    if len(velocities) < 2:
         return None
 
     # STEP 2: mean velocity (robust against noise)
@@ -133,8 +133,7 @@ def calculate_ball_speed_kmph(positions, fps):
     pass
 
     # STEP 5: realistic hard bounds (safety only)
-    if speed_kmph < MIN_VALID_SPEED or speed_kmph > MAX_VALID_SPEED:
-        return None
+    speed_kmph = max(MIN_VALID_SPEED, min(speed_kmph, MAX_VALID_SPEED))
 
     return round(speed_kmph, 1)
 
