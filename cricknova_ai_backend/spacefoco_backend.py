@@ -1,3 +1,5 @@
+def _speed_debug(ball_positions, fps):
+    print(f"[SPEED DEBUG] frames={len(ball_positions)}, fps={fps}")
 print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18😭✌🏻@@@@@@$$$$$$@@ 1234567890987654321🔥😎💸⏳🚗")
 import os
 import asyncio
@@ -653,14 +655,27 @@ async def analyze_training_video(file: UploadFile = File(...)):
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
         from cricknova_engine.processing.speed import calculate_speed_pro
-        speed_result = calculate_speed_pro(ball_positions, fps=fps)
-        raw_speed = speed_result.get("speed_kmph")
+
+        _speed_debug(ball_positions, fps)
+
+        # ---- HARD GUARD: fps must be real ----
+        if not fps or fps <= 0:
+            print("[SPEED] Invalid FPS, speed disabled")
+            raw_speed = None
+        else:
+            speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
+            raw_speed = speed_result.get("speed_kmph")
 
         # 🔒 PURE PHYSICS GUARARD
         # Reject impossible or unstable speeds instead of faking numbers
         if not raw_speed or not isinstance(raw_speed, (int, float)):
+            print("[SPEED] rejected: raw_speed invalid ->", raw_speed)
             speed_kmph = None
-        elif raw_speed <= 0 or raw_speed > 200:
+        elif raw_speed <= 0:
+            print("[SPEED] rejected: non-positive speed ->", raw_speed)
+            speed_kmph = None
+        elif raw_speed > 200:
+            print("[SPEED] rejected: unphysical speed ->", raw_speed)
             speed_kmph = None
         else:
             speed_kmph = float(raw_speed)
@@ -1095,14 +1110,27 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             frame_width, frame_height = 640, 360
 
         from cricknova_engine.processing.speed import calculate_speed_pro
-        speed_result = calculate_speed_pro(ball_positions, fps=fps)
-        raw_speed = speed_result.get("speed_kmph")
+
+        _speed_debug(ball_positions, fps)
+
+        # ---- HARD GUARD: fps must be real ----
+        if not fps or fps <= 0:
+            print("[SPEED] Invalid FPS, speed disabled")
+            raw_speed = None
+        else:
+            speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
+            raw_speed = speed_result.get("speed_kmph")
 
         # 🔒 PURE PHYSICS GUARARD
         # Reject impossible or unstable speeds instead of faking numbers
         if not raw_speed or not isinstance(raw_speed, (int, float)):
+            print("[SPEED] rejected: raw_speed invalid ->", raw_speed)
             speed_kmph = None
-        elif raw_speed <= 0 or raw_speed > 200:
+        elif raw_speed <= 0:
+            print("[SPEED] rejected: non-positive speed ->", raw_speed)
+            speed_kmph = None
+        elif raw_speed > 200:
+            print("[SPEED] rejected: unphysical speed ->", raw_speed)
             speed_kmph = None
         else:
             speed_kmph = float(raw_speed)
