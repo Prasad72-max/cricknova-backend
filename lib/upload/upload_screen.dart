@@ -49,8 +49,6 @@ class _UploadScreenState extends State<UploadScreen> {
   bool showTrajectory = false;
 
 double? speed;
-Map<String, dynamic>? speedRange; // {min, max}
-double speedConfidence = 0.0;
 String spin = "NA";
 String swing = "NA";
 
@@ -153,7 +151,6 @@ String swing = "NA";
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
-        speedRange = null;
       });
     }
 
@@ -192,52 +189,24 @@ String swing = "NA";
       final analysis = decoded["analysis"] ?? decoded;
 
       double? extractedSpeed;
-      // Capture speed range if provided by backend
-      final dynamic rawRange = analysis["speed_kmph"];
-      Map<String, dynamic>? extractedRange;
-      if (rawRange is Map &&
-          rawRange["min"] is num &&
-          rawRange["max"] is num) {
-        extractedRange = {
-          "min": rawRange["min"],
-          "max": rawRange["max"],
-        };
+
+      final dynamic speedVal =
+          analysis["speed_kmph"] ??
+          decoded["speed_kmph"] ??
+          analysis["speed"] ??
+          decoded["speed"];
+
+      if (speedVal is num && speedVal > 0) {
+        extractedSpeed = speedVal.toDouble();
+      } else if (speedVal is String) {
+        final parsed = double.tryParse(speedVal);
+        extractedSpeed = (parsed != null && parsed > 0) ? parsed : null;
       }
-
-      // Preferred: direct numeric value for UI
-      final dynamic speedValue =
-          analysis["speed_value"] ??
-          decoded["speed_value"];
-
-      if (speedValue is num) {
-        extractedSpeed = speedValue.toDouble();
-      } else if (speedValue is String) {
-        extractedSpeed = double.tryParse(speedValue);
-      }
-
-      // Fallback: older backend numeric fields
-      if (extractedSpeed == null) {
-        final dynamic legacySpeed =
-            analysis["speed_kmph"] ??
-            analysis["speed"] ??
-            analysis["speed_mph"] ??
-            decoded["speed_kmph"] ??
-            decoded["speed"] ??
-            decoded["speed_mph"];
-
-        if (legacySpeed is num) {
-          extractedSpeed = legacySpeed.toDouble();
-        } else if (legacySpeed is String) {
-          extractedSpeed = double.tryParse(legacySpeed);
-        }
-      }
-      // --- End speed extraction ---
 
       if (!mounted) return;
 
       setState(() {
         speed = extractedSpeed;
-        speedRange = extractedRange;
 
         final swingVal = analysis["swing"];
         swing = (swingVal != null && swingVal.toString().isNotEmpty)
@@ -627,11 +596,7 @@ String swing = "NA";
                       children: [
                         _metric(
                           "Speed",
-                          speedRange != null
-                              ? "${speedRange!["min"]}-${speedRange!["max"]} km/h"
-                              : speed != null
-                                  ? "${speed!.round()} km/h"
-                                  : "CALCULATING",
+                          speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "NA",
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),

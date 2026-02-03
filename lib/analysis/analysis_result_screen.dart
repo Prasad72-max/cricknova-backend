@@ -23,31 +23,17 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SAFE SPEED (supports exact & range) ----------
-    String speed = "CALCULATING";
+    // ---------- SPEED (VALUE ONLY) ----------
+    String speed = "NA";
 
     final dynamic rawSpeed =
-        src["speed_value"] ??
         src["speed_kmph"] ??
-        src["analysis"]?["speed_value"] ??
         src["analysis"]?["speed_kmph"] ??
-        src["speed"] ??
-        src["speed_mph"];
+        src["speed"];
 
-    // Case 1: backend sends range {min, max}
-    if (rawSpeed is Map &&
-        rawSpeed["min"] is num &&
-        rawSpeed["max"] is num) {
-      final min = rawSpeed["min"].round();
-      final max = rawSpeed["max"].round();
-      speed = "$min–$max";
-    }
-    // Case 2: backend sends single number
-    else if (rawSpeed is num && rawSpeed > 0) {
+    if (rawSpeed is num && rawSpeed > 0) {
       speed = rawSpeed.toStringAsFixed(1);
-    }
-    // Case 3: backend sends string number
-    else if (rawSpeed is String) {
+    } else if (rawSpeed is String) {
       final parsed = double.tryParse(rawSpeed);
       if (parsed != null && parsed > 0) {
         speed = parsed.toStringAsFixed(1);
@@ -92,7 +78,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         children: [
           _metric(
             "Ball Speed",
-            speed == "CALCULATING" ? "CALCULATING" : "$speed km/h",
+            speed == "NA" ? "NA" : "$speed km/h",
           ),
           _metric("Swing", swing),
           _metric("Spin", spin),

@@ -590,7 +590,10 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
                   : indiaPlans()),
 
             // INTERNATIONAL PLANS
-            if (!isIndia) ...internationalPlans(),
+            if (!isIndia)
+              ...((sourceFromArgs ?? widget.entrySource) == "analyse"
+                  ? internationalCompareOnlyPlans()
+                  : internationalPlans()),
           ],
         ),
       ),
@@ -765,6 +768,51 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
           "20,000 AI Chats",
           "200 Mistake Detections",
           "150 Video Compare",
+          "All Features Unlocked",
+          "Priority AI",
+        ],
+      ),
+    ];
+  }
+
+  List<Widget> internationalCompareOnlyPlans() {
+    return [
+      sexyPlanCard(
+        title: "6 Months",
+        price: "\$49.99",
+        tag: "Analyse Pro 🎯",
+        glowColor: Colors.purpleAccent,
+        features: [
+          "Analyse Yourself",
+          "5 Video Compare",
+          "1,200 AI Chats",
+          "30 Mistake Detections",
+        ],
+      ),
+      const SizedBox(height: 20),
+      sexyPlanCard(
+        title: "Yearly",
+        price: "\$69.99",
+        tag: "Best Value 💎",
+        glowColor: Colors.greenAccent,
+        features: [
+          "Analyse Yourself",
+          "10 Video Compare",
+          "1,800 AI Chats",
+          "50 Mistake Detections",
+        ],
+      ),
+      const SizedBox(height: 20),
+      sexyPlanCard(
+        title: "ULTRA INTERNATIONAL",
+        price: "\$159.99",
+        tag: "Unlimited Analysis 🚀",
+        glowColor: Colors.redAccent,
+        features: [
+          "Unlimited Analyse",
+          "150 Video Compare",
+          "20,000 AI Chats",
+          "200 Mistake Detections",
           "All Features Unlocked",
           "Priority AI",
         ],

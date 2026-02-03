@@ -102,10 +102,8 @@ def calculate_ball_speed_kmph(positions, fps):
     if len(velocities) < 3:
         return None
 
-    # STEP 2: median velocity (robust against noise)
-    velocities.sort()
-    mid = len(velocities) // 2
-    pixel_velocity = velocities[mid]
+    # STEP 2: mean velocity (robust against noise)
+    pixel_velocity = sum(velocities) / len(velocities)
 
     # STEP 3: pixel → meter conversion
     # Assumption: visible ball travel ~18.5 meters (pitch release to bounce)
@@ -124,7 +122,7 @@ def calculate_ball_speed_kmph(positions, fps):
     speed_kmph = speed_mps * 3.6
 
     # STEP 5: realistic hard bounds (safety only)
-    if speed_kmph < 60 or speed_kmph > 170:
+    if speed_kmph <= 0:
         return None
 
     return round(speed_kmph, 1)

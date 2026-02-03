@@ -50,7 +50,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         last_time.pop(0)
 
     speed_value = None
-    speed_confidence = 0.0
 
     if len(last_pos) >= 6 and len(last_time) >= 6:
         # Use last 5 segments for stability
@@ -75,9 +74,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             speed_mps = avg_px_per_sec * meters_per_pixel
             speed_kmh_calc = speed_mps * 3.6
 
-            # Confidence based on number of stable segments used
-            usable_segments = len(distances)
-            speed_confidence = min(1.0, usable_segments / 5.0)
             speed_value = round(float(speed_kmh_calc), 1)
 
     # SWING CALCULATION
@@ -110,12 +106,9 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     return {
         "found": True,
         "speed_kmph": speed_value,
-        "speed_confidence": round(speed_confidence, 2),
         "speed_type": "pre-pitch",
         "speed_note": "Frame-distance physics speed",
         "swing": swing,
-        "swing_confidence": round(swing_confidence, 2),
         "spin": spin,
-        "spin_confidence": round(spin_confidence, 2),
         "trajectory": last_pos
     }

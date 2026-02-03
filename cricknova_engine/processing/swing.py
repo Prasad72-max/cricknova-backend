@@ -3,140 +3,92 @@ import numpy as np
 
 def unmirror_positions(positions):
     """
-    Fix horizontal camera mirroring from mobile videos.
+    Correct horizontal mirroring common in mobile cameras.
     """
     xs = [p[0] for p in positions]
     min_x, max_x = min(xs), max(xs)
-
     return [((max_x - (x - min_x)), y) for x, y in positions]
 
-class SwingDetector:
+def smooth_positions(positions, window=3):
+    """
+    Simple moving average smoothing to reduce tracker noise.
+    """
+    if len(positions) < window:
+        return positions
 
+    smoothed = []
+    for i in range(len(positions)):
+        xs, ys = [], []
+        for j in range(max(0, i - window), min(len(positions), i + window + 1)):
+            xs.append(positions[j][0])
+            ys.append(positions[j][1])
+        smoothed.append((sum(xs) / len(xs), sum(ys) / len(ys)))
+    return smoothed
+
+class SwingDetector:
     def __init__(self, fps=30):
         self.fps = fps
 
     def _line_angle(self, p1, p2):
-        """
-        Returns angle of line (deg) between 2 points.
-        """
-        x1, y1 = p1
-        x2, y2 = p2
-
-        dx = x2 - x1
-        dy = y2 - y1
-
-        if dx == 0:
+        dx = p2[0] - p1[0]
+        dy = p2[1] - p1[1]
+        if abs(dx) < 1e-6:
             return 90.0
+        return math.degrees(math.atan2(dy, dx))
 
-        angle = math.degrees(math.atan2(dy, dx))
-        return angle
-
-    def _swing_confidence(self, positions, pitch_index):
+    def _detect_pitch_index(self, positions):
         """
-        Confidence based on smoothness and consistency of lateral deviation.
-        Returns value between 0.0 and 1.0
+        Detect bounce using strongest vertical direction change.
         """
-        if pitch_index < 4 or pitch_index + 4 >= len(positions):
-            return 0.0
-
-        pre = positions[:pitch_index]
-        post = positions[pitch_index+1:]
-
-        def lateral_variance(seq):
-            xs = [p[0] for p in seq]
-            return np.var(xs) if len(xs) > 2 else 0.0
-
-        var_pre = lateral_variance(pre)
-        var_post = lateral_variance(post)
-
-        total_var = var_pre + var_post
-        if total_var == 0:
-            return 0.0
-
-        confidence = min(total_var / 150.0, 1.0)
-        return round(confidence, 2)
+        ys = [p[1] for p in positions]
+        diffs = np.diff(ys)
+        accel = np.abs(np.diff(diffs))
+        if len(accel) == 0:
+            return None
+        idx = int(np.argmax(accel)) + 1
+        return max(2, min(idx, len(positions) - 3))
 
     def detect_swing(self, positions):
         """
-        positions: list of (x, y) from ball_tracker.
-
-        Returns:
-            float swing_angle_deg - numeric degrees of swing angle
+        Returns raw swing angle (degrees) based purely on trajectory.
         """
-        if not positions or len(positions) < 8:
+        if not positions or len(positions) < 10:
             return None
 
-        # Fix mirrored camera coordinates before angle calculation
         positions = unmirror_positions(positions)
+        positions = smooth_positions(positions)
 
-        # Detect pitch using maximum vertical acceleration (more stable)
-        diffs = [positions[i+1][1] - positions[i][1] for i in range(len(positions)-1)]
-        accel = [abs(diffs[i+1] - diffs[i]) for i in range(len(diffs)-1)]
-        pitch_index = np.argmax(accel)
+        pitch_idx = self._detect_pitch_index(positions)
+        if pitch_idx is None:
+            return None
 
-        # protect boundaries
-        pitch_index = max(1, min(pitch_index, len(positions)-2))
-        confidence = self._swing_confidence(positions, pitch_index)
+        pre_vec = (positions[pitch_idx - 2], positions[pitch_idx - 1])
+        post_vec = (positions[pitch_idx + 1], positions[pitch_idx + 3])
 
-        # pre-bounce (frames before pitch)
-        pre1 = positions[pitch_index - 2]
-        pre2 = positions[pitch_index - 1]
-
-        # post-bounce (frames after pitch)
-        post1 = positions[pitch_index + 1]
-        post2 = positions[pitch_index + 3] if pitch_index + 3 < len(positions) else positions[-1]
-
-        # Calculate angles
-        angle_pre = self._line_angle(pre1, pre2)
-        angle_post = self._line_angle(post1, post2)
+        angle_pre = self._line_angle(*pre_vec)
+        angle_post = self._line_angle(*post_vec)
 
         swing_angle = angle_post - angle_pre
+        return round(float(swing_angle), 2)
 
-        # No artificial clamping: return observed trajectory change
-        return float(round(swing_angle, 3))
+def classify_swing(swing_deg):
+    """
+    Cricket-realistic classification.
+    """
+    if swing_deg is None:
+        return "unknown"
+    if abs(swing_deg) < 1.0:
+        return "straight"
+    return "inswing" if swing_deg < 0 else "outswing"
 
 def calculate_swing(ball_positions):
-    """
-    Returns ONLY swing name: inswing / outswing / straight
-    """
     detector = SwingDetector()
-    swing_deg = detector.detect_swing(ball_positions)
-    if swing_deg is None:
-        return "unknown"
-    return classify_swing(swing_deg)
+    return classify_swing(detector.detect_swing(ball_positions))
 
 def calculate_swing_name(ball_positions):
-    """
-    Explicit helper to return ONLY swing name.
-    """
-    detector = SwingDetector()
-    swing_deg = detector.detect_swing(ball_positions)
-    if swing_deg is None:
-        return "unknown"
-    return classify_swing(swing_deg)
-
-def classify_swing(swing_deg: float):
-    """
-    Cricket-correct swing classification after unmirroring.
-    """
-    if abs(swing_deg) < 1.2:
-        return "straight"
-
-    # NOTE:
-    # Positive angle after unmirror = ball moves AWAY from body
-    # Negative angle = ball moves INTO body
-
-    if swing_deg < 0:
-        return "inswing"
-    else:
-        return "outswing"
-    return "straight"
+    return calculate_swing(ball_positions)
 
 def calculate_swing_full(ball_positions):
-    """
-    Returns observed swing data based purely on trajectory physics.
-    No scripted limits. Includes confidence score.
-    """
     detector = SwingDetector()
     swing_deg = detector.detect_swing(ball_positions)
 
@@ -146,10 +98,7 @@ def calculate_swing_full(ball_positions):
             "swing_degree": None
         }
 
-    confidence = detector._swing_confidence(ball_positions, len(ball_positions)//2)
-
     return {
         "swing": classify_swing(swing_deg),
-        "swing_degree": swing_deg,
-        "confidence": confidence
+        "swing_degree": swing_deg
     }

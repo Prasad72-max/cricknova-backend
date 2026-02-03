@@ -2,7 +2,7 @@ import math
 import numpy as np
 import cv2
 
-
+...
 # -----------------------------
 # CONFIG
 # -----------------------------
@@ -38,7 +38,7 @@ def calculate_speed_pro(
 ):
     """
     Calculates release speed from frame-to-frame distance over time.
-    Returns confidence based on usable tracking frames.
+    Returns speed only (pure physics).
     ball_positions: list of (x, y) pixel coordinates per frame (ordered in time).
     pitch_corners: 4 pitch corner points in image pixels.
     fps: frames per second of the video.
@@ -82,8 +82,7 @@ def calculate_speed_pro(
         return {
             "speed_kmph": round(float(base), 1),
             "speed_type": "pre-pitch",
-            "confidence": 0.25,
-            "speed_note": "Pixel-only speed (low confidence)"
+            "speed_note": "Pixel-only speed"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -123,7 +122,8 @@ def calculate_speed_pro(
     upper = Q3 + 1.2 * iqr
 
     clean_distances = distances[(distances >= lower) & (distances <= upper)]
-    confidence = min(1.0, len(clean_distances) / max(len(distances), 1))
+    # Removed confidence calculation line here
+
     if len(clean_distances) < 2:
         clean_distances = distances
 
@@ -170,7 +170,6 @@ def calculate_speed_pro(
     return {
         "speed_kmph": final_kmph,
         "speed_type": "pre-pitch",
-        "confidence": round(confidence, 2),
         "speed_note": "Frame-distance physics speed"
     }
 

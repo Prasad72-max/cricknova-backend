@@ -22,7 +22,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   bool _showTrajectoryAfterVideo = false;
 
   double? speedKmph;
-  String? speedRangeLabel;
   String? swingName;
   double? swingDegree;
   String? spinType;
@@ -57,8 +56,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Ball Speed",
-              value: speedRangeLabel ??
-                  (speedKmph == null ? "CALCULATING" : "${speedKmph!.toStringAsFixed(1)} km/h"),
+              value: speedKmph == null
+                  ? "NA"
+                  : "${speedKmph!.toStringAsFixed(1)} km/h",
               icon: Icons.speed,
               color: Colors.blueAccent,
             ),
@@ -208,30 +208,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           ? Map<String, dynamic>.from(responseData["data"])
           : responseData;
 
-  // ---------- SPEED (SUPPORT RANGE + VALUE) ----------
-  speedRangeLabel = null;
-  speedKmph = null;
+  // ---------- SPEED (VALUE ONLY) ----------
+  final speedVal = src["speed_kmph"] ?? src["speed"];
 
-  final speedVal =
-      src["speed_value"] ??
-      src["speed_kmph"] ??
-      src["speed"];
-
-  if (speedVal is Map) {
-    final minV = speedVal["min"];
-    final maxV = speedVal["max"];
-
-    if (minV is num && maxV is num) {
-      speedRangeLabel = "${minV.round()}–${maxV.round()} km/h";
-      speedKmph = ((minV + maxV) / 2).toDouble();
-    }
-  } else if (speedVal is num && speedVal > 0) {
+  if (speedVal is num && speedVal > 0) {
     speedKmph = speedVal.toDouble();
   } else if (speedVal is String) {
     final parsed = double.tryParse(speedVal);
-    if (parsed != null && parsed > 0) {
-      speedKmph = parsed;
-    }
+    speedKmph = (parsed != null && parsed > 0) ? parsed : null;
+  } else {
+    speedKmph = null;
   }
 
   // ---------- SWING ----------

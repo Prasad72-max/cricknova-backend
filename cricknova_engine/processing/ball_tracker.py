@@ -28,7 +28,7 @@ def track_ball_positions(video_path):
     cap = cv.VideoCapture(video_path)
     fps = cap.get(cv.CAP_PROP_FPS)
     if fps is None or fps <= 1:
-        fps = DEFAULT_FPS
+        fps = 30.0
     ball_positions = []
     prev_center = None
     frame_idx = 0
@@ -119,15 +119,14 @@ def track_ball_positions(video_path):
 def compute_speed_kmph(ball_positions, fps):
     """
     Physics-based speed estimation from frame-to-frame motion.
-    Returns speed and confidence.
+    Returns speed only.
     No scripted fallbacks or clamps.
     """
 
     # Fallback if tracking is insufficient
     if not ball_positions or len(ball_positions) < 4 or fps <= 1:
         return {
-            "speed_kmph": None,
-            "confidence": 0.0
+            "speed_kmph": None
         }
 
     xs = [p[0] for p in ball_positions]
@@ -138,8 +137,7 @@ def compute_speed_kmph(ball_positions, fps):
     pitch_idx = int(np.argmax(ys))
     if pitch_idx < 3:
         return {
-            "speed_kmph": None,
-            "confidence": 0.0
+            "speed_kmph": None
         }
 
     start = max(1, pitch_idx - 8)
@@ -167,12 +165,10 @@ def compute_speed_kmph(ball_positions, fps):
 
     if len(distances) < 4:
         return {
-            "speed_kmph": None,
-            "confidence": 0.0
+            "speed_kmph": None
         }
 
-    distances.sort()
-    median_px = distances[len(distances) // 2]
+    median_px = sum(distances) / len(distances)
 
     # Estimate pitch length in pixels
     pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
@@ -181,12 +177,9 @@ def compute_speed_kmph(ball_positions, fps):
     speed_mps = (median_px * meters_per_pixel) / np.median(times)
 
     speed_kmph = speed_mps * 3.6
-    # Confidence based on number of clean distance samples
-    confidence = min(1.0, len(distances) / 6.0)
 
     return {
-        "speed_kmph": round(float(speed_kmph), 1),
-        "confidence": round(confidence, 2)
+        "speed_kmph": round(float(speed_kmph), 1)
     }
 
 def compute_swing(ball_positions):

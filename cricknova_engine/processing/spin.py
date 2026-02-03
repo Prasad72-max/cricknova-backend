@@ -2,81 +2,74 @@ import math
 import numpy as np
 
 """
-PHYSICS-ONLY SPIN ESTIMATION FROM VIDEO TRAJECTORY
-- Fully data-driven (no scripted or forced values)
-- Uses real post-bounce trajectory deviation
-- Camera-aware lateral movement only
-- Returns NONE or low confidence when spin is not physically reliable
+PHYSICS-ONLY SPIN DETECTION (RELIABLE VERSION)
+
+Principles:
+- Spin is detected ONLY after bounce
+- Uses post-bounce lateral deviation relative to forward travel
+- No artificial confidence values
+- Returns 'none' when evidence is weak
 """
 
-def calculate_spin(ball_positions, fps=30):
-    import math
-    import numpy as np
+def _smooth(values, window=3):
+    if len(values) < window:
+        return values
+    out = []
+    for i in range(len(values)):
+        seg = values[max(0, i - window): min(len(values), i + window + 1)]
+        out.append(sum(seg) / len(seg))
+    return out
 
+def calculate_spin(ball_positions, fps=30):
     empty_result = {
         "type": "none",
         "name": "none",
-        "spin_degree": None,
-        "confidence": 0.0
+        "spin_degree": None
     }
 
-    if not ball_positions or len(ball_positions) < 8:
+    if not ball_positions or len(ball_positions) < 10:
         return empty_result
 
-    # Detect bounce (max Y)
+    # --- Bounce detection (max Y = pitch) ---
     ys = np.array([p[1] for p in ball_positions])
     pitch_idx = int(np.argmax(ys))
 
-    # Need enough frames after bounce
-    if pitch_idx < 3 or pitch_idx + 4 >= len(ball_positions):
+    # Need stable frames before & after bounce
+    if pitch_idx < 3 or pitch_idx + 5 >= len(ball_positions):
         return empty_result
 
-    # Collect post-bounce trajectory
-    post_x = []
-    post_y = []
-    for i in range(pitch_idx + 1, min(pitch_idx + 7, len(ball_positions))):
-        post_x.append(ball_positions[i][0])
-        post_y.append(ball_positions[i][1])
+    # --- Collect post-bounce trajectory ---
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 8]
+    xs = [p[0] for p in post]
+    ys = [p[1] for p in post]
 
-    if len(post_x) < 3:
+    if len(xs) < 4:
         return empty_result
 
-    lateral_disp = post_x[-1] - post_x[0]
-    forward_disp = post_y[-1] - post_y[0]
+    # Smooth to reduce tracker jitter
+    xs = _smooth(xs)
+    ys = _smooth(ys)
 
-    # Avoid math explosion
-    if abs(forward_disp) < 8:
+    lateral_disp = xs[-1] - xs[0]
+    forward_disp = ys[-1] - ys[0]
+
+    # Reject near-vertical / unreliable motion
+    if abs(forward_disp) < 10:
         return empty_result
 
-    # Geometry-based turn angle using stable atan2
+    # --- Spin angle estimation ---
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
 
-    # Allow very light but still physically plausible spin
-    if turn_deg < 0.1:
+    # Threshold: below this is visually straight after bounce
+    if turn_deg < 0.15:
         return empty_result
 
-    # Confidence based on smoothness of post-bounce lateral movement
-    post_x_arr = np.array(post_x)
-    lateral_deltas = np.diff(post_x_arr)
-
-    if len(lateral_deltas) < 2:
-        confidence = 0.0
-    else:
-        variance = np.var(lateral_deltas)
-        confidence = max(0.0, min(1.0, 1.0 - (variance / 25.0)))
-
-    # Spin direction based purely on post-bounce lateral movement
-    # Positive X movement (to the right on screen) -> leg-spin
-    # Negative X movement (to the left on screen) -> off-spin
-    if lateral_disp > 0:
-        spin_name = "leg-spin"
-    else:
-        spin_name = "off-spin"
+    # Direction based purely on screen-space deviation
+    spin_name = "leg spin" if lateral_disp > 0 else "off spin"
 
     return {
         "type": "spin",
-        "name": spin_name.replace("-", " "),
-        "spin_degree": round(turn_deg, 2),
-        "confidence": round(confidence, 2)
+        "name": spin_name,
+        "spin_degree": round(float(turn_deg), 2)
     }

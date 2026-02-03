@@ -34,6 +34,7 @@ if PROJECT_ROOT not in sys.path:
 from fastapi import FastAPI, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+
 app = FastAPI(title="CrickNova AI Backend")
 
 security = HTTPBearer(auto_error=False)
@@ -625,7 +626,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        raw_positions = track_ball_positions(video_path)
+        raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -636,7 +637,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
             return {
                 "status": "success",
                 "speed_kmph": None,
-                "speed_confidence": 0.0,
                 "swing": "unknown",
                 "spin": "none",
                 "trajectory": []
@@ -652,25 +652,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
-        # Extract reference frame for pitch detection
-        reference_frame = None
-        cap = cv2.VideoCapture(video_path)
-        video_fps = 30.0
-        if cap.isOpened():
-            fps_val = cap.get(cv2.CAP_PROP_FPS)
-            if isinstance(fps_val, (int, float)) and 5.0 <= fps_val <= 240.0:
-                video_fps = float(fps_val)
-            ret, frame = cap.read()
-            if ret:
-                reference_frame = frame
-            cap.release()
-
         from cricknova_engine.processing.speed import calculate_speed
-        speed_result = calculate_speed(ball_positions, fps=video_fps)
+        speed_result = calculate_speed(ball_positions, fps=fps)
         speed_kmph = speed_result.get("speed_kmph")
-        speed_confidence = speed_result.get("confidence", 0.0)
 
-        print(f"[SPEED] speed_kmph={speed_kmph}, confidence={speed_confidence}, fps={video_fps}, points={len(ball_positions)}")
+        print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}, points={len(ball_positions)}")
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -687,7 +673,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_confidence": speed_confidence,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -754,7 +739,7 @@ async def ai_coach_analyze(
         video_path = tmp.name
 
     try:
-        raw_positions = track_ball_positions(video_path)
+        raw_positions, _ = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
 
         if not ball_positions or len(ball_positions) < 6:
@@ -1002,9 +987,9 @@ async def ai_coach_diff(
     right_path = save_temp(right)
 
     try:
-        left_raw_positions = track_ball_positions(left_path)
+        left_raw_positions, _ = track_ball_positions(left_path)
         left_positions = normalize_ball_positions(left_raw_positions)
-        right_raw_positions = track_ball_positions(right_path)
+        right_raw_positions, _ = track_ball_positions(right_path)
         right_positions = normalize_ball_positions(right_raw_positions)
 
         if not left_positions or not right_positions:
@@ -1077,7 +1062,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        raw_positions = track_ball_positions(video_path)
+        raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
 
         if len(ball_positions) > 30:
@@ -1087,7 +1072,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             return {
                 "status": "success",
                 "speed_kmph": None,
-                "speed_confidence": 0.0,
                 "swing": "unknown",
                 "spin": "none",
                 "trajectory": []
@@ -1096,7 +1080,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         cap = cv2.VideoCapture(video_path)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         cap.release()
 
         if frame_width <= 0 or frame_height <= 0:
@@ -1105,7 +1088,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         from cricknova_engine.processing.speed import calculate_speed
         speed_result = calculate_speed(ball_positions, fps=fps)
         speed_kmph = speed_result.get("speed_kmph")
-        speed_confidence = speed_result.get("confidence", 0.0)
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
@@ -1121,7 +1103,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_confidence": speed_confidence,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1190,7 +1171,7 @@ async def drs_review(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        raw_positions = track_ball_positions(video_path)
+        raw_positions, _ = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
 
         if not ball_positions or len(ball_positions) < 6:
