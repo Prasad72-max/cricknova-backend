@@ -654,7 +654,16 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         from cricknova_engine.processing.speed import calculate_speed_pro
         speed_result = calculate_speed_pro(ball_positions, fps=fps)
-        speed_kmph = speed_result.get("speed_kmph")
+        raw_speed = speed_result.get("speed_kmph")
+
+        # 🔒 PURE PHYSICS GUARARD
+        # Reject impossible or unstable speeds instead of faking numbers
+        if not raw_speed or not isinstance(raw_speed, (int, float)):
+            speed_kmph = None
+        elif raw_speed <= 0 or raw_speed > 200:
+            speed_kmph = None
+        else:
+            speed_kmph = float(raw_speed)
 
         print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}")
 
@@ -1087,7 +1096,16 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         from cricknova_engine.processing.speed import calculate_speed_pro
         speed_result = calculate_speed_pro(ball_positions, fps=fps)
-        speed_kmph = speed_result.get("speed_kmph")
+        raw_speed = speed_result.get("speed_kmph")
+
+        # 🔒 PURE PHYSICS GUARARD
+        # Reject impossible or unstable speeds instead of faking numbers
+        if not raw_speed or not isinstance(raw_speed, (int, float)):
+            speed_kmph = None
+        elif raw_speed <= 0 or raw_speed > 200:
+            speed_kmph = None
+        else:
+            speed_kmph = float(raw_speed)
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)

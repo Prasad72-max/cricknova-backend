@@ -106,30 +106,23 @@ def calculate_ball_speed_kmph(positions, fps):
     # STEP 2: mean velocity (robust against noise)
     pixel_velocity = sum(velocities) / len(velocities)
 
-    # STEP 3: pixel → meter conversion
-    # Assumption: visible ball travel ~18.5 meters (pitch release to bounce)
-    total_pixel_dist = sum(
-        math.hypot(
-            positions[i][0] - positions[i - 1][0],
-            positions[i][1] - positions[i - 1][1],
-        )
-        for i in range(1, len(positions))
-    )
+    # STEP 3: pixel → meter conversion (STRICT PHYSICS)
+    # Use dynamic scale based on frame resolution.
+    # If real-world calibration is missing, DO NOT guess pitch length.
 
-    meters_per_pixel = 18.5 / max(total_pixel_dist, 1.0)
+    FRAME_WIDTH_PX = 640.0   # must match tracker resize
+    ESTIMATED_PITCH_WIDTH_M = 3.05  # cricket pitch width only (safe, visible)
+
+    meters_per_pixel = ESTIMATED_PITCH_WIDTH_M / FRAME_WIDTH_PX
 
     # STEP 4: physics conversion
     speed_mps = pixel_velocity * meters_per_pixel
     speed_kmph = speed_mps * 3.6
 
-    # -----------------------------
-    # CAMERA NORMALIZATION (SAFE)
-    # -----------------------------
-    # If real-world calibration is missing, do NOT apply artificial scaling.
-    # Pixel-based estimation is returned as-is and treated conservatively.
-    pass
-
-    # STEP 5: return physics result ONLY
+    # STEP 5: physics sanity gate (NOT clamping, only rejection)
+    # Reject impossible results caused by tracking jumps
+    if speed_kmph > 200:
+        return None
     # If calculation is unrealistic, caller must treat it as low confidence
     if speed_kmph <= 0 or not math.isfinite(speed_kmph):
         return None

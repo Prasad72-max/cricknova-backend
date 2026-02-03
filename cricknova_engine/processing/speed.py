@@ -7,10 +7,7 @@ import cv2
 # CONFIG
 # -----------------------------
 # Physical sanity limits (km/h) to prevent impossible spikes
-MAX_SPEED = 170
-MIN_SPEED = 60
-MIN_PITCH_PX = 180
-MAX_PITCH_PX = 520
+# REMOVED MAX_SPEED, MIN_SPEED, MIN_PITCH_PX, MAX_PITCH_PX
 
 
 def get_perspective_matrix(pitch_corners):
@@ -93,16 +90,22 @@ def calculate_speed_pro(
         else:
             avg_px = np.mean(pixel_dists)
             fps = max(15, fps)
-            # Pixel-only fallback (low confidence)
+            # Pixel-only fallback (pure physics)
             base = avg_px * fps
 
         base_kmph = base * 3.6
-        base_kmph = max(MIN_SPEED, min(base_kmph, MAX_SPEED))
+
+        if base_kmph <= 0 or math.isnan(base_kmph):
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "Invalid pixel physics"
+            }
 
         return {
-            "speed_kmph": round(float(base_kmph), 1),
+            "speed_kmph": float(base_kmph),
             "speed_type": "pre-pitch",
-            "speed_note": "Pixel-only physics speed (no pitch calibration)"
+            "speed_note": "Pixel-distance / frame-time physics"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -112,16 +115,7 @@ def calculate_speed_pro(
     real_pts = cv2.perspectiveTransform(pts, M)
     real_pts = real_pts.reshape(-1, 2)
 
-    ys = [p[1] for p in ball_positions]
-    pitch_px = max(ys) - min(ys)
-
-    if pitch_px < MIN_PITCH_PX or pitch_px > MAX_PITCH_PX:
-        print(f"[SPEED] rejected pitch_px={pitch_px}")
-        return {
-            "speed_kmph": None,
-            "speed_type": "pre-pitch",
-            "speed_note": "Invalid pitch scale"
-        }
+    # REMOVED pitch pixel sanity rejection block
 
     # 3. Calculate Real-World Distances (Meters) between consecutive frames
     distances = []
@@ -139,57 +133,14 @@ def calculate_speed_pro(
 
     distances = np.array(distances)
 
-    # 4. Hybrid noise filtering (IQR + positive-only)
-    distances = distances[distances > 0]
-    if len(distances) < 2:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Insufficient tracking data"
-        }
+    # REMOVED Hybrid noise filtering (IQR + positive-only) block entirely
+    # Use distances directly
 
-    Q1, Q3 = np.percentile(distances, [25, 75])
-    iqr = max(Q3 - Q1, 1e-6)
-    lower = max(0, Q1 - 1.2 * iqr)
-    upper = Q3 + 1.2 * iqr
+    # REMOVED multi-window speed estimation and median selection
+    avg_mpf = float(np.mean(distances))
+    raw_kmph = avg_mpf * fps * 3.6
 
-    clean_distances = distances[(distances >= lower) & (distances <= upper)]
-
-    if len(clean_distances) < 2:
-        clean_distances = distances
-
-    # 5. Multi-window speed estimation (robust for all clip lengths)
-    # Use only early-flight frames (stabilized like broadcast systems)
-    max_frames = int(0.3 * fps)  # ~0.3s window
-    usable = clean_distances[:max_frames]
-
-    window_sizes = [
-        min(3, len(usable)),
-        min(5, len(usable)),
-        min(8, len(usable)),
-    ]
-
-    speed_estimates = []
-    for w in window_sizes:
-        if w < 2:
-            continue
-        segment = usable[:w]
-        avg_mpf = np.mean(segment)
-        if avg_mpf > 0:
-            speed_estimates.append(avg_mpf * fps * 3.6)
-
-    if not speed_estimates:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Insufficient tracking data"
-        }
-
-    # Use median of window speeds to avoid spikes
-    raw_kmph = float(np.median(speed_estimates))
-
-    raw_kmph = max(MIN_SPEED, min(raw_kmph, MAX_SPEED))
-
+    # REMOVED soft clamp logic entirely
     final_kmph = raw_kmph
 
     # -----------------------------
@@ -205,18 +156,15 @@ def calculate_speed_pro(
         return {
             "speed_kmph": None,
             "speed_type": "unknown",
-            "speed_note": "Insufficient tracking data"
+            "speed_note": "Physics calculation failed"
         }
 
-    print("SPEED PHYSICS => final:", round(final_kmph, 1), "fps:", fps)
-
-    # Broadcast-style rounding (natural, not perfect)
-    final_kmph = round(float(final_kmph), 1)
+    # REMOVED broadcast-style rounding
 
     return {
-        "speed_kmph": final_kmph,
+        "speed_kmph": float(final_kmph),
         "speed_type": "pre-pitch",
-        "speed_note": "Frame-distance physics speed"
+        "speed_note": "Pure pixel + time physics"
     }
 
 

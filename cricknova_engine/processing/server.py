@@ -13,14 +13,6 @@ app.state.last_time = []
 model = YOLO("yolo11n.pt")  # cricket ball trained model
 
 
-# Realistic pitch-based scaling (22 yards ≈ 20.12 meters)
-PITCH_LENGTH_METERS = 20.12
-
-# Physical human bowling limits (km/h)
-MIN_SPEED_KMPH = 40.0
-MAX_SPEED_KMPH = 170.0
-
-
 @app.post("/analyze_live_frame")
 async def analyze_live_frame(file: UploadFile = File(...)):
     # read frame
@@ -45,9 +37,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     if len(last_pos) > 12:
         last_pos.pop(0)
 
-    # Speed is computed only from tracked ball motion over time (no scripted scaling)
     # -----------------------------
-    # REAL PHYSICS SPEED (NON-SCRIPTED)
+    # PURE PHYSICS SPEED (PIXEL + TIME ONLY)
     # -----------------------------
     last_time = app.state.last_time
     now = time.time()
@@ -57,41 +48,28 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
     speed_value = None
 
-    # Use only early-flight samples for stability (broadcast-style)
-    if len(last_pos) >= 4 and len(last_time) >= 4:
+    if len(last_pos) >= 2 and len(last_time) >= 2:
         distances = []
         times = []
 
-        # Take last few contiguous segments only
-        start = max(0, len(last_pos) - 6)
-        for i in range(start, len(last_pos) - 1):
+        for i in range(len(last_pos) - 1):
             d_px = math.dist(last_pos[i], last_pos[i + 1])
             dt = last_time[i + 1] - last_time[i]
-            if dt > 0:
+            if dt > 0 and d_px > 0:
                 distances.append(d_px)
                 times.append(dt)
 
         if distances and times:
-            avg_px_per_sec = (sum(distances) / sum(times))
+            px_per_sec = sum(distances) / sum(times)
 
-            ys = [p[1] for p in last_pos]
-            vertical_span = max(ys) - min(ys)
+            # NOTE:
+            # No pitch assumptions
+            # No vertical filtering
+            # No cricket limits
+            # Raw pixel speed converted using frame scale only
+            # 1 pixel == 1 unit distance (debug physics)
 
-            # Require meaningful vertical travel before trusting speed
-            # Prevents insane speeds when the ball barely moves vertically
-            frame_h = frame.shape[0]
-            if vertical_span < frame_h * 0.12:
-                speed_value = None
-            else:
-                pitch_px = max(220.0, vertical_span)
-                meters_per_pixel = PITCH_LENGTH_METERS / pitch_px
-
-                speed_mps = avg_px_per_sec * meters_per_pixel
-                speed_kmh_calc = speed_mps * 3.6
-
-                # Silent physical clamp (real cricket limits)
-                speed_kmh_calc = max(MIN_SPEED_KMPH, min(speed_kmh_calc, MAX_SPEED_KMPH))
-                speed_value = round(float(speed_kmh_calc), 1)
+            speed_value = round(float(px_per_sec), 2)
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -123,8 +101,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     return {
         "found": True,
         "speed_kmph": speed_value,
-        "speed_type": "pre-pitch",
-        "speed_note": "Physics-based speed from distance–time (video frames)",
+        "speed_type": "raw_pixel_speed",
+        "speed_note": "Pure pixel-per-second speed (no physics assumptions, no limits)",
         "swing": swing,
         "spin": spin,
         "trajectory": last_pos

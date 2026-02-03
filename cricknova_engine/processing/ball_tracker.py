@@ -2,9 +2,6 @@ import cv2 as cv
 import numpy as np
 import math
 
-# Physical human bowling limits (km/h)
-MIN_VALID_SPEED = 40.0
-MAX_VALID_SPEED = 170.0
 
 def filter_positions(ball_positions):
     """
@@ -176,17 +173,8 @@ def compute_speed_kmph(ball_positions, fps):
 
     speed_kmph = speed_mps * 3.6
 
-    # -----------------------------
-    # PHYSICS VALIDATION (NO SCRIPTING)
-    # -----------------------------
-    # Reject clearly impossible values instead of clamping
-    if speed_kmph < MIN_VALID_SPEED or speed_kmph > MAX_VALID_SPEED:
-        return {
-            "speed_kmph": None
-        }
-
     return {
-        "speed_kmph": round(float(speed_kmph), 1)
+        "speed_kmph": float(speed_kmph)
     }
 
 def compute_swing(ball_positions):
