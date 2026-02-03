@@ -178,3 +178,18 @@ def calculate_speed_pro(
 # corners = [(300, 200), (500, 200), (700, 800), (100, 800)]  # Example pitch pixels
 # speed = calculate_speed_pro(ball_pixel_coords, corners, fps=60, ball_type="leather")
 # print("Speed:", speed, "km/h")
+
+# -----------------------------
+# PUBLIC API (BACKWARD COMPAT)
+# -----------------------------
+def calculate_speed(ball_positions, fps=30, pitch_corners=None, ball_type="leather"):
+    """
+    Backward-compatible wrapper expected by backend.
+    Calls calculate_speed_pro internally.
+    """
+    return calculate_speed_pro(
+        ball_positions=ball_positions,
+        pitch_corners=pitch_corners,
+        fps=fps,
+        ball_type=ball_type
+    )
