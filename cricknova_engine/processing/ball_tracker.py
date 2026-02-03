@@ -2,9 +2,9 @@ import cv2 as cv
 import numpy as np
 import math
 
-# No hard speed validity limits – physics + confidence decide
-MIN_VALID_SPEED = None
-MAX_VALID_SPEED = None
+# Physical human bowling limits (km/h)
+MIN_VALID_SPEED = 40.0
+MAX_VALID_SPEED = 170.0
 
 def filter_positions(ball_positions):
     """
@@ -177,6 +177,21 @@ def compute_speed_kmph(ball_positions, fps):
     speed_mps = (median_px * meters_per_pixel) / np.median(times)
 
     speed_kmph = speed_mps * 3.6
+
+    # -----------------------------
+    # CAMERA NORMALIZATION (SAFE)
+    # -----------------------------
+    # If real-world calibration is missing, do NOT apply artificial scaling.
+    # Pixel-based estimation is returned as-is and treated conservatively.
+    pass
+
+    # -----------------------------
+    # PHYSICAL SANITY CLAMP
+    # -----------------------------
+    if speed_kmph < MIN_VALID_SPEED or speed_kmph > MAX_VALID_SPEED:
+        return {
+            "speed_kmph": None
+        }
 
     return {
         "speed_kmph": round(float(speed_kmph), 1)

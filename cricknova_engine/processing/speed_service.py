@@ -1,5 +1,5 @@
 from .ball_tracker import BallTracker
-from .speed import BallSpeedCalculator
+from .speed import calculate_speed_pro
 
 def estimate_speed(video_path):
     """
@@ -11,7 +11,6 @@ def estimate_speed(video_path):
 
     tracker = BallTracker()
     # FPS will be inferred internally from video metadata
-    speed_calc = BallSpeedCalculator()
 
     positions, fps = tracker.track_ball(video_path)
 
@@ -22,20 +21,23 @@ def estimate_speed(video_path):
             "speed_note": "Insufficient frames for physics-based speed"
         }
 
-    base_speed = speed_calc.calculate_speed(positions, fps)
+    base_speed_result = calculate_speed_pro(
+        positions,
+        fps=fps,
+    )
 
-    if base_speed is None:
+    if not base_speed_result or not isinstance(base_speed_result, dict):
         return {
             "speed_kmph": None,
             "speed_type": "pre-pitch",
             "speed_note": "Tracking incomplete, speed not reliable"
         }
 
-    if isinstance(base_speed, dict):
-        return base_speed
+    speed_kmph = base_speed_result.get("speed_kmph")
+    speed_note = base_speed_result.get("speed_note")
 
     return {
-        "speed_kmph": round(float(base_speed), 1),
+        "speed_kmph": speed_kmph,
         "speed_type": "pre-pitch",
-        "speed_note": "Physics-based speed"
+        "speed_note": speed_note or "Physics-based speed from distance–time (video frames)"
     }

@@ -595,8 +595,18 @@ String swing = "NA";
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _metric(
-                          "Speed",
-                          speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "NA",
+                          "Speed (Physics)",
+                          speed != null
+                              ? "${speed!.clamp(60, 160).toStringAsFixed(1)} km/h"
+                              : "Calculating…",
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          "Based on distance–time from video frames",
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),

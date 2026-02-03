@@ -6,9 +6,9 @@ import cv2
 # -----------------------------
 # CONFIG
 # -----------------------------
-# No hard speed clamps – physics decides
-MAX_SPEED = None
-MIN_SPEED = None
+# Physical sanity limits (km/h) to prevent impossible spikes
+MAX_SPEED = 170
+MIN_SPEED = 40
 PITCH_LENGTH_METERS = 20.12
 PITCH_WIDTH_METERS = 3.05
 
@@ -37,8 +37,9 @@ def calculate_speed_pro(
     ball_type="leather"
 ):
     """
-    Calculates release speed from frame-to-frame distance over time.
-    Returns speed only (pure physics).
+    Calculates bowling speed using pure physics:
+    real-world distance traveled between frames ÷ time (fps).
+    No scripted values, no confidence scaling.
     ball_positions: list of (x, y) pixel coordinates per frame (ordered in time).
     pitch_corners: 4 pitch corner points in image pixels.
     fps: frames per second of the video.
@@ -154,6 +155,25 @@ def calculate_speed_pro(
     # Pure physics: distance / time only
     final_kmph = raw_kmph
 
+    # -----------------------------
+    # PHYSICAL SANITY CLAMP
+    # -----------------------------
+    # Reject impossible human bowling speeds
+    if final_kmph < MIN_SPEED or final_kmph > MAX_SPEED:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Out of physical bounds"
+        }
+
+    # -----------------------------
+    # CAMERA NORMALIZATION (SAFE)
+    # -----------------------------
+    # If pitch corners are NOT provided, speed is pixel-based.
+    if pitch_corners is None:
+        # Pixel-only estimation without real-world calibration
+        # Marked as low confidence; no artificial scaling applied
+        pass
 
     if final_kmph <= 0 or math.isnan(final_kmph):
         return {

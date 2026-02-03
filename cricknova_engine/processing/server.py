@@ -12,8 +12,13 @@ app.state.last_time = []
 
 model = YOLO("yolo11n.pt")  # cricket ball trained model
 
+
 # Realistic pitch-based scaling (22 yards ≈ 20.12 meters)
 PITCH_LENGTH_METERS = 20.12
+
+# Physical human bowling limits (km/h)
+MIN_SPEED_KMPH = 40.0
+MAX_SPEED_KMPH = 170.0
 
 
 @app.post("/analyze_live_frame")
@@ -40,6 +45,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     if len(last_pos) > 12:
         last_pos.pop(0)
 
+    # Speed is computed only from tracked ball motion over time (no scripted scaling)
     # -----------------------------
     # REAL PHYSICS SPEED (NON-SCRIPTED)
     # -----------------------------
@@ -74,7 +80,13 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             speed_mps = avg_px_per_sec * meters_per_pixel
             speed_kmh_calc = speed_mps * 3.6
 
-            speed_value = round(float(speed_kmh_calc), 1)
+            # -----------------------------
+            # PHYSICAL SANITY CLAMP
+            # -----------------------------
+            if speed_kmh_calc < MIN_SPEED_KMPH or speed_kmh_calc > MAX_SPEED_KMPH:
+                speed_value = None
+            else:
+                speed_value = round(float(speed_kmh_calc), 1)
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -107,7 +119,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         "found": True,
         "speed_kmph": speed_value,
         "speed_type": "pre-pitch",
-        "speed_note": "Frame-distance physics speed",
+        "speed_note": "Physics-based speed from distance–time (video frames)",
         "swing": swing,
         "spin": spin,
         "trajectory": last_pos

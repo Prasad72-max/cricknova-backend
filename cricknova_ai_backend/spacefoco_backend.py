@@ -652,8 +652,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
-        from cricknova_engine.processing.speed import calculate_speed
-        speed_result = calculate_speed(ball_positions, fps=fps)
+        from cricknova_engine.processing.speed import calculate_speed_pro
+        speed_result = calculate_speed_pro(ball_positions, fps=fps)
         speed_kmph = speed_result.get("speed_kmph")
 
         print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}, points={len(ball_positions)}")
@@ -1085,8 +1085,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
-        from cricknova_engine.processing.speed import calculate_speed
-        speed_result = calculate_speed(ball_positions, fps=fps)
+        from cricknova_engine.processing.speed import calculate_speed_pro
+        speed_result = calculate_speed_pro(ball_positions, fps=fps)
         speed_kmph = speed_result.get("speed_kmph")
 
         swing = detect_swing_x(ball_positions)

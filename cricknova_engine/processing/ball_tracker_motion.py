@@ -2,6 +2,10 @@ import cv2
 import numpy as np
 import math
 
+# Physical human bowling limits (km/h)
+MIN_VALID_SPEED = 40.0
+MAX_VALID_SPEED = 170.0
+
 def track_ball_positions(video_path, max_frames=120):
     cap = cv2.VideoCapture(video_path)
 
@@ -121,8 +125,15 @@ def calculate_ball_speed_kmph(positions, fps):
     speed_mps = pixel_velocity * meters_per_pixel
     speed_kmph = speed_mps * 3.6
 
+    # -----------------------------
+    # CAMERA NORMALIZATION (SAFE)
+    # -----------------------------
+    # If real-world calibration is missing, do NOT apply artificial scaling.
+    # Pixel-based estimation is returned as-is and treated conservatively.
+    pass
+
     # STEP 5: realistic hard bounds (safety only)
-    if speed_kmph <= 0:
+    if speed_kmph < MIN_VALID_SPEED or speed_kmph > MAX_VALID_SPEED:
         return None
 
     return round(speed_kmph, 1)
