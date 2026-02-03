@@ -97,17 +97,12 @@ def calculate_speed_pro(
             base = avg_px * fps
 
         base_kmph = base * 3.6
-        if base_kmph < MIN_SPEED or base_kmph > MAX_SPEED:
-            return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Pixel speed outside physical limits"
-            }
+        base_kmph = max(MIN_SPEED, min(base_kmph, MAX_SPEED))
 
         return {
-            "speed_kmph": round(float(base), 1),
+            "speed_kmph": round(float(base_kmph), 1),
             "speed_type": "pre-pitch",
-            "speed_note": "Pixel-only speed"
+            "speed_note": "Pixel-only physics speed (no pitch calibration)"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -193,13 +188,7 @@ def calculate_speed_pro(
     # Use median of window speeds to avoid spikes
     raw_kmph = float(np.median(speed_estimates))
 
-    if raw_kmph < MIN_SPEED or raw_kmph > MAX_SPEED:
-        print(f"[SPEED] rejected raw={raw_kmph}")
-        return {
-            "speed_kmph": None,
-            "speed_type": "pre-pitch",
-            "speed_note": "Speed outside physical limits"
-        }
+    raw_kmph = max(MIN_SPEED, min(raw_kmph, MAX_SPEED))
 
     final_kmph = raw_kmph
 
