@@ -596,9 +596,9 @@ String swing = "NA";
                       children: [
                         _metric(
                           "Speed (Physics)",
-                          speed != null
-                              ? "${speed!.clamp(60, 160).toStringAsFixed(1)} km/h"
-                              : "Calculating…",
+                          speed == null
+                              ? "-- km/h"
+                              : "${speed!.toStringAsFixed(1)} km/h",
                         ),
                         const SizedBox(height: 6),
                         const Text(

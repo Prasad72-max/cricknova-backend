@@ -177,16 +177,13 @@ def compute_speed_kmph(ball_positions, fps):
     speed_kmph = speed_mps * 3.6
 
     # -----------------------------
-    # CAMERA NORMALIZATION (SAFE)
+    # PHYSICS VALIDATION (NO SCRIPTING)
     # -----------------------------
-    # If real-world calibration is missing, do NOT apply artificial scaling.
-    # Pixel-based estimation is returned as-is and treated conservatively.
-    pass
-
-    # -----------------------------
-    # PHYSICAL SANITY CLAMP
-    # -----------------------------
-    speed_kmph = max(MIN_VALID_SPEED, min(speed_kmph, MAX_VALID_SPEED))
+    # Reject clearly impossible values instead of clamping
+    if speed_kmph < MIN_VALID_SPEED or speed_kmph > MAX_VALID_SPEED:
+        return {
+            "speed_kmph": None
+        }
 
     return {
         "speed_kmph": round(float(speed_kmph), 1)

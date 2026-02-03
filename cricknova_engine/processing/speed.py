@@ -8,9 +8,9 @@ import cv2
 # -----------------------------
 # Physical sanity limits (km/h) to prevent impossible spikes
 MAX_SPEED = 170
-MIN_SPEED = 40
-PITCH_LENGTH_METERS = 20.12
-PITCH_WIDTH_METERS = 3.05
+MIN_SPEED = 60
+MIN_PITCH_PX = 180
+MAX_PITCH_PX = 520
 
 
 def get_perspective_matrix(pitch_corners):
@@ -54,6 +54,14 @@ def calculate_speed_pro(
             "speed_note": "Physics-based speed unavailable"
         }
 
+    # HARD GUARD: require enough trajectory
+    if len(ball_positions) < 6:
+        return {
+            "speed_kmph": None,
+            "speed_type": "pre-pitch",
+            "speed_note": "Insufficient tracking data"
+        }
+
     # Allow low FPS videos but note reduced accuracy
     fps = max(15, fps)
 
@@ -65,8 +73,16 @@ def calculate_speed_pro(
             d = np.linalg.norm(
                 np.array(ball_positions[i]) - np.array(ball_positions[i - 1])
             )
-            if d > 0:
+            # HARD motion sanity (px/frame)
+            if 1.5 < d < 35.0:
                 pixel_dists.append(d)
+
+        if not pixel_dists:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "Unstable pixel motion"
+            }
 
         if len(pixel_dists) < 2:
             return {
@@ -79,6 +95,14 @@ def calculate_speed_pro(
             fps = max(15, fps)
             # Pixel-only fallback (low confidence)
             base = avg_px * fps
+
+        base_kmph = base * 3.6
+        if base_kmph < MIN_SPEED or base_kmph > MAX_SPEED:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "Pixel speed outside physical limits"
+            }
 
         return {
             "speed_kmph": round(float(base), 1),
@@ -93,11 +117,23 @@ def calculate_speed_pro(
     real_pts = cv2.perspectiveTransform(pts, M)
     real_pts = real_pts.reshape(-1, 2)
 
+    ys = [p[1] for p in ball_positions]
+    pitch_px = max(ys) - min(ys)
+
+    if pitch_px < MIN_PITCH_PX or pitch_px > MAX_PITCH_PX:
+        print(f"[SPEED] rejected pitch_px={pitch_px}")
+        return {
+            "speed_kmph": None,
+            "speed_type": "pre-pitch",
+            "speed_note": "Invalid pitch scale"
+        }
+
     # 3. Calculate Real-World Distances (Meters) between consecutive frames
     distances = []
     for i in range(1, len(real_pts)):
         d = np.linalg.norm(real_pts[i] - real_pts[i - 1])
-        distances.append(d)
+        if 0.01 < d < 1.5:
+            distances.append(d)
 
     if len(distances) < 2:
         return {
@@ -123,7 +159,6 @@ def calculate_speed_pro(
     upper = Q3 + 1.2 * iqr
 
     clean_distances = distances[(distances >= lower) & (distances <= upper)]
-    # Removed confidence calculation line here
 
     if len(clean_distances) < 2:
         clean_distances = distances
@@ -158,14 +193,15 @@ def calculate_speed_pro(
     # Use median of window speeds to avoid spikes
     raw_kmph = float(np.median(speed_estimates))
 
-    # Pure physics: distance / time only
-    final_kmph = raw_kmph
+    if raw_kmph < MIN_SPEED or raw_kmph > MAX_SPEED:
+        print(f"[SPEED] rejected raw={raw_kmph}")
+        return {
+            "speed_kmph": None,
+            "speed_type": "pre-pitch",
+            "speed_note": "Speed outside physical limits"
+        }
 
-    # -----------------------------
-    # PHYSICAL SANITY CLAMP
-    # -----------------------------
-    # Silent physical clamp (broadcast-style)
-    final_kmph = max(MIN_SPEED, min(final_kmph, MAX_SPEED))
+    final_kmph = raw_kmph
 
     # -----------------------------
     # CAMERA NORMALIZATION (SAFE)

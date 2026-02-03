@@ -74,17 +74,24 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         if distances and times:
             avg_px_per_sec = (sum(distances) / sum(times))
 
-            # Estimate pitch pixel length dynamically
             ys = [p[1] for p in last_pos]
-            pitch_px = max(200.0, max(ys) - min(ys))
-            meters_per_pixel = PITCH_LENGTH_METERS / pitch_px
+            vertical_span = max(ys) - min(ys)
 
-            speed_mps = avg_px_per_sec * meters_per_pixel
-            speed_kmh_calc = speed_mps * 3.6
+            # Require meaningful vertical travel before trusting speed
+            # Prevents insane speeds when the ball barely moves vertically
+            frame_h = frame.shape[0]
+            if vertical_span < frame_h * 0.12:
+                speed_value = None
+            else:
+                pitch_px = max(220.0, vertical_span)
+                meters_per_pixel = PITCH_LENGTH_METERS / pitch_px
 
-            # Silent physical clamp (no rejection shown)
-            speed_kmh_calc = max(MIN_SPEED_KMPH, min(speed_kmh_calc, MAX_SPEED_KMPH))
-            speed_value = round(float(speed_kmh_calc), 1)
+                speed_mps = avg_px_per_sec * meters_per_pixel
+                speed_kmh_calc = speed_mps * 3.6
+
+                # Silent physical clamp (real cricket limits)
+                speed_kmh_calc = max(MIN_SPEED_KMPH, min(speed_kmh_calc, MAX_SPEED_KMPH))
+                speed_value = round(float(speed_kmh_calc), 1)
 
     # SWING CALCULATION
     if len(last_pos) > 4:

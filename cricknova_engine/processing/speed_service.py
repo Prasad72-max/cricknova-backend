@@ -36,6 +36,13 @@ def estimate_speed(video_path):
     speed_kmph = base_speed_result.get("speed_kmph")
     speed_note = base_speed_result.get("speed_note")
 
+    # ---- HARD PHYSICS SANITY CHECK ----
+    # Reject impossible cricket speeds instead of showing fake numbers
+    if not isinstance(speed_kmph, (int, float)):
+        speed_kmph = None
+    elif speed_kmph < 50 or speed_kmph > 180:
+        speed_kmph = None
+
     return {
         "speed_kmph": speed_kmph,
         "speed_type": "pre-pitch",
