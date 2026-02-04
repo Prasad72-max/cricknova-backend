@@ -710,16 +710,26 @@ async def analyze_training_video(file: UploadFile = File(...)):
         # ---- HARD GUARD: fps must be real ----
         if not fps or fps <= 0:
             print("[SPEED] Invalid FPS, speed disabled")
-            raw_speed = None
+            speed_result = None
         else:
             speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
-            raw_speed = speed_result.get("speed_kmph")
 
-        # Engine already enforces VERIFIED physics.
-        # Accept speed only if engine returned a real number.
-        speed_kmph = float(raw_speed) if isinstance(raw_speed, (int, float)) else None
+        # ---- Extract speed safely (supports tagged dict) ----
+        speed_kmph = None
+        speed_type = None
+        speed_note = None
 
-        print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}")
+        if isinstance(speed_result, dict):
+            speed_kmph = speed_result.get("speed_kmph")
+            speed_type = speed_result.get("speed_type")
+            speed_note = speed_result.get("speed_note")
+
+        if isinstance(speed_kmph, (int, float)):
+            speed_kmph = float(speed_kmph)
+        else:
+            speed_kmph = None
+
+        print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -736,6 +746,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
+            "speed_type": speed_type,
+            "speed_note": speed_note,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1159,14 +1171,26 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         # ---- HARD GUARD: fps must be real ----
         if not fps or fps <= 0:
             print("[SPEED] Invalid FPS, speed disabled")
-            raw_speed = None
+            speed_result = None
         else:
             speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
-            raw_speed = speed_result.get("speed_kmph")
 
-        # Engine already enforces VERIFIED physics.
-        # Accept speed only if engine returned a real number.
-        speed_kmph = float(raw_speed) if isinstance(raw_speed, (int, float)) else None
+        # ---- Extract speed safely (supports tagged dict) ----
+        speed_kmph = None
+        speed_type = None
+        speed_note = None
+
+        if isinstance(speed_result, dict):
+            speed_kmph = speed_result.get("speed_kmph")
+            speed_type = speed_result.get("speed_type")
+            speed_note = speed_result.get("speed_note")
+
+        if isinstance(speed_kmph, (int, float)):
+            speed_kmph = float(speed_kmph)
+        else:
+            speed_kmph = None
+
+        print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
@@ -1182,6 +1206,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
+            "speed_type": speed_type,
+            "speed_note": speed_note,
             "swing": swing,
             "spin": spin_label,
             "trajectory": []

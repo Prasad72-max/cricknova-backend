@@ -195,13 +195,12 @@ def calculate_speed_pro(
             "speed_note": "Physics calculation failed"
         }
 
-    # HARD CRICKET PHYSICS GATE
-    # Reject speeds outside real fast-bowling range
+    # HARD CRICKET PHYSICS GATE (TAG ONLY, DO NOT DROP)
     if final_kmph < 80 or final_kmph > 170:
         return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Unphysical cricket speed rejected"
+            "speed_kmph": float(final_kmph),
+            "speed_type": "out_of_range",
+            "speed_note": "Outside typical fast-bowling range"
         }
 
     # REMOVED broadcast-style rounding

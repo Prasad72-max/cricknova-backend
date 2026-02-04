@@ -122,11 +122,19 @@ def calculate_ball_speed_kmph(positions, fps):
     speed_mps = pixel_velocity * meters_per_pixel
     speed_kmph = speed_mps * 3.6
 
-    # HARD CRICKET PHYSICS GATE
-    if speed_kmph < 80 or speed_kmph > 170 or not math.isfinite(speed_kmph):
-        return None
+    # HARD CRICKET PHYSICS GATE (TAG ONLY – DO NOT DROP)
+    speed_type = "normal"
+    speed_note = "Physics-based estimate"
 
-    return round(speed_kmph, 1)
+    if speed_kmph < 80 or speed_kmph > 170 or not math.isfinite(speed_kmph):
+        speed_type = "out_of_range"
+        speed_note = "Outside typical fast-bowling range"
+
+    return {
+        "speed_kmph": round(speed_kmph, 1),
+        "speed_type": speed_type,
+        "speed_note": speed_note,
+    }
 
 # --- Swing & Spin detection (physics-based, no heuristics UI-side) ---
 

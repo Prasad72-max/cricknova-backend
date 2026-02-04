@@ -46,11 +46,12 @@ class _UploadScreenState extends State<UploadScreen> {
   VideoPlayerController? controller;
 
   bool uploading = false;
+  String? progressText;
   bool showTrajectory = false;
 
 double? speed;
-String spin = "NA";
-String swing = "NA";
+String? spin;
+String? swing;
 
   List<dynamic>? trajectory = const [];
 
@@ -148,9 +149,15 @@ String swing = "NA";
     if (mounted) {
       setState(() {
         uploading = true;
+        progressText = "Uploading video… ⏳";
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
+
+        // reset metrics until backend responds
+        speed = null;
+        swing = null;
+        spin = null;
       });
     }
 
@@ -177,6 +184,12 @@ String swing = "NA";
 
       final response = await request.send()
           .timeout(const Duration(seconds: 40));
+
+      if (mounted) {
+        setState(() {
+          progressText = "Analyzing frames… 🎯";
+        });
+      }
 
       final respStr = await response.stream.bytesToString();
       debugPrint("UPLOAD RESPONSE ${response.statusCode} => $respStr");
@@ -205,18 +218,17 @@ String swing = "NA";
 
       if (!mounted) return;
 
+      if (mounted) {
+        setState(() {
+          progressText = "Calculating speed… 📐";
+        });
+      }
+
       setState(() {
         speed = extractedSpeed;
 
-        final swingVal = analysis["swing"];
-        swing = (swingVal != null && swingVal.toString().isNotEmpty)
-            ? swingVal.toString().toUpperCase()
-            : "NONE";
-
-        final spinVal = analysis["spin"];
-        spin = (spinVal != null && spinVal.toString().isNotEmpty)
-            ? spinVal.toString().toUpperCase()
-            : "NONE";
+        swing = analysis["swing"]?.toString();
+        spin  = analysis["spin"]?.toString();
 
         trajectory = const [];
         showTrajectory = false;
@@ -236,6 +248,7 @@ String swing = "NA";
       if (mounted) {
         setState(() {
           uploading = false;
+          progressText = null;
         });
       }
     }
@@ -596,20 +609,18 @@ String swing = "NA";
                       children: [
                         _metric(
                           "Speed",
-                          uploading
+                          uploading || speed == null
                               ? "__"
-                              : (speed == null
-                                  ? ""
-                                  : "${speed!.toStringAsFixed(1)} km/h"),
+                              : "${speed!.toStringAsFixed(1)} km/h",
                         ),
                         const SizedBox(height: 10),
                         _metric(
                           "Swing",
-                          uploading ? "__" : ((swing == "NA" || swing == "NONE") ? "" : swing),
+                          uploading || swing == null ? "__" : swing!,
                         ),
                         _metric(
                           "Spin",
-                          uploading ? "__" : ((spin == "NA" || spin == "NONE") ? "" : spin),
+                          uploading || spin == null ? "__" : spin!,
                         ),
                         const SizedBox(height: 10),
                         GestureDetector(
@@ -762,8 +773,23 @@ String swing = "NA";
                 if (uploading)
                   Positioned(
                     top: 20,
-                    right: 20,
-                    child: CircularProgressIndicator(),
+                    left: 0,
+                    right: 0,
+                    child: Column(
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 10),
+                        if (progressText != null)
+                          Text(
+                            progressText!,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
               ],
             ),

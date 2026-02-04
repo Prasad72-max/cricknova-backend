@@ -45,11 +45,12 @@ def estimate_speed(video_path):
     speed_note = base_speed_result.get("speed_note")
 
     # ---- VERIFIED PHYSICS MODE ----
-    # Speed is returned ONLY if it passes
-    # real cricket-physics validation.
-    # Otherwise backend returns None honestly.
+    # Do NOT drop numeric speeds here.
+    # Validation is handled inside calculate_speed_pro.
     if not isinstance(speed_kmph, (int, float)):
         speed_kmph = None
+    else:
+        speed_kmph = float(speed_kmph)
 
     return {
         "speed_kmph": speed_kmph,

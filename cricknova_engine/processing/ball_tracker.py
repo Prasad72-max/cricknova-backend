@@ -180,14 +180,18 @@ def compute_speed_kmph(ball_positions, fps):
 
     speed_kmph = speed_mps * 3.6
 
-    # HARD CRICKET PHYSICS GATE
+    # HARD CRICKET PHYSICS GATE (TAG ONLY – DO NOT DROP)
+    speed_type = "normal"
+    speed_note = "Physics-based estimate"
+
     if speed_kmph < 80 or speed_kmph > 170:
-        return {
-            "speed_kmph": None
-        }
+        speed_type = "out_of_range"
+        speed_note = "Outside typical fast-bowling range"
 
     return {
-        "speed_kmph": float(speed_kmph)
+        "speed_kmph": float(speed_kmph),
+        "speed_type": speed_type,
+        "speed_note": speed_note
     }
 
 def compute_swing(ball_positions):

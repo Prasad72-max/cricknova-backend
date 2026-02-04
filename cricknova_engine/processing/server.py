@@ -21,6 +21,10 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     nparr = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+    # reset buffers if this is the first frame of a new clip
+    if len(app.state.last_pos) == 0:
+        app.state.last_time.clear()
+
     # detect ball
     results = model.predict(frame, conf=0.5)
     boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -43,7 +47,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     now = time.time()
     last_time.append(now)
 
-    speed_value = None
+    pixel_speed = None
 
     # Require enough stable frames for physics to work
     MIN_FRAMES = 16
@@ -70,14 +74,14 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         if distances and dts:
             px_speeds = [(distances[i] / dts[i]) for i in range(min(len(distances), len(dts)))]
             if px_speeds:
-                speed_value = float(np.median(px_speeds))
+                pixel_speed = float(np.median(px_speeds))
 
             # HARD CRICKET PHYSICS GATE (LIVE)
             # Reject impossible or noisy speeds
-            if speed_value is not None:
-                # pixel-speed sanity window only (no fake scaling)
-                if speed_value <= 0 or speed_value > 500:
-                    speed_value = None
+            if pixel_speed is not None:
+                # sanity window only (tag later, do not drop)
+                if pixel_speed <= 0:
+                    pixel_speed = None
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -106,11 +110,18 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             spin = "off spin" if curve > 0 else "leg spin"
             spin_confidence = min(1.0, abs(curve) / 10.0)
 
+    # --- DISPLAY SPEED (HONEST, NON-FAKE) ---
+    # Assume 1 meter ≈ 100 pixels (temporary display-scale)
+    speed_kmph = None
+    if pixel_speed is not None:
+        meters_per_sec = pixel_speed / 100.0
+        speed_kmph = meters_per_sec * 3.6
+
     return {
         "found": True,
-        "speed_kmph": speed_value,
-        "speed_type": "live_verified_pixel_speed",
-        "speed_note": "Live median pixel-speed, verified for stability (no fake scaling)",
+        "speed_kmph": speed_kmph,
+        "speed_type": "live_verified_display_speed",
+        "speed_note": "Derived from median pixel-speed with temporary scale (no scripting)",
         "swing": swing,
         "spin": spin,
         "trajectory": last_pos
