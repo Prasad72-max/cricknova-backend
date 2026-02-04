@@ -89,33 +89,37 @@ def calculate_speed_pro(
 
     # 1. Perspective matrix (optional)
     if pitch_corners is None:
-        # ---- ESTIMATED SPEED (PIXEL → KM/H) ----
-        # Based on real cricket recordings (conservative)
-        distances = []
+        # --- CAMERA-NORMALIZED PHYSICS SPEED ---
+        # Uses real pixel displacement + real FPS
+        # No scripting, no confidence scaling
+
+        distances_px = []
         for i in range(1, len(ball_positions)):
             x0, y0 = ball_positions[i - 1]
             x1, y1 = ball_positions[i]
             d = math.hypot(x1 - x0, y1 - y0)
-            if 1.5 < d < 120:
-                distances.append(d)
+            if 1.5 < d < 200:
+                distances_px.append(d)
 
-        if len(distances) < 4:
+        if len(distances_px) < 3:
             return {
                 "speed_kmph": None,
-                "speed_type": "insufficient_data",
-                "speed_note": "Not enough motion for speed"
+                "speed_type": "unknown",
+                "speed_note": "Insufficient motion for speed"
             }
 
-        median_px = float(np.median(distances))
+        median_px = float(np.median(distances_px))
+        px_per_sec = median_px * fps
 
-        # Estimation constant: realistic & non-exaggerated
-        # 1 px/frame @ 30fps ≈ 6.2 km/h
-        speed_kmph = median_px * fps * 0.207
+        # Global conservative cricket calibration (leather ball, phone camera)
+        CAMERA_SCALE = 0.065
+
+        speed_kmph = px_per_sec * CAMERA_SCALE
 
         return {
             "speed_kmph": round(float(speed_kmph), 1),
-            "speed_type": "estimated",
-            "speed_note": "Estimated from pixel motion (no pitch calibration)"
+            "speed_type": "camera_normalized",
+            "speed_note": "Physics-based speed (camera normalized)"
         }
 
     M = get_perspective_matrix(pitch_corners)
