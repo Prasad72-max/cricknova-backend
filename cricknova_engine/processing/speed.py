@@ -87,83 +87,15 @@ def calculate_speed_pro(
             "speed_note": "Insufficient tracking data"
         }
 
-    # HARD NORMALIZATION: force physics to 30 FPS to avoid 60fps micro-motion
-    fps = 30
-
     # 1. Perspective matrix (optional)
     if pitch_corners is None:
-        # Fallback: pixel-distance based estimation
-        pixel_dists = []
-        total_px = 0.0
-
-        for i in range(1, len(ball_positions)):
-            dx = ball_positions[i][0] - ball_positions[i - 1][0]
-            dy = ball_positions[i][1] - ball_positions[i - 1][1]
-            d = math.hypot(dx, dy)
-
-            total_px += d
-
-            # Accept realistic inter-frame motion (relaxed for mobile cameras)
-            if 0.8 < d < 160.0:
-                pixel_dists.append(d)
-
-        avg_px_per_frame = total_px / max(len(ball_positions) - 1, 1)
-
-        # Reject tracking jumps (camera shake / ID switch)
-        if avg_px_per_frame > 0.25 * max(
-            [p[0] for p in ball_positions] + [p[1] for p in ball_positions]
-        ):
-            return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Tracking jump detected"
-            }
-
-        if not pixel_dists:
-            return {
-                "speed_kmph": None,
-                "speed_type": "tracking_lost",
-                "speed_note": "Ball detected but motion too small between frames"
-            }
-
-        if len(pixel_dists) < 2:
-            return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Insufficient tracking data"
-            }
-        else:
-            # --- PIXEL → METER CALIBRATION ---
-            # Estimate real distance using expected release-to-bounce distance
-            total_px_dist = sum(pixel_dists)
-            if total_px_dist <= 0:
-                return {
-                    "speed_kmph": None,
-                    "speed_type": "unknown",
-                    "speed_note": "Invalid pixel distance"
-                }
-
-            # Camera geometry guard (relaxed further for mobile uploads)
-            if total_px_dist < 90:
-                return {
-                    "speed_kmph": None,
-                    "speed_type": "invalid_camera",
-                    "speed_note": "Visible ball travel too short for reliable physics"
-                }
-
-            print("[SPEED DEBUG] pixel_dists =", len(pixel_dists), "total_px_dist =", total_px_dist)
-
-            meters_per_pixel = TYPICAL_RELEASE_TO_BOUNCE_METERS / max(total_px_dist, 1.0)
-
-            # Convert pixel distances to meters
-            meter_speeds = [(d * meters_per_pixel) * fps * 3.6 for d in pixel_dists]
-            final_kmph = float(np.median(meter_speeds))
-
-            return {
-                "speed_kmph": final_kmph,
-                "speed_type": "calibrated_pre_pitch",
-                "speed_note": "Pixel speed calibrated using expected pitch distance"
-            }
+        # NO REAL-WORLD SCALE AVAILABLE
+        # Without pitch calibration, km/h is physically impossible
+        return {
+            "speed_kmph": None,
+            "speed_type": "uncalibrated",
+            "speed_note": "Real speed requires pitch calibration (crease-to-crease)"
+        }
 
     M = get_perspective_matrix(pitch_corners)
 
@@ -199,15 +131,6 @@ def calculate_speed_pro(
 
     # REMOVED soft clamp logic entirely
 
-    # -----------------------------
-    # CAMERA NORMALIZATION (SAFE)
-    # -----------------------------
-    # If pitch corners are NOT provided, speed is pixel-based.
-    if pitch_corners is None:
-        # Pixel-only estimation without real-world calibration
-        # Marked as low confidence; no artificial scaling applied
-        pass
-
     if final_kmph <= 0 or math.isnan(final_kmph):
         return {
             "speed_kmph": None,
@@ -215,20 +138,12 @@ def calculate_speed_pro(
             "speed_note": "Physics calculation failed"
         }
 
-    # Tag out-of-range but DO NOT reject physics
-    if final_kmph < 60 or final_kmph > 180:
-        return {
-            "speed_kmph": float(final_kmph),
-            "speed_type": "out_of_range",
-            "speed_note": "Outside typical bowling range but physics valid"
-        }
-
-    # REMOVED broadcast-style rounding
+    # REMOVED CAMERA NORMALIZATION (SAFE) section entirely
 
     return {
-        "speed_kmph": float(final_kmph),
-        "speed_type": "pre-pitch",
-        "speed_note": "Pure pixel + time physics"
+        "speed_kmph": float(round(final_kmph, 1)),
+        "speed_type": "calibrated_real_world",
+        "speed_note": "Physics-based speed using real pitch geometry"
     }
 
 

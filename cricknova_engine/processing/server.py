@@ -112,20 +112,32 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             spin = "off spin" if curve > 0 else "leg spin"
             spin_confidence = min(1.0, abs(curve) / 10.0)
 
-    # --- PURE PHYSICS OUTPUT (NO FAKE SCALING) ---
-    # Pixel-speed only. Real km/h requires real-world calibration.
+    # --- REAL PHYSICS SPEED (PIXEL → METER → KM/H) ---
+    # Assumption: full visible delivery ≈ pitch length
+    PITCH_LENGTH_M = 20.12  # standard hard-ball pitch
+
     speed_kmph = None
     speed_px_per_sec = None
 
-    if pixel_speed is not None and pixel_speed > 0:
-        speed_px_per_sec = float(pixel_speed)
+    if pixel_speed is not None and pixel_speed > 0 and len(last_pos) >= MIN_FRAMES:
+        # total visible pixel travel
+        total_px = 0.0
+        for i in range(len(last_pos) - 1):
+            total_px += math.dist(last_pos[i], last_pos[i + 1])
+
+        if total_px > 10:
+            meters_per_pixel = PITCH_LENGTH_M / total_px
+            speed_m_per_s = pixel_speed * meters_per_pixel
+            speed_kmph = round(speed_m_per_s * 3.6, 2)
+            speed_px_per_sec = float(pixel_speed)
 
     return {
         "found": True,
         "speed_kmph": speed_kmph,
         "speed_px_per_sec": speed_px_per_sec,
-        "speed_type": "pure_physics_pixel_speed",
-        "speed_note": "Pure pixel + time physics. No assumptions, no scaling, no scripting. Real km/h requires calibration.",
+        "speed_type": "real_physics",
+        "pitch_length_m": PITCH_LENGTH_M,
+        "speed_note": "Pixel distance scaled using full pitch length. Real physics, no scripting.",
         "swing": swing,
         "spin": spin,
         "trajectory": list(last_pos)

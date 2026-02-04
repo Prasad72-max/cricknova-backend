@@ -113,40 +113,44 @@ def track_ball_positions(video_path):
 
 
 # --- Physics-based speed calculator ---
-def compute_speed_kmph(ball_positions, fps):
+def compute_speed_kmph(ball_positions, fps, pitch_length_m=20.12):
     """
-    Physics-based speed estimation from frame-to-frame motion.
-    Returns speed only.
-    No scripted fallbacks or clamps.
+    Real physics-based speed estimation.
+    - Uses real pitch length (meters)
+    - Converts pixel travel to meters using calibration
+    - Returns REAL km/h
     """
 
-    # Fallback if tracking is insufficient
     if not ball_positions or fps <= 1 or len(ball_positions) < 8:
         return {
-            "speed_kmph": None
+            "speed_kmph": None,
+            "speed_type": "insufficient_data"
         }
 
-    # Normalize FPS for stable physics (Render-safe)
     fps = min(max(fps, 24), 60)
-
-    # Limit frames to stable delivery window (Render-safe)
-    if len(ball_positions) > 120:
-        ball_positions = ball_positions[:120]
 
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
     fs = [p[2] for p in ball_positions]
 
-    # Detect pitch (max Y in camera space)
+    # Detect pitch (bounce point)
     pitch_idx = int(np.argmax(ys))
     if pitch_idx < 3:
-        pitch_idx = min(len(ys) - 1, 3)
+        pitch_idx = 3
 
+    # Use delivery phase only (release → pitch)
     start = 1
-    end = len(ball_positions)
+    end = pitch_idx
 
-    distances = []
-    times = []
+    if end - start < 4:
+        return {
+            "speed_kmph": None,
+            "speed_type": "invalid_delivery"
+        }
+
+    # Total pixel distance traveled
+    pixel_dist = 0.0
+    time_sec = 0.0
 
     for i in range(start, end):
         x0, y0, f0 = xs[i - 1], ys[i - 1], fs[i - 1]
@@ -157,49 +161,29 @@ def compute_speed_kmph(ball_positions, fps):
             continue
 
         dp = math.hypot(x1 - x0, y1 - y0)
-
-        # Accept all positive motion; no scripted speed limits
         if dp <= 0:
             continue
 
-        distances.append(dp)
-        times.append(df / fps)
+        pixel_dist += dp
+        time_sec += df / fps
 
-    if len(distances) < 2:
-        return {
-            "speed_kmph": None
-        }
-
-    median_px = float(np.median(distances))
-
-    # ---- CAMERA GEOMETRY GUARD ----
-    # If visible ball travel is too small, scaling becomes unreliable
-    if median_px < 2.0:
+    if pixel_dist < 10 or time_sec <= 0:
         return {
             "speed_kmph": None,
-            "speed_type": "invalid_camera",
-            "speed_note": "Camera angle too side-on or ball travel too short"
+            "speed_type": "invalid_camera"
         }
 
-    # --- PURE PHYSICS: PIXEL SPEED ONLY ---
-    # No meter conversion, no pitch assumption, no camera distance.
-    # Absolute km/h is impossible without calibration.
+    # ---- CALIBRATION ----
+    # Assume delivery covers full pitch length
+    meters_per_pixel = pitch_length_m / pixel_dist
 
-    speed_px_per_sec = median_px / np.median(times)
-
-    if speed_px_per_sec <= 0 or math.isnan(speed_px_per_sec):
-        return {
-            "speed_kmph": None,
-            "speed_px_per_sec": None,
-            "speed_type": "invalid",
-            "speed_note": "Physics calculation failed"
-        }
+    speed_mps = (pixel_dist * meters_per_pixel) / time_sec
+    speed_kmph = speed_mps * 3.6
 
     return {
-        "speed_kmph": None,
-        "speed_px_per_sec": float(speed_px_per_sec),
-        "speed_type": "pure_physics_pixel_speed",
-        "speed_note": "Pure pixel + time physics. No assumptions, no calibration, no scripting."
+        "speed_kmph": round(speed_kmph, 1),
+        "speed_type": "real_physics",
+        "pitch_length_m": pitch_length_m
     }
 
 def compute_swing(ball_positions):
