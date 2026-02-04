@@ -131,6 +131,23 @@ def normalize_ball_positions(raw_positions):
         except Exception:
             continue
     return clean
+
+# -----------------------------
+# TEMPORAL SMOOTHING (PHYSICS SAFE)
+# -----------------------------
+def smooth_positions(positions, window=3):
+    if not positions or len(positions) < window:
+        return positions
+
+    smoothed = []
+    for i in range(len(positions)):
+        xs = []
+        ys = []
+        for j in range(max(0, i - window + 1), i + 1):
+            xs.append(positions[j][0])
+            ys.append(positions[j][1])
+        smoothed.append((sum(xs) / len(xs), sum(ys) / len(ys)))
+    return smoothed
 import time
 
 # Subscription management (external store)
@@ -619,6 +636,35 @@ def calculate_spin_real(ball_positions):
 
 
 # -----------------------------
+# PURE PHYSICS SPEED STABILIZER
+# -----------------------------
+def stabilize_ball_positions(ball_positions, max_jump_px=40):
+    """
+    Removes single-frame pixel spikes without inventing motion.
+    Keeps only physically continuous movement.
+    """
+    if len(ball_positions) < 3:
+        return ball_positions
+
+    stable = [ball_positions[0]]
+
+    for i in range(1, len(ball_positions)):
+        px, py = stable[-1]
+        cx, cy = ball_positions[i]
+
+        dx = abs(cx - px)
+        dy = abs(cy - py)
+
+        # Drop impossible teleport frames
+        if dx > max_jump_px or dy > max_jump_px:
+            continue
+
+        stable.append((cx, cy))
+
+    return stable
+
+
+# -----------------------------
 # TRAINING VIDEO API
 # -----------------------------
 @app.post("/training/analyze")
@@ -630,12 +676,15 @@ async def analyze_training_video(file: UploadFile = File(...)):
     try:
         raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
+        ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
-        if len(ball_positions) > 30:
-            ball_positions = ball_positions[:30]
+        # Keep enough frames for verified physics (>=24)
+        if len(ball_positions) > 60:
+            ball_positions = ball_positions[:60]
 
-        if len(ball_positions) < 5:
+        if len(ball_positions) < 24:
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -666,19 +715,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
             speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
             raw_speed = speed_result.get("speed_kmph")
 
-        # 🔒 PURE PHYSICS GUARARD
-        # Reject impossible or unstable speeds instead of faking numbers
-        if not raw_speed or not isinstance(raw_speed, (int, float)):
-            print("[SPEED] rejected: raw_speed invalid ->", raw_speed)
-            speed_kmph = None
-        elif raw_speed <= 0:
-            print("[SPEED] rejected: non-positive speed ->", raw_speed)
-            speed_kmph = None
-        elif raw_speed > 200:
-            print("[SPEED] rejected: unphysical speed ->", raw_speed)
-            speed_kmph = None
-        else:
-            speed_kmph = float(raw_speed)
+        # Engine already enforces VERIFIED physics.
+        # Accept speed only if engine returned a real number.
+        speed_kmph = float(raw_speed) if isinstance(raw_speed, (int, float)) else None
 
         print(f"[SPEED] speed_kmph={speed_kmph}, fps={fps}")
 
@@ -1088,11 +1127,15 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
     try:
         raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
+        ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
-        if len(ball_positions) > 30:
-            ball_positions = ball_positions[:30]
+        # Use ONLY the first ball delivery (no best-ball logic)
+        # Keep enough frames for verified physics (>=24)
+        if len(ball_positions) > 60:
+            ball_positions = ball_positions[:60]
 
-        if len(ball_positions) < 5:
+        if len(ball_positions) < 24:
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -1121,19 +1164,9 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
             raw_speed = speed_result.get("speed_kmph")
 
-        # 🔒 PURE PHYSICS GUARARD
-        # Reject impossible or unstable speeds instead of faking numbers
-        if not raw_speed or not isinstance(raw_speed, (int, float)):
-            print("[SPEED] rejected: raw_speed invalid ->", raw_speed)
-            speed_kmph = None
-        elif raw_speed <= 0:
-            print("[SPEED] rejected: non-positive speed ->", raw_speed)
-            speed_kmph = None
-        elif raw_speed > 200:
-            print("[SPEED] rejected: unphysical speed ->", raw_speed)
-            speed_kmph = None
-        else:
-            speed_kmph = float(raw_speed)
+        # Engine already enforces VERIFIED physics.
+        # Accept speed only if engine returned a real number.
+        speed_kmph = float(raw_speed) if isinstance(raw_speed, (int, float)) else None
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)

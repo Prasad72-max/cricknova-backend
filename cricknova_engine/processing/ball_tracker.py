@@ -15,8 +15,8 @@ def filter_positions(ball_positions):
         lx, ly, lf = filtered[-1]
         dist = math.hypot(x - lx, y - ly)
 
-        # Reject noise and sudden jumps
-        if 1.5 < dist < 50:
+        # Keep only reasonable motion; reject sudden jumps
+        if 0 < dist < 120:
             filtered.append((x, y, f))
 
     return filtered
@@ -121,7 +121,7 @@ def compute_speed_kmph(ball_positions, fps):
     """
 
     # Fallback if tracking is insufficient
-    if not ball_positions or fps <= 1:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 24:
         return {
             "speed_kmph": None
         }
@@ -151,8 +151,8 @@ def compute_speed_kmph(ball_positions, fps):
 
         dp = math.hypot(x1 - x0, y1 - y0)
 
-        # Strong noise rejection
-        if dp < 2.0 or dp > 40.0:
+        # Accept all positive motion; no scripted speed limits
+        if dp <= 0:
             continue
 
         distances.append(dp)
@@ -163,7 +163,7 @@ def compute_speed_kmph(ball_positions, fps):
             "speed_kmph": None
         }
 
-    median_px = sum(distances) / len(distances)
+    median_px = float(np.median(distances))
 
     # Estimate pitch length in pixels
     pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
@@ -172,6 +172,12 @@ def compute_speed_kmph(ball_positions, fps):
     speed_mps = (median_px * meters_per_pixel) / np.median(times)
 
     speed_kmph = speed_mps * 3.6
+
+    # HARD CRICKET PHYSICS GATE
+    if speed_kmph < 80 or speed_kmph > 170:
+        return {
+            "speed_kmph": None
+        }
 
     return {
         "speed_kmph": float(speed_kmph)

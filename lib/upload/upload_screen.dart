@@ -595,22 +595,22 @@ String swing = "NA";
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _metric(
-                          "Speed (Physics)",
-                          speed == null
-                              ? "-- km/h"
-                              : "${speed!.toStringAsFixed(1)} km/h",
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          "Based on distance–time from video frames",
-                          style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 11,
-                          ),
+                          "Speed",
+                          uploading
+                              ? "__"
+                              : (speed == null
+                                  ? ""
+                                  : "${speed!.toStringAsFixed(1)} km/h"),
                         ),
                         const SizedBox(height: 10),
-                        _metric("Swing", swing),
-                        _metric("Spin", spin),
+                        _metric(
+                          "Swing",
+                          uploading ? "__" : ((swing == "NA" || swing == "NONE") ? "" : swing),
+                        ),
+                        _metric(
+                          "Spin",
+                          uploading ? "__" : ((spin == "NA" || spin == "NONE") ? "" : spin),
+                        ),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

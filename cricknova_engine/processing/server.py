@@ -4,11 +4,12 @@ import cv2
 import numpy as np
 import math
 import time
+from collections import deque
 
 app = FastAPI()
 
-app.state.last_pos = []
-app.state.last_time = []
+app.state.last_pos = deque(maxlen=40)
+app.state.last_time = deque(maxlen=40)
 
 model = YOLO("yolo11n.pt")  # cricket ball trained model
 
@@ -48,28 +49,39 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
     speed_value = None
 
-    if len(last_pos) >= 2 and len(last_time) >= 2:
+    # Require enough stable frames for physics to work
+    MIN_FRAMES = 24
+    DROP_INITIAL = 4
+
+    if len(last_pos) >= MIN_FRAMES and len(last_time) >= MIN_FRAMES:
+        positions = list(last_pos)[DROP_INITIAL:]
+        times = list(last_time)[DROP_INITIAL:]
+
         distances = []
-        times = []
+        dts = []
 
-        for i in range(len(last_pos) - 1):
-            d_px = math.dist(last_pos[i], last_pos[i + 1])
-            dt = last_time[i + 1] - last_time[i]
-            if dt > 0 and d_px > 0:
-                distances.append(d_px)
-                times.append(dt)
+        for i in range(len(positions) - 1):
+            d_px = math.dist(positions[i], positions[i + 1])
+            dt = times[i + 1] - times[i]
 
-        if distances and times:
-            px_per_sec = sum(distances) / sum(times)
+            # reject zero / noisy measurements
+            if dt <= 0 or d_px < 1.0:
+                continue
 
-            # NOTE:
-            # No pitch assumptions
-            # No vertical filtering
-            # No cricket limits
-            # Raw pixel speed converted using frame scale only
-            # 1 pixel == 1 unit distance (debug physics)
+            distances.append(d_px)
+            dts.append(dt)
 
-            speed_value = round(float(px_per_sec), 2)
+        if distances and dts:
+            px_speeds = [(distances[i] / dts[i]) for i in range(min(len(distances), len(dts)))]
+            if px_speeds:
+                speed_value = float(np.median(px_speeds))
+
+            # HARD CRICKET PHYSICS GATE (LIVE)
+            # Reject impossible or noisy speeds
+            if speed_value is not None:
+                # pixel-speed sanity window only (no fake scaling)
+                if speed_value <= 0 or speed_value > 500:
+                    speed_value = None
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -101,8 +113,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     return {
         "found": True,
         "speed_kmph": speed_value,
-        "speed_type": "raw_pixel_speed",
-        "speed_note": "Pure pixel-per-second speed (no physics assumptions, no limits)",
+        "speed_type": "live_verified_pixel_speed",
+        "speed_note": "Live median pixel-speed, verified for stability (no fake scaling)",
         "swing": swing,
         "spin": spin,
         "trajectory": last_pos

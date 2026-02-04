@@ -43,6 +43,23 @@ def calculate_speed_pro(
     ball_type: 'leather', 'tennis', 'rubber'.
     """
 
+    # -----------------------------
+    # HARD RELIABILITY GUARDS
+    # -----------------------------
+    MIN_FRAMES_FOR_SPEED = 24
+
+    # Require enough frames for physics to stabilize
+    if not ball_positions or len(ball_positions) < MIN_FRAMES_FOR_SPEED:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Insufficient frames for reliable physics"
+        }
+
+    # Drop first 2 frames to avoid detector jump noise
+    if len(ball_positions) > 3:
+        ball_positions = ball_positions[2:]
+
     # 0. Basic sanity checks (always return speed)
     if not ball_positions or len(ball_positions) < 4:
         return {
@@ -66,13 +83,30 @@ def calculate_speed_pro(
     if pitch_corners is None:
         # Fallback: pixel-distance based estimation
         pixel_dists = []
+        total_px = 0.0
+
         for i in range(1, len(ball_positions)):
-            d = np.linalg.norm(
-                np.array(ball_positions[i]) - np.array(ball_positions[i - 1])
-            )
-            # HARD motion sanity (px/frame)
-            if 1.5 < d < 35.0:
+            dx = ball_positions[i][0] - ball_positions[i - 1][0]
+            dy = ball_positions[i][1] - ball_positions[i - 1][1]
+            d = math.hypot(dx, dy)
+
+            total_px += d
+
+            # Accept only realistic inter-frame motion
+            if 1.0 < d < 40.0:
                 pixel_dists.append(d)
+
+        avg_px_per_frame = total_px / max(len(ball_positions) - 1, 1)
+
+        # Reject tracking jumps (camera shake / ID switch)
+        if avg_px_per_frame > 0.25 * max(
+            [p[0] for p in ball_positions] + [p[1] for p in ball_positions]
+        ):
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "Tracking jump detected"
+            }
 
         if not pixel_dists:
             return {
@@ -88,12 +122,8 @@ def calculate_speed_pro(
                 "speed_note": "Insufficient tracking data"
             }
         else:
-            avg_px = np.mean(pixel_dists)
-            fps = max(15, fps)
-            # Pixel-only fallback (pure physics)
-            base = avg_px * fps
-
-        base_kmph = base * 3.6
+            px_speeds = [d * fps * 3.6 for d in pixel_dists]
+            base_kmph = float(np.median(px_speeds))
 
         if base_kmph <= 0 or math.isnan(base_kmph):
             return {
@@ -137,11 +167,10 @@ def calculate_speed_pro(
     # Use distances directly
 
     # REMOVED multi-window speed estimation and median selection
-    avg_mpf = float(np.mean(distances))
-    raw_kmph = avg_mpf * fps * 3.6
+    mpf_speeds = distances * fps * 3.6
+    final_kmph = float(np.median(mpf_speeds))
 
     # REMOVED soft clamp logic entirely
-    final_kmph = raw_kmph
 
     # -----------------------------
     # CAMERA NORMALIZATION (SAFE)
@@ -157,6 +186,15 @@ def calculate_speed_pro(
             "speed_kmph": None,
             "speed_type": "unknown",
             "speed_note": "Physics calculation failed"
+        }
+
+    # HARD CRICKET PHYSICS GATE
+    # Reject speeds outside real fast-bowling range
+    if final_kmph < 80 or final_kmph > 170:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unknown",
+            "speed_note": "Unphysical cricket speed rejected"
         }
 
     # REMOVED broadcast-style rounding

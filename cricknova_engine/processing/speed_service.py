@@ -14,15 +14,19 @@ def estimate_speed(video_path):
 
     positions, fps = tracker.track_ball(video_path)
 
-    if not positions:
+    # Require sufficient frames for physical stability
+    if not positions or len(positions) < 24:
         return {
             "speed_kmph": None,
             "speed_type": "pre-pitch",
-            "speed_note": "Physics-based speed unavailable"
+            "speed_note": "Insufficient tracked frames for physics-based speed"
         }
 
+    # Drop first 2 frames to avoid detector warm-up jumps
+    stable_positions = positions[2:]
+
     base_speed_result = calculate_speed_pro(
-        positions,
+        stable_positions,
         fps=fps,
     )
 
@@ -36,9 +40,10 @@ def estimate_speed(video_path):
     speed_kmph = base_speed_result.get("speed_kmph")
     speed_note = base_speed_result.get("speed_note")
 
-    # ---- PURE PHYSICS MODE ----
-    # Do NOT cap, clamp, or judge the speed.
-    # If tracking is wrong, speed may be extreme — that is intentional.
+    # ---- VERIFIED PHYSICS MODE ----
+    # Speed is returned ONLY if it passes
+    # real cricket-physics validation.
+    # Otherwise backend returns None honestly.
     if not isinstance(speed_kmph, (int, float)):
         speed_kmph = None
 

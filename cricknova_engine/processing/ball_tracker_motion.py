@@ -71,8 +71,8 @@ def track_ball_positions(video_path, max_frames=120):
 
         prev_gray = gray
 
-        # stop early if enough points found (support short 2–4s videos, allow partial)
-        if len(positions) >= 8:
+        # stop early only if enough stable points found
+        if len(positions) >= 24:
             break
 
     cap.release()
@@ -86,7 +86,7 @@ def calculate_ball_speed_kmph(positions, fps):
     No confidence labels, no min/max ranges, no artificial boosting.
     """
 
-    if not positions or fps <= 0:
+    if not positions or fps <= 0 or len(positions) < 24:
         return None
 
     dt = 1.0 / fps
@@ -97,14 +97,15 @@ def calculate_ball_speed_kmph(positions, fps):
         x0, y0 = positions[i - 1]
         x1, y1 = positions[i]
         d = math.hypot(x1 - x0, y1 - y0)
-        if d > 2.0:  # reject jitter
+        # accept only reasonable frame-to-frame motion
+        if 1.5 < d < 120:
             velocities.append(d / dt)
 
     if len(velocities) < 2:
         return None
 
-    # STEP 2: mean velocity (robust against noise)
-    pixel_velocity = sum(velocities) / len(velocities)
+    # STEP 2: median velocity (robust against spikes)
+    pixel_velocity = float(np.median(velocities))
 
     # STEP 3: pixel → meter conversion (STRICT PHYSICS)
     # Use dynamic scale based on frame resolution.
@@ -119,12 +120,8 @@ def calculate_ball_speed_kmph(positions, fps):
     speed_mps = pixel_velocity * meters_per_pixel
     speed_kmph = speed_mps * 3.6
 
-    # STEP 5: physics sanity gate (NOT clamping, only rejection)
-    # Reject impossible results caused by tracking jumps
-    if speed_kmph > 200:
-        return None
-    # If calculation is unrealistic, caller must treat it as low confidence
-    if speed_kmph <= 0 or not math.isfinite(speed_kmph):
+    # HARD CRICKET PHYSICS GATE
+    if speed_kmph < 80 or speed_kmph > 170 or not math.isfinite(speed_kmph):
         return None
 
     return round(speed_kmph, 1)
