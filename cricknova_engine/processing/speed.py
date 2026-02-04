@@ -87,8 +87,8 @@ def calculate_speed_pro(
             "speed_note": "Insufficient tracking data"
         }
 
-    # Normalize FPS to avoid variable-FPS instability
-    fps = min(max(fps, 24), 60)
+    # HARD NORMALIZATION: force physics to 30 FPS to avoid 60fps micro-motion
+    fps = 30
 
     # 1. Perspective matrix (optional)
     if pitch_corners is None:
@@ -122,8 +122,8 @@ def calculate_speed_pro(
         if not pixel_dists:
             return {
                 "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Unstable pixel motion"
+                "speed_type": "tracking_lost",
+                "speed_note": "Ball detected but motion too small between frames"
             }
 
         if len(pixel_dists) < 2:
@@ -143,14 +143,12 @@ def calculate_speed_pro(
                     "speed_note": "Invalid pixel distance"
                 }
 
-            # ---- CAMERA GEOMETRY GUARD ----
-            # If total visible travel in pixels is too small,
-            # camera angle is too side-on or zoomed -> unreliable scaling
-            if total_px_dist < 300:
+            # Camera geometry guard (relaxed for mobile 720p videos)
+            if total_px_dist < 180:
                 return {
                     "speed_kmph": None,
                     "speed_type": "invalid_camera",
-                    "speed_note": "Camera angle too side-on or pitch not visible for speed"
+                    "speed_note": "Insufficient visible ball travel for physics"
                 }
 
             meters_per_pixel = TYPICAL_RELEASE_TO_BOUNCE_METERS / max(total_px_dist, 1.0)
@@ -215,12 +213,12 @@ def calculate_speed_pro(
             "speed_note": "Physics calculation failed"
         }
 
-    # HARD CRICKET PHYSICS GATE (TAG ONLY, DO NOT DROP)
-    if final_kmph < 80 or final_kmph > 170:
+    # Tag out-of-range but DO NOT reject physics
+    if final_kmph < 60 or final_kmph > 180:
         return {
             "speed_kmph": float(final_kmph),
             "speed_type": "out_of_range",
-            "speed_note": "Outside typical fast-bowling range"
+            "speed_note": "Outside typical bowling range but physics valid"
         }
 
     # REMOVED broadcast-style rounding

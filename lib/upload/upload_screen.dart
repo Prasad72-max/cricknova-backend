@@ -32,6 +32,9 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
+  double? speed;
+  String spin = "NA";
+  String swing = "NA";
   @override
   void initState() {
     super.initState();
@@ -47,10 +50,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
   bool uploading = false;
   bool showTrajectory = false;
-
-  double? speedPx;
-String? spin;
-String? swing;
 
   List<dynamic>? trajectory = const [];
 
@@ -151,11 +150,6 @@ String? swing;
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
-
-        // reset metrics until backend responds
-        speed = null;
-        swing = null;
-        spin = null;
       });
     }
 
@@ -213,8 +207,15 @@ String? swing;
       setState(() {
         speed = extractedSpeed;
 
-        swing = analysis["swing"]?.toString();
-        spin  = analysis["spin"]?.toString();
+        final swingVal = analysis["swing"];
+        swing = (swingVal != null && swingVal.toString().isNotEmpty)
+            ? swingVal.toString().toUpperCase()
+            : "NONE";
+
+        final spinVal = analysis["spin"];
+        spin = (spinVal != null && spinVal.toString().isNotEmpty)
+            ? spinVal.toString().toUpperCase()
+            : "NONE";
 
         trajectory = const [];
         showTrajectory = false;
@@ -337,8 +338,8 @@ String? swing;
 
       // optional metadata (safe)
       request.fields["speed_kmph"] = speed != null ? speed!.toString() : "";
-      request.fields["swing"] = swing ?? "";
-      request.fields["spin"] = spin ?? "";
+      request.fields["swing"] = swing;
+      request.fields["spin"] = spin;
 
       final response = await request.send();
       print("COACH STATUS => ${response.statusCode}");
@@ -594,19 +595,11 @@ String? swing;
                       children: [
                         _metric(
                           "Speed",
-                          uploading || speed == null
-                              ? "__"
-                              : "${speed!.toStringAsFixed(1)} km/h",
+                          speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "NA",
                         ),
                         const SizedBox(height: 10),
-                        _metric(
-                          "Swing",
-                          uploading || swing == null ? "__" : swing!,
-                        ),
-                        _metric(
-                          "Spin",
-                          uploading || spin == null ? "__" : spin!,
-                        ),
+                        _metric("Swing", swing),
+                        _metric("Spin", spin),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

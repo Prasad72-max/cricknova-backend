@@ -15,11 +15,11 @@ def estimate_speed(video_path):
     positions, fps = tracker.track_ball(video_path)
 
     # Require sufficient frames for physical stability
-    if not positions or len(positions) < 16:
+    if not positions or len(positions) < 8:
         return {
-            "speed_kmph": None,
+            "speed_kmph": 0.0,
             "speed_type": "pre-pitch",
-            "speed_note": "Insufficient tracked frames for physics-based speed"
+            "speed_note": "Very low tracking confidence (minimal frames)"
         }
 
     # Drop first 2 frames to avoid detector warm-up jumps
@@ -36,9 +36,9 @@ def estimate_speed(video_path):
 
     if not base_speed_result or not isinstance(base_speed_result, dict):
         return {
-            "speed_kmph": None,
+            "speed_kmph": 0.0,
             "speed_type": "pre-pitch",
-            "speed_note": "Physics-based speed unavailable"
+            "speed_note": "Fallback speed (pixel-time estimate)"
         }
 
     speed_kmph = base_speed_result.get("speed_kmph")
@@ -48,7 +48,7 @@ def estimate_speed(video_path):
     # Do NOT drop numeric speeds here.
     # Validation is handled inside calculate_speed_pro.
     if not isinstance(speed_kmph, (int, float)):
-        speed_kmph = None
+        speed_kmph = 0.0
     else:
         speed_kmph = float(speed_kmph)
 

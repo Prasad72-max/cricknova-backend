@@ -16,7 +16,7 @@ def filter_positions(ball_positions):
         dist = math.hypot(x - lx, y - ly)
 
         # Keep only reasonable motion; reject sudden jumps
-        if 0 < dist < 120:
+        if 0 < dist < 200:
             filtered.append((x, y, f))
 
     return filtered
@@ -121,7 +121,7 @@ def compute_speed_kmph(ball_positions, fps):
     """
 
     # Fallback if tracking is insufficient
-    if not ball_positions or fps <= 1 or len(ball_positions) < 16:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 8:
         return {
             "speed_kmph": None
         }
@@ -142,8 +142,8 @@ def compute_speed_kmph(ball_positions, fps):
     if pitch_idx < 3:
         pitch_idx = min(len(ys) - 1, 3)
 
-    start = max(1, pitch_idx - 8)
-    end = pitch_idx
+    start = 1
+    end = len(ball_positions)
 
     distances = []
     times = []

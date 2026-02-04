@@ -31,6 +31,24 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
+  File? video;
+  VideoPlayerController? controller;
+
+  bool uploading = false;
+  bool showTrajectory = false;
+
+  double? ballSpeed;
+  String? spin;
+  String? swing;
+
+  List<dynamic>? trajectory = const [];
+
+  bool showDRS = false;
+  String? drsResult;
+
+  bool showCoach = false;
+  String? coachReply;
+
   Future<bool> _checkCoachAccess() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -94,23 +112,6 @@ class _UploadScreenState extends State<UploadScreen> {
     // ✅ Premium active and limit available
     return true;
   }
-  File? video;
-  VideoPlayerController? controller;
-
-  bool uploading = false;
-  bool showTrajectory = false;
-
-  double? speed;
-  String? spin;
-  String? swing;
-
-  List<dynamic>? trajectory = const [];
-
-  bool showDRS = false;
-  String? drsResult;
-
-  bool showCoach = false;
-  String? coachReply;
 
   void _showVideoRulesThenPick() {
     showModalBottomSheet(
@@ -200,6 +201,7 @@ class _UploadScreenState extends State<UploadScreen> {
       showTrajectory = false;
       showDRS = false;
       drsResult = null;
+      // ballSpeed = null; // Optionally reset ballSpeed here if needed
     });
 
     final uri = Uri.parse("https://cricknova-backend.onrender.com/training/analyze");
@@ -229,7 +231,7 @@ class _UploadScreenState extends State<UploadScreen> {
           } else if (rawSpeed is String) {
             parsedSpeed = double.tryParse(rawSpeed);
           }
-          speed = parsedSpeed;
+          ballSpeed = parsedSpeed;
 
           final swingVal = analysis["swing"]?.toString().toLowerCase();
 
@@ -259,7 +261,7 @@ class _UploadScreenState extends State<UploadScreen> {
           trajectory = const [];
           showTrajectory = false;
 
-          print("UI STATE => speed=$speed swing=$swing spin=$spin");
+          print("UI STATE => speed=$ballSpeed swing=$swing spin=$spin");
           controller?.play();
         });
       } else {
@@ -347,7 +349,7 @@ class _UploadScreenState extends State<UploadScreen> {
       );
 
       // optional metadata (safe)
-      request.fields["speed_kmph"] = speed?.toString() ?? "";
+      request.fields["speed_kmph"] = ballSpeed != null ? ballSpeed!.toString() : "";
       request.fields["swing"] = swing ?? "";
       request.fields["spin"] = spin ?? "";
 
@@ -470,7 +472,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _metric("Speed", speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "--"),
+                        _metric("Speed", ballSpeed != null ? "${ballSpeed!.toStringAsFixed(1)} km/h" : "--"),
                         const SizedBox(height: 10),
                         _metric(
                           "Swing",

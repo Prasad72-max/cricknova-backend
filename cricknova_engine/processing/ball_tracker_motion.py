@@ -92,7 +92,7 @@ def calculate_ball_speed_kmph(positions, fps):
     NO km/h guessing.
     """
 
-    if not positions or fps <= 0 or len(positions) < 16:
+    if not positions or fps <= 0 or len(positions) < 8:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
@@ -109,7 +109,7 @@ def calculate_ball_speed_kmph(positions, fps):
         d = math.hypot(x1 - x0, y1 - y0)
 
         # Accept only physically continuous motion
-        if 1.5 < d < 120:
+        if 1.0 < d < 200:
             velocities.append(d / dt)
 
     if len(velocities) < 2:
@@ -126,7 +126,7 @@ def calculate_ball_speed_kmph(positions, fps):
         "speed_px_per_sec": pixel_velocity,
         "speed_kmph": None,
         "speed_type": "pure_physics",
-        "speed_note": "Pixel distance divided by real time"
+        "speed_note": "Pixel distance divided by real time (px/s)"
     }
 
 # --- Swing & Spin detection (physics-based, no heuristics UI-side) ---

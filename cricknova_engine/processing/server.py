@@ -21,18 +21,21 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     nparr = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # reset buffers if this is the first frame of a new clip
-    if len(app.state.last_pos) == 0:
-        app.state.last_time.clear()
+    # reset buffers per request to avoid carry-over between videos
+    app.state.last_pos.clear()
+    app.state.last_time.clear()
 
     # detect ball
-    results = model.predict(frame, conf=0.5)
+    results = model.predict(frame, conf=0.15, imgsz=640)
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
         return {"found": False}
 
-    x1, y1, x2, y2 = boxes[0]
+    # choose smallest box (ball)
+    areas = [(i, (b[2] - b[0]) * (b[3] - b[1])) for i, b in enumerate(boxes)]
+    best_i = min(areas, key=lambda x: x[1])[0]
+    x1, y1, x2, y2 = boxes[best_i]
     cx = int((x1 + x2) / 2)
     cy = int((y1 + y2) / 2)
 
@@ -90,9 +93,11 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         swing_angle = math.degrees(math.atan2((y_end - y_start),
                                               (x_end - x_start)))
     else:
-        swing_angle = 0
+        swing_angle = None
 
-    if abs(swing_angle) < 1.5:
+    if swing_angle is None:
+        swing = "unknown"
+    elif abs(swing_angle) < 1.5:
         swing = "none"
     elif swing_angle > 0:
         swing = "outswing"
