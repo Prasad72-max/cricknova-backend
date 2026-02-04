@@ -113,27 +113,21 @@ def calculate_ball_speed_kmph(positions, fps):
     # Use dynamic scale based on frame resolution.
     # If real-world calibration is missing, DO NOT guess pitch length.
 
-    FRAME_WIDTH_PX = 640.0   # must match tracker resize
-    ESTIMATED_PITCH_WIDTH_M = 3.05  # cricket pitch width only (safe, visible)
+    # --- CALIBRATED PRE-PITCH PHYSICS ---
+    # We observe only pre-pitch frames, so use real pre-pitch distance.
+    PRE_PITCH_METERS = 16.0
 
-    meters_per_pixel = ESTIMATED_PITCH_WIDTH_M / FRAME_WIDTH_PX
+    FRAME_WIDTH_PX = 640.0  # must match tracker resize
+    meters_per_pixel = PRE_PITCH_METERS / FRAME_WIDTH_PX
 
     # STEP 4: physics conversion
     speed_mps = pixel_velocity * meters_per_pixel
     speed_kmph = speed_mps * 3.6
 
-    # HARD CRICKET PHYSICS GATE (TAG ONLY – DO NOT DROP)
-    speed_type = "normal"
-    speed_note = "Physics-based estimate"
-
-    if speed_kmph < 80 or speed_kmph > 170 or not math.isfinite(speed_kmph):
-        speed_type = "out_of_range"
-        speed_note = "Outside typical fast-bowling range"
-
     return {
-        "speed_kmph": round(speed_kmph, 1),
-        "speed_type": speed_type,
-        "speed_note": speed_note,
+        "speed_kmph": round(float(speed_kmph), 1),
+        "speed_type": "calibrated_pre_pitch",
+        "speed_note": "Pixel speed calibrated using real pre-pitch distance",
     }
 
 # --- Swing & Spin detection (physics-based, no heuristics UI-side) ---

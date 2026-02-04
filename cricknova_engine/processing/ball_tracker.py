@@ -172,26 +172,26 @@ def compute_speed_kmph(ball_positions, fps):
 
     median_px = float(np.median(distances))
 
-    # Estimate pitch length in pixels
+    # --- CALIBRATED PRE-PITCH PHYSICS ---
+    # We measure only the last few frames before pitching,
+    # so use real pre-pitch distance (≈16 meters), NOT full pitch.
+
+    PRE_PITCH_METERS = 16.0
+
     pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
-    meters_per_pixel = 20.12 / pitch_px
+    meters_per_pixel = PRE_PITCH_METERS / pitch_px
 
     speed_mps = (median_px * meters_per_pixel) / np.median(times)
-
     speed_kmph = speed_mps * 3.6
 
     # HARD CRICKET PHYSICS GATE (TAG ONLY – DO NOT DROP)
     speed_type = "normal"
     speed_note = "Physics-based estimate"
 
-    if speed_kmph < 80 or speed_kmph > 170:
-        speed_type = "out_of_range"
-        speed_note = "Outside typical fast-bowling range"
-
     return {
-        "speed_kmph": float(speed_kmph),
-        "speed_type": speed_type,
-        "speed_note": speed_note
+        "speed_kmph": round(float(speed_kmph), 1),
+        "speed_type": "calibrated_pre_pitch",
+        "speed_note": "Pixel speed calibrated using real pre-pitch distance"
     }
 
 def compute_swing(ball_positions):

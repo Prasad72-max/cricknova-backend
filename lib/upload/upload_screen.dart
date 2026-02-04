@@ -46,7 +46,6 @@ class _UploadScreenState extends State<UploadScreen> {
   VideoPlayerController? controller;
 
   bool uploading = false;
-  String? progressText;
   bool showTrajectory = false;
 
 double? speed;
@@ -149,7 +148,6 @@ String? swing;
     if (mounted) {
       setState(() {
         uploading = true;
-        progressText = "Uploading video… ⏳";
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
@@ -185,12 +183,6 @@ String? swing;
       final response = await request.send()
           .timeout(const Duration(seconds: 40));
 
-      if (mounted) {
-        setState(() {
-          progressText = "Analyzing frames… 🎯";
-        });
-      }
-
       final respStr = await response.stream.bytesToString();
       debugPrint("UPLOAD RESPONSE ${response.statusCode} => $respStr");
 
@@ -218,12 +210,6 @@ String? swing;
 
       if (!mounted) return;
 
-      if (mounted) {
-        setState(() {
-          progressText = "Calculating speed… 📐";
-        });
-      }
-
       setState(() {
         speed = extractedSpeed;
 
@@ -248,7 +234,6 @@ String? swing;
       if (mounted) {
         setState(() {
           uploading = false;
-          progressText = null;
         });
       }
     }
@@ -773,23 +758,8 @@ String? swing;
                 if (uploading)
                   Positioned(
                     top: 20,
-                    left: 0,
-                    right: 0,
-                    child: Column(
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(height: 10),
-                        if (progressText != null)
-                          Text(
-                            progressText!,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                      ],
-                    ),
+                    right: 20,
+                    child: CircularProgressIndicator(),
                   ),
               ],
             ),

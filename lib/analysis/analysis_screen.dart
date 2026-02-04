@@ -56,11 +56,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Ball Speed",
-              value: _loading
-                  ? "__"
-                  : (speedKmph == null
-                      ? ""
-                      : "${speedKmph!.toStringAsFixed(1)} km/h"),
+              value: speedKmph == null
+                  ? "NA"
+                  : "${speedKmph!.toStringAsFixed(1)} km/h",
               icon: Icons.speed,
               color: Colors.blueAccent,
             ),
@@ -68,11 +66,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Swing",
-              value: _loading
-                  ? "__"
-                  : ((swingName == null || swingName == "NONE" || swingName == "UNKNOWN")
-                      ? ""
-                      : swingName!),
+              value: swingName ?? "NA",
               icon: Icons.rotate_right,
               color: Colors.orange,
             ),
@@ -80,11 +74,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin Strength",
-              value: _loading
-                  ? "__"
-                  : ((spinType == null || spinType == "NONE" || spinType == "UNKNOWN")
-                      ? ""
-                      : spinType!),
+              value: spinType ?? "NA",
               icon: Icons.autorenew,
               color: Colors.green,
             ),

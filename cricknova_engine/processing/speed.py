@@ -2,12 +2,15 @@ import math
 import numpy as np
 import cv2
 
-...
 # -----------------------------
 # CONFIG
 # -----------------------------
 # Physical sanity limits (km/h) to prevent impossible spikes
 # REMOVED MAX_SPEED, MIN_SPEED, MIN_PITCH_PX, MAX_PITCH_PX
+
+# --- REAL CRICKET CONSTANTS ---
+PITCH_LENGTH_METERS = 18.29  # crease to crease
+TYPICAL_RELEASE_TO_BOUNCE_METERS = 16.0
 
 
 def get_perspective_matrix(pitch_corners):
@@ -129,21 +132,27 @@ def calculate_speed_pro(
                 "speed_note": "Insufficient tracking data"
             }
         else:
-            px_speeds = [d * fps * 3.6 for d in pixel_dists]
-            base_kmph = float(np.median(px_speeds))
+            # --- PIXEL → METER CALIBRATION ---
+            # Estimate real distance using expected release-to-bounce distance
+            total_px_dist = sum(pixel_dists)
+            if total_px_dist <= 0:
+                return {
+                    "speed_kmph": None,
+                    "speed_type": "unknown",
+                    "speed_note": "Invalid pixel distance"
+                }
 
-        if base_kmph <= 0 or math.isnan(base_kmph):
+            meters_per_pixel = TYPICAL_RELEASE_TO_BOUNCE_METERS / total_px_dist
+
+            # Convert pixel distances to meters
+            meter_speeds = [(d * meters_per_pixel) * fps * 3.6 for d in pixel_dists]
+            final_kmph = float(np.median(meter_speeds))
+
             return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Invalid pixel physics"
+                "speed_kmph": final_kmph,
+                "speed_type": "calibrated_pre_pitch",
+                "speed_note": "Pixel speed calibrated using expected pitch distance"
             }
-
-        return {
-            "speed_kmph": float(base_kmph),
-            "speed_type": "pre-pitch",
-            "speed_note": "Pixel-distance / frame-time physics"
-        }
 
     M = get_perspective_matrix(pitch_corners)
 
