@@ -15,7 +15,7 @@ def estimate_speed(video_path):
     positions, fps = tracker.track_ball(video_path)
 
     # Require sufficient frames for physical stability
-    if not positions or len(positions) < 24:
+    if not positions or len(positions) < 16:
         return {
             "speed_kmph": None,
             "speed_type": "pre-pitch",
@@ -24,6 +24,10 @@ def estimate_speed(video_path):
 
     # Drop first 2 frames to avoid detector warm-up jumps
     stable_positions = positions[2:]
+
+    # Limit frames to stable delivery window (Render-safe)
+    if len(stable_positions) > 120:
+        stable_positions = stable_positions[:120]
 
     base_speed_result = calculate_speed_pro(
         stable_positions,

@@ -52,7 +52,12 @@ class SwingDetector:
         """
         Returns raw swing angle (degrees) based purely on trajectory.
         """
-        if not positions or len(positions) < 10:
+        # Limit frames to stable delivery window
+        if len(positions) > 120:
+            positions = positions[:120]
+
+        # Render-safe minimum frames (keeps physics honest)
+        if not positions or len(positions) < 8:
             return None
 
         positions = unmirror_positions(positions)

@@ -121,10 +121,17 @@ def compute_speed_kmph(ball_positions, fps):
     """
 
     # Fallback if tracking is insufficient
-    if not ball_positions or fps <= 1 or len(ball_positions) < 24:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 16:
         return {
             "speed_kmph": None
         }
+
+    # Normalize FPS for stable physics (Render-safe)
+    fps = min(max(fps, 24), 60)
+
+    # Limit frames to stable delivery window (Render-safe)
+    if len(ball_positions) > 120:
+        ball_positions = ball_positions[:120]
 
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]

@@ -14,6 +14,7 @@ class SwingHeatmap:
         self.impact_points = []
         # speed samples for averaging
         self.speed_samples = []
+        self.MAX_POINTS = 120
 
     def add_swing_point(self, x, y, speed=None):
         """
@@ -24,11 +25,21 @@ class SwingHeatmap:
         if speed is not None:
             self.speed_samples.append(speed)
 
+        # Keep only the most recent stable points (Render-safe)
+        if len(self.swing_points) > self.MAX_POINTS:
+            self.swing_points = self.swing_points[:self.MAX_POINTS]
+        if len(self.speed_samples) > self.MAX_POINTS:
+            self.speed_samples = self.speed_samples[:self.MAX_POINTS]
+
     def add_impact(self, x, y):
         """
         Register pitch or impact location.
         """
         self.impact_points.append((x, y))
+
+        # Prevent unbounded growth
+        if len(self.impact_points) > self.MAX_POINTS:
+            self.impact_points = self.impact_points[:self.MAX_POINTS]
 
     def get_heatmap_data(self):
         """

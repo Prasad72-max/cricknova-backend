@@ -78,10 +78,16 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         children: [
           _metric(
             "Ball Speed",
-            speed == "NA" ? "NA" : "$speed km/h",
+            speed == "NA" ? "" : "$speed km/h",
           ),
-          _metric("Swing", swing),
-          _metric("Spin", spin),
+          _metric(
+            "Swing",
+            (swing == "NONE" || swing == "UNKNOWN") ? "" : swing,
+          ),
+          _metric(
+            "Spin",
+            (spin == "NONE" || spin == "UNKNOWN") ? "" : spin,
+          ),
           const SizedBox(height: 25),
 
           _chartTitle("Ball Trajectory"),

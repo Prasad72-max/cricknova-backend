@@ -35,8 +35,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # track previous positions
     last_pos = app.state.last_pos
     last_pos.append((cx, cy))
-    if len(last_pos) > 12:
-        last_pos.pop(0)
 
     # -----------------------------
     # PURE PHYSICS SPEED (PIXEL + TIME ONLY)
@@ -44,13 +42,11 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     last_time = app.state.last_time
     now = time.time()
     last_time.append(now)
-    if len(last_time) > 12:
-        last_time.pop(0)
 
     speed_value = None
 
     # Require enough stable frames for physics to work
-    MIN_FRAMES = 24
+    MIN_FRAMES = 16
     DROP_INITIAL = 4
 
     if len(last_pos) >= MIN_FRAMES and len(last_time) >= MIN_FRAMES:

@@ -46,7 +46,10 @@ def calculate_speed_pro(
     # -----------------------------
     # HARD RELIABILITY GUARDS
     # -----------------------------
-    MIN_FRAMES_FOR_SPEED = 24
+    MIN_FRAMES_FOR_SPEED = 16
+
+    # Maximum number of frames to use for speed calculation (Render-safe)
+    MAX_FRAMES_FOR_SPEED = 120
 
     # Require enough frames for physics to stabilize
     if not ball_positions or len(ball_positions) < MIN_FRAMES_FOR_SPEED:
@@ -55,6 +58,10 @@ def calculate_speed_pro(
             "speed_type": "unknown",
             "speed_note": "Insufficient frames for reliable physics"
         }
+
+    # Limit frames to avoid CPU overload and unstable tails (Render-safe)
+    if len(ball_positions) > MAX_FRAMES_FOR_SPEED:
+        ball_positions = ball_positions[:MAX_FRAMES_FOR_SPEED]
 
     # Drop first 2 frames to avoid detector jump noise
     if len(ball_positions) > 3:
@@ -76,8 +83,8 @@ def calculate_speed_pro(
             "speed_note": "Insufficient tracking data"
         }
 
-    # Allow low FPS videos but note reduced accuracy
-    fps = max(15, fps)
+    # Normalize FPS to avoid variable-FPS instability
+    fps = min(max(fps, 24), 60)
 
     # 1. Perspective matrix (optional)
     if pitch_corners is None:

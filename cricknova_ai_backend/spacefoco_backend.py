@@ -680,11 +680,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
         ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
-        # Keep enough frames for verified physics (>=24)
-        if len(ball_positions) > 60:
-            ball_positions = ball_positions[:60]
+        # Keep enough frames for verified physics (>=16)
+        if len(ball_positions) > 120:
+            ball_positions = ball_positions[:120]
 
-        if len(ball_positions) < 24:
+        if len(ball_positions) < 16:
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -1131,11 +1131,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
-        # Keep enough frames for verified physics (>=24)
-        if len(ball_positions) > 60:
-            ball_positions = ball_positions[:60]
+        # Keep enough frames for verified physics (>=16)
+        if len(ball_positions) > 120:
+            ball_positions = ball_positions[:120]
 
-        if len(ball_positions) < 24:
+        if len(ball_positions) < 16:
             return {
                 "status": "success",
                 "speed_kmph": None,

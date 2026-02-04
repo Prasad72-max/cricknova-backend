@@ -10,6 +10,8 @@ def track_ball_positions(video_path, max_frames=120):
     if fps is None or fps <= 1 or fps > 240:
         fps = 30.0
     fps = float(fps)
+    # Normalize FPS to avoid variable-FPS instability (Render-safe)
+    fps = min(max(fps, 24.0), 60.0)
 
     positions = []
     last_pos = None
@@ -71,8 +73,8 @@ def track_ball_positions(video_path, max_frames=120):
 
         prev_gray = gray
 
-        # stop early only if enough stable points found
-        if len(positions) >= 24:
+        # stop early only if enough stable points found (Render-safe)
+        if len(positions) >= 16:
             break
 
     cap.release()
@@ -86,7 +88,7 @@ def calculate_ball_speed_kmph(positions, fps):
     No confidence labels, no min/max ranges, no artificial boosting.
     """
 
-    if not positions or fps <= 0 or len(positions) < 24:
+    if not positions or fps <= 0 or len(positions) < 16:
         return None
 
     dt = 1.0 / fps

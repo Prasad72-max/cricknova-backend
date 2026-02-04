@@ -27,8 +27,13 @@ def calculate_spin(ball_positions, fps=30):
         "spin_degree": None
     }
 
-    if not ball_positions or len(ball_positions) < 10:
+    # Render-safe minimum frames (post-bounce physics still enforced)
+    if not ball_positions or len(ball_positions) < 8:
         return empty_result
+
+    # Limit frames to stable delivery window (Render-safe)
+    if len(ball_positions) > 120:
+        ball_positions = ball_positions[:120]
 
     # --- Bounce detection (max Y = pitch) ---
     ys = np.array([p[1] for p in ball_positions])
@@ -39,7 +44,7 @@ def calculate_spin(ball_positions, fps=30):
         return empty_result
 
     # --- Collect post-bounce trajectory ---
-    post = ball_positions[pitch_idx + 1 : pitch_idx + 8]
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 10]
     xs = [p[0] for p in post]
     ys = [p[1] for p in post]
 
