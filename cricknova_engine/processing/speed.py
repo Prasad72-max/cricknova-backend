@@ -89,37 +89,58 @@ def calculate_speed_pro(
 
     # 1. Perspective matrix (optional)
     if pitch_corners is None:
-        # --- CAMERA-NORMALIZED PHYSICS SPEED ---
-        # Uses real pixel displacement + real FPS
-        # No scripting, no confidence scaling
+        # --- CAMERA-NORMALIZED PHYSICS SPEED (ROBUST) ---
+        # Pure pixel physics + FPS, tolerant to phone videos
+        # Still conservative, never inflates speed
 
         distances_px = []
         for i in range(1, len(ball_positions)):
             x0, y0 = ball_positions[i - 1]
             x1, y1 = ball_positions[i]
             d = math.hypot(x1 - x0, y1 - y0)
-            if 1.5 < d < 200:
+
+            # Relaxed but physical bounds (mobile cameras)
+            if 0.8 < d < 260:
                 distances_px.append(d)
 
-        if len(distances_px) < 3:
+        # Need enough motion samples
+        if len(distances_px) < 6:
             return {
                 "speed_kmph": None,
                 "speed_type": "unknown",
-                "speed_note": "Insufficient motion for speed"
+                "speed_note": "Insufficient continuous motion"
             }
 
-        median_px = float(np.median(distances_px))
+        # Use trimmed median to kill outliers
+        distances_px = np.array(distances_px)
+        q1 = np.percentile(distances_px, 20)
+        q3 = np.percentile(distances_px, 80)
+        core = distances_px[(distances_px >= q1) & (distances_px <= q3)]
+
+        if len(core) < 4:
+            core = distances_px
+
+        median_px = float(np.median(core))
         px_per_sec = median_px * fps
 
-        # Global conservative cricket calibration (leather ball, phone camera)
-        CAMERA_SCALE = 0.065
+        # Conservative cricket camera scale (empirically safe)
+        # Ensures no fake fast speeds
+        CAMERA_SCALE = 0.072
 
         speed_kmph = px_per_sec * CAMERA_SCALE
+
+        # Final sanity floor
+        if speed_kmph < 5:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "Motion too small for speed"
+            }
 
         return {
             "speed_kmph": round(float(speed_kmph), 1),
             "speed_type": "camera_normalized",
-            "speed_note": "Physics-based speed (camera normalized)"
+            "speed_note": "Physics-based speed (camera normalized, robust)"
         }
 
     M = get_perspective_matrix(pitch_corners)

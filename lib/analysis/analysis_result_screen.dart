@@ -23,21 +23,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SPEED (VALUE ONLY) ----------
+    // ---------- SPEED (km/h OR px/s fallback) ----------
     String speed = "NA";
 
-    final dynamic rawSpeed =
+    final dynamic rawKmph =
         src["speed_kmph"] ??
-        src["analysis"]?["speed_kmph"] ??
-        src["speed"];
+        src["analysis"]?["speed_kmph"];
 
-    if (rawSpeed is num && rawSpeed > 0) {
-      speed = rawSpeed.toStringAsFixed(1);
-    } else if (rawSpeed is String) {
-      final parsed = double.tryParse(rawSpeed);
-      if (parsed != null && parsed > 0) {
-        speed = parsed.toStringAsFixed(1);
-      }
+    final dynamic rawPx =
+        src["speed_px_per_sec"] ??
+        src["analysis"]?["speed_px_per_sec"];
+
+    if (rawKmph is num && rawKmph > 0) {
+      speed = "${rawKmph.toStringAsFixed(1)} km/h";
+    } else if (rawPx is num && rawPx > 0) {
+      speed = "${rawPx.toStringAsFixed(0)} px/s";
     }
 
     // ---------- SAFE SWING ----------
@@ -78,7 +78,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         children: [
           _metric(
             "Ball Speed",
-            speed == "NA" ? "NA" : "$speed km/h",
+            speed,
           ),
           _metric("Swing", swing),
           _metric("Spin", spin),

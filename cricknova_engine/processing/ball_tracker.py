@@ -122,7 +122,7 @@ def compute_speed_kmph(ball_positions, fps):
     - Returns speed ONLY when motion is reliable
     """
 
-    if not ball_positions or fps <= 1 or len(ball_positions) < 16:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 8:
         return {
             "speed_kmph": None,
             "speed_type": "insufficient_data"
@@ -144,11 +144,11 @@ def compute_speed_kmph(ball_positions, fps):
             continue
 
         dp = math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
-        if 1.0 < dp < 200:
+        if 0.6 < dp < 200:
             distances.append(dp)
             times.append(df / fps)
 
-    if len(distances) < 3:
+    if len(distances) < 2:
         return {
             "speed_kmph": None,
             "speed_type": "unstable_motion"
@@ -166,8 +166,9 @@ def compute_speed_kmph(ball_positions, fps):
     speed_px_per_sec = median_px / median_time
 
     return {
-        "speed_kmph": round(speed_px_per_sec * 0.1, 1),
-        "speed_type": "pure_physics_pixel_based"
+        "speed_kmph": None,
+        "speed_px_per_sec": round(speed_px_per_sec, 2),
+        "speed_type": "pure_physics_pixel"
     }
 
 def compute_swing(ball_positions):

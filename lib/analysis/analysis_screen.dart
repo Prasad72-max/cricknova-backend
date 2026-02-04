@@ -22,6 +22,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   bool _showTrajectoryAfterVideo = false;
 
   double? speedKmph;
+  double? speedPxPerSec;
+  String? speedType;
   String? swingName;
   double? swingDegree;
   String? spinType;
@@ -56,9 +58,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Ball Speed",
-              value: speedKmph == null
-                  ? "NA"
-                  : "${speedKmph!.toStringAsFixed(1)} km/h",
+              value: speedKmph != null
+                  ? "${speedKmph!.toStringAsFixed(1)} km/h"
+                  : (speedPxPerSec != null
+                      ? "${speedPxPerSec!.toStringAsFixed(1)} px/s"
+                      : "NA"),
               icon: Icons.speed,
               color: Colors.blueAccent,
             ),
@@ -209,15 +213,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           : responseData;
 
   // ---------- SPEED (VALUE ONLY) ----------
-  final speedVal = src["speed_kmph"] ?? src["speed"];
+  final speedVal = src["speed_kmph"];
+  final speedPxVal = src["speed_px_per_sec"];
+  speedType = src["speed_type"];
 
   if (speedVal is num && speedVal > 0) {
     speedKmph = speedVal.toDouble();
-  } else if (speedVal is String) {
-    final parsed = double.tryParse(speedVal);
-    speedKmph = (parsed != null && parsed > 0) ? parsed : null;
+    speedPxPerSec = null;
+  } else if (speedPxVal is num && speedPxVal > 0) {
+    speedKmph = null;
+    speedPxPerSec = speedPxVal.toDouble();
   } else {
     speedKmph = null;
+    speedPxPerSec = null;
   }
 
   // ---------- SWING ----------

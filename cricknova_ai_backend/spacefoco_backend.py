@@ -1,6 +1,20 @@
+def calculate_pixel_speed_px_per_sec(ball_positions, fps):
+    if not ball_positions or fps <= 0 or len(ball_positions) < 6:
+        return None
+    dt = 1.0 / fps
+    speeds = []
+    for i in range(1, len(ball_positions)):
+        dx = ball_positions[i][0] - ball_positions[i-1][0]
+        dy = ball_positions[i][1] - ball_positions[i-1][1]
+        d = math.hypot(dx, dy)
+        if 1.0 < d < 200:
+            speeds.append(d / dt)
+    if not speeds:
+        return None
+    return float(np.median(speeds))
 def _speed_debug(ball_positions, fps):
     print(f"[SPEED DEBUG] frames={len(ball_positions)}, fps={fps}")
-print("🚀 SPACEFOCO BACKEND LOADED (speed-fix)")
+print("🚀 SPACEFOCO BACKEND LOADED (speed-fix)😀")
 import os
 import asyncio
 import sys
@@ -720,6 +734,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         speed_kmph = None
         speed_type = None
         speed_note = None
+        pixel_speed_px_s = calculate_pixel_speed_px_per_sec(ball_positions, fps)
 
         if isinstance(speed_result, dict):
             speed_kmph = speed_result.get("speed_kmph")
@@ -748,8 +763,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": speed_type,
-            "speed_note": speed_note,
+            "speed_px_per_sec": pixel_speed_px_s,
+            "speed_type": speed_type or "pixel_physics",
+            "speed_note": speed_note or "Pixel speed shown. Real km/h requires pitch calibration.",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1185,6 +1201,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         speed_kmph = None
         speed_type = None
         speed_note = None
+        pixel_speed_px_s = calculate_pixel_speed_px_per_sec(ball_positions, fps)
 
         if isinstance(speed_result, dict):
             speed_kmph = speed_result.get("speed_kmph")
@@ -1212,8 +1229,9 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": speed_type,
-            "speed_note": speed_note,
+            "speed_px_per_sec": pixel_speed_px_s,
+            "speed_type": speed_type or "pixel_physics",
+            "speed_note": speed_note or "Pixel speed shown. Real km/h requires pitch calibration.",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []

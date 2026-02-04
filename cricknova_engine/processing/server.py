@@ -50,8 +50,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     pixel_speed = None
 
     # Require enough stable frames for physics to work
-    MIN_FRAMES = 16
-    DROP_INITIAL = 4
+    MIN_FRAMES = 8        # relaxed for real-world phone videos
+    DROP_INITIAL = 1     # avoid killing short deliveries
 
     if len(last_pos) >= MIN_FRAMES and len(last_time) >= MIN_FRAMES:
         positions = list(last_pos)[DROP_INITIAL:]
@@ -65,7 +65,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             dt = times[i + 1] - times[i]
 
             # reject zero / noisy measurements
-            if dt <= 0 or d_px < 1.0:
+            if dt <= 0 or d_px < 0.6:
                 continue
 
             distances.append(d_px)

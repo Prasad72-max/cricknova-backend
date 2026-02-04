@@ -17,16 +17,16 @@ def estimate_speed(video_path):
 
     positions, fps = tracker.track_ball(video_path)
 
-    # Require sufficient frames for physical stability
-    if not positions or len(positions) < 8:
+    # Require sufficient frames for physical stability (relaxed)
+    if not positions or len(positions) < 6:
         return {
             "speed_kmph": None,
             "speed_type": "insufficient_data",
             "speed_note": "Not enough tracked frames for physics"
         }
 
-    # Drop first 2 frames to avoid detector warm-up jumps
-    stable_positions = positions[2:]
+    # Drop first frame only (avoid over-pruning short deliveries)
+    stable_positions = positions[1:]
 
     # Limit frames to stable delivery window (Render-safe)
     if len(stable_positions) > 120:

@@ -188,18 +188,26 @@ class _UploadScreenState extends State<UploadScreen> {
       final analysis = decoded["analysis"] ?? decoded;
 
       double? extractedSpeed;
+      String speedUnit = "km/h";
 
-      final dynamic speedVal =
-          analysis["speed_kmph"] ??
-          decoded["speed_kmph"] ??
-          analysis["speed"] ??
-          decoded["speed"];
+      final dynamic kmhVal =
+          analysis["speed_kmph"] ?? decoded["speed_kmph"];
 
-      if (speedVal is num && speedVal > 0) {
-        extractedSpeed = speedVal.toDouble();
-      } else if (speedVal is String) {
-        final parsed = double.tryParse(speedVal);
-        extractedSpeed = (parsed != null && parsed > 0) ? parsed : null;
+      final dynamic pxVal =
+          analysis["speed_px_per_sec"] ?? decoded["speed_px_per_sec"];
+
+      if (kmhVal is num && kmhVal > 0) {
+        extractedSpeed = kmhVal.toDouble();
+        speedUnit = "km/h";
+      } else if (pxVal is num && pxVal > 0) {
+        extractedSpeed = pxVal.toDouble();
+        speedUnit = "px/s";
+      } else if (kmhVal is String) {
+        final parsed = double.tryParse(kmhVal);
+        if (parsed != null && parsed > 0) {
+          extractedSpeed = parsed;
+          speedUnit = "km/h";
+        }
       }
 
       if (!mounted) return;
@@ -595,7 +603,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         _metric(
                           "Speed",
-                          speed != null ? "${speed!.toStringAsFixed(1)} km/h" : "NA",
+                          speed != null ? "${speed!.toStringAsFixed(1)} ${speedUnit}" : "NA",
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),

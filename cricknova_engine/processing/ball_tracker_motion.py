@@ -75,7 +75,7 @@ def track_ball_positions(video_path, max_frames=120):
 
         # stop early only if enough stable points found (Render-safe)
         # lowered threshold to allow short but physically valid clips
-        if len(positions) >= 12:
+        if len(positions) >= 20:
             break
 
     cap.release()
@@ -93,7 +93,7 @@ def calculate_ball_speed_kmph(positions, fps):
     NO km/h guessing.
     """
 
-    if not positions or fps <= 0 or len(positions) < 6:
+    if not positions or fps <= 0 or len(positions) < 4:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
@@ -110,10 +110,10 @@ def calculate_ball_speed_kmph(positions, fps):
         d = math.hypot(x1 - x0, y1 - y0)
 
         # Accept only physically continuous motion
-        if 1.0 < d < 200:
+        if 0.6 < d < 200:
             velocities.append(d / dt)
 
-    if len(velocities) < 1:
+    if len(velocities) < 2:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
