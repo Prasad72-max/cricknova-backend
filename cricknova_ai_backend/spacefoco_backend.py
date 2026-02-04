@@ -1,6 +1,6 @@
 def _speed_debug(ball_positions, fps):
     print(f"[SPEED DEBUG] frames={len(ball_positions)}, fps={fps}")
-print("🔥 SPACEFOCO BACKEND LOADED — SPEED FIX VERSION 2026-01-18😭✌🏻@@@@@@$$$$$$@@ 1234567890987654321🔥😎💸⏳🚗")
+print("🚀 SPACEFOCO BACKEND LOADED (speed-fix)")
 import os
 import asyncio
 import sys
@@ -51,8 +51,6 @@ def alive():
 from fastapi import UploadFile, File, HTTPException, Request
 from cricknova_engine.processing.routes.payment_verify import router as subscription_router
 from fastapi.middleware.cors import CORSMiddleware
-import tempfile
-import math
 import numpy as np
 import cv2
  

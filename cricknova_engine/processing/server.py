@@ -21,9 +21,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     nparr = np.frombuffer(img_bytes, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    # reset buffers per request to avoid carry-over between videos
-    app.state.last_pos.clear()
-    app.state.last_time.clear()
 
     # detect ball
     results = model.predict(frame, conf=0.15, imgsz=640)

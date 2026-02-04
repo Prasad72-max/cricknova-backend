@@ -103,8 +103,8 @@ def calculate_speed_pro(
 
             total_px += d
 
-            # Accept only realistic inter-frame motion
-            if 1.0 < d < 40.0:
+            # Accept realistic inter-frame motion (relaxed for mobile cameras)
+            if 0.8 < d < 160.0:
                 pixel_dists.append(d)
 
         avg_px_per_frame = total_px / max(len(ball_positions) - 1, 1)
@@ -143,13 +143,15 @@ def calculate_speed_pro(
                     "speed_note": "Invalid pixel distance"
                 }
 
-            # Camera geometry guard (relaxed for mobile 720p videos)
-            if total_px_dist < 180:
+            # Camera geometry guard (relaxed further for mobile uploads)
+            if total_px_dist < 90:
                 return {
                     "speed_kmph": None,
                     "speed_type": "invalid_camera",
-                    "speed_note": "Insufficient visible ball travel for physics"
+                    "speed_note": "Visible ball travel too short for reliable physics"
                 }
+
+            print("[SPEED DEBUG] pixel_dists =", len(pixel_dists), "total_px_dist =", total_px_dist)
 
             meters_per_pixel = TYPICAL_RELEASE_TO_BOUNCE_METERS / max(total_px_dist, 1.0)
 
