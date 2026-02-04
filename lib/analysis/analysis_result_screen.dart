@@ -23,35 +23,41 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SPEED (km/h OR px/s fallback) ----------
+    // ---------- SPEED (km/h ONLY, SAFE) ----------
     String speed = "NA";
 
     final dynamic rawKmph =
         src["speed_kmph"] ??
         src["analysis"]?["speed_kmph"];
 
-    final dynamic rawPx =
-        src["speed_px_per_sec"] ??
-        src["analysis"]?["speed_px_per_sec"];
-
     if (rawKmph is num && rawKmph > 0) {
       speed = "${rawKmph.toStringAsFixed(1)} km/h";
-    } else if (rawPx is num && rawPx > 0) {
-      speed = "${rawPx.toStringAsFixed(0)} px/s";
     }
 
-    // ---------- SAFE SWING ----------
-    String swing = "NONE";
+    // ---------- SAFE SWING (CONSERVATIVE) ----------
+    String swing = "STRAIGHT";
     final rawSwing = src["swing"];
-    if (rawSwing is String && rawSwing.isNotEmpty) {
-      swing = rawSwing.toUpperCase();
+    if (rawSwing is String) {
+      final s = rawSwing.toLowerCase();
+      if (s.contains("in")) {
+        swing = "INSWING";
+      } else if (s.contains("out")) {
+        swing = "OUTSWING";
+      } else if (s.contains("straight")) {
+        swing = "STRAIGHT";
+      }
     }
 
-    // ---------- SAFE SPIN ----------
+    // ---------- SAFE SPIN (CONSERVATIVE) ----------
     String spin = "NONE";
     final rawSpin = src["spin"];
-    if (rawSpin is String && rawSpin.isNotEmpty) {
-      spin = rawSpin.toUpperCase();
+    if (rawSpin is String) {
+      final s = rawSpin.toLowerCase();
+      if (s.contains("leg")) {
+        spin = "LEG SPIN";
+      } else if (s.contains("off")) {
+        spin = "OFF SPIN";
+      }
     }
 
     final List trajectory =

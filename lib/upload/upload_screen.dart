@@ -217,15 +217,25 @@ class _UploadScreenState extends State<UploadScreen> {
         speed = extractedSpeed;
         this.speedUnit = speedUnit;
 
-        final swingVal = analysis["swing"];
-        swing = (swingVal != null && swingVal.toString().isNotEmpty)
-            ? swingVal.toString().toUpperCase()
-            : "NONE";
+        final swingVal = analysis["swing"]?.toString().toLowerCase();
+        if (swingVal == "unknown" || swingVal == "none" || swingVal == "straight") {
+          swing = "STRAIGHT";
+        } else if (swingVal == "inswing") {
+          swing = "INSWING";
+        } else if (swingVal == "outswing") {
+          swing = "OUTSWING";
+        } else {
+          swing = "STRAIGHT";
+        }
 
-        final spinVal = analysis["spin"];
-        spin = (spinVal != null && spinVal.toString().isNotEmpty)
-            ? spinVal.toString().toUpperCase()
-            : "NONE";
+        final spinVal = analysis["spin"]?.toString().toLowerCase();
+        if (spinVal == "leg spin" || spinVal == "leg-spin") {
+          spin = "LEG SPIN";
+        } else if (spinVal == "off spin" || spinVal == "off-spin") {
+          spin = "OFF SPIN";
+        } else {
+          spin = "NONE";
+        }
 
         trajectory = const [];
         showTrajectory = false;

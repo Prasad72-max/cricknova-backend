@@ -234,10 +234,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       src["swing_type"] ??
       src["swingName"];
 
-  swingName =
-      (swingVal is String && swingVal.isNotEmpty)
-          ? swingVal.toUpperCase()
-          : "NONE";
+  String _normalizeSwing(String? raw) {
+    if (raw == null) return "STRAIGHT";
+    final v = raw.toLowerCase();
+    if (v.contains("in")) return "INSWING";
+    if (v.contains("out")) return "OUTSWING";
+    if (v.contains("straight") || v.contains("none")) return "STRAIGHT";
+    return "STRAIGHT";
+  }
+
+  swingName = _normalizeSwing(swingVal?.toString());
 
   // ---------- SPIN ----------
   final spinVal =
@@ -245,10 +251,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       src["spin_type"] ??
       src["spinType"];
 
-  spinType =
-      (spinVal is String && spinVal.isNotEmpty)
-          ? spinVal.toUpperCase()
-          : "NONE";
+  String _normalizeSpin(String? raw) {
+    if (raw == null) return "NONE";
+    final v = raw.toLowerCase();
+    if (v.contains("leg")) return "LEG SPIN";
+    if (v.contains("off")) return "OFF SPIN";
+    return "NONE";
+  }
+
+  spinType = _normalizeSpin(spinVal?.toString());
 
   // ---------- TRAJECTORY ----------
   trajectory = src["trajectory"] is List

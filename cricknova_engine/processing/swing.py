@@ -4,7 +4,18 @@ import numpy as np
 def unmirror_positions(positions):
     """
     Correct horizontal mirroring common in mobile cameras.
+    Only applies correction if horizontal motion dominates.
     """
+    if len(positions) < 2:
+        return positions
+
+    dx = abs(positions[-1][0] - positions[0][0])
+    dy = abs(positions[-1][1] - positions[0][1])
+
+    # If motion is mostly vertical, do NOT unmirror
+    if dx < dy * 0.3:
+        return positions
+
     xs = [p[0] for p in positions]
     min_x, max_x = min(xs), max(xs)
     return [((max_x - (x - min_x)), y) for x, y in positions]
@@ -39,12 +50,17 @@ class SwingDetector:
     def _detect_pitch_index(self, positions):
         """
         Detect bounce using strongest vertical direction change.
+        Falls back safely when bounce is weak.
         """
         ys = [p[1] for p in positions]
         diffs = np.diff(ys)
-        accel = np.abs(np.diff(diffs))
-        if len(accel) == 0:
+        if len(diffs) < 3:
             return None
+
+        accel = np.abs(np.diff(diffs))
+        if len(accel) == 0 or np.max(accel) < 0.8:
+            return None
+
         idx = int(np.argmax(accel)) + 1
         return max(2, min(idx, len(positions) - 3))
 
@@ -63,6 +79,10 @@ class SwingDetector:
         positions = unmirror_positions(positions)
         positions = smooth_positions(positions)
 
+        # Normalize camera direction (handles mirror / side-angle videos)
+        forward_dx = positions[-1][0] - positions[0][0]
+        camera_sign = 1 if forward_dx >= 0 else -1
+
         pitch_idx = self._detect_pitch_index(positions)
         if pitch_idx is None:
             return None
@@ -73,7 +93,7 @@ class SwingDetector:
         angle_pre = self._line_angle(*pre_vec)
         angle_post = self._line_angle(*post_vec)
 
-        swing_angle = angle_post - angle_pre
+        swing_angle = (angle_post - angle_pre) * camera_sign
         return round(float(swing_angle), 2)
 
 def classify_swing(swing_deg):

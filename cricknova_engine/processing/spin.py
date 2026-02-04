@@ -55,11 +55,15 @@ def calculate_spin(ball_positions, fps=30):
     xs = _smooth(xs)
     ys = _smooth(ys)
 
-    lateral_disp = xs[-1] - xs[0]
+    # Normalize lateral movement relative to first post-bounce point
+    x0 = xs[0]
+    xs_norm = [x - x0 for x in xs]
+
+    lateral_disp = xs_norm[-1] - xs_norm[0]
     forward_disp = ys[-1] - ys[0]
 
     # Reject near-vertical / unreliable motion
-    if abs(forward_disp) < 10:
+    if abs(forward_disp) < 4:
         return empty_result
 
     # --- Spin angle estimation ---
@@ -67,10 +71,13 @@ def calculate_spin(ball_positions, fps=30):
     turn_deg = math.degrees(turn_rad)
 
     # Threshold: below this is visually straight after bounce
-    if turn_deg < 0.15:
+    if turn_deg < 0.35:
         return empty_result
 
     # Direction based purely on screen-space deviation
+    if abs(lateral_disp) < 1.2:
+        return empty_result
+
     spin_name = "leg spin" if lateral_disp > 0 else "off spin"
 
     return {

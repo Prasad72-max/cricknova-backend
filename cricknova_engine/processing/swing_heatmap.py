@@ -20,8 +20,18 @@ class SwingHeatmap:
         """
         Add a swing observation point.
         Speed is optional and used only if reliable.
+        Lateral position is normalized relative to the first point
+        to avoid camera left/right bias.
         """
-        self.swing_points.append((x, y, speed))
+        # Normalize x relative to first point to remove camera bias
+        if self.swing_points:
+            x0 = self.swing_points[0][0]
+            norm_x = x - x0
+        else:
+            norm_x = 0.0
+
+        self.swing_points.append((norm_x, y, speed))
+
         if speed is not None:
             self.speed_samples.append(speed)
 

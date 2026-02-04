@@ -569,7 +569,7 @@ def calculate_spin_real(ball_positions):
     - Returns NONE when spin is not reliably detectable
     """
 
-    if len(ball_positions) < 8:
+    if len(ball_positions) < 10:
         return "none", 0.0
 
     ys = [p[1] for p in ball_positions]
@@ -608,7 +608,7 @@ def calculate_spin_real(ball_positions):
     delta_vx = (vx_post - vx_pre) * 0.9
     forward_v = abs(vy_pre)
 
-    if forward_v < 1e-3:
+    if forward_v < 4.0:
         return "none", 0.0
 
     # ---- Angle computation (stable & camera-safe) ----
@@ -620,7 +620,7 @@ def calculate_spin_real(ball_positions):
     turn_deg = min(raw_turn_deg, 12.0)
 
     # ---- Noise floor (aggressive to avoid fake spin) ----
-    if turn_deg < 0.6:
+    if turn_deg < 0.35:
         return "none", 0.0
 
     # -------- Camera-aware spin direction (displacement-based) --------
@@ -635,7 +635,7 @@ def calculate_spin_real(ball_positions):
 
     corrected_shift = lateral_shift
 
-    if abs(corrected_shift) < 0.8:
+    if abs(corrected_shift) < 1.2:
         return "none", 0.0
 
     # Cricket convention:
