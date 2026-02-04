@@ -636,7 +636,7 @@ def calculate_spin_real(ball_positions):
 # -----------------------------
 # PURE PHYSICS SPEED STABILIZER
 # -----------------------------
-def stabilize_ball_positions(ball_positions, max_jump_px=40):
+def stabilize_ball_positions(ball_positions, max_jump_px=55):
     """
     Removes single-frame pixel spikes without inventing motion.
     Keeps only physically continuous movement.
@@ -678,11 +678,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
         ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
-        # Keep enough frames for verified physics (>=16)
+        # Keep enough frames for verified physics (>=10)
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
-        if len(ball_positions) < 16:
+        if len(ball_positions) < 10:
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -707,7 +707,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         # ---- HARD GUARD: fps must be real ----
         if not fps or fps <= 0:
-            print("[SPEED] Invalid FPS, speed disabled")
+            print(f"[SPEED] Invalid FPS ({fps}), speed disabled")
             speed_result = None
         else:
             speed_result = calculate_speed_pro(
@@ -1145,11 +1145,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
-        # Keep enough frames for verified physics (>=16)
+        # Keep enough frames for verified physics (>=10)
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
-        if len(ball_positions) < 16:
+        if len(ball_positions) < 10:
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -1172,7 +1172,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         # ---- HARD GUARD: fps must be real ----
         if not fps or fps <= 0:
-            print("[SPEED] Invalid FPS, speed disabled")
+            print(f"[SPEED] Invalid FPS ({fps}), speed disabled")
             speed_result = None
         else:
             speed_result = calculate_speed_pro(
