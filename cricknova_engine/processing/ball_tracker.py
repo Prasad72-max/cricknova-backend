@@ -172,26 +172,34 @@ def compute_speed_kmph(ball_positions, fps):
 
     median_px = float(np.median(distances))
 
-    # --- CALIBRATED PRE-PITCH PHYSICS ---
-    # We measure only the last few frames before pitching,
-    # so use real pre-pitch distance (≈16 meters), NOT full pitch.
+    # ---- CAMERA GEOMETRY GUARD ----
+    # If visible ball travel is too small, scaling becomes unreliable
+    if median_px < 2.0:
+        return {
+            "speed_kmph": None,
+            "speed_type": "invalid_camera",
+            "speed_note": "Camera angle too side-on or ball travel too short"
+        }
 
-    PRE_PITCH_METERS = 16.0
+    # --- PURE PHYSICS: PIXEL SPEED ONLY ---
+    # No meter conversion, no pitch assumption, no camera distance.
+    # Absolute km/h is impossible without calibration.
 
-    pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
-    meters_per_pixel = PRE_PITCH_METERS / pitch_px
+    speed_px_per_sec = median_px / np.median(times)
 
-    speed_mps = (median_px * meters_per_pixel) / np.median(times)
-    speed_kmph = speed_mps * 3.6
-
-    # HARD CRICKET PHYSICS GATE (TAG ONLY – DO NOT DROP)
-    speed_type = "normal"
-    speed_note = "Physics-based estimate"
+    if speed_px_per_sec <= 0 or math.isnan(speed_px_per_sec):
+        return {
+            "speed_kmph": None,
+            "speed_px_per_sec": None,
+            "speed_type": "invalid",
+            "speed_note": "Physics calculation failed"
+        }
 
     return {
-        "speed_kmph": round(float(speed_kmph), 1),
-        "speed_type": "calibrated_pre_pitch",
-        "speed_note": "Pixel speed calibrated using real pre-pitch distance"
+        "speed_kmph": None,
+        "speed_px_per_sec": float(speed_px_per_sec),
+        "speed_type": "pure_physics_pixel_speed",
+        "speed_note": "Pure pixel + time physics. No assumptions, no calibration, no scripting."
     }
 
 def compute_swing(ball_positions):

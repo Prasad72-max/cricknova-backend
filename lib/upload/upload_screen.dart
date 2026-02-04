@@ -48,7 +48,7 @@ class _UploadScreenState extends State<UploadScreen> {
   bool uploading = false;
   bool showTrajectory = false;
 
-double? speed;
+  double? speedPx;
 String? spin;
 String? swing;
 

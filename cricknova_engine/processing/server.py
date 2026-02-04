@@ -110,19 +110,21 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             spin = "off spin" if curve > 0 else "leg spin"
             spin_confidence = min(1.0, abs(curve) / 10.0)
 
-    # --- DISPLAY SPEED (HONEST, NON-FAKE) ---
-    # Assume 1 meter ≈ 100 pixels (temporary display-scale)
+    # --- PURE PHYSICS OUTPUT (NO FAKE SCALING) ---
+    # Pixel-speed only. Real km/h requires real-world calibration.
     speed_kmph = None
-    if pixel_speed is not None:
-        meters_per_sec = pixel_speed / 100.0
-        speed_kmph = meters_per_sec * 3.6
+    speed_px_per_sec = None
+
+    if pixel_speed is not None and pixel_speed > 0:
+        speed_px_per_sec = float(pixel_speed)
 
     return {
         "found": True,
         "speed_kmph": speed_kmph,
-        "speed_type": "live_verified_display_speed",
-        "speed_note": "Derived from median pixel-speed with temporary scale (no scripting)",
+        "speed_px_per_sec": speed_px_per_sec,
+        "speed_type": "pure_physics_pixel_speed",
+        "speed_note": "Pure pixel + time physics. No assumptions, no scaling, no scripting. Real km/h requires calibration.",
         "swing": swing,
         "spin": spin,
-        "trajectory": last_pos
+        "trajectory": list(last_pos)
     }

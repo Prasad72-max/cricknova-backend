@@ -10,6 +10,7 @@ import cv2
 
 # --- REAL CRICKET CONSTANTS ---
 PITCH_LENGTH_METERS = 18.29  # crease to crease
+PITCH_WIDTH_METERS = 3.05  # standard cricket pitch width (meters)
 TYPICAL_RELEASE_TO_BOUNCE_METERS = 16.0
 
 
@@ -142,7 +143,17 @@ def calculate_speed_pro(
                     "speed_note": "Invalid pixel distance"
                 }
 
-            meters_per_pixel = TYPICAL_RELEASE_TO_BOUNCE_METERS / total_px_dist
+            # ---- CAMERA GEOMETRY GUARD ----
+            # If total visible travel in pixels is too small,
+            # camera angle is too side-on or zoomed -> unreliable scaling
+            if total_px_dist < 300:
+                return {
+                    "speed_kmph": None,
+                    "speed_type": "invalid_camera",
+                    "speed_note": "Camera angle too side-on or pitch not visible for speed"
+                }
+
+            meters_per_pixel = TYPICAL_RELEASE_TO_BOUNCE_METERS / max(total_px_dist, 1.0)
 
             # Convert pixel distances to meters
             meter_speeds = [(d * meters_per_pixel) * fps * 3.6 for d in pixel_dists]

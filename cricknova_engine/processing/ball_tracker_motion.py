@@ -84,50 +84,49 @@ def track_ball_positions(video_path, max_frames=120):
 # --- Ball speed calculation utility ---
 def calculate_ball_speed_kmph(positions, fps):
     """
-    Pure physics-based ball speed calculation.
-    No confidence labels, no min/max ranges, no artificial boosting.
+    100% physics-based speed calculation.
+    Reports raw pixel velocity only.
+    NO real-world calibration.
+    NO pitch length.
+    NO meters-per-pixel.
+    NO km/h guessing.
     """
 
     if not positions or fps <= 0 or len(positions) < 16:
-        return None
+        return {
+            "speed_px_per_sec": None,
+            "speed_kmph": None,
+            "speed_type": "insufficient_data",
+            "speed_note": "Not enough frames for physics"
+        }
 
     dt = 1.0 / fps
     velocities = []
 
-    # STEP 1: compute per-frame pixel velocity
     for i in range(1, len(positions)):
         x0, y0 = positions[i - 1]
         x1, y1 = positions[i]
         d = math.hypot(x1 - x0, y1 - y0)
-        # accept only reasonable frame-to-frame motion
+
+        # Accept only physically continuous motion
         if 1.5 < d < 120:
             velocities.append(d / dt)
 
     if len(velocities) < 2:
-        return None
+        return {
+            "speed_px_per_sec": None,
+            "speed_kmph": None,
+            "speed_type": "unstable_motion",
+            "speed_note": "Tracking too noisy"
+        }
 
-    # STEP 2: median velocity (robust against spikes)
     pixel_velocity = float(np.median(velocities))
 
-    # STEP 3: pixel → meter conversion (STRICT PHYSICS)
-    # Use dynamic scale based on frame resolution.
-    # If real-world calibration is missing, DO NOT guess pitch length.
-
-    # --- CALIBRATED PRE-PITCH PHYSICS ---
-    # We observe only pre-pitch frames, so use real pre-pitch distance.
-    PRE_PITCH_METERS = 16.0
-
-    FRAME_WIDTH_PX = 640.0  # must match tracker resize
-    meters_per_pixel = PRE_PITCH_METERS / FRAME_WIDTH_PX
-
-    # STEP 4: physics conversion
-    speed_mps = pixel_velocity * meters_per_pixel
-    speed_kmph = speed_mps * 3.6
-
     return {
-        "speed_kmph": round(float(speed_kmph), 1),
-        "speed_type": "calibrated_pre_pitch",
-        "speed_note": "Pixel speed calibrated using real pre-pitch distance",
+        "speed_px_per_sec": pixel_velocity,
+        "speed_kmph": None,
+        "speed_type": "pure_physics",
+        "speed_note": "Pixel distance divided by real time"
     }
 
 # --- Swing & Spin detection (physics-based, no heuristics UI-side) ---

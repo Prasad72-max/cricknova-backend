@@ -712,7 +712,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
             print("[SPEED] Invalid FPS, speed disabled")
             speed_result = None
         else:
-            speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
+            speed_result = calculate_speed_pro(
+                ball_positions=ball_positions,
+                fps=float(fps),
+                pitch_corners=None
+            )
 
         # ---- Extract speed safely (supports tagged dict) ----
         speed_kmph = None
@@ -1173,7 +1177,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             print("[SPEED] Invalid FPS, speed disabled")
             speed_result = None
         else:
-            speed_result = calculate_speed_pro(ball_positions, fps=float(fps))
+            speed_result = calculate_speed_pro(
+                ball_positions=ball_positions,
+                fps=float(fps),
+                pitch_corners=None
+            )
 
         # ---- Extract speed safely (supports tagged dict) ----
         speed_kmph = None
