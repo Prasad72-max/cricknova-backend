@@ -123,24 +123,15 @@ def calculate_speed_pro(
         median_px = float(np.median(core))
         px_per_sec = median_px * fps
 
-        # Conservative cricket camera scale (empirically safe)
-        # Ensures no fake fast speeds
-        CAMERA_SCALE = 0.072
-
+        # ---- CAMERA NORMALIZED CONVERSION ----
+        CAMERA_SCALE = 0.072  # conservative cricket camera scale
         speed_kmph = px_per_sec * CAMERA_SCALE
-
-        # Final sanity floor
-        if speed_kmph < 5:
-            return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Motion too small for speed"
-            }
 
         return {
             "speed_kmph": round(float(speed_kmph), 1),
-            "speed_type": "camera_normalized",
-            "speed_note": "Physics-based speed (camera normalized, robust)"
+            "speed_px_per_sec": round(float(px_per_sec), 2),
+            "speed_type": "camera_estimated",
+            "speed_note": "Estimated bowling speed (camera-normalized physics)"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -186,8 +177,18 @@ def calculate_speed_pro(
 
     # REMOVED CAMERA NORMALIZATION (SAFE) section entirely
 
+    px_distances = []
+    for i in range(1, len(ball_positions)):
+        x0, y0 = ball_positions[i - 1]
+        x1, y1 = ball_positions[i]
+        dpx = math.hypot(x1 - x0, y1 - y0)
+        if 0.8 < dpx < 260:
+            px_distances.append(dpx)
+    px_per_sec = round(float(np.median(px_distances) * fps), 2) if px_distances else None
+
     return {
         "speed_kmph": float(round(final_kmph, 1)),
+        "speed_px_per_sec": px_per_sec,
         "speed_type": "calibrated_real_world",
         "speed_note": "Physics-based speed using real pitch geometry"
     }

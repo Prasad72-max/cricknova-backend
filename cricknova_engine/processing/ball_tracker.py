@@ -29,6 +29,7 @@ def track_ball_positions(video_path):
     ball_positions = []
     prev_center = None
     frame_idx = 0
+    miss_count = 0
 
     backSub = cv.createBackgroundSubtractorMOG2(
         history=200,
@@ -101,9 +102,16 @@ def track_ball_positions(video_path):
                 else:
                     chosen = (circles[0][0][0], circles[0][0][1])
 
-        if chosen is not None:
-            ball_positions.append((chosen[0], chosen[1], frame_idx))
-            prev_center = chosen
+        if chosen is None:
+            miss_count += 1
+            if miss_count >= 5:
+                prev_center = None
+            continue
+        else:
+            miss_count = 0
+
+        ball_positions.append((chosen[0], chosen[1], frame_idx))
+        prev_center = chosen
 
     # Final cleanup
     ball_positions = filter_positions(ball_positions)
@@ -165,10 +173,14 @@ def compute_speed_kmph(ball_positions, fps):
 
     speed_px_per_sec = median_px / median_time
 
+    # ---- CAMERA-NORMALIZED CONVERSION (SAFE) ----
+    CAMERA_SCALE = 0.072  # conservative cricket camera scale
+    speed_kmph = speed_px_per_sec * CAMERA_SCALE
+
     return {
-        "speed_kmph": None,
+        "speed_kmph": round(float(speed_kmph), 1),
         "speed_px_per_sec": round(speed_px_per_sec, 2),
-        "speed_type": "pure_physics_pixel"
+        "speed_type": "camera_estimated"
     }
 
 def compute_swing(ball_positions):

@@ -33,8 +33,10 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   double? speed;
+  String speedUnit = "km/h";
   String spin = "NA";
   String swing = "NA";
+  String get speedUnitLabel => speedUnit;
   @override
   void initState() {
     super.initState();
@@ -188,7 +190,6 @@ class _UploadScreenState extends State<UploadScreen> {
       final analysis = decoded["analysis"] ?? decoded;
 
       double? extractedSpeed;
-      String speedUnit = "km/h";
 
       final dynamic kmhVal =
           analysis["speed_kmph"] ?? decoded["speed_kmph"];
@@ -214,6 +215,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
       setState(() {
         speed = extractedSpeed;
+        this.speedUnit = speedUnit;
 
         final swingVal = analysis["swing"];
         swing = (swingVal != null && swingVal.toString().isNotEmpty)
@@ -603,8 +605,17 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         _metric(
                           "Speed",
-                          speed != null ? "${speed!.toStringAsFixed(1)} ${speedUnit}" : "NA",
+                          speed != null ? "${speed!.toStringAsFixed(1)} ${speedUnitLabel}" : "NA",
                         ),
+                        const SizedBox(height: 4),
+                        if (speedUnitLabel == "px/s")
+                          const Text(
+                            "⚠️ km/h needs pitch calibration",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
+                          ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
                         _metric("Spin", spin),

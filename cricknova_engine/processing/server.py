@@ -27,6 +27,9 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
+        # Reset state to avoid mixing deliveries / frames
+        app.state.last_pos.clear()
+        app.state.last_time.clear()
         return {"found": False}
 
     # choose smallest box (ball)
@@ -112,20 +115,24 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             spin = "off spin" if curve > 0 else "leg spin"
             spin_confidence = min(1.0, abs(curve) / 10.0)
 
-    # --- PURE PHYSICS SPEED (HONEST) ---
+    # --- CAMERA-NORMALIZED SPEED ESTIMATION ---
     speed_kmph = None
     speed_px_per_sec = None
-    speed_type = "pixel_physics"
+    speed_type = "camera_estimated"
 
     if pixel_speed is not None and pixel_speed > 0 and len(last_pos) >= MIN_FRAMES:
         speed_px_per_sec = round(float(pixel_speed), 2)
 
+        # Camera-normalized conversion (safe, conservative)
+        CAMERA_SCALE = 0.072
+        speed_kmph = round(speed_px_per_sec * CAMERA_SCALE, 1)
+
     return {
         "found": True,
-        "speed_kmph": speed_kmph,              # always None in live (no calibration)
-        "speed_px_per_sec": speed_px_per_sec,  # ALWAYS reliable when shown
+        "speed_kmph": speed_kmph,
+        "speed_px_per_sec": speed_px_per_sec,
         "speed_type": speed_type,
-        "speed_note": "Pure physics: pixel distance / real time. Real km/h requires pitch calibration.",
+        "speed_note": "Estimated bowling speed (camera-normalized physics)",
         "swing": swing,
         "spin": spin,
         "trajectory": list(last_pos)

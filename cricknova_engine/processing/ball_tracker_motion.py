@@ -17,6 +17,7 @@ def track_ball_positions(video_path, max_frames=120):
     last_pos = None
     prev_gray = None
     frame_count = 0
+    miss_count = 0
 
     # scale down once (huge speed boost)
     TARGET_WIDTH = 640
@@ -67,10 +68,16 @@ def track_ball_positions(video_path, max_frames=120):
                         min_dist = dist
                         ball_candidate = (cx, cy)
 
-        if ball_candidate:
+        if ball_candidate is None:
+            miss_count += 1
+            if miss_count >= 5:
+                last_pos = None
+            prev_gray = gray
+            continue
+        else:
+            miss_count = 0
             positions.append(ball_candidate)
             last_pos = ball_candidate
-
         prev_gray = gray
 
         # stop early only if enough stable points found (Render-safe)
@@ -85,15 +92,13 @@ def track_ball_positions(video_path, max_frames=120):
 # --- Ball speed calculation utility ---
 def calculate_ball_speed_kmph(positions, fps):
     """
-    100% physics-based speed calculation.
-    Reports raw pixel velocity only.
-    NO real-world calibration.
-    NO pitch length.
-    NO meters-per-pixel.
-    NO km/h guessing.
+    Physics-based speed calculation with camera-normalized km/h.
+    - Uses pixel motion + FPS
+    - Converts to km/h using a conservative camera scale
+    - Returns None when motion is insufficient (no fake speed)
     """
 
-    if not positions or fps <= 0 or len(positions) < 4:
+    if not positions or fps <= 0 or len(positions) < 6:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
@@ -101,7 +106,6 @@ def calculate_ball_speed_kmph(positions, fps):
             "speed_note": "Not enough frames for physics"
         }
 
-    dt = 1.0 / fps
     velocities = []
 
     for i in range(1, len(positions)):
@@ -109,11 +113,11 @@ def calculate_ball_speed_kmph(positions, fps):
         x1, y1 = positions[i]
         d = math.hypot(x1 - x0, y1 - y0)
 
-        # Accept only physically continuous motion
-        if 0.6 < d < 200:
-            velocities.append(d / dt)
+        # physically continuous motion only
+        if 0.8 < d < 260:
+            velocities.append(d * fps)
 
-    if len(velocities) < 2:
+    if len(velocities) < 3:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
@@ -121,13 +125,25 @@ def calculate_ball_speed_kmph(positions, fps):
             "speed_note": "Tracking too noisy"
         }
 
-    pixel_velocity = float(np.median(velocities))
+    px_per_sec = float(np.median(velocities))
+
+    # Camera-normalized conversion (empirically safe, non-inflating)
+    CAMERA_SCALE = 0.072  # km/h per (px/sec)
+    speed_kmph = px_per_sec * CAMERA_SCALE
+
+    if speed_kmph < 5:
+        return {
+            "speed_px_per_sec": round(px_per_sec, 2),
+            "speed_kmph": None,
+            "speed_type": "motion_too_small",
+            "speed_note": "Ball motion too small for reliable speed"
+        }
 
     return {
-        "speed_px_per_sec": pixel_velocity,
-        "speed_kmph": None,
-        "speed_type": "pure_physics",
-        "speed_note": "Pixel distance divided by real time (px/s)"
+        "speed_px_per_sec": round(px_per_sec, 2),
+        "speed_kmph": round(speed_kmph, 1),
+        "speed_type": "camera_normalized",
+        "speed_note": "Physics-based speed (camera normalized)"
     }
 
 # --- Swing & Spin detection (physics-based, no heuristics UI-side) ---
