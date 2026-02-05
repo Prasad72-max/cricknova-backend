@@ -105,9 +105,9 @@ def track_ball_positions(video_path):
                     chosen = (circles[0][0][0], circles[0][0][1])
 
         if chosen is None:
+            # Allow brief occlusions without resetting physics history
             miss_count += 1
-            if miss_count >= 5:
-                prev_center = None
+            # Do NOT reset prev_center; keep continuity
             continue
         else:
             miss_count = 0

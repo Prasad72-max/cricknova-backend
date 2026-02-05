@@ -70,9 +70,9 @@ def track_ball_positions(video_path, max_frames=120):
                         ball_candidate = (cx, cy)
 
         if ball_candidate is None:
+            # Allow brief occlusions without resetting physics history
             miss_count += 1
-            if miss_count >= 8:
-                last_pos = None
+            # Do NOT reset last_pos; keep continuity for speed physics
             prev_gray = gray
             continue
         else:

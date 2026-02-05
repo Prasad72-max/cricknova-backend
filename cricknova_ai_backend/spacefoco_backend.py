@@ -720,40 +720,27 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
-        from cricknova_engine.processing.speed import calculate_speed_pro
-
-        _speed_debug(ball_positions, fps)
-
-        # ---- HARD GUARD: fps must be real ----
-        if not fps or fps <= 0:
-            print(f"[SPEED] Invalid FPS ({fps}), speed disabled")
-            speed_result = None
-        else:
-            speed_result = calculate_speed_pro(
-                ball_positions=ball_positions,
-                fps=float(fps),
-                pitch_corners=None
-            )
-
-        # ---- Extract speed safely (supports tagged dict) ----
+        # ---- PURE PIXEL PHYSICS SPEED (NO SCRIPTING) ----
         speed_kmph = None
-        speed_type = None
-        speed_note = None
+        speed_type = "unavailable"
+        speed_note = "INSUFFICIENT_PHYSICS_DATA"
+
         pixel_speed_px_s = calculate_pixel_speed_px_per_sec(ball_positions, fps)
 
-        if isinstance(speed_result, dict):
-            speed_kmph = speed_result.get("speed_kmph")
-            speed_type = speed_result.get("speed_type")
-            speed_note = speed_result.get("speed_note")
+        if pixel_speed_px_s and pixel_speed_px_s > 0:
+            xs = [p[0] for p in ball_positions]
+            ys = [p[1] for p in ball_positions]
+            total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
 
-        # ---- NO SCRIPTED FALLBACK ----
-        # Speed must come ONLY from calculate_speed_pro
-        if not isinstance(speed_kmph, (int, float)):
-            speed_kmph = None
-            speed_type = "unavailable"
-            speed_note = "INSUFFICIENT_PHYSICS_DATA"
+            if total_px > 0:
+                MAX_EFFECTIVE_DISTANCE_METERS = 23.0
+                meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
+                kmph = pixel_speed_px_s * meters_per_px * 3.6
 
-        print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
+                if 0 < kmph < 180:
+                    speed_kmph = round(float(kmph), 1)
+                    speed_type = "pure_pixel_physics"
+                    speed_note = "Pixel + FPS based real speed"
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -1190,40 +1177,27 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
-        from cricknova_engine.processing.speed import calculate_speed_pro
-
-        _speed_debug(ball_positions, fps)
-
-        # ---- HARD GUARD: fps must be real ----
-        if not fps or fps <= 0:
-            print(f"[SPEED] Invalid FPS ({fps}), speed disabled")
-            speed_result = None
-        else:
-            speed_result = calculate_speed_pro(
-                ball_positions=ball_positions,
-                fps=float(fps),
-                pitch_corners=None
-            )
-
-        # ---- Extract speed safely (supports tagged dict) ----
+        # ---- PURE PIXEL PHYSICS SPEED (NO SCRIPTING) ----
         speed_kmph = None
-        speed_type = None
-        speed_note = None
+        speed_type = "unavailable"
+        speed_note = "INSUFFICIENT_PHYSICS_DATA"
+
         pixel_speed_px_s = calculate_pixel_speed_px_per_sec(ball_positions, fps)
 
-        if isinstance(speed_result, dict):
-            speed_kmph = speed_result.get("speed_kmph")
-            speed_type = speed_result.get("speed_type")
-            speed_note = speed_result.get("speed_note")
+        if pixel_speed_px_s and pixel_speed_px_s > 0:
+            xs = [p[0] for p in ball_positions]
+            ys = [p[1] for p in ball_positions]
+            total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
 
-        # ---- NO SCRIPTED FALLBACK ----
-        # Speed must come ONLY from calculate_speed_pro
-        if not isinstance(speed_kmph, (int, float)):
-            speed_kmph = None
-            speed_type = "unavailable"
-            speed_note = "INSUFFICIENT_PHYSICS_DATA"
+            if total_px > 0:
+                MAX_EFFECTIVE_DISTANCE_METERS = 23.0
+                meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
+                kmph = pixel_speed_px_s * meters_per_px * 3.6
 
-        print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
+                if 0 < kmph < 180:
+                    speed_kmph = round(float(kmph), 1)
+                    speed_type = "pure_pixel_physics"
+                    speed_note = "Pixel + FPS based real speed"
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)

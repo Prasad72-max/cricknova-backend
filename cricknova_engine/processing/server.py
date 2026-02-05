@@ -28,8 +28,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
-        app.state.last_pos.clear()
-        app.state.last_time.clear()
+        # Do NOT clear history; allow continuity across brief occlusion
         return {"found": False}
 
     # choose smallest box (ball)
