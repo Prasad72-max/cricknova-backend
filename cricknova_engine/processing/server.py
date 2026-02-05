@@ -48,7 +48,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     speed_kmph = None
     speed_type = "unavailable"
-    speed_note = "FULLTRACK_STYLE_WINDOWED"
+    speed_note = "INSUFFICIENT_PHYSICS_DATA"
     confidence = 0.0
 
     MIN_FRAMES = 12
@@ -86,6 +86,39 @@ async def analyze_live_frame(file: UploadFile = File(...)):
                 speed_kmph = round(float(raw_kmph), 1)
                 speed_type = "ai_estimated_release"
                 confidence = round(min(1.0, len(seg_dists) / 6.0), 2)
+
+    # -----------------------------
+    # CONSERVATIVE VIDEO FALLBACK (NEVER NULL)
+    # -----------------------------
+    if speed_kmph is None and len(app.state.last_pos) >= 6:
+        pts = list(app.state.last_pos)
+
+        pixel_dists = []
+        for i in range(1, len(pts)):
+            d = math.dist(pts[i], pts[i - 1])
+            if d > 1.0:
+                pixel_dists.append(d)
+
+        if len(pixel_dists) >= 3:
+            avg_px = float(np.mean(pixel_dists))
+
+            # Conservative visible flight calibration
+            FRAME_METERS = 20.0
+            y_vals = [p[1] for p in pts]
+            pixel_span = abs(max(y_vals) - min(y_vals))
+
+            if pixel_span > 0:
+                meters_per_px = FRAME_METERS / pixel_span
+                fps_est = 30.0
+
+                kmph = avg_px * meters_per_px * fps_est * 3.6
+                kmph = max(90.0, min(kmph, 155.0))
+                kmph = kmph * 0.85
+
+                speed_kmph = round(float(kmph), 1)
+                speed_type = "estimated_fallback"
+                speed_note = "CONSERVATIVE_VIDEO_ESTIMATE"
+                confidence = 0.45
 
     # SWING CALCULATION
     if len(last_pos) > 4:

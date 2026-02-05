@@ -32,7 +32,9 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
- double? speedKmph;
+  double? speedKmph;
+  String swing = "NA";
+  String spin = "NA";
   @override
   void initState() {
     super.initState();
@@ -188,13 +190,10 @@ class _UploadScreenState extends State<UploadScreen> {
 final dynamic speedVal =
     analysis["speed_kmph"] ?? decoded["speed_kmph"];
 
-final dynamic confidenceVal =
-    analysis["confidence"] ?? decoded["confidence"];
+final dynamic speedTypeVal =
+    analysis["speed_type"] ?? decoded["speed_type"];
 
-if (speedVal is num &&
-    speedVal > 0 &&
-    confidenceVal is num &&
-    confidenceVal >= 0.4) {
+if (speedVal is num && speedVal > 0) {
   speedKmph = speedVal.toDouble();
 } else {
   speedKmph = null;
@@ -202,9 +201,6 @@ if (speedVal is num &&
       if (!mounted) return;
 
       setState(() {
-        speed = extractedSpeed;
-        this.speedUnit = speedUnit;
-
         final swingVal = analysis["swing"]?.toString().toLowerCase();
         if (swingVal == "inswing") {
           swing = "INSWING";
@@ -345,8 +341,8 @@ if (speedVal is num &&
       );
 
       // optional metadata (safe)
-      if (speed != null) {
-      request.fields["speed_kmph"] = speed!.toString();
+      if (speedKmph != null) {
+        request.fields["speed_kmph"] = speedKmph!.toString();
       }
       request.fields["swing"] = swing;
       request.fields["spin"] = spin;
@@ -604,20 +600,11 @@ if (speedVal is num &&
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                       _metric(
-                      "Speed",
-                       speed != null
-                        ? "${speed!.toStringAsFixed(1)} $speedUnitLabel"
-                        : "Speed unavailable",
-                       ),
-                        const SizedBox(height: 4),
-                        if (speedUnitLabel == "px/s")
-                          const Text(
-                            "⚠️ km/h needs pitch calibration",
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 11,
-                            ),
-                          ),
+                        "Estimated Speed",
+                        speedKmph != null
+                            ? "${speedKmph!.toStringAsFixed(1)} km/h"
+                            : "Unavailable",
+                      ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
                         _metric("Spin", spin),

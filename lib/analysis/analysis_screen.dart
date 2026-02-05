@@ -56,12 +56,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 20),
 
             _metricBox(
-              title: "Estimated Speed",
+              title: speedType == "estimated_fallback"
+                  ? "Estimated Speed"
+                  : "Speed",
               value: speedKmph != null
                   ? "${speedKmph!.toStringAsFixed(1)} km/h"
-                  : "Not reliable",
+                  : "Unavailable",
               icon: Icons.speed,
-              color: Colors.blueAccent,
+              color: speedType == "estimated_fallback"
+                  ? Colors.orangeAccent
+                  : Colors.blueAccent,
             ),
             const SizedBox(height: 15),
 
@@ -214,7 +218,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final confidenceVal = src["confidence"];
       speedType = src["speed_type"];
 
-      if (speedVal is num && speedVal > 0 && confidenceVal is num && confidenceVal >= 0.4) {
+      if (speedVal is num && speedVal > 0) {
         speedKmph = speedVal.toDouble();
       } else {
         speedKmph = null;

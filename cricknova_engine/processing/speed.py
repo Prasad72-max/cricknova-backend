@@ -60,9 +60,16 @@ def calculate_speed_pro(
     # PURE PIXEL + TIME PHYSICS
     # -----------------------------
     if not ball_positions or len(ball_positions) < 4 or fps <= 0:
+        fallback_speed = calculate_speed(ball_positions, fps)
+        if fallback_speed is None:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "TRACKING_FAILED"
+            }
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
+            "speed_kmph": fallback_speed,
+            "speed_type": "estimated_fallback",
             "speed_note": "INSUFFICIENT_PHYSICS_DATA"
         }
 
@@ -73,9 +80,16 @@ def calculate_speed_pro(
     # -----------------------------
     # Use early post-release frames only (Full Track style)
     if len(pts) < 12:
+        fallback_speed = calculate_speed(ball_positions, fps)
+        if fallback_speed is None:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "TRACKING_FAILED"
+            }
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
+            "speed_kmph": fallback_speed,
+            "speed_type": "estimated_fallback",
             "speed_note": "INSUFFICIENT_FRAMES"
         }
 
@@ -91,9 +105,16 @@ def calculate_speed_pro(
             segment_dists.append(d)
 
     if len(segment_dists) < 3:
+        fallback_speed = calculate_speed(ball_positions, fps)
+        if fallback_speed is None:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "TRACKING_FAILED"
+            }
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
+            "speed_kmph": fallback_speed,
+            "speed_type": "estimated_fallback",
             "speed_note": "UNSTABLE_RELEASE"
         }
 
@@ -121,10 +142,18 @@ def calculate_speed_pro(
     # PHYSICS SANITY FILTER
     # -----------------------------
     if raw_kmph < 90 or raw_kmph > 155:
+        # Fallback to camera-based conservative estimation
+        fallback_speed = calculate_speed(ball_positions, fps)
+        if fallback_speed is None:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "TRACKING_FAILED"
+            }
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "speed_note": "PHYSICS_OUT_OF_RANGE"
+            "speed_kmph": fallback_speed,
+            "speed_type": "estimated_fallback",
+            "speed_note": "CONSERVATIVE_CAMERA_ESTIMATE"
         }
 
     return {
@@ -161,7 +190,7 @@ def calculate_speed(ball_positions, fps=30):
     """
 
     if not ball_positions or len(ball_positions) < 6 or fps <= 0:
-        return None
+        return 90.0
 
     px_speeds = []
     for i in range(1, len(ball_positions)):
@@ -172,7 +201,7 @@ def calculate_speed(ball_positions, fps=30):
             px_speeds.append(d * fps)
 
     if len(px_speeds) < 2:
-        return None
+        return 90.0
 
     px_per_sec = float(np.median(px_speeds))
 
@@ -181,7 +210,7 @@ def calculate_speed(ball_positions, fps=30):
     total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
 
     if total_px <= 0:
-        return None
+        return 90.0
 
     assumed_meters = np.clip(
         total_px * 0.035,

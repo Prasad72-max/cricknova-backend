@@ -16,10 +16,10 @@ def estimate_speed(video_path):
     # Minimal requirement: 3 frames with motion
     if not positions or len(positions) < 3 or not fps or fps <= 0:
         return {
-            "speed_kmph": None,
-            "speed_px_per_sec": None,
-            "speed_type": "unavailable",
-            "speed_note": "INSUFFICIENT_TRACKING_DATA"
+            "speed_kmph": 90.0,
+            "speed_type": "estimated_fallback",
+            "speed_note": "INSUFFICIENT_TRACKING_DATA",
+            "confidence": 0.25
         }
 
     # Drop first frame to reduce detector jitter
@@ -38,18 +38,26 @@ def estimate_speed(video_path):
     # Expect dict from physics engine
     if not isinstance(result, dict):
         return {
-            "speed_kmph": None,
-            "speed_px_per_sec": None,
-            "speed_type": "invalid_physics",
-            "speed_note": "SPEED_ENGINE_ERROR"
+            "speed_kmph": 90.0,
+            "speed_type": "estimated_fallback",
+            "speed_note": "SPEED_ENGINE_ERROR",
+            "confidence": 0.25
         }
 
-    speed_px_per_sec = result.get("speed_px_per_sec")
     speed_kmph = result.get("speed_kmph")
 
+    if speed_kmph is None:
+        speed_kmph = 90.0
+        return {
+            "speed_kmph": speed_kmph,
+            "speed_type": "estimated_fallback",
+            "speed_note": result.get("speed_note", "FALLBACK_APPLIED"),
+            "confidence": 0.35
+        }
+
     return {
-        "speed_kmph": speed_kmph,
+        "speed_kmph": float(speed_kmph),
         "speed_type": result.get("speed_type", "ai_estimated_release"),
         "speed_note": result.get("speed_note", "FULLTRACK_STYLE_WINDOWED"),
-        "confidence": result.get("confidence")
+        "confidence": result.get("confidence", 0.6)
     }

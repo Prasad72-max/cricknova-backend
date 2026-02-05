@@ -23,22 +23,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SPEED (FULLTRACK STYLE, CONFIDENCE AWARE) ----------
-    String speed = "Not reliable";
+    // ---------- SPEED (FULLTRACK STYLE, UI SAFE) ----------
+    String speed = "Unavailable";
 
     final dynamic rawKmph =
         src["speed_kmph"] ??
         src["analysis"]?["speed_kmph"];
 
-    final dynamic confidenceVal =
-        src["confidence"] ??
-        src["analysis"]?["confidence"];
+    final dynamic speedType =
+        src["speed_type"] ??
+        src["analysis"]?["speed_type"];
 
-    if (rawKmph is num &&
-        rawKmph > 0 &&
-        confidenceVal is num &&
-        confidenceVal >= 0.4) {
-      speed = "${rawKmph.toStringAsFixed(1)} km/h";
+    if (rawKmph is num && rawKmph > 0) {
+      speed = speedType == "estimated_fallback"
+          ? "~${rawKmph.toStringAsFixed(1)} km/h"
+          : "${rawKmph.toStringAsFixed(1)} km/h";
     }
 
     // ---------- SAFE SWING (CONSERVATIVE) ----------
@@ -90,7 +89,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _metric(
-            "Estimated Speed",
+            speed.startsWith("~") ? "Estimated Speed" : "Speed",
             speed,
           ),
           _metric("Swing", swing),

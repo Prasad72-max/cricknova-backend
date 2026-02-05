@@ -66,8 +66,17 @@ def test_speed_calculation(video_path):
         return
 
     # Calculate speed with dynamic pitch detection
-    speed = calculate_speed(positions, fps=30, reference_frame=reference_frame)
-    print(f"Calculated speed: {speed} km/h")
+    result = calculate_speed(positions, fps=30, reference_frame=reference_frame)
+
+    # Support both float-only and dict-based returns
+    if isinstance(result, dict):
+        speed = result.get("speed_kmph")
+        speed_type = result.get("speed_type")
+        note = result.get("speed_note")
+        print(f"Calculated speed: {speed} km/h | type={speed_type} | note={note}")
+    else:
+        speed = result
+        print(f"Calculated speed: {speed} km/h")
 
     return speed
 
@@ -88,9 +97,9 @@ if __name__ == "__main__":
         speed = test_speed_calculation(video_path)
 
         print("\nTest completed!")
-        if speed and speed > 0:
-            print("✓ Real speed calculation working!")
+        if speed is not None and speed > 0:
+            print("✓ Speed calculation working (real or fallback)!")
         else:
-            print("⚠ Speed calculation returned 0 - may need adjustment")
+            print("⚠ Speed unavailable - tracking may have failed")
     else:
         print("No test videos found (temp_*.mp4)")

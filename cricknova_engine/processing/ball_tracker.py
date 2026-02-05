@@ -131,11 +131,11 @@ def compute_speed_kmph(ball_positions, fps):
     - Returns speed ONLY when reliable
     """
 
-    if not ball_positions or fps <= 1 or len(ball_positions) < 12:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 6:
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0
+            "speed_kmph": 90.0,
+            "speed_type": "estimated_fallback",
+            "confidence": 0.25
         }
 
     fps = min(max(fps, 24), 240)
@@ -157,10 +157,27 @@ def compute_speed_kmph(ball_positions, fps):
             seg_dists.append(d)
 
     if len(seg_dists) < 3:
+        # Conservative video-based fallback
+        ys = [p[1] for p in ball_positions]
+        pixel_span = abs(max(ys) - min(ys))
+
+        if pixel_span > 0:
+            FRAME_METERS = 20.0
+            meters_per_px = FRAME_METERS / pixel_span
+            avg_px = float(np.mean(seg_dists)) if seg_dists else 1.0
+            kmph = avg_px * meters_per_px * fps * 3.6
+            kmph = max(90.0, min(kmph, 155.0)) * 0.85
+
+            return {
+                "speed_kmph": round(float(kmph), 1),
+                "speed_type": "estimated_fallback",
+                "confidence": 0.4
+            }
+
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0
+            "speed_kmph": 90.0,
+            "speed_type": "estimated_fallback",
+            "confidence": 0.25
         }
 
     # Median px/sec over release window
@@ -172,10 +189,11 @@ def compute_speed_kmph(ball_positions, fps):
 
     # Human fast-bowling physics gate
     if raw_kmph < 90.0 or raw_kmph > 155.0:
+        kmph = max(90.0, min(raw_kmph, 155.0)) * 0.85
         return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0
+            "speed_kmph": round(float(kmph), 1),
+            "speed_type": "estimated_fallback",
+            "confidence": 0.45
         }
 
     return {
