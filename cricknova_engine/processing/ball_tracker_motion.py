@@ -205,4 +205,3 @@ def calculate_spin_type(positions):
     if abs(drift) < 5:
         return "none"
     return "off spin" if drift < 0 else "leg spin"
-DONE
