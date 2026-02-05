@@ -2,23 +2,6 @@ import math
 import numpy as np
 
 
-def calculate_pixel_speed_px_per_sec(ball_positions, fps):
-    if not ball_positions or fps <= 0 or len(ball_positions) < 4:
-        return None
-    dt = 1.0 / fps
-    speeds = []
-    for i in range(1, len(ball_positions)):
-        dx = ball_positions[i][0] - ball_positions[i-1][0]
-        dy = ball_positions[i][1] - ball_positions[i-1][1]
-        d = math.hypot(dx, dy)
-        if 1.0 < d < 200:
-            speeds.append(d / dt)
-    if not speeds:
-        return None
-    return float(np.median(speeds))
-def _speed_debug(ball_positions, fps):
-    print(f"[SPEED DEBUG] frames={len(ball_positions)}, fps={fps}")
-print("🚀 SPACEFOCO BACKEND LOADED (speed-fix)😀")
 import os
 import asyncio
 import sys
@@ -123,7 +106,10 @@ def get_paypal_client():
     )
     return PayPalHttpClient(env)
 
-from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
+from cricknova_engine.processing.ball_tracker_motion import (
+    track_ball_positions,
+    calculate_ball_speed_kmph
+)
 
 # -----------------------------
 # BALL POSITION NORMALIZATION
@@ -720,27 +706,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
-        # ---- PURE PIXEL PHYSICS SPEED (NO SCRIPTING) ----
-        speed_kmph = None
-        speed_type = "unavailable"
-        speed_note = "INSUFFICIENT_PHYSICS_DATA"
+        speed_result = calculate_ball_speed_kmph(ball_positions, fps)
 
-        pixel_speed_px_s = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-
-        if pixel_speed_px_s and pixel_speed_px_s > 0:
-            xs = [p[0] for p in ball_positions]
-            ys = [p[1] for p in ball_positions]
-            total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
-
-            if total_px > 0:
-                MAX_EFFECTIVE_DISTANCE_METERS = 23.0
-                meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
-                kmph = pixel_speed_px_s * meters_per_px * 3.6
-
-                if 0 < kmph < 180:
-                    speed_kmph = round(float(kmph), 1)
-                    speed_type = "pure_pixel_physics"
-                    speed_note = "Pixel + FPS based real speed"
+        speed_kmph = speed_result.get("speed_kmph")
+        speed_type = speed_result.get("speed_type", "unavailable")
+        speed_note = speed_result.get("speed_note", "FULLTRACK_STYLE_WINDOWED")
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -1177,27 +1147,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
-        # ---- PURE PIXEL PHYSICS SPEED (NO SCRIPTING) ----
-        speed_kmph = None
-        speed_type = "unavailable"
-        speed_note = "INSUFFICIENT_PHYSICS_DATA"
+        speed_result = calculate_ball_speed_kmph(ball_positions, fps)
 
-        pixel_speed_px_s = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-
-        if pixel_speed_px_s and pixel_speed_px_s > 0:
-            xs = [p[0] for p in ball_positions]
-            ys = [p[1] for p in ball_positions]
-            total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
-
-            if total_px > 0:
-                MAX_EFFECTIVE_DISTANCE_METERS = 23.0
-                meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
-                kmph = pixel_speed_px_s * meters_per_px * 3.6
-
-                if 0 < kmph < 180:
-                    speed_kmph = round(float(kmph), 1)
-                    speed_type = "pure_pixel_physics"
-                    speed_note = "Pixel + FPS based real speed"
+        speed_kmph = speed_result.get("speed_kmph")
+        speed_type = speed_result.get("speed_type", "unavailable")
+        speed_note = speed_result.get("speed_note", "FULLTRACK_STYLE_WINDOWED")
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)

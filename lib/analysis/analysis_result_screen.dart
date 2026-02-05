@@ -23,14 +23,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 ? Map<String, dynamic>.from(widget.data["result"])
                 : Map<String, dynamic>.from(widget.data);
 
-    // ---------- SPEED (km/h ONLY, SAFE) ----------
-    String speed = "Speed unavailable";
+    // ---------- SPEED (FULLTRACK STYLE, CONFIDENCE AWARE) ----------
+    String speed = "Not reliable";
 
     final dynamic rawKmph =
         src["speed_kmph"] ??
         src["analysis"]?["speed_kmph"];
 
-    if (rawKmph is num && rawKmph > 0) {
+    final dynamic confidenceVal =
+        src["confidence"] ??
+        src["analysis"]?["confidence"];
+
+    if (rawKmph is num &&
+        rawKmph > 0 &&
+        confidenceVal is num &&
+        confidenceVal >= 0.4) {
       speed = "${rawKmph.toStringAsFixed(1)} km/h";
     }
 
@@ -83,7 +90,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _metric(
-            "Ball Speed",
+            "Estimated Speed",
             speed,
           ),
           _metric("Swing", swing),
@@ -277,4 +284,3 @@ class PremiumScreen extends StatelessWidget {
     );
   }
 }
-DONE

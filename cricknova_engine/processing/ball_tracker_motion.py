@@ -11,7 +11,6 @@ def track_ball_positions(video_path, max_frames=120):
     if fps is None or fps <= 1 or fps > 240:
         fps = 30.0
     fps = float(fps)
-    # Normalize FPS to avoid variable-FPS instability (Render-safe)
     fps = min(max(fps, 24.0), 60.0)
 
     positions = []
@@ -20,7 +19,6 @@ def track_ball_positions(video_path, max_frames=120):
     frame_count = 0
     miss_count = 0
 
-    # scale down once (huge speed boost)
     TARGET_WIDTH = 640
 
     while cap.isOpened() and frame_count < max_frames:
@@ -30,7 +28,6 @@ def track_ball_positions(video_path, max_frames=120):
 
         frame_count += 1
 
-        # downscale frame
         h, w = frame.shape[:2]
         scale = TARGET_WIDTH / w
         frame = cv2.resize(frame, (TARGET_WIDTH, int(h * scale)))
@@ -70,19 +67,16 @@ def track_ball_positions(video_path, max_frames=120):
                         ball_candidate = (cx, cy)
 
         if ball_candidate is None:
-            # Allow brief occlusions without resetting physics history
             miss_count += 1
-            # Do NOT reset last_pos; keep continuity for speed physics
             prev_gray = gray
             continue
         else:
             miss_count = 0
             positions.append(ball_candidate)
             last_pos = ball_candidate
+
         prev_gray = gray
 
-        # stop early only if enough stable points found (Render-safe)
-        # lowered threshold to allow short but physically valid clips
         if len(positions) >= 12:
             break
 
@@ -90,65 +84,55 @@ def track_ball_positions(video_path, max_frames=120):
     return positions, fps
 
 
-# --- Ball speed calculation utility ---
 def calculate_ball_speed_kmph(positions, fps):
     """
-    Physics-based speed calculation (camera-normalized).
-    - Uses pixel motion + real FPS
-    - Returns speed only when motion-based physics is valid
+    Full Track–style AI estimated release speed.
+    - Windowed post-release velocity
+    - Median smoothing
+    - Human fast-bowling physics gate
+    - Speed returned ONLY when reliable
     """
 
-    if not positions or fps <= 0 or len(positions) < 4:
+    if not positions or fps <= 1 or len(positions) < 12:
         return {
-            "speed_px_per_sec": None,
             "speed_kmph": None,
             "speed_type": "unavailable",
             "confidence": 0.0,
-            "speed_note": "INSUFFICIENT_PHYSICS_DATA"
+            "speed_note": "INSUFFICIENT_FRAMES"
         }
 
-    velocities = []
+    fps = min(max(float(fps), 24.0), 240.0)
 
-    for i in range(1, len(positions)):
+    # Skip first 2 frames (hand separation jitter)
+    window_start = 2
+    window_end = min(10, len(positions) - 1)
+
+    seg_dists = []
+    for i in range(window_start, window_end):
         x0, y0 = positions[i - 1]
         x1, y1 = positions[i]
         d = math.hypot(x1 - x0, y1 - y0)
+        if 1.0 < d < 200.0:
+            seg_dists.append(d)
 
-        # physically continuous motion only
-        if 0.8 < d < 260:
-            velocities.append(d * fps)
-
-    if len(velocities) < 2:
+    if len(seg_dists) < 3:
         return {
-            "speed_px_per_sec": None,
             "speed_kmph": None,
             "speed_type": "unavailable",
             "confidence": 0.0,
-            "speed_note": "INSUFFICIENT_PHYSICS_DATA"
+            "speed_note": "UNSTABLE_RELEASE"
         }
 
-    px_per_sec = float(np.median(velocities))
+    # Median px/sec over release window
+    px_per_sec = float(np.median(seg_dists)) * fps
 
-    # --- BOUNDED REAL-WORLD PHYSICS (NO SCRIPTING) ---
-    xs = [p[0] for p in positions]
-    ys = [p[1] for p in positions]
-    total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
+    # Realistic release-to-bounce scaling (fallback)
+    meters_per_px = 17.0 / 320.0
+    raw_kmph = px_per_sec * meters_per_px * 3.6
 
-    if total_px <= 0:
+    # Human fast-bowling physics gate
+    if raw_kmph < 90.0 or raw_kmph > 155.0:
         return {
-            "speed_px_per_sec": None,
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0,
-            "speed_note": "INVALID_PIXEL_DISTANCE"
-        }
-
-    meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
-    speed_kmph = px_per_sec * meters_per_px * 3.6
-
-    if speed_kmph <= 0 or speed_kmph > 170:
-        return {
-            "speed_px_per_sec": round(px_per_sec, 2),
             "speed_kmph": None,
             "speed_type": "unavailable",
             "confidence": 0.0,
@@ -156,28 +140,20 @@ def calculate_ball_speed_kmph(positions, fps):
         }
 
     return {
-        "speed_px_per_sec": round(px_per_sec, 2),
-        "speed_kmph": round(float(speed_kmph), 1),
-        "speed_type": "camera_estimated",
-        "confidence": round(min(1.0, len(velocities) / 10.0), 2),
-        "speed_note": "bounded_real_physics"
+        "speed_kmph": round(raw_kmph, 1),
+        "speed_type": "ai_estimated_release",
+        "confidence": round(min(1.0, len(seg_dists) / 6.0), 2),
+        "speed_note": "FULLTRACK_STYLE_WINDOWED"
     }
 
-# --- Swing & Spin detection (physics-based, no heuristics UI-side) ---
 
 def calculate_swing_type(positions):
-    """
-    Detects swing using lateral deviation during flight.
-    Returns: 'inswing', 'outswing', or 'none'
-    """
     if not positions or len(positions) < 6:
         return "none"
 
     xs = [p[0] for p in positions]
-
     early_mean = np.mean(xs[: len(xs)//3])
     late_mean = np.mean(xs[-len(xs)//3 :])
-
     dx = late_mean - early_mean
 
     if abs(dx) < 6:
@@ -186,10 +162,6 @@ def calculate_swing_type(positions):
 
 
 def calculate_spin_type(positions):
-    """
-    Detects spin using post-pitch sideways drift.
-    Returns: 'off spin', 'leg spin', or 'none'
-    """
     if not positions or len(positions) < 8:
         return "none"
 

@@ -32,12 +32,7 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  double? speed;
-  double? extractedSpeed;
-  String speedUnit = "km/h";
-  String spin = "NA";
-  String swing = "NA";
-  String get speedUnitLabel => speedUnit;
+ double? speedKmph;
   @override
   void initState() {
     super.initState();
@@ -190,29 +185,20 @@ class _UploadScreenState extends State<UploadScreen> {
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
+final dynamic speedVal =
+    analysis["speed_kmph"] ?? decoded["speed_kmph"];
 
-      final dynamic kmhVal =
-          analysis["speed_kmph"] ?? decoded["speed_kmph"];
+final dynamic confidenceVal =
+    analysis["confidence"] ?? decoded["confidence"];
 
-      final dynamic pxVal =
-          analysis["speed_px_per_sec"] ?? decoded["speed_px_per_sec"];
-
-      if (kmhVal is num && kmhVal > 0) {
-      extractedSpeed = kmhVal.toDouble();
-      speedUnit = "km/h";
-      } else if (kmhVal is String) {
-  final parsed = double.tryParse(kmhVal);
-  if (parsed != null && parsed > 0) {
-    extractedSpeed = parsed;
-    speedUnit = "km/h";
-  }
-} else if (pxVal is num && pxVal > 0) {
-  extractedSpeed = pxVal.toDouble();
-  speedUnit = "px/s";
+if (speedVal is num &&
+    speedVal > 0 &&
+    confidenceVal is num &&
+    confidenceVal >= 0.4) {
+  speedKmph = speedVal.toDouble();
 } else {
-  extractedSpeed = null;
+  speedKmph = null;
 }
-
       if (!mounted) return;
 
       setState(() {

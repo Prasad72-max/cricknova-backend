@@ -42,46 +42,50 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     last_pos = app.state.last_pos
     last_pos.append((cx, cy))
 
+
     # -----------------------------
-    # PURE PHYSICS SPEED (PIXEL + TIME ONLY)
+    # FULLTRACK-STYLE WINDOWED RELEASE SPEED (LIVE)
     # -----------------------------
-    last_time = app.state.last_time
-    now = time.time()
-    last_time.append(now)
+    speed_kmph = None
+    speed_type = "unavailable"
+    speed_note = "FULLTRACK_STYLE_WINDOWED"
+    confidence = 0.0
 
-    pixel_speed = None
+    MIN_FRAMES = 12
+    if len(app.state.last_pos) >= MIN_FRAMES and len(app.state.last_time) >= MIN_FRAMES:
+        pts = list(app.state.last_pos)
+        times = list(app.state.last_time)
 
-    # Require enough stable frames for physics to work
-    MIN_FRAMES = 4        # allow very short clips (~0.12s at 30fps)
-    DROP_INITIAL = 0     # do not drop frames for short deliveries
+        # Skip first 2 frames to avoid hand jitter
+        window_start = 2
+        window_end = min(10, len(pts) - 1)
 
-    if len(last_pos) >= MIN_FRAMES and len(last_time) >= MIN_FRAMES:
-        positions = list(last_pos)[DROP_INITIAL:]
-        times = list(last_time)[DROP_INITIAL:]
+        seg_dists = []
+        seg_times = []
 
-        distances = []
-        dts = []
+        for i in range(window_start, window_end):
+            d_px = math.dist(pts[i], pts[i - 1])
+            dt = times[i] - times[i - 1]
 
-        for i in range(len(positions) - 1):
-            d_px = math.dist(positions[i], positions[i + 1])
-            dt = times[i + 1] - times[i]
-
-            MAX_PX_JUMP = 120
-            if dt <= 0 or d_px < 0.6 or d_px > MAX_PX_JUMP:
+            if dt <= 0 or d_px < 1.0 or d_px > 200.0:
                 continue
 
-            distances.append(d_px)
-            dts.append(dt)
+            seg_dists.append(d_px)
+            seg_times.append(dt)
 
-        if distances and dts:
-            px_speeds = [(distances[i] / dts[i]) for i in range(min(len(distances), len(dts)))]
-            if px_speeds:
-                pixel_speed = float(np.median(px_speeds))
+        if len(seg_dists) >= 3:
+            px_per_sec = np.median(
+                [seg_dists[i] / seg_times[i] for i in range(len(seg_dists))]
+            )
 
-            # HARD CRICKET PHYSICS GATE (LIVE)
-            # Reject impossible or noisy speeds
-            if pixel_speed is not None and pixel_speed <= 0:
-                pixel_speed = None
+            # Pitch-anchored realistic scaling (fallback)
+            meters_per_px = 17.0 / 320.0  # tuned release-to-bounce scale
+            raw_kmph = px_per_sec * meters_per_px * 3.6
+
+            if 90.0 <= raw_kmph <= 155.0:
+                speed_kmph = round(float(raw_kmph), 1)
+                speed_type = "ai_estimated_release"
+                confidence = round(min(1.0, len(seg_dists) / 6.0), 2)
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -112,37 +116,12 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             spin = "off spin" if curve > 0 else "leg spin"
             spin_confidence = min(1.0, abs(curve) / 10.0)
 
-    # --- PURE PIXEL + TIME PHYSICS (NO SCRIPTING) ---
-    speed_kmph = None
-    speed_px_per_sec = None
-    speed_type = "unavailable"
-
-    if pixel_speed is not None and pixel_speed > 0:
-        speed_px_per_sec = round(float(pixel_speed), 2)
-
-        # Convert using bounded real-world travel (≤ 23 m)
-        MAX_TRAVEL_METERS = 23.0
-        TRACK_WINDOW = min(len(last_pos), 12)
-        seg = list(last_pos)[-TRACK_WINDOW:]
-        total_px = math.dist(seg[0], seg[-1])
-
-        if total_px > 0:
-            meters_per_px = MAX_TRAVEL_METERS / total_px
-            kmph = speed_px_per_sec * meters_per_px * 3.6
-
-            if 0 < kmph <= 170:
-                speed_kmph = round(kmph, 1)
-                speed_type = "camera_estimated"
-
-    confidence = round(min(1.0, len(app.state.last_pos) / 12.0), 2)
-
     return {
         "found": True,
         "speed_kmph": speed_kmph,
-        "speed_px_per_sec": speed_px_per_sec,
         "speed_type": speed_type,
         "confidence": confidence,
-        "speed_note": "Live physics-based speed (no scripting)",
+        "speed_note": speed_note,
         "swing": swing,
         "spin": spin,
         "trajectory": list(last_pos)

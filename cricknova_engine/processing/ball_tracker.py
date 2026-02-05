@@ -107,7 +107,6 @@ def track_ball_positions(video_path):
         if chosen is None:
             # Allow brief occlusions without resetting physics history
             miss_count += 1
-            # Do NOT reset prev_center; keep continuity
             continue
         else:
             miss_count = 0
@@ -125,69 +124,54 @@ def track_ball_positions(video_path):
 # --- Physics-based speed calculator ---
 def compute_speed_kmph(ball_positions, fps):
     """
-    Physics-based speed estimation.
-    - Uses real time between frames
-    - Camera-normalized pixel distance
-    - Never returns null speed for valid motion
+    Full Track–style AI estimated release speed.
+    - Windowed post-release velocity
+    - Median-based smoothing
+    - Human physics gating
+    - Returns speed ONLY when reliable
     """
 
-    if not ball_positions or fps <= 1 or len(ball_positions) < 6:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 12:
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
             "confidence": 0.0
         }
 
-    fps = min(max(fps, 24), 60)
+    fps = min(max(fps, 24), 240)
 
-    xs = [p[0] for p in ball_positions]
-    ys = [p[1] for p in ball_positions]
-    fs = [p[2] for p in ball_positions]
+    # Extract positions only
+    pts = [(p[0], p[1]) for p in ball_positions]
 
-    distances = []
-    times = []
+    # Skip first 2 frames (hand separation jitter)
+    window_start = 2
+    window_end = min(10, len(pts) - 1)
 
-    for i in range(1, len(ball_positions)):
-        df = fs[i] - fs[i - 1]
-        if df <= 0:
-            continue
+    seg_dists = []
+    for i in range(window_start, window_end):
+        d = math.hypot(
+            pts[i][0] - pts[i - 1][0],
+            pts[i][1] - pts[i - 1][1]
+        )
+        if 1.0 < d < 200.0:
+            seg_dists.append(d)
 
-        dp = math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
-        if 0.6 < dp < 200:
-            distances.append(dp)
-            times.append(df / fps)
-
-    if len(distances) < 2:
+    if len(seg_dists) < 3:
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
             "confidence": 0.0
         }
 
-    median_px = float(np.median(distances))
-    median_time = float(np.median(times))
+    # Median px/sec over release window
+    px_per_sec = float(np.median(seg_dists)) * fps
 
-    if median_time <= 0:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0
-        }
+    # Realistic release-to-bounce scaling (fallback)
+    meters_per_px = 17.0 / 320.0
+    raw_kmph = px_per_sec * meters_per_px * 3.6
 
-    speed_px_per_sec = median_px / median_time
-
-    total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
-    if total_px <= 0:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0
-        }
-
-    meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
-    speed_kmph = speed_px_per_sec * meters_per_px * 3.6
-
-    if speed_kmph <= 0 or speed_kmph > 170:
+    # Human fast-bowling physics gate
+    if raw_kmph < 90.0 or raw_kmph > 155.0:
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
@@ -195,10 +179,9 @@ def compute_speed_kmph(ball_positions, fps):
         }
 
     return {
-        "speed_kmph": round(float(speed_kmph), 1),
-        "speed_px_per_sec": round(speed_px_per_sec, 2),
-        "speed_type": "camera_estimated",
-        "confidence": round(min(1.0, len(distances) / 10.0), 2)
+        "speed_kmph": round(raw_kmph, 1),
+        "speed_type": "ai_estimated_release",
+        "confidence": round(min(1.0, len(seg_dists) / 6.0), 2)
     }
 
 def compute_swing(ball_positions):
@@ -212,13 +195,11 @@ def compute_swing(ball_positions):
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
 
-    # Compare early vs late lateral movement
     early_x = np.mean(xs[: len(xs)//3])
     late_x = np.mean(xs[-len(xs)//3 :])
 
     dx = late_x - early_x
 
-    # Dead-zone to avoid camera bias (most phone angles drift right)
     if abs(dx) < 4:
         return {"swing": "none", "confidence": 0.0}
 
@@ -227,7 +208,6 @@ def compute_swing(ball_positions):
         "swing": "inswing" if dx < 0 else "outswing",
         "confidence": round(confidence, 2)
     }
-
 
 def compute_spin(ball_positions):
     """
@@ -240,7 +220,6 @@ def compute_spin(ball_positions):
     xs = [p[0] for p in ball_positions]
     ys = [p[1] for p in ball_positions]
 
-    # Look for sideways drift after bounce
     pitch_idx = int(np.argmax(ys))
     if pitch_idx >= len(xs) - 4:
         return {"spin": "none", "confidence": 0.0}
@@ -248,7 +227,6 @@ def compute_spin(ball_positions):
     post_x = xs[pitch_idx:]
     drift = post_x[-1] - post_x[0]
 
-    # Lower threshold so real spin is not missed
     if abs(drift) < 1.0:
         return {"spin": "none", "confidence": 0.0}
 

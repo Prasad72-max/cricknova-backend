@@ -56,153 +56,82 @@ def calculate_speed_pro(
     ball_type: 'leather', 'tennis', 'rubber'.
     """
 
-    def _estimated_speed_from_pixels(ball_positions, fps):
-        pts = np.array(ball_positions, dtype="float32")
-        if len(pts) < 4:
-            return None
+    # -----------------------------
+    # PURE PIXEL + TIME PHYSICS
+    # -----------------------------
+    if not ball_positions or len(ball_positions) < 4 or fps <= 0:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INSUFFICIENT_PHYSICS_DATA"
+        }
 
-        dists = np.linalg.norm(pts[1:] - pts[:-1], axis=1)
-        dists = dists[dists > 0.5]  # remove jitter
-        if len(dists) < 2:
-            return None
+    pts = np.array(ball_positions, dtype="float32")
 
-        px_per_sec = float(np.median(dists)) * fps
+    # -----------------------------
+    # RELEASE WINDOW MECHANISM
+    # -----------------------------
+    # Use early post-release frames only (Full Track style)
+    if len(pts) < 12:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INSUFFICIENT_FRAMES"
+        }
 
-        total_px_span = float(np.linalg.norm(pts[-1] - pts[0]))
-        if total_px_span <= 1:
-            return None
+    # Assume release around first visible stable frames
+    # Skip first 2 frames to avoid hand separation jitter
+    window_start = 2
+    window_end = min(10, len(pts) - 1)
 
-        # Assume real-world travel distance bounded by cricket domain
-        assumed_meters = np.clip(
-            total_px_span * 0.04,
-            MIN_EFFECTIVE_DISTANCE_METERS,
-            MAX_EFFECTIVE_DISTANCE_METERS,
+    segment_dists = []
+    for i in range(window_start, window_end):
+        d = np.linalg.norm(pts[i] - pts[i - 1])
+        if 1.0 < d < 200.0:
+            segment_dists.append(d)
+
+    if len(segment_dists) < 3:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "UNSTABLE_RELEASE"
+        }
+
+    # Median pixel velocity (px/sec)
+    px_per_sec = float(np.median(segment_dists)) * float(fps)
+
+    # -----------------------------
+    # REAL-WORLD SCALING (PITCH-ANCHORED)
+    # -----------------------------
+    if pitch_corners is not None:
+        M = get_perspective_matrix(pitch_corners)
+        p0 = cv2.perspectiveTransform(np.array([[pts[window_start]]]), M)[0][0]
+        p1 = cv2.perspectiveTransform(np.array([[pts[window_end]]]), M)[0][0]
+        real_dist = np.linalg.norm(p1 - p0)
+        meters_per_px = real_dist / max(
+            np.linalg.norm(pts[window_end] - pts[window_start]), 1.0
         )
+    else:
+        # Fallback: realistic release travel distance
+        meters_per_px = TYPICAL_RELEASE_TO_BOUNCE_METERS / 350.0
 
-        meters_per_px = assumed_meters / total_px_span
-        est_kmph = px_per_sec * meters_per_px * 3.6
-
-        if est_kmph <= 0:
-            return None
-
-        return {
-            "speed_kmph": round(est_kmph, 1),
-            "speed_type": "estimated_physics",
-            "speed_note": "ASSUMED_PITCH_SCALE",
-            "confidence": 0.7
-        }
+    raw_kmph = px_per_sec * meters_per_px * 3.6
 
     # -----------------------------
-    # HARD RELIABILITY GUARDS
+    # PHYSICS SANITY FILTER
     # -----------------------------
-    MIN_FRAMES_FOR_SPEED = 4
-
-    # Maximum number of frames to use for speed calculation (Render-safe)
-    MAX_FRAMES_FOR_SPEED = 120
-
-    # Require enough frames for physics to stabilize
-    if not ball_positions or len(ball_positions) < MIN_FRAMES_FOR_SPEED:
-        est = _estimated_speed_from_pixels(ball_positions, fps)
-        if est is not None:
-            return est
+    if raw_kmph < 90 or raw_kmph > 155:
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "reason": "TRACKING_FAILED"
+            "speed_note": "PHYSICS_OUT_OF_RANGE"
         }
-
-    # Limit frames to avoid CPU overload and unstable tails (Render-safe)
-    if len(ball_positions) > MAX_FRAMES_FOR_SPEED:
-        ball_positions = ball_positions[:MAX_FRAMES_FOR_SPEED]
-
-    # Drop first 2 frames to avoid detector jump noise
-    if len(ball_positions) > 3:
-        ball_positions = ball_positions[2:]
-
-    # 0. Basic sanity checks (always return speed)
-    if not ball_positions or len(ball_positions) < 4:
-        est = _estimated_speed_from_pixels(ball_positions, fps)
-        if est is not None:
-            return est
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "reason": "TRACKING_FAILED"
-        }
-
-    # HARD GUARD: require enough trajectory
-    if len(ball_positions) < 6:
-        est = _estimated_speed_from_pixels(ball_positions, fps)
-        if est is not None:
-            return est
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "reason": "TRACKING_FAILED"
-        }
-
-    # --- SEGMENT-BASED PHYSICS (RELEASE → FIRST MAJOR EVENT) ---
-    # REMOVED entire segment-based scripted speed block
-
-    # 1. Perspective matrix (optional)
-    if pitch_corners is None:
-        est = _estimated_speed_from_pixels(ball_positions, fps)
-        if est is not None:
-            return est
-
-    M = get_perspective_matrix(pitch_corners)
-
-    # 2. Transform Pixel Positions to Real-World Meters
-    pts = np.array(ball_positions, dtype="float32").reshape(-1, 1, 2)
-    real_pts = cv2.perspectiveTransform(pts, M)
-    real_pts = real_pts.reshape(-1, 2)
-
-    # REMOVED pitch pixel sanity rejection block
-
-    # 3. Calculate Real-World Distances (Meters) between consecutive frames
-    distances = []
-    for i in range(1, len(real_pts)):
-        d = np.linalg.norm(real_pts[i] - real_pts[i - 1])
-        if 0.01 < d < 1.5:
-            distances.append(d)
-
-    if len(distances) < 2:
-        est = _estimated_speed_from_pixels(ball_positions, fps)
-        if est is not None:
-            return est
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "reason": "TRACKING_FAILED"
-        }
-
-    distances = np.array(distances)
-
-    # REMOVED Hybrid noise filtering (IQR + positive-only) block entirely
-    # Use distances directly
-
-    # REMOVED multi-window speed estimation and median selection
-    mpf_speeds = distances * fps * 3.6
-    final_kmph = float(np.median(mpf_speeds))
-
-    if final_kmph <= 0 or final_kmph > 170:
-        est = _estimated_speed_from_pixels(ball_positions, fps)
-        if est is not None:
-            return est
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "reason": "PHYSICS_OUT_OF_RANGE"
-        }
-
-    # REMOVED CAMERA NORMALIZATION (SAFE) section entirely
-
-    # REMOVED pixel distance median calculation for return
 
     return {
-        "speed_kmph": round(final_kmph, 1),
-        "speed_type": "calibrated_real_world",
-        "confidence": 0.95
+        "speed_kmph": round(raw_kmph, 1),
+        "speed_type": "ai_estimated_release",
+        "speed_note": "FULLTRACK_STYLE_WINDOWED",
+        "confidence": round(min(1.0, len(segment_dists) / 6.0), 2)
     }
 
 

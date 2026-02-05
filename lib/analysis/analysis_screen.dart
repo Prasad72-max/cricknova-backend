@@ -22,7 +22,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   bool _showTrajectoryAfterVideo = false;
 
   double? speedKmph;
-  double? speedPxPerSec;
   String? speedType;
   String? swingName;
   double? swingDegree;
@@ -57,12 +56,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 20),
 
             _metricBox(
-              title: "Ball Speed",
+              title: "Estimated Speed",
               value: speedKmph != null
                   ? "${speedKmph!.toStringAsFixed(1)} km/h"
-                  : (speedPxPerSec != null
-                      ? "${speedPxPerSec!.toStringAsFixed(1)} px/s"
-                      : "NA"),
+                  : "Not reliable",
               icon: Icons.speed,
               color: Colors.blueAccent,
             ),
@@ -212,20 +209,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ? Map<String, dynamic>.from(responseData["data"])
               : responseData;
 
-      // ---------- SPEED (VALUE ONLY) ----------
+      // ---------- SPEED (FULLTRACK STYLE) ----------
       final speedVal = src["speed_kmph"];
-      final speedPxVal = src["speed_px_per_sec"];
+      final confidenceVal = src["confidence"];
       speedType = src["speed_type"];
 
-      if (speedVal is num && speedVal > 0) {
+      if (speedVal is num && speedVal > 0 && confidenceVal is num && confidenceVal >= 0.4) {
         speedKmph = speedVal.toDouble();
-        speedPxPerSec = null;
-      } else if (speedPxVal is num && speedPxVal > 0) {
-        speedKmph = null;
-        speedPxPerSec = speedPxVal.toDouble();
       } else {
         speedKmph = null;
-        speedPxPerSec = null;
       }
 
       // ---------- SWING ----------
@@ -488,4 +480,3 @@ class _TrajectoryPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
-DONE

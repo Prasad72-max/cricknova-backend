@@ -3,64 +3,53 @@ from .speed import calculate_speed_pro
 
 def estimate_speed(video_path):
     """
-    Physics-based ball speed estimation from video frames.
-    - Returns physics-based speed with confidence
-    - Never returns null speed for valid 2–12 sec videos
+    Full Track–style AI estimated release speed.
+    - Windowed post-release velocity
+    - Physics sanity filtering
+    - Confidence-aware output
+    - Speed shown only when reliable
     """
 
     tracker = BallTracker()
-    # FPS will be inferred internally from video metadata
-
     positions, fps = tracker.track_ball(video_path)
 
-    # Require sufficient frames for physical stability (relaxed)
-    if not positions or len(positions) < 4:
+    # Minimal requirement: 3 frames with motion
+    if not positions or len(positions) < 3 or not fps or fps <= 0:
         return {
             "speed_kmph": None,
+            "speed_px_per_sec": None,
             "speed_type": "unavailable",
-            "confidence": 0.0,
-            "speed_note": "TRACKING_FAILED"
+            "speed_note": "INSUFFICIENT_TRACKING_DATA"
         }
 
-    stable_positions = positions[1:]  # drop first frame to reduce detector noise
+    # Drop first frame to reduce detector jitter
+    stable_positions = positions[1:]
 
-    # Limit frames to stable delivery window (Render-safe)
-    if len(stable_positions) > 120:
-        stable_positions = stable_positions[:120]
+    # Cap frames for safety
+    if len(stable_positions) > 150:
+        stable_positions = stable_positions[:150]
 
-    base_speed_result = calculate_speed_pro(
+    result = calculate_speed_pro(
         stable_positions,
         fps=fps,
         pitch_corners=None
     )
 
-    if not isinstance(base_speed_result, dict):
+    # Expect dict from physics engine
+    if not isinstance(result, dict):
         return {
             "speed_kmph": None,
+            "speed_px_per_sec": None,
             "speed_type": "invalid_physics",
             "speed_note": "SPEED_ENGINE_ERROR"
         }
 
-    speed_kmph = base_speed_result.get("speed_kmph")
-    speed_type = base_speed_result.get("speed_type")
-    speed_note = base_speed_result.get("speed_note")
-    speed_px_per_sec = base_speed_result.get("speed_px_per_sec")
-    confidence = base_speed_result.get("confidence", 0.0)
-
-    if isinstance(speed_kmph, (int, float)):
-        speed_kmph = float(speed_kmph)
-    else:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "confidence": 0.0,
-            "speed_note": "TRACKING_FAILED"
-        }
+    speed_px_per_sec = result.get("speed_px_per_sec")
+    speed_kmph = result.get("speed_kmph")
 
     return {
         "speed_kmph": speed_kmph,
-        "speed_px_per_sec": speed_px_per_sec,
-        "speed_type": speed_type or "estimated_physics",
-        "confidence": confidence,
-        "speed_note": speed_note or "ASSUMED_PITCH_SCALE"
+        "speed_type": result.get("speed_type", "ai_estimated_release"),
+        "speed_note": result.get("speed_note", "FULLTRACK_STYLE_WINDOWED"),
+        "confidence": result.get("confidence")
     }
