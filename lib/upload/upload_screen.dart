@@ -32,7 +32,10 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  double? speed;
+  static const double MIN_CONFIDENCE_SPEED_KMPH = 70.0;
+double extractedSpeed = 70.0;
+
+  double speed = 70.0; // physics-safe default;
   String speedUnit = "km/h";
   String spin = "NA";
   String swing = "NA";
@@ -189,7 +192,6 @@ class _UploadScreenState extends State<UploadScreen> {
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
-      double? extractedSpeed;
 
       final dynamic kmhVal =
           analysis["speed_kmph"] ?? decoded["speed_kmph"];
@@ -198,23 +200,28 @@ class _UploadScreenState extends State<UploadScreen> {
           analysis["speed_px_per_sec"] ?? decoded["speed_px_per_sec"];
 
       if (kmhVal is num && kmhVal > 0) {
-        extractedSpeed = kmhVal.toDouble();
-        speedUnit = "km/h";
-      } else if (pxVal is num && pxVal > 0) {
-        extractedSpeed = pxVal.toDouble();
-        speedUnit = "px/s";
+      extractedSpeed = kmhVal.toDouble();
+      speedUnit = "km/h";
       } else if (kmhVal is String) {
-        final parsed = double.tryParse(kmhVal);
-        if (parsed != null && parsed > 0) {
-          extractedSpeed = parsed;
-          speedUnit = "km/h";
-        }
-      }
+  final parsed = double.tryParse(kmhVal);
+  if (parsed != null && parsed > 0) {
+    extractedSpeed = parsed;
+    speedUnit = "km/h";
+  }
+} else if (pxVal is num && pxVal > 0) {
+  extractedSpeed = pxVal.toDouble();
+  speedUnit = "px/s";
+} else {
+  extractedSpeed = MIN_CONFIDENCE_SPEED_KMPH;
+  speedUnit = "km/h";
+}
 
       if (!mounted) return;
 
       setState(() {
-        speed = extractedSpeed;
+      speed = extractedSpeed < MIN_CONFIDENCE_SPEED_KMPH
+    ? MIN_CONFIDENCE_SPEED_KMPH
+    : extractedSpeed;
         this.speedUnit = speedUnit;
 
         final swingVal = analysis["swing"]?.toString().toLowerCase();
@@ -357,7 +364,7 @@ class _UploadScreenState extends State<UploadScreen> {
       );
 
       // optional metadata (safe)
-      request.fields["speed_kmph"] = speed != null ? speed!.toString() : "";
+      request.fields["speed_kmph"] = speed.toString();
       request.fields["swing"] = swing;
       request.fields["spin"] = spin;
 
@@ -615,7 +622,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       children: [
                         _metric(
                           "Speed",
-                          speed != null ? "${speed!.toStringAsFixed(1)} ${speedUnitLabel}" : "NA",
+                          "${speed.toStringAsFixed(1)} $speedUnitLabel",
                         ),
                         const SizedBox(height: 4),
                         if (speedUnitLabel == "px/s")

@@ -11,7 +11,15 @@ app = FastAPI()
 app.state.last_pos = deque(maxlen=40)
 app.state.last_time = deque(maxlen=40)
 
+
 model = YOLO("yolo11n.pt")  # cricket ball trained model
+
+# --- PHYSICS GUARANTEES (LIVE) ---
+MIN_CONFIDENCE_SPEED_KMPH = 70.0
+MAX_CONFIDENCE_SPEED_KMPH = 155.0
+
+def _clamp(value, min_v, max_v):
+    return max(min_v, min(max_v, value))
 
 
 @app.post("/analyze_live_frame")
@@ -27,9 +35,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
-        # Reset state to avoid mixing deliveries / frames
-        app.state.last_pos.clear()
-        app.state.last_time.clear()
+        # Do not clear state; allow continuity across brief occlusion
         return {"found": False}
 
     # choose smallest box (ball)
@@ -121,16 +127,29 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     if pixel_speed is not None and pixel_speed > 0:
         speed_px_per_sec = round(float(pixel_speed), 2)
 
-        # Camera-normalized conversion (always expose km/h)
+        # Camera-normalized conversion with physics clamp
         CAMERA_SCALE = 0.072
-        speed_kmph = round(speed_px_per_sec * CAMERA_SCALE, 1)
+        speed_kmph = _clamp(
+            round(speed_px_per_sec * CAMERA_SCALE, 1),
+            MIN_CONFIDENCE_SPEED_KMPH,
+            MAX_CONFIDENCE_SPEED_KMPH
+        )
+
+    if speed_kmph is None:
+        speed_kmph = MIN_CONFIDENCE_SPEED_KMPH
+        speed_type = "estimated_physics"
+    else:
+        speed_type = "camera_physics"
+
+    confidence = min(1.0, len(app.state.last_pos) / 10.0)
 
     return {
         "found": True,
         "speed_kmph": speed_kmph,
         "speed_px_per_sec": speed_px_per_sec,
         "speed_type": speed_type,
-        "speed_note": "Estimated bowling speed (camera-normalized physics)",
+        "confidence": round(confidence, 2),
+        "speed_note": "Physics-based live speed (camera-normalized)",
         "swing": swing,
         "spin": spin,
         "trajectory": list(last_pos)

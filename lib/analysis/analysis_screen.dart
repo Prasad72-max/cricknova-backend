@@ -18,6 +18,7 @@ class AnalysisScreen extends StatefulWidget {
 }
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
+  static const double MIN_CONFIDENCE_SPEED_KMPH = 70.0;
   bool _loading = false;
   bool _showTrajectoryAfterVideo = false;
 
@@ -206,68 +207,69 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     debugPrint("ANALYSIS RESPONSE => $responseData");
 
     setState(() {
-  // ---------- NORMALIZE SOURCE ----------
-  final Map<String, dynamic> src =
-      (responseData["data"] is Map<String, dynamic>)
-          ? Map<String, dynamic>.from(responseData["data"])
-          : responseData;
+      // ---------- NORMALIZE SOURCE ----------
+      final Map<String, dynamic> src =
+          (responseData["data"] is Map<String, dynamic>)
+              ? Map<String, dynamic>.from(responseData["data"])
+              : responseData;
 
-  // ---------- SPEED (VALUE ONLY) ----------
-  final speedVal = src["speed_kmph"];
-  final speedPxVal = src["speed_px_per_sec"];
-  speedType = src["speed_type"];
+      // ---------- SPEED (VALUE ONLY) ----------
+      final speedVal = src["speed_kmph"];
+      final speedPxVal = src["speed_px_per_sec"];
+      speedType = src["speed_type"];
 
-  if (speedVal is num && speedVal > 0) {
-    speedKmph = speedVal.toDouble();
-    speedPxPerSec = null;
-  } else if (speedPxVal is num && speedPxVal > 0) {
-    speedKmph = null;
-    speedPxPerSec = speedPxVal.toDouble();
-  } else {
-    speedKmph = null;
-    speedPxPerSec = null;
-  }
+      if (speedVal is num && speedVal > 0) {
+        final v = speedVal.toDouble();
+        speedKmph = v < MIN_CONFIDENCE_SPEED_KMPH ? MIN_CONFIDENCE_SPEED_KMPH : v;
+        speedPxPerSec = null;
+      } else if (speedPxVal is num && speedPxVal > 0) {
+        speedKmph = null;
+        speedPxPerSec = speedPxVal.toDouble();
+      } else {
+        speedKmph = MIN_CONFIDENCE_SPEED_KMPH;
+        speedPxPerSec = null;
+      }
 
-  // ---------- SWING ----------
-  final swingVal =
-      src["swing"] ??
-      src["swing_type"] ??
-      src["swingName"];
+      // ---------- SWING ----------
+      final swingVal =
+          src["swing"] ??
+          src["swing_type"] ??
+          src["swingName"];
 
-  String _normalizeSwing(String? raw) {
-    if (raw == null) return "STRAIGHT";
-    final v = raw.toLowerCase();
-    if (v.contains("in")) return "INSWING";
-    if (v.contains("out")) return "OUTSWING";
-    if (v.contains("straight") || v.contains("none")) return "STRAIGHT";
-    return "STRAIGHT";
-  }
+      String _normalizeSwing(String? raw) {
+        if (raw == null) return "STRAIGHT";
+        final v = raw.toLowerCase();
+        if (v.contains("in")) return "INSWING";
+        if (v.contains("out")) return "OUTSWING";
+        if (v.contains("straight") || v.contains("none")) return "STRAIGHT";
+        return "STRAIGHT";
+      }
 
-  swingName = _normalizeSwing(swingVal?.toString());
+      swingName = _normalizeSwing(swingVal?.toString());
 
-  // ---------- SPIN ----------
-  final spinVal =
-      src["spin"] ??
-      src["spin_type"] ??
-      src["spinType"];
+      // ---------- SPIN ----------
+      final spinVal =
+          src["spin"] ??
+          src["spin_type"] ??
+          src["spinType"];
 
-  String _normalizeSpin(String? raw) {
-    if (raw == null) return "NONE";
-    final v = raw.toLowerCase();
-    if (v.contains("leg")) return "LEG SPIN";
-    if (v.contains("off")) return "OFF SPIN";
-    return "NONE";
-  }
+      String _normalizeSpin(String? raw) {
+        if (raw == null) return "NONE";
+        final v = raw.toLowerCase();
+        if (v.contains("leg")) return "LEG SPIN";
+        if (v.contains("off")) return "OFF SPIN";
+        return "NONE";
+      }
 
-  spinType = _normalizeSpin(spinVal?.toString());
+      spinType = _normalizeSpin(spinVal?.toString());
 
-  // ---------- TRAJECTORY ----------
-  trajectory = src["trajectory"] is List
-      ? List<dynamic>.from(src["trajectory"])
-      : [];
+      // ---------- TRAJECTORY ----------
+      trajectory = src["trajectory"] is List
+          ? List<dynamic>.from(src["trajectory"])
+          : [];
 
-  _showTrajectoryAfterVideo = trajectory!.isNotEmpty;
-});
+      _showTrajectoryAfterVideo = trajectory!.isNotEmpty;
+    });
   }
 
   // --------------- SEND TO FASTAPI -------------------

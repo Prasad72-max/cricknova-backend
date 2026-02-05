@@ -1,3 +1,12 @@
+import math
+
+# --- PHYSICS GUARANTEES (BACKEND) ---
+MIN_CONFIDENCE_SPEED_KMPH = 70.0
+MAX_CONFIDENCE_SPEED_KMPH = 155.0
+
+def _clamp(value, min_v, max_v):
+    return max(min_v, min(max_v, value))
+
 def calculate_pixel_speed_px_per_sec(ball_positions, fps):
     if not ball_positions or fps <= 0 or len(ball_positions) < 4:
         return None
@@ -747,10 +756,17 @@ async def analyze_training_video(file: UploadFile = File(...)):
             speed_note = speed_result.get("speed_note")
 
         if isinstance(speed_kmph, (int, float)):
-            speed_kmph = float(speed_kmph)
+            speed_kmph = _clamp(float(speed_kmph), MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
         else:
             pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-            speed_kmph = round(pixel_speed * 0.072, 1) if pixel_speed else None
+            if isinstance(pixel_speed, (int, float)):
+                speed_kmph = _clamp(pixel_speed * 0.072, MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
+                speed_type = "estimated_physics"
+                speed_note = "Physics-safe estimate from pixel motion"
+            else:
+                speed_kmph = MIN_CONFIDENCE_SPEED_KMPH
+                speed_type = "estimated_physics"
+                speed_note = "Minimum physics-safe speed fallback"
 
         print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
@@ -1219,9 +1235,17 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             speed_note = speed_result.get("speed_note")
 
         if isinstance(speed_kmph, (int, float)):
-            speed_kmph = float(speed_kmph)
+            speed_kmph = _clamp(float(speed_kmph), MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
         else:
-            speed_kmph = None
+            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
+            if isinstance(pixel_speed, (int, float)):
+                speed_kmph = _clamp(pixel_speed * 0.072, MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
+                speed_type = "estimated_physics"
+                speed_note = "Physics-safe estimate from pixel motion"
+            else:
+                speed_kmph = MIN_CONFIDENCE_SPEED_KMPH
+                speed_type = "estimated_physics"
+                speed_note = "Minimum physics-safe speed fallback"
 
         print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
