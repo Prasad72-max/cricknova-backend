@@ -5,8 +5,6 @@ import math
 # --- BOUNDED REAL-WORLD TRAVEL ---
 MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # max cricket ball travel (release → bat)
 
-
-
 def filter_positions(ball_positions):
     """
     Removes noisy jumps and keeps physically plausible motion.
@@ -130,17 +128,16 @@ def compute_speed_kmph(ball_positions, fps):
     Physics-based speed estimation.
     - Uses real time between frames
     - Camera-normalized pixel distance
-    - Returns speed only when motion-based physics is valid
+    - Never returns null speed for valid motion
     """
 
-    if not ball_positions or fps <= 1 or len(ball_positions) < 8:
+    if not ball_positions or fps <= 1 or len(ball_positions) < 6:
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
             "confidence": 0.0
         }
 
-    # Normalize FPS for stability
     fps = min(max(fps, 24), 60)
 
     xs = [p[0] for p in ball_positions]
@@ -179,7 +176,6 @@ def compute_speed_kmph(ball_positions, fps):
 
     speed_px_per_sec = median_px / median_time
 
-    # --- BOUNDED REAL-WORLD PHYSICS (NO SCRIPTING) ---
     total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
     if total_px <= 0:
         return {

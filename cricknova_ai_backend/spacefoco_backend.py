@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 
 def calculate_pixel_speed_px_per_sec(ball_positions, fps):
@@ -21,7 +22,6 @@ print("🚀 SPACEFOCO BACKEND LOADED (speed-fix)😀")
 import os
 import asyncio
 import sys
-import math
 import time
 import tempfile
 

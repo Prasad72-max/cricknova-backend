@@ -28,7 +28,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
-        # Do not clear state; allow continuity across brief occlusion
+        app.state.last_pos.clear()
+        app.state.last_time.clear()
         return {"found": False}
 
     # choose smallest box (ball)
@@ -66,8 +67,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             d_px = math.dist(positions[i], positions[i + 1])
             dt = times[i + 1] - times[i]
 
-            # reject zero / noisy measurements
-            if dt <= 0 or d_px < 0.6:
+            MAX_PX_JUMP = 120
+            if dt <= 0 or d_px < 0.6 or d_px > MAX_PX_JUMP:
                 continue
 
             distances.append(d_px)
@@ -122,7 +123,9 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
         # Convert using bounded real-world travel (≤ 23 m)
         MAX_TRAVEL_METERS = 23.0
-        total_px = math.dist(last_pos[0], last_pos[-1])
+        TRACK_WINDOW = min(len(last_pos), 12)
+        seg = list(last_pos)[-TRACK_WINDOW:]
+        total_px = math.dist(seg[0], seg[-1])
 
         if total_px > 0:
             meters_per_px = MAX_TRAVEL_METERS / total_px

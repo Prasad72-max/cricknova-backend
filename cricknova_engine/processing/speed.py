@@ -58,6 +58,9 @@ def calculate_speed_pro(
 
     def _estimated_speed_from_pixels(ball_positions, fps):
         pts = np.array(ball_positions, dtype="float32")
+        if len(pts) < 4:
+            return None
+
         dists = np.linalg.norm(pts[1:] - pts[:-1], axis=1)
         dists = dists[dists > 0.5]  # remove jitter
         if len(dists) < 2:
@@ -66,19 +69,27 @@ def calculate_speed_pro(
         px_per_sec = float(np.median(dists)) * fps
 
         total_px_span = float(np.linalg.norm(pts[-1] - pts[0]))
-        if total_px_span <= 0:
+        if total_px_span <= 1:
             return None
 
-        meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px_span
+        # Assume real-world travel distance bounded by cricket domain
+        assumed_meters = np.clip(
+            total_px_span * 0.04,
+            MIN_EFFECTIVE_DISTANCE_METERS,
+            MAX_EFFECTIVE_DISTANCE_METERS,
+        )
+
+        meters_per_px = assumed_meters / total_px_span
         est_kmph = px_per_sec * meters_per_px * 3.6
 
-        if est_kmph <= 0 or est_kmph > 170:
+        if est_kmph <= 0:
             return None
 
         return {
             "speed_kmph": round(est_kmph, 1),
-            "speed_type": "camera_estimated",
-            "confidence": 0.75
+            "speed_type": "estimated_physics",
+            "speed_note": "ASSUMED_PITCH_SCALE",
+            "confidence": 0.7
         }
 
     # -----------------------------
@@ -91,10 +102,13 @@ def calculate_speed_pro(
 
     # Require enough frames for physics to stabilize
     if not ball_positions or len(ball_positions) < MIN_FRAMES_FOR_SPEED:
+        est = _estimated_speed_from_pixels(ball_positions, fps)
+        if est is not None:
+            return est
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "reason": "INSUFFICIENT_PHYSICS_DATA"
+            "reason": "TRACKING_FAILED"
         }
 
     # Limit frames to avoid CPU overload and unstable tails (Render-safe)
@@ -107,18 +121,24 @@ def calculate_speed_pro(
 
     # 0. Basic sanity checks (always return speed)
     if not ball_positions or len(ball_positions) < 4:
+        est = _estimated_speed_from_pixels(ball_positions, fps)
+        if est is not None:
+            return est
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "reason": "INSUFFICIENT_PHYSICS_DATA"
+            "reason": "TRACKING_FAILED"
         }
 
     # HARD GUARD: require enough trajectory
     if len(ball_positions) < 6:
+        est = _estimated_speed_from_pixels(ball_positions, fps)
+        if est is not None:
+            return est
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "reason": "INSUFFICIENT_PHYSICS_DATA"
+            "reason": "TRACKING_FAILED"
         }
 
     # --- SEGMENT-BASED PHYSICS (RELEASE → FIRST MAJOR EVENT) ---
@@ -129,11 +149,6 @@ def calculate_speed_pro(
         est = _estimated_speed_from_pixels(ball_positions, fps)
         if est is not None:
             return est
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "reason": "INSUFFICIENT_PHYSICS_DATA"
-        }
 
     M = get_perspective_matrix(pitch_corners)
 
@@ -152,10 +167,13 @@ def calculate_speed_pro(
             distances.append(d)
 
     if len(distances) < 2:
+        est = _estimated_speed_from_pixels(ball_positions, fps)
+        if est is not None:
+            return est
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "reason": "INSUFFICIENT_PHYSICS_DATA"
+            "reason": "TRACKING_FAILED"
         }
 
     distances = np.array(distances)
