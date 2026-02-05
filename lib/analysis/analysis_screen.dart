@@ -18,7 +18,6 @@ class AnalysisScreen extends StatefulWidget {
 }
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
-  static const double MIN_CONFIDENCE_SPEED_KMPH = 70.0;
   bool _loading = false;
   bool _showTrajectoryAfterVideo = false;
 
@@ -219,14 +218,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       speedType = src["speed_type"];
 
       if (speedVal is num && speedVal > 0) {
-        final v = speedVal.toDouble();
-        speedKmph = v < MIN_CONFIDENCE_SPEED_KMPH ? MIN_CONFIDENCE_SPEED_KMPH : v;
+        speedKmph = speedVal.toDouble();
         speedPxPerSec = null;
       } else if (speedPxVal is num && speedPxVal > 0) {
         speedKmph = null;
         speedPxPerSec = speedPxVal.toDouble();
       } else {
-        speedKmph = MIN_CONFIDENCE_SPEED_KMPH;
+        speedKmph = null;
         speedPxPerSec = null;
       }
 
@@ -490,3 +488,4 @@ class _TrajectoryPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+DONE

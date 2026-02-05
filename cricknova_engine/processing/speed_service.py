@@ -19,10 +19,10 @@ def estimate_speed(video_path):
     # Require sufficient frames for physical stability (relaxed)
     if not positions or len(positions) < 4:
         return {
-            "speed_kmph": 70.0,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60,
-            "speed_note": "Insufficient tracking, physics-safe estimate"
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "Insufficient tracking data"
         }
 
     # Drop first frame only (avoid over-pruning short deliveries)
@@ -49,17 +49,22 @@ def estimate_speed(video_path):
     speed_type = base_speed_result.get("speed_type")
     speed_note = base_speed_result.get("speed_note")
     speed_px_per_sec = base_speed_result.get("speed_px_per_sec")
-    confidence = base_speed_result.get("confidence", 0.60)
+    confidence = base_speed_result.get("confidence", 0.0)
 
     if isinstance(speed_kmph, (int, float)):
         speed_kmph = float(speed_kmph)
     else:
-        speed_kmph = 70.0
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "Physics calculation failed"
+        }
 
     return {
         "speed_kmph": speed_kmph,
         "speed_px_per_sec": speed_px_per_sec,
-        "speed_type": speed_type or "estimated_physics",
+        "speed_type": speed_type or "camera_estimated",
         "confidence": confidence,
         "speed_note": speed_note or "Physics-based speed estimation"
     }

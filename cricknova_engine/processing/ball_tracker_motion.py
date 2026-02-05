@@ -2,13 +2,7 @@ import cv2
 import numpy as np
 import math
 
-# --- PHYSICS GUARANTEES ---
-MIN_CONFIDENCE_SPEED_KMPH = 70.0
-MAX_CONFIDENCE_SPEED_KMPH = 155.0
-
-def _clamp(value, min_v, max_v):
-    return max(min_v, min(max_v, value))
-
+MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # max real ball travel (release → bat)
 
 def track_ball_positions(video_path, max_frames=120):
     cap = cv2.VideoCapture(video_path)
@@ -101,17 +95,16 @@ def calculate_ball_speed_kmph(positions, fps):
     """
     Physics-based speed calculation (camera-normalized).
     - Uses pixel motion + real FPS
-    - Clamped to cricket-safe km/h range
-    - Never returns null speed for valid 2–12 sec clips
+    - Returns speed only when motion-based physics is valid
     """
 
     if not positions or fps <= 0 or len(positions) < 4:
         return {
             "speed_px_per_sec": None,
-            "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60,
-            "speed_note": "Insufficient frames, physics-safe estimate"
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "INSUFFICIENT_PHYSICS_DATA"
         }
 
     velocities = []
@@ -128,37 +121,46 @@ def calculate_ball_speed_kmph(positions, fps):
     if len(velocities) < 2:
         return {
             "speed_px_per_sec": None,
-            "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60,
-            "speed_note": "Unstable motion, physics-safe estimate"
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "INSUFFICIENT_PHYSICS_DATA"
         }
 
     px_per_sec = float(np.median(velocities))
 
-    # Camera-normalized conversion (empirically safe, non-inflating)
-    CAMERA_SCALE = 0.072  # km/h per (px/sec)
-    speed_kmph = _clamp(
-        px_per_sec * CAMERA_SCALE,
-        MIN_CONFIDENCE_SPEED_KMPH,
-        MAX_CONFIDENCE_SPEED_KMPH
-    )
+    # --- BOUNDED REAL-WORLD PHYSICS (NO SCRIPTING) ---
+    xs = [p[0] for p in positions]
+    ys = [p[1] for p in positions]
+    total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
 
-    if speed_kmph < 3:
+    if total_px <= 0:
+        return {
+            "speed_px_per_sec": None,
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "INVALID_PIXEL_DISTANCE"
+        }
+
+    meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
+    speed_kmph = px_per_sec * meters_per_px * 3.6
+
+    if speed_kmph <= 0 or speed_kmph > 170:
         return {
             "speed_px_per_sec": round(px_per_sec, 2),
-            "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60,
-            "speed_note": "Motion too small, physics-safe estimate"
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "PHYSICS_OUT_OF_RANGE"
         }
 
     return {
         "speed_px_per_sec": round(px_per_sec, 2),
-        "speed_kmph": round(speed_kmph, 1),
-        "speed_type": "camera_physics",
-        "confidence": 0.70,
-        "speed_note": "Physics-based speed (camera normalized)"
+        "speed_kmph": round(float(speed_kmph), 1),
+        "speed_type": "camera_estimated",
+        "confidence": round(min(1.0, len(velocities) / 10.0), 2),
+        "speed_note": "bounded_real_physics"
     }
 
 # --- Swing & Spin detection (physics-based, no heuristics UI-side) ---
@@ -203,3 +205,4 @@ def calculate_spin_type(positions):
     if abs(drift) < 5:
         return "none"
     return "off spin" if drift < 0 else "leg spin"
+DONE

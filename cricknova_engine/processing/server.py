@@ -14,13 +14,6 @@ app.state.last_time = deque(maxlen=40)
 
 model = YOLO("yolo11n.pt")  # cricket ball trained model
 
-# --- PHYSICS GUARANTEES (LIVE) ---
-MIN_CONFIDENCE_SPEED_KMPH = 70.0
-MAX_CONFIDENCE_SPEED_KMPH = 155.0
-
-def _clamp(value, min_v, max_v):
-    return max(min_v, min(max_v, value))
-
 
 @app.post("/analyze_live_frame")
 async def analyze_live_frame(file: UploadFile = File(...)):
@@ -119,37 +112,35 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             spin = "off spin" if curve > 0 else "leg spin"
             spin_confidence = min(1.0, abs(curve) / 10.0)
 
-    # --- CAMERA-NORMALIZED SPEED ESTIMATION ---
+    # --- PURE PIXEL + TIME PHYSICS (NO SCRIPTING) ---
     speed_kmph = None
     speed_px_per_sec = None
-    speed_type = "camera_estimated"
+    speed_type = "unavailable"
 
     if pixel_speed is not None and pixel_speed > 0:
         speed_px_per_sec = round(float(pixel_speed), 2)
 
-        # Camera-normalized conversion with physics clamp
-        CAMERA_SCALE = 0.072
-        speed_kmph = _clamp(
-            round(speed_px_per_sec * CAMERA_SCALE, 1),
-            MIN_CONFIDENCE_SPEED_KMPH,
-            MAX_CONFIDENCE_SPEED_KMPH
-        )
+        # Convert using bounded real-world travel (≤ 23 m)
+        MAX_TRAVEL_METERS = 23.0
+        total_px = math.dist(last_pos[0], last_pos[-1])
 
-    if speed_kmph is None:
-        speed_kmph = MIN_CONFIDENCE_SPEED_KMPH
-        speed_type = "estimated_physics"
-    else:
-        speed_type = "camera_physics"
+        if total_px > 0:
+            meters_per_px = MAX_TRAVEL_METERS / total_px
+            kmph = speed_px_per_sec * meters_per_px * 3.6
 
-    confidence = min(1.0, len(app.state.last_pos) / 10.0)
+            if 0 < kmph <= 170:
+                speed_kmph = round(kmph, 1)
+                speed_type = "camera_estimated"
+
+    confidence = round(min(1.0, len(app.state.last_pos) / 12.0), 2)
 
     return {
         "found": True,
         "speed_kmph": speed_kmph,
         "speed_px_per_sec": speed_px_per_sec,
         "speed_type": speed_type,
-        "confidence": round(confidence, 2),
-        "speed_note": "Physics-based live speed (camera-normalized)",
+        "confidence": confidence,
+        "speed_note": "Live physics-based speed (no scripting)",
         "swing": swing,
         "spin": spin,
         "trajectory": list(last_pos)

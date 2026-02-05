@@ -2,6 +2,9 @@ import math
 import numpy as np
 import cv2
 
+MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # domain-bounded max travel distance
+MIN_EFFECTIVE_DISTANCE_METERS = 6.0   # minimum plausible travel distance
+
 # -----------------------------
 # CONFIG
 # -----------------------------
@@ -14,13 +17,11 @@ PITCH_WIDTH_METERS = 3.05  # standard cricket pitch width (meters)
 TYPICAL_RELEASE_TO_BOUNCE_METERS = 16.0
 
 # --- PHYSICS GUARANTEES ---
-MIN_CONFIDENCE_SPEED_KMPH = 70.0
-MAX_CONFIDENCE_SPEED_KMPH = 155.0
+# REMOVED MIN_CONFIDENCE_SPEED_KMPH = 70.0
+# REMOVED MAX_CONFIDENCE_SPEED_KMPH = 155.0
 MIN_VALID_SEGMENT_METERS = 3.0
 
-def _clamp(value, min_v, max_v):
-    return max(min_v, min(max_v, value))
-
+# REMOVED clamp function entirely
 
 def get_perspective_matrix(pitch_corners):
     """
@@ -56,40 +57,28 @@ def calculate_speed_pro(
     """
 
     def _estimated_speed_from_pixels(ball_positions, fps):
-        if not ball_positions or fps <= 0 or len(ball_positions) < 2:
-            return {
-                "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-                "speed_type": "estimated_physics",
-                "confidence": 0.60,
-                "speed_note": "Insufficient motion, physics-bounded estimate"
-            }
+        pts = np.array(ball_positions, dtype="float32")
+        dists = np.linalg.norm(pts[1:] - pts[:-1], axis=1)
+        dists = dists[dists > 0.5]  # remove jitter
+        if len(dists) < 2:
+            return None
 
-        distances_px = []
-        for i in range(1, len(ball_positions)):
-            x0, y0 = ball_positions[i - 1]
-            x1, y1 = ball_positions[i]
-            d = math.hypot(x1 - x0, y1 - y0)
-            if 0.5 < d < 300:
-                distances_px.append(d)
+        px_per_sec = float(np.median(dists)) * fps
 
-        if not distances_px:
-            return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "No valid motion samples"
-            }
+        total_px_span = float(np.linalg.norm(pts[-1] - pts[0]))
+        if total_px_span <= 0:
+            return None
 
-        px_per_sec = float(np.median(distances_px) * fps)
+        meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px_span
+        est_kmph = px_per_sec * meters_per_px * 3.6
 
-        CAMERA_SCALE = 0.075
-        speed_kmph = _clamp(px_per_sec * CAMERA_SCALE, MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
+        if est_kmph <= 0 or est_kmph > 170:
+            return None
 
         return {
-            "speed_kmph": round(speed_kmph, 1),
-            "speed_px_per_sec": round(px_per_sec, 2),
-            "speed_type": "estimated_physics",
-            "confidence": 0.65,
-            "speed_note": "Physics-bounded pixel motion estimate"
+            "speed_kmph": round(est_kmph, 1),
+            "speed_type": "camera_estimated",
+            "confidence": 0.75
         }
 
     # -----------------------------
@@ -102,7 +91,11 @@ def calculate_speed_pro(
 
     # Require enough frames for physics to stabilize
     if not ball_positions or len(ball_positions) < MIN_FRAMES_FOR_SPEED:
-        return _estimated_speed_from_pixels(ball_positions, fps)
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "reason": "INSUFFICIENT_PHYSICS_DATA"
+        }
 
     # Limit frames to avoid CPU overload and unstable tails (Render-safe)
     if len(ball_positions) > MAX_FRAMES_FOR_SPEED:
@@ -114,74 +107,32 @@ def calculate_speed_pro(
 
     # 0. Basic sanity checks (always return speed)
     if not ball_positions or len(ball_positions) < 4:
-        return _estimated_speed_from_pixels(ball_positions, fps)
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "reason": "INSUFFICIENT_PHYSICS_DATA"
+        }
 
     # HARD GUARD: require enough trajectory
     if len(ball_positions) < 6:
-        return _estimated_speed_from_pixels(ball_positions, fps)
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "reason": "INSUFFICIENT_PHYSICS_DATA"
+        }
 
     # --- SEGMENT-BASED PHYSICS (RELEASE → FIRST MAJOR EVENT) ---
-    segment_distances_px = []
-    for i in range(1, len(ball_positions)):
-        x0, y0 = ball_positions[i - 1]
-        x1, y1 = ball_positions[i]
-        dpx = math.hypot(x1 - x0, y1 - y0)
-        if 1.0 < dpx < 200:
-            segment_distances_px.append(dpx)
-
-    if len(segment_distances_px) >= 8:
-        segment_time = len(segment_distances_px) / fps
-        if segment_time > 0:
-            segment_speed = (TYPICAL_RELEASE_TO_BOUNCE_METERS / segment_time) * 3.6
-            segment_speed = _clamp(segment_speed, MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
-            return {
-                "speed_kmph": round(segment_speed, 1),
-                "speed_type": "segment_physics",
-                "confidence": 0.85,
-                "speed_note": "Physics speed from release-to-event segment"
-            }
+    # REMOVED entire segment-based scripted speed block
 
     # 1. Perspective matrix (optional)
     if pitch_corners is None:
-        # --- CAMERA-NORMALIZED PHYSICS SPEED (ROBUST) ---
-        # Pure pixel physics + FPS, tolerant to phone videos
-        # Still conservative, never inflates speed
-
-        distances_px = []
-        for i in range(1, len(ball_positions)):
-            x0, y0 = ball_positions[i - 1]
-            x1, y1 = ball_positions[i]
-            d = math.hypot(x1 - x0, y1 - y0)
-
-            # Relaxed but physical bounds (mobile cameras)
-            if 0.8 < d < 260:
-                distances_px.append(d)
-
-        # Need enough motion samples
-        if len(distances_px) < 6:
-            return _estimated_speed_from_pixels(ball_positions, fps)
-
-        # Use trimmed median to kill outliers
-        distances_px = np.array(distances_px)
-        q1 = np.percentile(distances_px, 20)
-        q3 = np.percentile(distances_px, 80)
-        core = distances_px[(distances_px >= q1) & (distances_px <= q3)]
-
-        if len(core) < 4:
-            core = distances_px
-
-        median_px = float(np.median(core))
-        px_per_sec = median_px * fps
-
-        # ---- CAMERA NORMALIZED CONVERSION ----
-        CAMERA_SCALE = 0.072  # conservative cricket camera scale
-        speed_kmph = px_per_sec * CAMERA_SCALE
-
+        est = _estimated_speed_from_pixels(ball_positions, fps)
+        if est is not None:
+            return est
         return {
-            "speed_kmph": round(float(speed_kmph), 1),
-            "speed_px_per_sec": round(float(px_per_sec), 2),
-            "speed_type": "camera_estimated",
-            "speed_note": "Estimated bowling speed (camera-normalized physics)"
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "reason": "INSUFFICIENT_PHYSICS_DATA"
         }
 
     M = get_perspective_matrix(pitch_corners)
@@ -201,7 +152,11 @@ def calculate_speed_pro(
             distances.append(d)
 
     if len(distances) < 2:
-        return _estimated_speed_from_pixels(ball_positions, fps)
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "reason": "INSUFFICIENT_PHYSICS_DATA"
+        }
 
     distances = np.array(distances)
 
@@ -210,38 +165,26 @@ def calculate_speed_pro(
 
     # REMOVED multi-window speed estimation and median selection
     mpf_speeds = distances * fps * 3.6
-    final_kmph = _clamp(float(np.median(mpf_speeds)), MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
+    final_kmph = float(np.median(mpf_speeds))
 
-    # REMOVED soft clamp logic entirely
-
-    if final_kmph <= 0 or math.isnan(final_kmph):
-        return _estimated_speed_from_pixels(ball_positions, fps)
+    if final_kmph <= 0 or final_kmph > 170:
+        est = _estimated_speed_from_pixels(ball_positions, fps)
+        if est is not None:
+            return est
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "reason": "PHYSICS_OUT_OF_RANGE"
+        }
 
     # REMOVED CAMERA NORMALIZATION (SAFE) section entirely
 
-    px_distances = []
-    for i in range(1, len(ball_positions)):
-        x0, y0 = ball_positions[i - 1]
-        x1, y1 = ball_positions[i]
-        dpx = math.hypot(x1 - x0, y1 - y0)
-        if 0.8 < dpx < 260:
-            px_distances.append(dpx)
-    px_per_sec = round(float(np.median(px_distances) * fps), 2) if px_distances else None
+    # REMOVED pixel distance median calculation for return
 
     return {
-        "speed_kmph": float(round(final_kmph, 1)),
-        "speed_px_per_sec": px_per_sec,
+        "speed_kmph": round(final_kmph, 1),
         "speed_type": "calibrated_real_world",
-        "confidence": 0.95,
-        "speed_note": "Physics-based speed using real pitch geometry"
-    }
-
-    # Absolute guarantee (should never hit)
-    return {
-        "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-        "speed_type": "estimated_physics",
-        "confidence": 0.60,
-        "speed_note": "Guaranteed physics-safe fallback"
+        "confidence": 0.95
     }
 
 

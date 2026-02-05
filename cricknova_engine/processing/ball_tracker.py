@@ -2,12 +2,9 @@ import cv2 as cv
 import numpy as np
 import math
 
-# --- PHYSICS GUARANTEES ---
-MIN_CONFIDENCE_SPEED_KMPH = 70.0
-MAX_CONFIDENCE_SPEED_KMPH = 155.0
+# --- BOUNDED REAL-WORLD TRAVEL ---
+MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # max cricket ball travel (release → bat)
 
-def _clamp(value, min_v, max_v):
-    return max(min_v, min(max_v, value))
 
 
 def filter_positions(ball_positions):
@@ -133,14 +130,14 @@ def compute_speed_kmph(ball_positions, fps):
     Physics-based speed estimation.
     - Uses real time between frames
     - Camera-normalized pixel distance
-    - Never returns null speed for valid motion
+    - Returns speed only when motion-based physics is valid
     """
 
     if not ball_positions or fps <= 1 or len(ball_positions) < 8:
         return {
-            "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0
         }
 
     # Normalize FPS for stability
@@ -165,9 +162,9 @@ def compute_speed_kmph(ball_positions, fps):
 
     if len(distances) < 2:
         return {
-            "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0
         }
 
     median_px = float(np.median(distances))
@@ -175,26 +172,37 @@ def compute_speed_kmph(ball_positions, fps):
 
     if median_time <= 0:
         return {
-            "speed_kmph": MIN_CONFIDENCE_SPEED_KMPH,
-            "speed_type": "estimated_physics",
-            "confidence": 0.60
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0
         }
 
     speed_px_per_sec = median_px / median_time
 
-    # ---- CAMERA-NORMALIZED CONVERSION (SAFE) ----
-    CAMERA_SCALE = 0.072  # conservative cricket camera scale
-    speed_kmph = _clamp(
-        speed_px_per_sec * CAMERA_SCALE,
-        MIN_CONFIDENCE_SPEED_KMPH,
-        MAX_CONFIDENCE_SPEED_KMPH
-    )
+    # --- BOUNDED REAL-WORLD PHYSICS (NO SCRIPTING) ---
+    total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
+    if total_px <= 0:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0
+        }
+
+    meters_per_px = MAX_EFFECTIVE_DISTANCE_METERS / total_px
+    speed_kmph = speed_px_per_sec * meters_per_px * 3.6
+
+    if speed_kmph <= 0 or speed_kmph > 170:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0
+        }
 
     return {
         "speed_kmph": round(float(speed_kmph), 1),
         "speed_px_per_sec": round(speed_px_per_sec, 2),
-        "speed_type": "camera_physics",
-        "confidence": 0.70
+        "speed_type": "camera_estimated",
+        "confidence": round(min(1.0, len(distances) / 10.0), 2)
     }
 
 def compute_swing(ball_positions):

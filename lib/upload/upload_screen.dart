@@ -32,10 +32,8 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
-  static const double MIN_CONFIDENCE_SPEED_KMPH = 70.0;
-double extractedSpeed = 70.0;
-
-  double speed = 70.0; // physics-safe default;
+  double? speed;
+  double? extractedSpeed;
   String speedUnit = "km/h";
   String spin = "NA";
   String swing = "NA";
@@ -212,16 +210,13 @@ double extractedSpeed = 70.0;
   extractedSpeed = pxVal.toDouble();
   speedUnit = "px/s";
 } else {
-  extractedSpeed = MIN_CONFIDENCE_SPEED_KMPH;
-  speedUnit = "km/h";
+  extractedSpeed = null;
 }
 
       if (!mounted) return;
 
       setState(() {
-      speed = extractedSpeed < MIN_CONFIDENCE_SPEED_KMPH
-    ? MIN_CONFIDENCE_SPEED_KMPH
-    : extractedSpeed;
+        speed = extractedSpeed;
         this.speedUnit = speedUnit;
 
         final swingVal = analysis["swing"]?.toString().toLowerCase();
@@ -364,7 +359,9 @@ double extractedSpeed = 70.0;
       );
 
       // optional metadata (safe)
-      request.fields["speed_kmph"] = speed.toString();
+      if (speed != null) {
+      request.fields["speed_kmph"] = speed!.toString();
+      }
       request.fields["swing"] = swing;
       request.fields["spin"] = spin;
 
@@ -620,10 +617,12 @@ double extractedSpeed = 70.0;
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _metric(
-                          "Speed",
-                          "${speed.toStringAsFixed(1)} $speedUnitLabel",
-                        ),
+                      _metric(
+                      "Speed",
+                       speed != null
+                        ? "${speed!.toStringAsFixed(1)} $speedUnitLabel"
+                        : "Speed unavailable",
+                       ),
                         const SizedBox(height: 4),
                         if (speedUnitLabel == "px/s")
                           const Text(

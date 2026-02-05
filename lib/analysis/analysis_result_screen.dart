@@ -24,7 +24,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 : Map<String, dynamic>.from(widget.data);
 
     // ---------- SPEED (km/h ONLY, SAFE) ----------
-    String speed = "NA";
+    String speed = "Speed unavailable";
 
     final dynamic rawKmph =
         src["speed_kmph"] ??
@@ -277,3 +277,4 @@ class PremiumScreen extends StatelessWidget {
     );
   }
 }
+DONE

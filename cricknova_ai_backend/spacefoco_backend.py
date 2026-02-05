@@ -1,11 +1,5 @@
 import math
 
-# --- PHYSICS GUARANTEES (BACKEND) ---
-MIN_CONFIDENCE_SPEED_KMPH = 70.0
-MAX_CONFIDENCE_SPEED_KMPH = 155.0
-
-def _clamp(value, min_v, max_v):
-    return max(min_v, min(max_v, value))
 
 def calculate_pixel_speed_px_per_sec(ball_positions, fps):
     if not ball_positions or fps <= 0 or len(ball_positions) < 4:
@@ -706,14 +700,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:120]
 
         if len(ball_positions) < 6:
-            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-            fallback_kmph = round(pixel_speed * 0.072, 1) if pixel_speed else None
-
             return {
                 "status": "success",
-                "speed_kmph": fallback_kmph,
-                "speed_type": "pixel_fallback",
-                "speed_note": "Estimated from pixel motion (short video)",
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "INSUFFICIENT_PHYSICS_DATA",
                 "swing": detect_swing_x(ball_positions),
                 "spin": "none",
                 "trajectory": []
@@ -755,18 +746,12 @@ async def analyze_training_video(file: UploadFile = File(...)):
             speed_type = speed_result.get("speed_type")
             speed_note = speed_result.get("speed_note")
 
-        if isinstance(speed_kmph, (int, float)):
-            speed_kmph = _clamp(float(speed_kmph), MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
-        else:
-            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-            if isinstance(pixel_speed, (int, float)):
-                speed_kmph = _clamp(pixel_speed * 0.072, MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
-                speed_type = "estimated_physics"
-                speed_note = "Physics-safe estimate from pixel motion"
-            else:
-                speed_kmph = MIN_CONFIDENCE_SPEED_KMPH
-                speed_type = "estimated_physics"
-                speed_note = "Minimum physics-safe speed fallback"
+        # ---- NO SCRIPTED FALLBACK ----
+        # Speed must come ONLY from calculate_speed_pro
+        if not isinstance(speed_kmph, (int, float)):
+            speed_kmph = None
+            speed_type = "unavailable"
+            speed_note = "INSUFFICIENT_PHYSICS_DATA"
 
         print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
@@ -785,8 +770,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": speed_type or "pixel_physics",
-            "speed_note": speed_note or "Speed shown in km/h when physics is reliable.",
+            "speed_type": speed_type or "unavailable",
+            "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
@@ -1187,14 +1172,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:120]
 
         if len(ball_positions) < 6:
-            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-            fallback_kmph = round(pixel_speed * 0.072, 1) if pixel_speed else None
-
             return {
                 "status": "success",
-                "speed_kmph": fallback_kmph,
-                "speed_type": "pixel_fallback",
-                "speed_note": "Estimated from pixel motion (short video)",
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "INSUFFICIENT_PHYSICS_DATA",
                 "swing": detect_swing_x(ball_positions),
                 "spin": "none",
                 "trajectory": []
@@ -1234,18 +1216,12 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             speed_type = speed_result.get("speed_type")
             speed_note = speed_result.get("speed_note")
 
-        if isinstance(speed_kmph, (int, float)):
-            speed_kmph = _clamp(float(speed_kmph), MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
-        else:
-            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
-            if isinstance(pixel_speed, (int, float)):
-                speed_kmph = _clamp(pixel_speed * 0.072, MIN_CONFIDENCE_SPEED_KMPH, MAX_CONFIDENCE_SPEED_KMPH)
-                speed_type = "estimated_physics"
-                speed_note = "Physics-safe estimate from pixel motion"
-            else:
-                speed_kmph = MIN_CONFIDENCE_SPEED_KMPH
-                speed_type = "estimated_physics"
-                speed_note = "Minimum physics-safe speed fallback"
+        # ---- NO SCRIPTED FALLBACK ----
+        # Speed must come ONLY from calculate_speed_pro
+        if not isinstance(speed_kmph, (int, float)):
+            speed_kmph = None
+            speed_type = "unavailable"
+            speed_note = "INSUFFICIENT_PHYSICS_DATA"
 
         print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
@@ -1263,8 +1239,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": speed_type or "pixel_physics",
-            "speed_note": speed_note or "Speed shown in km/h when physics is reliable.",
+            "speed_type": speed_type or "unavailable",
+            "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin_label,
             "trajectory": []
