@@ -54,7 +54,7 @@ def track_ball_positions(video_path, max_frames=120):
 
         for c in contours:
             area = cv2.contourArea(c)
-            if 25 < area < 600:
+            if 18 < area < 900:
                 (x, y, w, h) = cv2.boundingRect(c)
                 cx = x + w // 2
                 cy = y + h // 2
@@ -64,13 +64,13 @@ def track_ball_positions(video_path, max_frames=120):
                     break
                 else:
                     dist = math.hypot(cx - last_pos[0], cy - last_pos[1])
-                    if 2 < dist < min_dist:
+                    if 1.2 < dist < min_dist:
                         min_dist = dist
                         ball_candidate = (cx, cy)
 
         if ball_candidate is None:
             miss_count += 1
-            if miss_count >= 5:
+            if miss_count >= 8:
                 last_pos = None
             prev_gray = gray
             continue
@@ -82,7 +82,7 @@ def track_ball_positions(video_path, max_frames=120):
 
         # stop early only if enough stable points found (Render-safe)
         # lowered threshold to allow short but physically valid clips
-        if len(positions) >= 20:
+        if len(positions) >= 12:
             break
 
     cap.release()
@@ -98,7 +98,7 @@ def calculate_ball_speed_kmph(positions, fps):
     - Returns None when motion is insufficient (no fake speed)
     """
 
-    if not positions or fps <= 0 or len(positions) < 6:
+    if not positions or fps <= 0 or len(positions) < 4:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
@@ -117,7 +117,7 @@ def calculate_ball_speed_kmph(positions, fps):
         if 0.8 < d < 260:
             velocities.append(d * fps)
 
-    if len(velocities) < 3:
+    if len(velocities) < 2:
         return {
             "speed_px_per_sec": None,
             "speed_kmph": None,
@@ -131,7 +131,7 @@ def calculate_ball_speed_kmph(positions, fps):
     CAMERA_SCALE = 0.072  # km/h per (px/sec)
     speed_kmph = px_per_sec * CAMERA_SCALE
 
-    if speed_kmph < 5:
+    if speed_kmph < 3:
         return {
             "speed_px_per_sec": round(px_per_sec, 2),
             "speed_kmph": None,

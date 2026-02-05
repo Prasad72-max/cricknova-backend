@@ -200,10 +200,11 @@ def compute_swing(ball_positions):
 
     dx = late_x - early_x
 
-    if abs(dx) < 2:
+    # Dead-zone to avoid camera bias (most phone angles drift right)
+    if abs(dx) < 4:
         return {"swing": "none", "confidence": 0.0}
 
-    confidence = min(1.0, abs(dx) / 12.0)
+    confidence = min(1.0, abs(dx) / 20.0)
     return {
         "swing": "inswing" if dx < 0 else "outswing",
         "confidence": round(confidence, 2)
@@ -229,10 +230,11 @@ def compute_spin(ball_positions):
     post_x = xs[pitch_idx:]
     drift = post_x[-1] - post_x[0]
 
-    if abs(drift) < 2:
+    # Lower threshold so real spin is not missed
+    if abs(drift) < 1.0:
         return {"spin": "none", "confidence": 0.0}
 
-    confidence = min(1.0, abs(drift) / 10.0)
+    confidence = min(1.0, abs(drift) / 6.0)
     return {
         "spin": "off spin" if drift < 0 else "leg spin",
         "confidence": round(confidence, 2)

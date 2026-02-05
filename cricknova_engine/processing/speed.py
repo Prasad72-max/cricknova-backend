@@ -47,21 +47,52 @@ def calculate_speed_pro(
     ball_type: 'leather', 'tennis', 'rubber'.
     """
 
+    def _estimated_speed_from_pixels(ball_positions, fps):
+        if not ball_positions or fps <= 0 or len(ball_positions) < 2:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "No motion detected"
+            }
+
+        distances_px = []
+        for i in range(1, len(ball_positions)):
+            x0, y0 = ball_positions[i - 1]
+            x1, y1 = ball_positions[i]
+            d = math.hypot(x1 - x0, y1 - y0)
+            if 0.5 < d < 300:
+                distances_px.append(d)
+
+        if not distances_px:
+            return {
+                "speed_kmph": None,
+                "speed_type": "unknown",
+                "speed_note": "No valid motion samples"
+            }
+
+        px_per_sec = float(np.median(distances_px) * fps)
+
+        CAMERA_SCALE = 0.075
+        speed_kmph = px_per_sec * CAMERA_SCALE
+
+        return {
+            "speed_kmph": round(speed_kmph, 1),
+            "speed_px_per_sec": round(px_per_sec, 2),
+            "speed_type": "estimated_release",
+            "speed_note": "Estimated release speed (camera-normalized)"
+        }
+
     # -----------------------------
     # HARD RELIABILITY GUARDS
     # -----------------------------
-    MIN_FRAMES_FOR_SPEED = 16
+    MIN_FRAMES_FOR_SPEED = 4
 
     # Maximum number of frames to use for speed calculation (Render-safe)
     MAX_FRAMES_FOR_SPEED = 120
 
     # Require enough frames for physics to stabilize
     if not ball_positions or len(ball_positions) < MIN_FRAMES_FOR_SPEED:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Insufficient frames for reliable physics"
-        }
+        return _estimated_speed_from_pixels(ball_positions, fps)
 
     # Limit frames to avoid CPU overload and unstable tails (Render-safe)
     if len(ball_positions) > MAX_FRAMES_FOR_SPEED:
@@ -73,19 +104,11 @@ def calculate_speed_pro(
 
     # 0. Basic sanity checks (always return speed)
     if not ball_positions or len(ball_positions) < 4:
-        return {
-            "speed_kmph": None,
-            "speed_type": "pre-pitch",
-            "speed_note": "Physics-based speed unavailable"
-        }
+        return _estimated_speed_from_pixels(ball_positions, fps)
 
     # HARD GUARD: require enough trajectory
     if len(ball_positions) < 6:
-        return {
-            "speed_kmph": None,
-            "speed_type": "pre-pitch",
-            "speed_note": "Insufficient tracking data"
-        }
+        return _estimated_speed_from_pixels(ball_positions, fps)
 
     # 1. Perspective matrix (optional)
     if pitch_corners is None:
@@ -105,11 +128,7 @@ def calculate_speed_pro(
 
         # Need enough motion samples
         if len(distances_px) < 6:
-            return {
-                "speed_kmph": None,
-                "speed_type": "unknown",
-                "speed_note": "Insufficient continuous motion"
-            }
+            return _estimated_speed_from_pixels(ball_positions, fps)
 
         # Use trimmed median to kill outliers
         distances_px = np.array(distances_px)
@@ -151,11 +170,7 @@ def calculate_speed_pro(
             distances.append(d)
 
     if len(distances) < 2:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Insufficient tracking data"
-        }
+        return _estimated_speed_from_pixels(ball_positions, fps)
 
     distances = np.array(distances)
 
@@ -169,11 +184,7 @@ def calculate_speed_pro(
     # REMOVED soft clamp logic entirely
 
     if final_kmph <= 0 or math.isnan(final_kmph):
-        return {
-            "speed_kmph": None,
-            "speed_type": "unknown",
-            "speed_note": "Physics calculation failed"
-        }
+        return _estimated_speed_from_pixels(ball_positions, fps)
 
     # REMOVED CAMERA NORMALIZATION (SAFE) section entirely
 

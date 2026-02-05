@@ -18,11 +18,11 @@ def estimate_speed(video_path):
     positions, fps = tracker.track_ball(video_path)
 
     # Require sufficient frames for physical stability (relaxed)
-    if not positions or len(positions) < 6:
+    if not positions or len(positions) < 4:
         return {
             "speed_kmph": None,
             "speed_type": "insufficient_data",
-            "speed_note": "Not enough tracked frames for physics"
+            "speed_note": "Not enough tracked frames to estimate speed"
         }
 
     # Drop first frame only (avoid over-pruning short deliveries)
@@ -50,12 +50,12 @@ def estimate_speed(video_path):
     speed_note = base_speed_result.get("speed_note")
     speed_px_per_sec = base_speed_result.get("speed_px_per_sec")
 
-    # ---- FALLBACK: ensure km/h is returned when px/s exists (camera-normalized) ----
-    if (speed_kmph is None) and isinstance(speed_px_per_sec, (int, float)):
+    # ---- HARD FALLBACK: always derive km/h if pixel speed exists ----
+    if (speed_kmph is None) and isinstance(speed_px_per_sec, (int, float)) and speed_px_per_sec > 0:
         CAMERA_SCALE = 0.072  # must match speed.py
         speed_kmph = round(float(speed_px_per_sec) * CAMERA_SCALE, 1)
-        speed_type = speed_type or "camera_estimated"
-        speed_note = speed_note or "Estimated bowling speed (camera-normalized physics)"
+        speed_type = "estimated_release"
+        speed_note = "Estimated bowling speed (camera-normalized, short clip fallback)"
 
     if isinstance(speed_kmph, (int, float)):
         speed_kmph = float(speed_kmph)

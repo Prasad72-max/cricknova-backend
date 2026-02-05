@@ -218,14 +218,14 @@ class _UploadScreenState extends State<UploadScreen> {
         this.speedUnit = speedUnit;
 
         final swingVal = analysis["swing"]?.toString().toLowerCase();
-        if (swingVal == "unknown" || swingVal == "none" || swingVal == "straight") {
-          swing = "STRAIGHT";
-        } else if (swingVal == "inswing") {
+        if (swingVal == "inswing") {
           swing = "INSWING";
         } else if (swingVal == "outswing") {
           swing = "OUTSWING";
-        } else {
+        } else if (swingVal == "straight") {
           swing = "STRAIGHT";
+        } else {
+          swing = "NONE";
         }
 
         final spinVal = analysis["spin"]?.toString().toLowerCase();

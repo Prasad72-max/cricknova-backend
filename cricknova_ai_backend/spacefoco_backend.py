@@ -1,5 +1,5 @@
 def calculate_pixel_speed_px_per_sec(ball_positions, fps):
-    if not ball_positions or fps <= 0 or len(ball_positions) < 6:
+    if not ball_positions or fps <= 0 or len(ball_positions) < 4:
         return None
     dt = 1.0 / fps
     speeds = []
@@ -696,11 +696,16 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
-        if len(ball_positions) < 10:
+        if len(ball_positions) < 6:
+            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
+            fallback_kmph = round(pixel_speed * 0.072, 1) if pixel_speed else None
+
             return {
                 "status": "success",
-                "speed_kmph": None,
-                "swing": "unknown",
+                "speed_kmph": fallback_kmph,
+                "speed_type": "pixel_fallback",
+                "speed_note": "Estimated from pixel motion (short video)",
+                "swing": detect_swing_x(ball_positions),
                 "spin": "none",
                 "trajectory": []
             }
@@ -744,7 +749,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if isinstance(speed_kmph, (int, float)):
             speed_kmph = float(speed_kmph)
         else:
-            speed_kmph = None
+            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
+            speed_kmph = round(pixel_speed * 0.072, 1) if pixel_speed else None
 
         print(f"[SPEED] FINAL speed_kmph={speed_kmph}, type={speed_type}, fps={fps}")
 
@@ -1164,11 +1170,16 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
-        if len(ball_positions) < 10:
+        if len(ball_positions) < 6:
+            pixel_speed = calculate_pixel_speed_px_per_sec(ball_positions, fps)
+            fallback_kmph = round(pixel_speed * 0.072, 1) if pixel_speed else None
+
             return {
                 "status": "success",
-                "speed_kmph": None,
-                "swing": "unknown",
+                "speed_kmph": fallback_kmph,
+                "speed_type": "pixel_fallback",
+                "speed_note": "Estimated from pixel motion (short video)",
+                "swing": detect_swing_x(ball_positions),
                 "spin": "none",
                 "trajectory": []
             }

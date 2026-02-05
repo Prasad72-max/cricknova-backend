@@ -53,8 +53,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     pixel_speed = None
 
     # Require enough stable frames for physics to work
-    MIN_FRAMES = 8        # relaxed for real-world phone videos
-    DROP_INITIAL = 1     # avoid killing short deliveries
+    MIN_FRAMES = 4        # allow very short clips (~0.12s at 30fps)
+    DROP_INITIAL = 0     # do not drop frames for short deliveries
 
     if len(last_pos) >= MIN_FRAMES and len(last_time) >= MIN_FRAMES:
         positions = list(last_pos)[DROP_INITIAL:]
@@ -81,10 +81,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
             # HARD CRICKET PHYSICS GATE (LIVE)
             # Reject impossible or noisy speeds
-            if pixel_speed is not None:
-                # sanity window only (tag later, do not drop)
-                if pixel_speed <= 0:
-                    pixel_speed = None
+            if pixel_speed is not None and pixel_speed <= 0:
+                pixel_speed = None
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -120,10 +118,10 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     speed_px_per_sec = None
     speed_type = "camera_estimated"
 
-    if pixel_speed is not None and pixel_speed > 0 and len(last_pos) >= MIN_FRAMES:
+    if pixel_speed is not None and pixel_speed > 0:
         speed_px_per_sec = round(float(pixel_speed), 2)
 
-        # Camera-normalized conversion (safe, conservative)
+        # Camera-normalized conversion (always expose km/h)
         CAMERA_SCALE = 0.072
         speed_kmph = round(speed_px_per_sec * CAMERA_SCALE, 1)
 
