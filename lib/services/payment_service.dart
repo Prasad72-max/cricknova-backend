@@ -42,7 +42,7 @@ class PaymentService {
             "razorpay_order_id": response.orderId,
             "razorpay_payment_id": response.paymentId,
             "razorpay_signature": response.signature,
-            "plan": "IN_99",
+            "plan": PremiumService.lastSelectedPlan ?? "IN_99",
           }),
         );
 
@@ -54,6 +54,9 @@ class PaymentService {
           await PremiumService.syncFromBackend(
             FirebaseAuth.instance.currentUser!.uid,
           );
+          await PremiumService.refresh();
+          // 🔔 Force UI update immediately (fix premium=false until reopen)
+          PremiumService.premiumNotifier.notifyListeners();
           onSuccess(response);
         } else {
           throw StateError(
@@ -96,7 +99,9 @@ class PaymentService {
       }
     };
 
-    _razorpay.open(options);
+    if (_razorpay.listeners.isNotEmpty) {
+      _razorpay.open(options);
+    }
   }
 
   Future<void> startPayPalPayment({
