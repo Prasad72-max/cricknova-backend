@@ -176,6 +176,20 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       throw Exception("Firebase ID token missing");
     }
 
+    // Show SnackBar indicating payment verification is starting
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.black,
+          content: Text(
+            "🔄 Verifying payment…",
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+
     final verifyRes = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
       headers: {
@@ -208,7 +222,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
             borderRadius: BorderRadius.circular(14),
           ),
           content: const Text(
-            "🔐 Payment verified successfully.\n🚀 Premium activated. Please reopen the app to start premium features.",
+            "✅ Payment verified successfully!\n🚀 Premium is now active. Please reopen the app to start using premium features.",
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w600,
