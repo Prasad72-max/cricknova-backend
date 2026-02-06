@@ -29,7 +29,10 @@ class RazorpayService {
             plan: _selectedPlan ?? "IN_99",
           );
 
-          debugPrint("🔥 Premium verification completed successfully");
+          // 🔥 FORCE immediate premium refresh from Firestore
+          await PremiumService.refreshSubscriptionStatus(force: true);
+
+          debugPrint("🔥 Premium verified + Firestore synced (no app restart needed)");
           onPaymentSuccess(response);
         } catch (e) {
           debugPrint("❌ Premium verification failed: $e");

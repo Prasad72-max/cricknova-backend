@@ -97,7 +97,11 @@ class PremiumService {
           .get(const GetOptions(source: Source.server));
 
       if (!doc.exists) {
-        // Do NOT force downgrade during runtime
+        // 🚫 Never downgrade an already-unlocked premium during runtime
+        if (isLoaded && isPremium) {
+          debugPrint("⏳ Skipping downgrade: premium already active locally");
+          return;
+        }
         if (!isLoaded) {
           await _cache(false, "FREE", 0, 0, 0);
         }
@@ -107,6 +111,11 @@ class PremiumService {
       final data = doc.data()!;
       // 1) Read isPremium from Firestore
       final bool firestorePremium = data["isPremium"] == true;
+      // 🚫 Prevent false downgrade if backend webhook is still processing
+      if (isLoaded && isPremium && firestorePremium == false) {
+        debugPrint("⏳ Firestore not updated yet, keeping premium=true");
+        return;
+      }
 
       DateTime? expiry;
       final rawExpiry = data["expiry"] ?? data["expiryDate"];

@@ -33,6 +33,8 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   double? speedKmph;
+  String speedType = "unavailable";
+  String speedNote = "";
   String swing = "NA";
   String spin = "NA";
   @override
@@ -187,17 +189,24 @@ class _UploadScreenState extends State<UploadScreen> {
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
-final dynamic speedVal =
-    analysis["speed_kmph"] ?? decoded["speed_kmph"];
+      final dynamic speedVal =
+          analysis["speed_kmph"] ?? decoded["speed_kmph"];
 
-final dynamic speedTypeVal =
-    analysis["speed_type"] ?? decoded["speed_type"];
+      final dynamic speedTypeVal =
+          analysis["speed_type"] ?? decoded["speed_type"];
 
-if (speedVal is num && speedVal > 0) {
-  speedKmph = speedVal.toDouble();
-} else {
-  speedKmph = null;
-}
+      final dynamic speedNoteVal =
+          analysis["speed_note"] ?? decoded["speed_note"];
+
+      if (speedVal is num && speedVal > 0) {
+        speedKmph = speedVal.toDouble();
+        speedType = speedTypeVal?.toString() ?? "estimated";
+        speedNote = speedNoteVal?.toString() ?? "";
+      } else {
+        speedKmph = null;
+        speedType = "unavailable";
+        speedNote = speedNoteVal?.toString() ?? "";
+      }
       if (!mounted) return;
 
       setState(() {
@@ -603,8 +612,21 @@ if (speedVal is num && speedVal > 0) {
                         "Estimated Speed",
                         speedKmph != null
                             ? "${speedKmph!.toStringAsFixed(1)} km/h"
-                            : "Unavailable",
+                            : "----",
                       ),
+                      if (speedKmph != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            speedType == "ai_estimated_release"
+                                ? "AI release-point estimate"
+                                : "Estimated from video flight",
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
                         _metric("Spin", spin),

@@ -112,13 +112,16 @@ async def analyze_live_frame(file: UploadFile = File(...)):
                 fps_est = 30.0
 
                 kmph = avg_px * meters_per_px * fps_est * 3.6
-                kmph = max(90.0, min(kmph, 155.0))
-                kmph = kmph * 0.85
 
-                speed_kmph = round(float(kmph), 1)
-                speed_type = "estimated_fallback"
-                speed_note = "CONSERVATIVE_VIDEO_ESTIMATE"
-                confidence = 0.45
+                # soft physical sanity only (no scripting)
+                if kmph < 60.0 or kmph > 170.0:
+                    kmph = None
+
+                if kmph is not None:
+                    speed_kmph = round(float(kmph), 1)
+                    speed_type = "video_derived"
+                    speed_note = "PARTIAL_TRACK_PHYSICS"
+                    confidence = 0.55
 
     # SWING CALCULATION
     if len(last_pos) > 4:

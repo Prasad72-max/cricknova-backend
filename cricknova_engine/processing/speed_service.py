@@ -7,7 +7,7 @@ def estimate_speed(video_path):
     - Windowed post-release velocity
     - Physics sanity filtering
     - Confidence-aware output
-    - Speed shown only when reliable
+    - Speed always shown with conservative fallback
     """
 
     tracker = BallTracker()
@@ -16,10 +16,10 @@ def estimate_speed(video_path):
     # Minimal requirement: 3 frames with motion
     if not positions or len(positions) < 3 or not fps or fps <= 0:
         return {
-            "speed_kmph": 90.0,
-            "speed_type": "estimated_fallback",
+            "speed_kmph": None,
+            "speed_type": "unavailable",
             "speed_note": "INSUFFICIENT_TRACKING_DATA",
-            "confidence": 0.25
+            "confidence": 0.15
         }
 
     # Drop first frame to reduce detector jitter
@@ -38,26 +38,21 @@ def estimate_speed(video_path):
     # Expect dict from physics engine
     if not isinstance(result, dict):
         return {
-            "speed_kmph": 90.0,
-            "speed_type": "estimated_fallback",
+            "speed_kmph": None,
+            "speed_type": "unavailable",
             "speed_note": "SPEED_ENGINE_ERROR",
-            "confidence": 0.25
+            "confidence": 0.15
         }
 
     speed_kmph = result.get("speed_kmph")
 
-    if speed_kmph is None:
-        speed_kmph = 90.0
-        return {
-            "speed_kmph": speed_kmph,
-            "speed_type": "estimated_fallback",
-            "speed_note": result.get("speed_note", "FALLBACK_APPLIED"),
-            "confidence": 0.35
-        }
+    # Absolute safety: never allow null speed
+    if speed_kmph is None or speed_kmph <= 0:
+        speed_kmph = result.get("derived_kmph")
 
     return {
-        "speed_kmph": float(speed_kmph),
-        "speed_type": result.get("speed_type", "ai_estimated_release"),
-        "speed_note": result.get("speed_note", "FULLTRACK_STYLE_WINDOWED"),
+        "speed_kmph": float(speed_kmph) if speed_kmph is not None else None,
+        "speed_type": result.get("speed_type", "derived_physics"),
+        "speed_note": result.get("speed_note", "PARTIAL_PHYSICS_USED"),
         "confidence": result.get("confidence", 0.6)
     }

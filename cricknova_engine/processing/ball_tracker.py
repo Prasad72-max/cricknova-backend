@@ -133,9 +133,9 @@ def compute_speed_kmph(ball_positions, fps):
 
     if not ball_positions or fps <= 1 or len(ball_positions) < 6:
         return {
-            "speed_kmph": 90.0,
-            "speed_type": "estimated_fallback",
-            "confidence": 0.25
+            "speed_kmph": None,
+            "speed_type": "insufficient_tracking",
+            "confidence": 0.0
         }
 
     fps = min(max(fps, 24), 240)
@@ -166,18 +166,19 @@ def compute_speed_kmph(ball_positions, fps):
             meters_per_px = FRAME_METERS / pixel_span
             avg_px = float(np.mean(seg_dists)) if seg_dists else 1.0
             kmph = avg_px * meters_per_px * fps * 3.6
-            kmph = max(90.0, min(kmph, 155.0)) * 0.85
 
-            return {
-                "speed_kmph": round(float(kmph), 1),
-                "speed_type": "estimated_fallback",
-                "confidence": 0.4
-            }
+            # soft physical sanity only (no scripting)
+            if 60.0 <= kmph <= 170.0:
+                return {
+                    "speed_kmph": round(float(kmph), 1),
+                    "speed_type": "video_derived",
+                    "confidence": 0.55
+                }
 
         return {
-            "speed_kmph": 90.0,
-            "speed_type": "estimated_fallback",
-            "confidence": 0.25
+            "speed_kmph": None,
+            "speed_type": "insufficient_physics",
+            "confidence": 0.0
         }
 
     # Median px/sec over release window
@@ -188,12 +189,11 @@ def compute_speed_kmph(ball_positions, fps):
     raw_kmph = px_per_sec * meters_per_px * 3.6
 
     # Human fast-bowling physics gate
-    if raw_kmph < 90.0 or raw_kmph > 155.0:
-        kmph = max(90.0, min(raw_kmph, 155.0)) * 0.85
+    if raw_kmph < 60.0 or raw_kmph > 170.0:
         return {
-            "speed_kmph": round(float(kmph), 1),
-            "speed_type": "estimated_fallback",
-            "confidence": 0.45
+            "speed_kmph": None,
+            "speed_type": "out_of_physics_range",
+            "confidence": 0.0
         }
 
     return {
