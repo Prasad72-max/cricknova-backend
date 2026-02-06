@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import auth
 from fastapi import Header, HTTPException
+from google.cloud import firestore
 
 # -----------------------------
 # FIREBASE INIT (SAFE GUARD)
@@ -38,7 +39,6 @@ PLAN_LIMITS = {
 
 FREE_PLAN = {
     "plan": "free",
-    "active": False,
     "limits": {"chat": 5, "mistake": 2, "compare": 0},
     "chat_used": 0,
     "mistake_used": 0,
@@ -82,9 +82,9 @@ def get_subscription(user_id: str):
                 expiry_dt = datetime.fromisoformat(expiry)
             else:
                 expiry_dt = None
-            fs_sub["active"] = expiry_dt is not None and datetime.utcnow() < expiry_dt
         except Exception:
-            fs_sub["active"] = False
+            expiry_dt = None
+        fs_sub["_computed_active"] = expiry_dt is not None and datetime.utcnow() < expiry_dt
         return fs_sub
 
     return json.loads(json.dumps(FREE_PLAN))
@@ -92,11 +92,19 @@ def get_subscription(user_id: str):
 def is_subscription_active(sub: dict) -> bool:
     if not sub:
         return False
-    if not sub.get("active", False):
+
+    expiry = sub.get("expiry")
+    try:
+        if hasattr(expiry, "to_datetime"):
+            expiry_dt = expiry.to_datetime()
+        elif isinstance(expiry, str):
+            expiry_dt = datetime.fromisoformat(expiry)
+        else:
+            return False
+    except Exception:
         return False
-    if not isinstance(sub.get("limits"), dict):
-        return False
-    return True
+
+    return datetime.utcnow() < expiry_dt
 
 def check_limit_and_increment(user_id: str, feature: str):
     sub = get_subscription(user_id)
@@ -149,7 +157,6 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
         "user_id": user_id,
         "plan": plan,
         "isPremium": True,
-        "active": True,
         "limits": PLAN_LIMITS[plan],
         "chat_used": 0,
         "mistake_used": 0,
@@ -157,7 +164,7 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
         "payment_id": payment_id,
         "order_id": order_id,
         "started_at": now.isoformat(),
-        "expiry": expiry.isoformat()
+        "expiry": firestore.Timestamp.from_datetime(expiry)
     }
 
     save_firestore_subscription(user_id, data)
@@ -248,6 +255,5 @@ def save_firestore_subscription(user_id: str, data: dict):
     db.collection("subscriptions").document(user_id).set({
         **data,
         "isPremium": True,
-        "active": True,
         "updatedAt": firestore.SERVER_TIMESTAMP,
     }, merge=True)
