@@ -281,14 +281,32 @@ class PremiumService {
       throw Exception("Payment verification failed");
     }
 
-    // ✅ Always resync from backend after verification
-    await syncFromBackend(user.uid);
-    // 🔥 FORCE local premium refresh so UI updates instantly
-    await refresh();
+    // 🚀 OPTIMISTIC UNLOCK: activate premium immediately (Firestore mirror may lag)
+    switch (normalizedPlan) {
+      case "IN_99":
+        await _cache(true, normalizedPlan, 200, 15, 0);
+        break;
+      case "IN_299":
+        await _cache(true, normalizedPlan, 1200, 30, 0);
+        break;
+      case "IN_499":
+        await _cache(true, normalizedPlan, 3000, 60, 50);
+        break;
+      case "IN_1999":
+        await _cache(true, normalizedPlan, 20000, 200, 200);
+        break;
+      default:
+        // fallback: do nothing
+        break;
+    }
 
-    // 🔔 Notify UI immediately after payment
-    premiumNotifier.value = isPremium;
+    // 🔔 Notify UI immediately (no Firestore wait)
+    premiumNotifier.value = true;
     premiumNotifier.notifyListeners();
+
+    // 🔁 Background sync from backend / Firestore (source of truth)
+    await syncFromBackend(user.uid);
+    await refresh();
   }
 
   // -----------------------------
