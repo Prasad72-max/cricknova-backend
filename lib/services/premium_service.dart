@@ -97,11 +97,7 @@ class PremiumService {
           .get(const GetOptions(source: Source.server));
 
       if (!doc.exists) {
-        // 🚫 Never downgrade an already-unlocked premium during runtime
-        if (isLoaded && isPremium) {
-          debugPrint("⏳ Skipping downgrade: premium already active locally");
-          return;
-        }
+        // Do NOT force downgrade during runtime
         if (!isLoaded) {
           await _cache(false, "FREE", 0, 0, 0);
         }
@@ -110,12 +106,10 @@ class PremiumService {
 
       final data = doc.data()!;
       // 1) Read isPremium from Firestore
-      final bool firestorePremium = data["isPremium"] == true;
-      // 🚫 Prevent false downgrade if backend webhook is still processing
-      if (isLoaded && isPremium && firestorePremium == false) {
-        debugPrint("⏳ Firestore not updated yet, keeping premium=true");
-        return;
-      }
+      // Support both old and new backend schemas
+      final bool firestorePremium =
+          data["isPremium"] == true || data["premium"] == true;
+      debugPrint("🔥 Premium flag from Firestore = $firestorePremium | raw keys: ${data.keys}");
 
       DateTime? expiry;
       final rawExpiry = data["expiry"] ?? data["expiryDate"];
@@ -290,32 +284,14 @@ class PremiumService {
       throw Exception("Payment verification failed");
     }
 
-    // 🚀 OPTIMISTIC UNLOCK: activate premium immediately (Firestore mirror may lag)
-    switch (normalizedPlan) {
-      case "IN_99":
-        await _cache(true, normalizedPlan, 200, 15, 0);
-        break;
-      case "IN_299":
-        await _cache(true, normalizedPlan, 1200, 30, 0);
-        break;
-      case "IN_499":
-        await _cache(true, normalizedPlan, 3000, 60, 50);
-        break;
-      case "IN_1999":
-        await _cache(true, normalizedPlan, 20000, 200, 200);
-        break;
-      default:
-        // fallback: do nothing
-        break;
-    }
-
-    // 🔔 Notify UI immediately (no Firestore wait)
-    premiumNotifier.value = true;
-    premiumNotifier.notifyListeners();
-
-    // 🔁 Background sync from backend / Firestore (source of truth)
+    // ✅ Always resync from backend after verification
     await syncFromBackend(user.uid);
+    // 🔥 FORCE local premium refresh so UI updates instantly
     await refresh();
+
+    // 🔔 Notify UI immediately after payment
+    premiumNotifier.value = isPremium;
+    premiumNotifier.notifyListeners();
   }
 
   // -----------------------------
