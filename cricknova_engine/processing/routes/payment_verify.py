@@ -146,10 +146,17 @@ def verify_payment(data: VerifyRequest, request: Request):
         "success": True,
         "status": "success",
         "premium": True,
+        "isPremium": True,
         "premium_activated": True,
         "plan": mapped_plan,
         "user_id": user_id,
         "razorpay_payment_id": data.razorpay_payment_id,
+        "subscription": {
+            "active": True,
+            "isPremium": True,
+            "plan": mapped_plan,
+            "provider": "razorpay"
+        },
         "ui_notes": {
             "step_1": "Payment verified successfully",
             "step_2": "Premium activated. Please reopen the app to refresh features"
