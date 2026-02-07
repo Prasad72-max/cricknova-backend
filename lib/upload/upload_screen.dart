@@ -210,25 +210,29 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        final swingVal = analysis["swing"]?.toString().toLowerCase();
-        if (swingVal == "inswing") {
-          swing = "INSWING";
-        } else if (swingVal == "outswing") {
-          swing = "OUTSWING";
-        } else if (swingVal == "straight") {
-          swing = "STRAIGHT";
-        } else {
-          swing = "NONE";
-        }
+         final swingVal = analysis["swing"]?.toString().toLowerCase() ?? "";
 
-        final spinVal = analysis["spin"]?.toString().toLowerCase();
-        if (spinVal == "leg spin" || spinVal == "leg-spin") {
-          spin = "LEG SPIN";
-        } else if (spinVal == "off spin" || spinVal == "off-spin") {
-          spin = "OFF SPIN";
-        } else {
-          spin = "NONE";
-        }
+if (swingVal.contains("in")) {
+  swing = "INSWING";
+} else if (swingVal.contains("out")) {
+  swing = "OUTSWING";
+} else if (swingVal.contains("straight")) {
+  swing = "STRAIGHT";
+} else {
+  swing = "UNDETECTED";
+}
+
+final spinVal = analysis["spin"]?.toString().toLowerCase() ?? "";
+
+if (spinVal.contains("leg")) {
+  spin = "LEG SPIN";
+} else if (spinVal.contains("off")) {
+  spin = "OFF SPIN";
+} else if (spinVal.contains("spin")) {
+  spin = "SPIN";
+} else {
+  spin = "NO SPIN DETECTED";
+}
 
         trajectory = const [];
         showTrajectory = false;

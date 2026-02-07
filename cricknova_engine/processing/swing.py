@@ -58,7 +58,7 @@ class SwingDetector:
             return None
 
         accel = np.abs(np.diff(diffs))
-        if len(accel) == 0 or np.max(accel) < 0.8:
+        if len(accel) == 0 or np.max(accel) < 0.3:
             return None
 
         idx = int(np.argmax(accel)) + 1
@@ -73,7 +73,7 @@ class SwingDetector:
             positions = positions[:120]
 
         # Render-safe minimum frames (keeps physics honest)
-        if not positions or len(positions) < 8:
+        if not positions or len(positions) < 4:
             return None
 
         positions = unmirror_positions(positions)
@@ -85,30 +85,42 @@ class SwingDetector:
 
         pitch_idx = self._detect_pitch_index(positions)
         if pitch_idx is None:
-            return None
+            # fallback: use early vs late trajectory comparison
+            mid = len(positions) // 2
+            angle_pre = self._line_angle(positions[0], positions[mid - 1])
+            angle_post = self._line_angle(positions[mid], positions[-1])
+            delta = angle_post - angle_pre
+            if abs(delta) > 25:
+                delta = 0.0
+            return round(float(delta), 2)
 
         pre_vec = (positions[pitch_idx - 2], positions[pitch_idx - 1])
-        post_vec = (positions[pitch_idx + 1], positions[pitch_idx + 3])
+        post_vec = (positions[pitch_idx + 1], positions[min(pitch_idx + 2, len(positions) - 1)])
 
         angle_pre = self._line_angle(*pre_vec)
         angle_post = self._line_angle(*post_vec)
 
         swing_angle = (angle_post - angle_pre) * camera_sign
+        # Clamp extreme noise (camera shake protection)
+        if abs(swing_angle) > 25:
+            return 0.0
         return round(float(swing_angle), 2)
 
 def classify_swing(swing_deg):
     """
-    Cricket-realistic classification.
+    Cricket-realistic classification with safe fallback.
     """
-    if swing_deg is None:
+    if swing_deg is None or math.isnan(swing_deg):
         return "unknown"
-    if abs(swing_deg) < 1.0:
+    # tighter dead-zone to avoid false outswing
+    if abs(swing_deg) < 0.25:
         return "straight"
     return "inswing" if swing_deg < 0 else "outswing"
 
 def calculate_swing(ball_positions):
     detector = SwingDetector()
-    return classify_swing(detector.detect_swing(ball_positions))
+    deg = detector.detect_swing(ball_positions)
+    return classify_swing(deg)
 
 def calculate_swing_name(ball_positions):
     return calculate_swing(ball_positions)

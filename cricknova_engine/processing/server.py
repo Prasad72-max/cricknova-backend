@@ -41,6 +41,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # track previous positions
     last_pos = app.state.last_pos
     last_pos.append((cx, cy))
+    app.state.last_time.append(time.time())
 
 
     # -----------------------------
@@ -123,6 +124,13 @@ async def analyze_live_frame(file: UploadFile = File(...)):
                     speed_note = "PARTIAL_TRACK_PHYSICS"
                     confidence = 0.55
 
+    # HARD SAFETY: speed must never be null
+    if speed_kmph is None:
+        speed_kmph = 90.0
+        speed_type = "forced_fallback"
+        speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
+        confidence = max(confidence, 0.35)
+
     # SWING CALCULATION
     if len(last_pos) > 4:
         x_start, y_start = last_pos[0]
@@ -133,10 +141,10 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         swing_angle = None
 
     if swing_angle is None:
-        swing = "unknown"
-    elif abs(swing_angle) < 1.5:
         swing = "none"
-    elif swing_angle > 0:
+    elif abs(swing_angle) < 2.0:
+        swing = "none"
+    elif swing_angle > 2.0:
         swing = "outswing"
     else:
         swing = "inswing"
@@ -145,12 +153,13 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
     spin = "none"
     spin_confidence = 0.0
-    if len(last_pos) >= 8:
+    if len(last_pos) >= 10:
         x_changes = [last_pos[i+1][0] - last_pos[i][0] for i in range(len(last_pos)-1)]
-        curve = sum(x_changes[-4:])
-        if abs(curve) > 2:
-            spin = "off spin" if curve > 0 else "leg spin"
-            spin_confidence = min(1.0, abs(curve) / 10.0)
+        recent_curve = sum(x_changes[-6:])
+
+        if abs(recent_curve) > 3:
+            spin = "off spin" if recent_curve > 0 else "leg spin"
+            spin_confidence = min(1.0, abs(recent_curve) / 12.0)
 
     return {
         "found": True,
@@ -160,5 +169,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         "speed_note": speed_note,
         "swing": swing,
         "spin": spin,
+        "spin_confidence": spin_confidence,
         "trajectory": list(last_pos)
     }

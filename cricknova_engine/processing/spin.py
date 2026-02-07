@@ -28,7 +28,7 @@ def calculate_spin(ball_positions, fps=30):
     }
 
     # Render-safe minimum frames (post-bounce physics still enforced)
-    if not ball_positions or len(ball_positions) < 8:
+    if not ball_positions or len(ball_positions) < 4:
         return empty_result
 
     # Limit frames to stable delivery window (Render-safe)
@@ -40,11 +40,11 @@ def calculate_spin(ball_positions, fps=30):
     pitch_idx = int(np.argmax(ys))
 
     # Need stable frames before & after bounce
-    if pitch_idx < 3 or pitch_idx + 5 >= len(ball_positions):
+    if pitch_idx < 2 or pitch_idx + 3 >= len(ball_positions):
         return empty_result
 
     # --- Collect post-bounce trajectory ---
-    post = ball_positions[pitch_idx + 1 : pitch_idx + 10]
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 12]
     xs = [p[0] for p in post]
     ys = [p[1] for p in post]
 
@@ -63,7 +63,7 @@ def calculate_spin(ball_positions, fps=30):
     forward_disp = ys[-1] - ys[0]
 
     # Reject near-vertical / unreliable motion
-    if abs(forward_disp) < 4:
+    if abs(forward_disp) < 1.2:
         return empty_result
 
     # --- Spin angle estimation ---
@@ -71,11 +71,11 @@ def calculate_spin(ball_positions, fps=30):
     turn_deg = math.degrees(turn_rad)
 
     # Threshold: below this is visually straight after bounce
-    if turn_deg < 0.35:
+    if turn_deg < 0.12:
         return empty_result
 
     # Direction based purely on screen-space deviation
-    if abs(lateral_disp) < 1.2:
+    if abs(lateral_disp) < 0.35:
         return empty_result
 
     spin_name = "leg spin" if lateral_disp > 0 else "off spin"

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:io';
 import 'dart:developer';
 import 'dart:convert';
@@ -8,7 +9,51 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../services/premium_service.dart';
+
+Future<void> showRestartRequiredDialog(BuildContext context) async {
+  await showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          "Premium Activated 🎉",
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: const Text(
+          "Your payment was successful.\n\n"
+          "Please close and reopen the app to activate Premium features.",
+          style: TextStyle(
+            color: Colors.white70,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueAccent,
+            ),
+            onPressed: () {
+              Future.delayed(const Duration(milliseconds: 300), () {
+                exit(0);
+              });
+            },
+            child: const Text("Restart App"),
+          ),
+        ],
+      );
+    },
+  );
+}
 
 class PremiumScreen extends StatefulWidget {
   final String? entrySource;
@@ -91,12 +136,7 @@ class PayPalWebViewScreen extends StatelessWidget {
       PremiumService.premiumNotifier.notifyListeners();
       if (!context.mounted) return;
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("🎉 Premium Activated Successfully!"),
-          backgroundColor: Colors.black,
-        ),
-      );
+      await showRestartRequiredDialog(context);
     }
   }
 }
@@ -115,6 +155,8 @@ class _PremiumScreenState extends State<PremiumScreen>
   // Track selected plan
   String? _lastPlanTitle;
   String? _lastPlanPrice;
+
+  String? _animatingPlan;
 
   @override
   void initState() {
@@ -213,24 +255,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       PremiumService.premiumNotifier.notifyListeners();
       if (!mounted) return;
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 4),
-          backgroundColor: Colors.black,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          content: const Text(
-            "✅ Payment verified successfully!\n🚀 Premium is now active. Please reopen the app to start using premium features.",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      );
       Navigator.pop(context, true);
+      await showRestartRequiredDialog(context);
     } else {
       _isPaying = false;
       throw Exception("Payment verification failed");
@@ -328,13 +354,6 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       };
 
       _isPaying = true;
-      // ⏱️ Safety fallback: unlock UI if Razorpay SDK stalls
-      Future.delayed(const Duration(seconds: 20), () {
-        if (mounted && _isPaying) {
-          debugPrint("⏱️ Razorpay timeout fallback unlock");
-          setState(() => _isPaying = false);
-        }
-      });
       _razorpay.open(options);
     } catch (e, st) {
       log("❌ Payment start failed", error: e, stackTrace: st);
@@ -493,13 +512,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         await PremiumService.syncFromBackend(user.uid);
         if (!mounted) return;
         setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("🎉 Premium Activated Successfully!"),
-            backgroundColor: Colors.black,
-          ),
-        );
         Navigator.pop(context, true);
+        await showRestartRequiredDialog(context);
       } else {
         throw Exception("Capture failed");
       }
@@ -890,51 +904,81 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
           const SizedBox(height: 16),
 
           GestureDetector(
-            onTap: () {
+            onTap: () async {
               if (_isPaying) return;
 
-              // Track selected plan before payment
+              HapticFeedback.mediumImpact();
+
+              setState(() {
+                _animatingPlan = price;
+              });
+
+              await Future.delayed(const Duration(milliseconds: 180));
+
               _lastPlanTitle = title;
               _lastPlanPrice = price;
+
               if (!mounted) return;
-              final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+
+              final numeric =
+                  double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+
               if (isIndia) {
                 debugPrint("🟢 Starting Razorpay payment for ₹${numeric.toInt()}");
-                _startRazorpayCheckout(numeric.toInt()); // pass RUPEES only
+                _startRazorpayCheckout(numeric.toInt());
               } else {
                 debugPrint("🌍 Starting PayPal payment for $price");
-                final planId = price;
-                _startPayPalCheckout(planId);
+                _startPayPalCheckout(price);
               }
+
+              setState(() {
+                _animatingPlan = null;
+              });
             },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  glowColor,
-                  glowColor.withOpacity(0.8),
-                ]),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Center(
-                child: (_payingPlan == price)
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+            child: AnimatedScale(
+              scale: _animatingPlan == price ? 0.94 : 1.0,
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              child: AnimatedOpacity(
+                opacity: _animatingPlan == price ? 0.85 : 1.0,
+                duration: const Duration(milliseconds: 160),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      glowColor,
+                      glowColor.withOpacity(0.8),
+                    ]),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: glowColor.withOpacity(0.6),
+                        blurRadius: 18,
+                        spreadRadius: 1,
                       )
-                    : const Text(
-                        "Buy Now",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: (_payingPlan == price)
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            "Buy Now",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
               ),
             ),
           ),

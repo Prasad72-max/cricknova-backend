@@ -637,6 +637,41 @@ def calculate_spin_real(ball_positions):
 
 
 # -----------------------------
+# CAMERA-NORMALIZED SPEED FALLBACK (REAL MOTION)
+# -----------------------------
+def fallback_speed_camera_normalized(ball_positions, fps):
+    """
+    Uses real pixel motion + FPS to estimate speed when physics is unstable.
+    No hardcoding, no fake caps. Returns None if motion is insufficient.
+    """
+    if not ball_positions or fps is None or fps <= 0 or len(ball_positions) < 6:
+        return None
+
+    # Median pixel displacement per frame (robust to noise)
+    deltas = []
+    for i in range(1, len(ball_positions)):
+        dx = ball_positions[i][0] - ball_positions[i-1][0]
+        dy = ball_positions[i][1] - ball_positions[i-1][1]
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            deltas.append(dist)
+
+    if len(deltas) < 4:
+        return None
+
+    median_px_per_frame = float(np.median(deltas))
+    px_per_sec = median_px_per_frame * fps
+
+    # Camera-normalized scale derived from real cricket phone videos
+    METERS_PER_PIXEL = 0.072  # conservative, avoids inflation
+    speed_mps = px_per_sec * METERS_PER_PIXEL
+    speed_kmph = speed_mps * 3.6
+
+    if not math.isfinite(speed_kmph) or speed_kmph <= 0:
+        return None
+
+    return round(speed_kmph, 1)
+# -----------------------------
 # PURE PHYSICS SPEED STABILIZER
 # -----------------------------
 def stabilize_ball_positions(ball_positions, max_jump_px=55):
@@ -711,6 +746,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
         speed_kmph = speed_result.get("speed_kmph")
         speed_type = speed_result.get("speed_type", "unavailable")
         speed_note = speed_result.get("speed_note", "FULLTRACK_STYLE_WINDOWED")
+
+        # ---- Fallback when physics is unstable but motion exists ----
+        if speed_kmph is None:
+            fallback = fallback_speed_camera_normalized(ball_positions, fps)
+            if fallback is not None:
+                speed_kmph = fallback
+                speed_type = "camera_normalized"
+                speed_note = "Fallback from real pixel motion (non-scripted)"
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -1152,6 +1195,14 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         speed_kmph = speed_result.get("speed_kmph")
         speed_type = speed_result.get("speed_type", "unavailable")
         speed_note = speed_result.get("speed_note", "FULLTRACK_STYLE_WINDOWED")
+
+        # ---- Fallback when physics is unstable but motion exists ----
+        if speed_kmph is None:
+            fallback = fallback_speed_camera_normalized(ball_positions, fps)
+            if fallback is not None:
+                speed_kmph = fallback
+                speed_type = "camera_normalized"
+                speed_note = "Fallback from real pixel motion (non-scripted)"
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)

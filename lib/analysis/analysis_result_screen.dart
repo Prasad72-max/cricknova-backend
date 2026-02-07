@@ -40,9 +40,14 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           : "${rawKmph.toStringAsFixed(1)} km/h";
     }
 
-    // ---------- SAFE SWING (CONSERVATIVE) ----------
-    String swing = "STRAIGHT";
-    final rawSwing = src["swing"];
+    // ---------- SAFE SWING (ROBUST) ----------
+    String swing = "UNDETECTED";
+
+    final rawSwing =
+        src["swing"] ??
+        src["swing_type"] ??
+        src["analysis"]?["swing"];
+
     if (rawSwing is String) {
       final s = rawSwing.toLowerCase();
       if (s.contains("in")) {
@@ -54,15 +59,22 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SAFE SPIN (CONSERVATIVE) ----------
-    String spin = "NONE";
-    final rawSpin = src["spin"];
+    // ---------- SAFE SPIN (ROBUST) ----------
+    String spin = "NO SPIN DETECTED";
+
+    final rawSpin =
+        src["spin"] ??
+        src["spin_type"] ??
+        src["analysis"]?["spin"];
+
     if (rawSpin is String) {
       final s = rawSpin.toLowerCase();
       if (s.contains("leg")) {
         spin = "LEG SPIN";
       } else if (s.contains("off")) {
         spin = "OFF SPIN";
+      } else if (s.contains("spin")) {
+        spin = "SPIN";
       }
     }
 

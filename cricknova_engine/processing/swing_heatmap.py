@@ -27,10 +27,15 @@ class SwingHeatmap:
         if self.swing_points:
             x0 = self.swing_points[0][0]
             norm_x = x - x0
+
+            # Dead-zone to suppress camera jitter (px)
+            if abs(norm_x) < 2.0:
+                norm_x = 0.0
         else:
             norm_x = 0.0
 
-        self.swing_points.append((norm_x, y, speed))
+        # preserve signed lateral displacement for swing direction
+        self.swing_points.append((float(norm_x), float(y), speed))
 
         if speed is not None:
             self.speed_samples.append(speed)
@@ -56,10 +61,9 @@ class SwingHeatmap:
         Returns clean heatmap data for UI rendering.
         No confidence scores, no exaggeration.
         """
-        avg_speed = (
-            sum(self.speed_samples) / len(self.speed_samples)
-            if self.speed_samples else None
-        )
+        avg_speed = None
+        if len(self.speed_samples) >= 4:
+            avg_speed = sum(self.speed_samples) / len(self.speed_samples)
 
         return {
             "swing_points": self.swing_points,

@@ -231,12 +231,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           src["swingName"];
 
       String _normalizeSwing(String? raw) {
-        if (raw == null) return "STRAIGHT";
+        if (raw == null) return "UNDETECTED";
         final v = raw.toLowerCase();
         if (v.contains("in")) return "INSWING";
         if (v.contains("out")) return "OUTSWING";
-        if (v.contains("straight") || v.contains("none")) return "STRAIGHT";
-        return "STRAIGHT";
+        if (v.contains("straight")) return "STRAIGHT";
+        return "UNDETECTED";
       }
 
       swingName = _normalizeSwing(swingVal?.toString());
@@ -248,11 +248,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           src["spinType"];
 
       String _normalizeSpin(String? raw) {
-        if (raw == null) return "NONE";
+        if (raw == null) return "NO SPIN DETECTED";
         final v = raw.toLowerCase();
         if (v.contains("leg")) return "LEG SPIN";
         if (v.contains("off")) return "OFF SPIN";
-        return "NONE";
+        if (v.contains("spin")) return "SPIN";
+        return "NO SPIN DETECTED";
       }
 
       spinType = _normalizeSpin(spinVal?.toString());

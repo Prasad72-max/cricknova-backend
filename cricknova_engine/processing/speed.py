@@ -131,6 +131,17 @@ def calculate_speed_pro(
             "speed_note": "SANITY_RELAXED"
         }
 
+    # -----------------------------
+    # FINAL HARD SAFETY (NEVER NULL / NA)
+    # -----------------------------
+    if raw_kmph is None or math.isnan(raw_kmph) or math.isinf(raw_kmph):
+        derived = calculate_speed(ball_positions, fps)
+        return {
+            "speed_kmph": derived,
+            "speed_type": "derived_failsafe",
+            "speed_note": "NUMERIC_GUARD"
+        }
+
     return {
         "speed_kmph": round(raw_kmph, 1),
         "speed_type": "ai_estimated_release",

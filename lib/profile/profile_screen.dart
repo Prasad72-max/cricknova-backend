@@ -197,7 +197,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 leading: const Icon(Icons.workspace_premium, color: Color(0xFFFFD700)),
                 title: const Text("See all premium benefits", style: TextStyle(color: Colors.white)),
                 trailing: const Icon(Icons.arrow_forward_ios, size: 18, color: Color(0xFF3B82F6)),
-                onTap: showPremiumPopup,
+                onTap: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: const Color(0xFF0F131A),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                    ),
+                    builder: (_) {
+                      return SafeArea(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Center(
+                                child: Text(
+                                  "✨ Premium Benefits",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              _premiumItem("⚡ Bowling Speed Analysis",
+                                "Accurate speed shown in km/h using physics-based AI."),
+                              _premiumItem("🌪️ Swing Detection",
+                                "Detects outswing, inswing, or straight delivery."),
+                              _premiumItem("🌀 Spin Detection",
+                                "Identifies off-spin, leg-spin, or no spin when confident."),
+                              _premiumItem("🎯 Shot & Mistake Analysis",
+                                "AI detects timing, shot selection, and technical mistakes."),
+                              _premiumItem("🧠 AI Coach",
+                                "Personalised coaching feedback for batting & bowling."),
+                              _premiumItem("🧑‍⚖️ DRS Simulation",
+                                "Training-only decision review with clear reasoning."),
+                              _premiumItem("🎥 Video Compare",
+                                "Compare multiple deliveries or shots side by side."),
+                              _premiumItem("🔥 Advanced Visuals",
+                                "Shot maps, swing paths, and trajectory insights."),
+                              _premiumItem("🚀 Priority Processing",
+                                "Faster AI analysis with premium servers."),
+                              _premiumItem("🔓 All Premium Limits Unlocked",
+                                "Higher chat, analysis, and comparison limits."),
+
+                              const SizedBox(height: 28),
+
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF3B82F6),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const PremiumScreen(entrySource: "profile"),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text(
+                                    "Upgrade to Premium",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
 
@@ -377,6 +462,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         );
       },
+    );
+  }
+  Widget _premiumItem(String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

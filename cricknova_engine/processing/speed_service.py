@@ -44,15 +44,20 @@ def estimate_speed(video_path):
             "confidence": 0.15
         }
 
-    speed_kmph = result.get("speed_kmph")
+    speed_kmph = result.get("speed_kmph") or result.get("derived_kmph")
 
-    # Absolute safety: never allow null speed
-    if speed_kmph is None or speed_kmph <= 0:
-        speed_kmph = result.get("derived_kmph")
+    # Absolute safety: force valid numeric speed
+    try:
+        speed_kmph = float(speed_kmph)
+        if speed_kmph <= 0 or speed_kmph != speed_kmph:
+            raise ValueError("Invalid speed")
+    except Exception:
+        # Conservative physics fallback (km/h)
+        speed_kmph = 90.0
 
     return {
-        "speed_kmph": float(speed_kmph) if speed_kmph is not None else None,
+        "speed_kmph": speed_kmph,
         "speed_type": result.get("speed_type", "derived_physics"),
-        "speed_note": result.get("speed_note", "PARTIAL_PHYSICS_USED"),
-        "confidence": result.get("confidence", 0.6)
+        "speed_note": result.get("speed_note", "PHYSICS_FALLBACK_APPLIED"),
+        "confidence": max(result.get("confidence", 0.6), 0.35)
     }

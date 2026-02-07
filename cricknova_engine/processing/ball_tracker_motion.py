@@ -133,11 +133,28 @@ def calculate_ball_speed_kmph(positions, fps):
                     "speed_note": "UNSTABLE_RELEASE"
                 }
 
+        px_vals = [math.hypot(positions[i][0] - positions[i-1][0],
+                              positions[i][1] - positions[i-1][1])
+                   for i in range(1, len(positions))]
+        px_vals = [p for p in px_vals if 1.0 < p < 220.0]
+
+        if px_vals:
+            px_per_sec = float(np.median(px_vals)) * fps
+            CAMERA_SCALE = 0.072
+            kmph = px_per_sec * CAMERA_SCALE
+
+            return {
+                "speed_kmph": round(kmph, 1),
+                "speed_type": "camera_normalized",
+                "confidence": 0.35,
+                "speed_note": "FALLBACK_PIXEL_PHYSICS"
+            }
+
         return {
             "speed_kmph": None,
-            "speed_type": "insufficient_physics",
+            "speed_type": "unavailable",
             "confidence": 0.0,
-            "speed_note": "UNSTABLE_RELEASE"
+            "speed_note": "NO_MOTION"
         }
 
     # Median px/sec over release window
@@ -150,10 +167,10 @@ def calculate_ball_speed_kmph(positions, fps):
     # Human fast-bowling physics gate
     if raw_kmph < 60.0 or raw_kmph > 170.0:
         return {
-            "speed_kmph": None,
-            "speed_type": "out_of_physics_range",
-            "confidence": 0.0,
-            "speed_note": "PHYSICS_OUT_OF_RANGE"
+            "speed_kmph": round(raw_kmph, 1),
+            "speed_type": "low_confidence_physics",
+            "confidence": 0.4,
+            "speed_note": "OUT_OF_RANGE_BUT_REAL_MOTION"
         }
 
     return {
