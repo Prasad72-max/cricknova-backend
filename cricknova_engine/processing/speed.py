@@ -163,10 +163,6 @@ def calculate_speed_pro(
 # FINAL CAMERA-BASED SPEED (RELIABLE, NON-NA, PRODUCTION)
 # =========================================================
 
-MIN_KMPH = 90.0
-MAX_KMPH = 155.0
-MAX_VISIBLE_DISTANCE_METERS = 23.0
-MIN_VISIBLE_DISTANCE_METERS = 14.0
 
 def calculate_speed(ball_positions, fps=30):
     """
@@ -176,7 +172,7 @@ def calculate_speed(ball_positions, fps=30):
     """
 
     if not ball_positions or len(ball_positions) < 6 or fps <= 0:
-        return 90.0
+        return None
 
     px_speeds = []
     for i in range(1, len(ball_positions)):
@@ -187,7 +183,7 @@ def calculate_speed(ball_positions, fps=30):
             px_speeds.append(d * fps)
 
     if len(px_speeds) < 2:
-        return 90.0
+        return None
 
     px_per_sec = float(np.median(px_speeds))
 
@@ -196,18 +192,16 @@ def calculate_speed(ball_positions, fps=30):
     total_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
 
     if total_px <= 0:
-        return 90.0
+        return None
 
-    assumed_meters = np.clip(
-        total_px * 0.035,
-        MIN_VISIBLE_DISTANCE_METERS,
-        MAX_VISIBLE_DISTANCE_METERS
-    )
+    assumed_meters = total_px * 0.035
+    if assumed_meters <= 0:
+        return None
 
     meters_per_px = assumed_meters / total_px
     kmph = px_per_sec * meters_per_px * 3.6
 
-    kmph = np.clip(kmph, 75.0, 165.0)
-    kmph *= 0.92
+    if kmph <= 0 or math.isnan(kmph) or math.isinf(kmph):
+        return None
 
     return round(kmph, 1)

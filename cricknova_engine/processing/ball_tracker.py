@@ -133,9 +133,10 @@ def compute_speed_kmph(ball_positions, fps):
 
     if not ball_positions or fps <= 1 or len(ball_positions) < 3:
         return {
-            "speed_kmph": 90.0,
-            "speed_type": "fallback_physics",
-            "confidence": 0.35
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INSUFFICIENT_TRACK_POINTS",
+            "confidence": 0.15
         }
 
     fps = min(max(fps, 24), 240)
@@ -176,9 +177,10 @@ def compute_speed_kmph(ball_positions, fps):
             }
 
         return {
-            "speed_kmph": 90.0,
-            "speed_type": "fallback_physics",
-            "confidence": 0.35
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INSUFFICIENT_PIXEL_SPAN",
+            "confidence": 0.15
         }
 
     # Median px/sec over release window

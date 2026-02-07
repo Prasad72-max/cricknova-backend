@@ -139,15 +139,11 @@ def calculate_ball_speed_kmph(positions, fps):
         px_vals = [p for p in px_vals if 1.0 < p < 220.0]
 
         if px_vals:
-            px_per_sec = float(np.median(px_vals)) * fps
-            CAMERA_SCALE = 0.072
-            kmph = px_per_sec * CAMERA_SCALE
-
             return {
-                "speed_kmph": round(kmph, 1),
-                "speed_type": "camera_normalized",
-                "confidence": 0.35,
-                "speed_note": "FALLBACK_PIXEL_PHYSICS"
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "confidence": 0.2,
+                "speed_note": "INSUFFICIENT_PHYSICS_SCALE"
             }
 
         return {

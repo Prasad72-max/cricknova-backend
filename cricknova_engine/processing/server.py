@@ -124,12 +124,11 @@ async def analyze_live_frame(file: UploadFile = File(...)):
                     speed_note = "PARTIAL_TRACK_PHYSICS"
                     confidence = 0.55
 
-    # HARD SAFETY: speed must never be null
+    # HARD SAFETY: do NOT fabricate speed
     if speed_kmph is None:
-        speed_kmph = 90.0
-        speed_type = "forced_fallback"
+        speed_type = "unavailable"
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
-        confidence = max(confidence, 0.35)
+        confidence = min(confidence, 0.25)
 
     # SWING CALCULATION
     if len(last_pos) > 4:
