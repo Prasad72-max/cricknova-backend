@@ -56,16 +56,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 20),
 
             _metricBox(
-              title: speedType == "estimated_fallback"
-                  ? "Estimated Speed"
-                  : "Speed",
+              title: "Speed",
               value: speedKmph != null
-                  ? "${speedKmph!.toStringAsFixed(1)} km/h"
+                  ? ((speedType == "very_slow_estimate" ||
+                          speedType == "camera_normalized" ||
+                          speedType == "video_derived" ||
+                          speedType == "derived_physics")
+                      ? "~${speedKmph!.toStringAsFixed(1)} km/h"
+                      : "${speedKmph!.toStringAsFixed(1)} km/h")
                   : "Unavailable",
               icon: Icons.speed,
-              color: speedType == "estimated_fallback"
-                  ? Colors.orangeAccent
-                  : Colors.blueAccent,
+              color: speedKmph != null ? Colors.blueAccent : Colors.grey,
             ),
             const SizedBox(height: 15),
 
@@ -78,7 +79,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(height: 15),
 
             _metricBox(
-              title: "Spin Strength",
+              title: "Spin",
               value: spinType ?? "NA",
               icon: Icons.autorenew,
               color: Colors.green,
@@ -215,7 +216,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       // ---------- SPEED (FULLTRACK STYLE) ----------
       final speedVal = src["speed_kmph"];
-      final confidenceVal = src["confidence"];
       speedType = src["speed_type"];
 
       if (speedVal is num && speedVal > 0) {
@@ -232,10 +232,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       String _normalizeSwing(String? raw) {
         if (raw == null) return "UNDETECTED";
-        final v = raw.toLowerCase();
-        if (v.contains("in")) return "INSWING";
-        if (v.contains("out")) return "OUTSWING";
-        if (v.contains("straight")) return "STRAIGHT";
+        final v = raw.toUpperCase();
+        if (v.contains("INSWING")) return "INSWING";
+        if (v.contains("OUTSWING")) return "OUTSWING";
+        if (v.contains("STRAIGHT")) return "STRAIGHT";
         return "UNDETECTED";
       }
 
@@ -248,12 +248,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           src["spinType"];
 
       String _normalizeSpin(String? raw) {
-        if (raw == null) return "NO SPIN DETECTED";
-        final v = raw.toLowerCase();
-        if (v.contains("leg")) return "LEG SPIN";
-        if (v.contains("off")) return "OFF SPIN";
-        if (v.contains("spin")) return "SPIN";
-        return "NO SPIN DETECTED";
+        if (raw == null) return "NO SPIN";
+        final v = raw.toUpperCase();
+        if (v.contains("RIGHT TURN")) return "RIGHT TURN SPIN";
+        if (v.contains("LEFT TURN")) return "LEFT TURN SPIN";
+        if (v.contains("SPIN")) return "SPIN";
+        return "NO SPIN";
       }
 
       spinType = _normalizeSpin(spinVal?.toString());

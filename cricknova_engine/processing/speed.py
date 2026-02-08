@@ -92,6 +92,12 @@ def calculate_speed_pro(
         if 1.0 < d < 200.0:
             segment_dists.append(d)
 
+    # Trim extreme outliers (top/bottom 10%) to stabilize measurement
+    if len(segment_dists) >= 5:
+        segment_dists_sorted = sorted(segment_dists)
+        k = max(1, int(0.1 * len(segment_dists_sorted)))
+        segment_dists = segment_dists_sorted[k:-k] or segment_dists_sorted
+
     if len(segment_dists) < 3:
         derived = calculate_speed(ball_positions, fps)
         return {
@@ -102,6 +108,25 @@ def calculate_speed_pro(
 
     # Median pixel velocity (px/sec)
     px_per_sec = float(np.median(segment_dists)) * float(fps)
+
+    # Consistency gate: compare early vs slightly later post-release windows
+    w2_start = window_start + 2
+    w2_end = min(window_end + 2, len(pts) - 1)
+    seg2 = []
+    for i in range(w2_start, w2_end):
+        d2 = np.linalg.norm(pts[i] - pts[i - 1])
+        if 1.0 < d2 < 200.0:
+            seg2.append(d2)
+
+    if len(seg2) >= 3:
+        px2 = float(np.median(seg2)) * float(fps)
+        if px_per_sec > 0 and abs((px2 - px_per_sec) * 3.6) > 7.0:
+            derived = calculate_speed(ball_positions, fps)
+            return {
+                "speed_kmph": derived,
+                "speed_type": "derived_physics",
+                "speed_note": "CONSISTENCY_GATE_DOWNGRADE"
+            }
 
     # -----------------------------
     # REAL-WORLD SCALING (PITCH-ANCHORED)

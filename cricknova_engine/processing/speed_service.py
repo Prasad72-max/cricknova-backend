@@ -42,9 +42,17 @@ def estimate_speed(video_path):
             "speed_note": "SPEED_ENGINE_ERROR"
         }
 
-    speed_kmph = result.get("speed_kmph") or result.get("derived_kmph")
+    speed_kmph = result.get("speed_kmph")
 
-    # Absolute safety: validate numeric speed (no fake fallback)
+    # Respect physics engine decision: do not coerce or invent speed
+    if speed_kmph is None:
+        return {
+            "speed_kmph": None,
+            "speed_type": result.get("speed_type", "unavailable"),
+            "speed_note": result.get("speed_note", "INVALID_OR_INSUFFICIENT_PHYSICS")
+        }
+
+    # Final numeric sanity check (no rescue, no fallback)
     try:
         speed_kmph = float(speed_kmph)
         if speed_kmph <= 0 or speed_kmph != speed_kmph:

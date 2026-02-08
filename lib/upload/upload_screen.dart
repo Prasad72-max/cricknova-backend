@@ -619,7 +619,7 @@ if (spinVal.contains("leg")) {
                                     speedType == "camera_normalized" ||
                                     speedType == "video_derived" ||
                                     speedType == "derived_physics")
-                                ? "~${speedKmph!.toStringAsFixed(1)} km/h"
+                                ? "${speedKmph!.toStringAsFixed(1)} km/h"
                                 : "${speedKmph!.toStringAsFixed(1)} km/h")
                             : "----",
                       ),

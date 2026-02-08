@@ -29,10 +29,15 @@ class SwingHeatmap:
             norm_x = x - x0
 
             # Dead-zone to suppress camera jitter (px)
-            if abs(norm_x) < 2.0:
+            # Must align with swing physics thresholds
+            if abs(norm_x) < 3.0:
                 norm_x = 0.0
         else:
             norm_x = 0.0
+
+        # Do not record swing points if speed is unreliable (too slow / undetected)
+        if speed is not None and speed < 55.0:
+            return
 
         # preserve signed lateral displacement for swing direction
         self.swing_points.append((float(norm_x), float(y), speed))
@@ -50,6 +55,9 @@ class SwingHeatmap:
         """
         Register pitch or impact location.
         """
+        if self.impact_points:
+            return
+
         self.impact_points.append((x, y))
 
         # Prevent unbounded growth
@@ -63,7 +71,8 @@ class SwingHeatmap:
         """
         avg_speed = None
         if len(self.speed_samples) >= 4:
-            avg_speed = sum(self.speed_samples) / len(self.speed_samples)
+            # Conservative average to avoid exaggeration
+            avg_speed = sum(self.speed_samples) / float(len(self.speed_samples))
 
         return {
             "swing_points": self.swing_points,

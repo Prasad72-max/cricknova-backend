@@ -35,9 +35,14 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         src["analysis"]?["speed_type"];
 
     if (rawKmph is num && rawKmph > 0) {
-      speed = speedType == "estimated_fallback"
-          ? "~${rawKmph.toStringAsFixed(1)} km/h"
-          : "${rawKmph.toStringAsFixed(1)} km/h";
+      if (speedType == "very_slow_estimate" ||
+          speedType == "camera_normalized" ||
+          speedType == "video_derived" ||
+          speedType == "derived_physics") {
+        speed = "~${rawKmph.toStringAsFixed(1)} km/h";
+      } else {
+        speed = "${rawKmph.toStringAsFixed(1)} km/h";
+      }
     }
 
     // ---------- SAFE SWING (ROBUST) ----------
@@ -49,18 +54,20 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         src["analysis"]?["swing"];
 
     if (rawSwing is String) {
-      final s = rawSwing.toLowerCase();
-      if (s.contains("in")) {
+      final s = rawSwing.toUpperCase();
+      if (s.contains("INSWING")) {
         swing = "INSWING";
-      } else if (s.contains("out")) {
+      } else if (s.contains("OUTSWING")) {
         swing = "OUTSWING";
-      } else if (s.contains("straight")) {
+      } else if (s.contains("STRAIGHT")) {
         swing = "STRAIGHT";
+      } else {
+        swing = "UNDETECTED";
       }
     }
 
     // ---------- SAFE SPIN (ROBUST) ----------
-    String spin = "NO SPIN DETECTED";
+    String spin = "NO SPIN";
 
     final rawSpin =
         src["spin"] ??
@@ -68,13 +75,15 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         src["analysis"]?["spin"];
 
     if (rawSpin is String) {
-      final s = rawSpin.toLowerCase();
-      if (s.contains("leg")) {
-        spin = "LEG SPIN";
-      } else if (s.contains("off")) {
-        spin = "OFF SPIN";
-      } else if (s.contains("spin")) {
+      final s = rawSpin.toUpperCase();
+      if (s.contains("RIGHT TURN")) {
+        spin = "RIGHT TURN SPIN";
+      } else if (s.contains("LEFT TURN")) {
+        spin = "LEFT TURN SPIN";
+      } else if (s.contains("SPIN")) {
         spin = "SPIN";
+      } else {
+        spin = "NO SPIN";
       }
     }
 
@@ -101,7 +110,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           _metric(
-            speed.startsWith("~") ? "Estimated Speed" : "Speed",
+            "Speed",
             speed,
           ),
           _metric("Swing", swing),

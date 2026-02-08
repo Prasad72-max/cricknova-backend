@@ -2,13 +2,14 @@ import math
 import numpy as np
 
 """
-PHYSICS-ONLY SPIN DETECTION (RELIABLE VERSION)
+PHYSICS-ONLY SPIN DETECTION (CONSERVATIVE)
 
-Principles:
+Rules:
 - Spin is detected ONLY after bounce
-- Uses post-bounce lateral deviation relative to forward travel
-- No artificial confidence values
-- Returns 'none' when evidence is weak
+- Uses post-bounce lateral deviation vs forward travel
+- No arm-action, no seam guess, no scripting
+- Returns NO SPIN when evidence is weak
+- Names turn direction only when clearly measurable
 """
 
 def _smooth(values, window=3):
@@ -44,11 +45,12 @@ def calculate_spin(ball_positions, fps=30):
         return empty_result
 
     # --- Collect post-bounce trajectory ---
-    post = ball_positions[pitch_idx + 1 : pitch_idx + 12]
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 14]
     xs = [p[0] for p in post]
     ys = [p[1] for p in post]
 
-    if len(xs) < 4:
+    # Require sufficient post-bounce samples
+    if len(xs) < 6:
         return empty_result
 
     # Smooth to reduce tracker jitter
@@ -63,7 +65,7 @@ def calculate_spin(ball_positions, fps=30):
     forward_disp = ys[-1] - ys[0]
 
     # Reject near-vertical / unreliable motion
-    if abs(forward_disp) < 1.2:
+    if abs(forward_disp) < 1.8:
         return empty_result
 
     # --- Spin angle estimation ---
@@ -75,10 +77,10 @@ def calculate_spin(ball_positions, fps=30):
         return empty_result
 
     # Direction based purely on screen-space deviation
-    if abs(lateral_disp) < 0.35:
+    if abs(lateral_disp) < 0.6:
         return empty_result
 
-    spin_name = "leg spin" if lateral_disp > 0 else "off spin"
+    spin_name = "RIGHT TURN SPIN" if lateral_disp > 0 else "LEFT TURN SPIN"
 
     return {
         "type": "spin",

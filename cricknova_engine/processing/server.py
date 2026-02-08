@@ -140,35 +140,9 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         speed_type = "unavailable"
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
 
-    # SWING CALCULATION
-    if len(last_pos) > 4:
-        x_start, y_start = last_pos[0]
-        x_end, y_end = last_pos[-1]
-        swing_angle = math.degrees(math.atan2((y_end - y_start),
-                                              (x_end - x_start)))
-    else:
-        swing_angle = None
-
-    if swing_angle is None:
-        swing = "none"
-    elif abs(swing_angle) < 2.0:
-        swing = "none"
-    elif swing_angle > 2.0:
-        swing = "outswing"
-    else:
-        swing = "inswing"
-
-    swing_confidence = min(1.0, len(last_pos) / 10.0)
-
-    spin = "none"
-    spin_confidence = 0.0
-    if len(last_pos) >= 10:
-        x_changes = [last_pos[i+1][0] - last_pos[i][0] for i in range(len(last_pos)-1)]
-        recent_curve = sum(x_changes[-6:])
-
-        if abs(recent_curve) > 3:
-            spin = "off spin" if recent_curve > 0 else "leg spin"
-            spin_confidence = min(1.0, abs(recent_curve) / 12.0)
+    # Swing & spin are computed by dedicated physics modules (offline / batch)
+    swing = "UNDETECTED"
+    spin = "NO SPIN"
 
     return {
         "found": True,
@@ -177,6 +151,5 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         "speed_note": speed_note,
         "swing": swing,
         "spin": spin,
-        "spin_confidence": spin_confidence,
         "trajectory": list(last_pos)
     }

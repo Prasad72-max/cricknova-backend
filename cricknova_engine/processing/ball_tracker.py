@@ -226,57 +226,6 @@ def compute_speed_kmph(ball_positions, fps):
         "speed_note": "FULLTRACK_STYLE_WINDOWED"
     }
 
-def compute_swing(ball_positions):
-    """
-    Simple physics-based swing detection using lateral deviation.
-    Returns: 'inswing', 'outswing', or 'none'
-    """
-    if not ball_positions or len(ball_positions) < 4:
-        return {"swing": "none", "confidence": 0.0}
-
-    xs = [p[0] for p in ball_positions]
-    ys = [p[1] for p in ball_positions]
-
-    early_x = np.mean(xs[: len(xs)//3])
-    late_x = np.mean(xs[-len(xs)//3 :])
-
-    dx = late_x - early_x
-
-    if abs(dx) < 1.2:
-        return {"swing": "none", "confidence": 0.0}
-
-    confidence = min(1.0, abs(dx) / 20.0)
-    return {
-        "swing": "inswing" if dx < 0 else "outswing",
-        "confidence": round(confidence, 2)
-    }
-
-def compute_spin(ball_positions):
-    """
-    Motion-based spin inference.
-    Returns: 'off spin', 'leg spin', or 'none'
-    """
-    if not ball_positions or len(ball_positions) < 5:
-        return {"spin": "none", "confidence": 0.0}
-
-    xs = [p[0] for p in ball_positions]
-    ys = [p[1] for p in ball_positions]
-
-    pitch_idx = int(np.argmax(ys))
-    if pitch_idx >= len(xs) - 3:
-        return {"spin": "none", "confidence": 0.0}
-
-    post_x = xs[pitch_idx:]
-    drift = post_x[-1] - post_x[0]
-
-    if abs(drift) < 0.3:
-        return {"spin": "none", "confidence": 0.0}
-
-    confidence = min(1.0, abs(drift) / 6.0)
-    return {
-        "spin": "off spin" if drift < 0 else "leg spin",
-        "confidence": round(confidence, 2)
-    }
 
 # --- Public speed API (restore compatibility) ---
 def calculate_ball_speed_kmph(ball_positions, fps):

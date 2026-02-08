@@ -213,35 +213,3 @@ def calculate_ball_speed_kmph(positions, fps):
         "speed_type": "measured_release",
         "speed_note": "FULLTRACK_STYLE_WINDOWED"
     }
-
-
-def calculate_swing_type(positions):
-    if not positions or len(positions) < 6:
-        return "none"
-
-    xs = [p[0] for p in positions]
-    early_mean = np.mean(xs[: len(xs)//3])
-    late_mean = np.mean(xs[-len(xs)//3 :])
-    dx = late_mean - early_mean
-
-    if abs(dx) < 6:
-        return "none"
-    return "inswing" if dx < 0 else "outswing"
-
-
-def calculate_spin_type(positions):
-    if not positions or len(positions) < 8:
-        return "none"
-
-    ys = [p[1] for p in positions]
-    pitch_idx = int(np.argmax(ys))
-
-    if pitch_idx >= len(positions) - 4:
-        return "none"
-
-    xs_after = [positions[i][0] for i in range(pitch_idx, len(positions))]
-    drift = xs_after[-1] - xs_after[0]
-
-    if abs(drift) < 5:
-        return "none"
-    return "off spin" if drift < 0 else "leg spin"

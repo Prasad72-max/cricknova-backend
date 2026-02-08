@@ -90,8 +90,9 @@ class SwingDetector:
             angle_pre = self._line_angle(positions[0], positions[mid - 1])
             angle_post = self._line_angle(positions[mid], positions[-1])
             delta = angle_post - angle_pre
+            # If deviation is extreme, treat as undetected (camera noise)
             if abs(delta) > 25:
-                delta = 0.0
+                return None
             return round(float(delta), 2)
 
         pre_vec = (positions[pitch_idx - 2], positions[pitch_idx - 1])
@@ -101,21 +102,28 @@ class SwingDetector:
         angle_post = self._line_angle(*post_vec)
 
         swing_angle = (angle_post - angle_pre) * camera_sign
-        # Clamp extreme noise (camera shake protection)
+        # Extreme deviation is likely camera noise, not swing
         if abs(swing_angle) > 25:
-            return 0.0
+            return None
         return round(float(swing_angle), 2)
 
 def classify_swing(swing_deg):
     """
-    Cricket-realistic classification with safe fallback.
+    Physics-only swing classification.
+    Names swing ONLY when lateral deviation is meaningful.
     """
     if swing_deg is None or math.isnan(swing_deg):
-        return "unknown"
-    # tighter dead-zone to avoid false outswing
-    if abs(swing_deg) < 0.25:
-        return "straight"
-    return "inswing" if swing_deg < 0 else "outswing"
+        return "UNDETECTED"
+
+    # Dead zone: treat tiny deviation as straight
+    if abs(swing_deg) < 0.35:
+        return "STRAIGHT"
+
+    # Direction based on true lateral deviation
+    if swing_deg > 0:
+        return "OUTSWING"
+    else:
+        return "INSWING"
 
 def calculate_swing(ball_positions):
     detector = SwingDetector()
@@ -131,7 +139,7 @@ def calculate_swing_full(ball_positions):
 
     if swing_deg is None:
         return {
-            "swing": "unknown",
+            "swing": "UNDETECTED",
             "swing_degree": None
         }
 

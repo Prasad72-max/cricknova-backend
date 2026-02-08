@@ -522,118 +522,8 @@ async def verify_payment(
     }
 
 
-# -----------------------------
-# FIXED SWING (DEGREES)
-# -----------------------------
-def detect_swing_x(ball_positions):
-    if len(ball_positions) < 8:
-        return "straight"
-
-    ys = [p[1] for p in ball_positions]
-    pitch_idx = int(np.argmax(ys))
-
-    pitch_idx = max(3, min(pitch_idx, len(ball_positions) - 3))
-
-    pre_x = np.mean([p[0] for p in ball_positions[pitch_idx-3:pitch_idx]])
-    post_x = np.mean([p[0] for p in ball_positions[pitch_idx+1:pitch_idx+4]])
-
-    delta_x = post_x - pre_x
-
-    if abs(delta_x) < 2:
-        return "straight"
-    elif delta_x > 0:
-        return "outswing"
-    else:
-        return "inswing"
 
 
-# -----------------------------
-# NEARBY REALISTIC SPIN (NON-SCRIPTED)
-# -----------------------------
-def calculate_spin_real(ball_positions):
-    """
-    Nearby spin estimation from real ball trajectory.
-    - No scripted values
-    - Camera-aware
-    - Returns NONE when spin is not reliably detectable
-    """
-
-    if len(ball_positions) < 10:
-        return "none", 0.0
-
-    ys = [p[1] for p in ball_positions]
-    pitch_idx = int(np.argmax(ys))
-
-    # Ensure enough frames before and after pitch
-    if pitch_idx < 3 or pitch_idx > len(ball_positions) - 4:
-        return "none", 0.0
-
-    # -------- Smoothed pre-pitch lateral velocity --------
-    vx_pre = np.mean([
-        ball_positions[pitch_idx - 1][0] - ball_positions[pitch_idx - 4][0],
-        ball_positions[pitch_idx - 2][0] - ball_positions[pitch_idx - 5][0]
-    ])
-
-    vy_pre = np.mean([
-        ball_positions[pitch_idx - 1][1] - ball_positions[pitch_idx - 4][1],
-        ball_positions[pitch_idx - 2][1] - ball_positions[pitch_idx - 5][1]
-    ])
-
-    # -------- Smoothed post-pitch lateral velocity --------
-    post_indices = [pitch_idx + 1, pitch_idx + 2, pitch_idx + 4, pitch_idx + 5]
-    if max(post_indices) >= len(ball_positions):
-        return "none", 0.0
-
-    vx_post = np.mean([
-        ball_positions[pitch_idx + 4][0] - ball_positions[pitch_idx + 1][0],
-        ball_positions[pitch_idx + 5][0] - ball_positions[pitch_idx + 2][0]
-    ])
-
-    vy_post = np.mean([
-        ball_positions[pitch_idx + 4][1] - ball_positions[pitch_idx + 1][1],
-        ball_positions[pitch_idx + 5][1] - ball_positions[pitch_idx + 2][1]
-    ])
-
-    delta_vx = (vx_post - vx_pre) * 0.9
-    forward_v = abs(vy_pre)
-
-    if forward_v < 4.0:
-        return "none", 0.0
-
-    # ---- Angle computation (stable & camera-safe) ----
-    turn_rad = math.atan2(abs(delta_vx), forward_v)
-    raw_turn_deg = math.degrees(turn_rad)
-
-    # ---- Hard clamp to cricket reality (2D camera limit) ----
-    # Any value above 12° is projection noise
-    turn_deg = min(raw_turn_deg, 12.0)
-
-    # ---- Noise floor (aggressive to avoid fake spin) ----
-    if turn_deg < 0.35:
-        return "none", 0.0
-
-    # -------- Camera-aware spin direction (displacement-based) --------
-    pre_x_mean = np.mean([p[0] for p in ball_positions[pitch_idx-3:pitch_idx]])
-    post_x_mean = np.mean([p[0] for p in ball_positions[pitch_idx+1:pitch_idx+4]])
-
-    lateral_shift = post_x_mean - pre_x_mean
-
-    # Camera-agnostic correction:
-    # Decide spin direction ONLY by post-bounce lateral movement
-    # Do NOT depend on pre-bounce camera travel direction
-
-    corrected_shift = lateral_shift
-
-    if abs(corrected_shift) < 1.2:
-        return "none", 0.0
-
-    # Cricket convention:
-    # Right-hander camera from behind bowler:
-    # Ball moving RIGHT after pitch = leg-spin
-    # Ball moving LEFT after pitch = off-spin
-    spin_name = "leg-spin" if corrected_shift > 0 else "off-spin"
-
-    return spin_name, float(turn_deg)
 
 
 # -----------------------------
@@ -726,8 +616,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": detect_swing_x(ball_positions),
-                "spin": "none",
+                "swing": "UNDETECTED",
+                "spin": "NO SPIN",
                 "trajectory": []
             }
 
@@ -764,25 +654,13 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing = detect_swing_x(ball_positions)
-        spin_name, spin_turn = calculate_spin_real(ball_positions)
-        trajectory = []
-
-        # Normalize spin output for app (leg spin / off spin / none)
-        if spin_name == "leg-spin":
-            spin_label = "leg spin"
-        elif spin_name == "off-spin":
-            spin_label = "off spin"
-        else:
-            spin_label = "none"
-
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
             "speed_type": speed_type or "unavailable",
             "speed_note": speed_note or "Speed shown only when physics is valid.",
-            "swing": swing,
-            "spin": spin_label,
+            "swing": "UNDETECTED",
+            "spin": "NO SPIN",
             "trajectory": []
         }
 
@@ -877,8 +755,8 @@ Mention one mistake and one improvement.
                 "coach_feedback": feedback
             }
 
-        swing = detect_swing_x(ball_positions)
-        spin_name, _ = calculate_spin_real(ball_positions)
+        swing = "UNDETECTED"
+        spin_name = "NO SPIN"
 
         prompt = f"""
 You are an elite cricket batting coach.
@@ -1106,11 +984,11 @@ async def ai_coach_diff(
                 "difference": "Ball not detected clearly in one or both videos."
             }
 
-        left_swing = detect_swing_x(left_positions)
-        right_swing = detect_swing_x(right_positions)
+        left_swing = "UNDETECTED"
+        right_swing = "UNDETECTED"
 
-        left_spin, _ = calculate_spin_real(left_positions)
-        right_spin, _ = calculate_spin_real(right_positions)
+        left_spin = "NO SPIN"
+        right_spin = "NO SPIN"
 
         prompt = f"""
 You are an elite cricket batting coach.
@@ -1186,8 +1064,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": detect_swing_x(ball_positions),
-                "spin": "none",
+                "swing": "UNDETECTED",
+                "spin": "NO SPIN",
                 "trajectory": []
             }
 
@@ -1222,24 +1100,13 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing = detect_swing_x(ball_positions)
-        spin_name, _ = calculate_spin_real(ball_positions)
-        trajectory = []
-
-        if spin_name == "leg-spin":
-            spin_label = "leg spin"
-        elif spin_name == "off-spin":
-            spin_label = "off spin"
-        else:
-            spin_label = "none"
-
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
             "speed_type": speed_type or "unavailable",
             "speed_note": speed_note or "Speed shown only when physics is valid.",
-            "swing": swing,
-            "spin": spin_label,
+            "swing": "UNDETECTED",
+            "spin": "NO SPIN",
             "trajectory": []
         }
 
