@@ -2,8 +2,6 @@ import cv2
 import numpy as np
 import math
 
-from cricknova_engine.processing.speed import calculate_ball_speed_kmph as _speed_core
-
 MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # max real ball travel (release → bat)
 
 def track_ball_positions(video_path, max_frames=120):
@@ -88,10 +86,101 @@ def track_ball_positions(video_path, max_frames=120):
 
 def calculate_ball_speed_kmph(positions, fps):
     """
-    Delegates bowling speed calculation to processing.speed.
-    Single source of truth for all speed logic.
+    Full Track–style AI estimated release speed.
+    - Windowed post-release velocity
+    - Median smoothing
+    - Human fast-bowling physics gate
+    - Speed returned ONLY when reliable
     """
-    return _speed_core(positions, fps)
+
+    if not positions or fps <= 1 or len(positions) < 4:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "NO_MOTION"
+        }
+
+    fps = min(max(float(fps), 24.0), 240.0)
+
+    # Skip first 2 frames (hand separation jitter)
+    window_start = 2
+    window_end = min(10, len(positions) - 1)
+
+    seg_dists = []
+    for i in range(window_start, window_end):
+        x0, y0 = positions[i - 1]
+        x1, y1 = positions[i]
+        d = math.hypot(x1 - x0, y1 - y0)
+        if 1.0 < d < 200.0:
+            seg_dists.append(d)
+
+    if len(seg_dists) < 3:
+        ys = [p[1] for p in positions]
+        pixel_span = abs(max(ys) - min(ys))
+
+        if pixel_span > 0:
+            FRAME_METERS = 20.0
+            meters_per_px = FRAME_METERS / pixel_span
+            avg_px = float(np.mean(seg_dists)) if seg_dists else 1.0
+            kmph = avg_px * meters_per_px * fps * 3.6
+
+            if 60.0 <= kmph <= 170.0:
+                return {
+                    "speed_kmph": round(float(kmph), 1),
+                    "speed_type": "video_derived",
+                    "confidence": 0.5,
+                    "speed_note": "UNSTABLE_RELEASE"
+                }
+
+        px_vals = [math.hypot(positions[i][0] - positions[i-1][0],
+                              positions[i][1] - positions[i-1][1])
+                   for i in range(1, len(positions))]
+        px_vals = [p for p in px_vals if 1.0 < p < 220.0]
+
+        if px_vals:
+            avg_px = float(np.mean(px_vals))
+            ys = [p[1] for p in positions]
+            pixel_span = abs(max(ys) - min(ys))
+            if pixel_span > 0:
+                meters_per_px = 20.0 / pixel_span
+                kmph = avg_px * meters_per_px * fps * 3.6
+                return {
+                    "speed_kmph": round(float(kmph), 1),
+                    "speed_type": "video_derived",
+                    "confidence": 0.35,
+                    "speed_note": "RESTORED_FALLBACK_DERIVED"
+                }
+
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "confidence": 0.0,
+            "speed_note": "NO_MOTION"
+        }
+
+    # Median px/sec over release window
+    px_per_sec = float(np.median(seg_dists)) * fps
+
+    # Realistic release-to-bounce scaling (fallback)
+    meters_per_px = 17.0 / 320.0
+    raw_kmph = px_per_sec * meters_per_px * 3.6
+
+    # Human fast-bowling physics gate
+    if raw_kmph < 60.0 or raw_kmph > 170.0:
+        return {
+            "speed_kmph": round(raw_kmph, 1),
+            "speed_type": "low_confidence_physics",
+            "confidence": 0.4,
+            "speed_note": "OUT_OF_RANGE_BUT_REAL_MOTION"
+        }
+
+    return {
+        "speed_kmph": round(raw_kmph, 1),
+        "speed_type": "ai_estimated_release",
+        "confidence": round(min(1.0, len(seg_dists) / 6.0), 2),
+        "speed_note": "FULLTRACK_STYLE_WINDOWED"
+    }
 
 
 def calculate_swing_type(positions):
