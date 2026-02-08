@@ -86,18 +86,17 @@ def track_ball_positions(video_path, max_frames=120):
 
 def calculate_ball_speed_kmph(positions, fps):
     """
-    Full Track–style AI estimated release speed.
+    Full Track–style release speed calculation.
     - Windowed post-release velocity
     - Median smoothing
-    - Human fast-bowling physics gate
-    - Speed returned ONLY when reliable
+    - Physics realism guards
+    - Method-aware output (no confidence)
     """
 
     if not positions or fps <= 1 or len(positions) < 4:
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "confidence": 0.0,
             "speed_note": "NO_MOTION"
         }
 
@@ -125,11 +124,22 @@ def calculate_ball_speed_kmph(positions, fps):
             avg_px = float(np.mean(seg_dists)) if seg_dists else 1.0
             kmph = avg_px * meters_per_px * fps * 3.6
 
-            if 60.0 <= kmph <= 170.0:
+            if kmph < 40.0:
+                return {
+                    "speed_kmph": None,
+                    "speed_type": "too_slow",
+                    "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+                }
+            elif kmph < 55.0:
+                return {
+                    "speed_kmph": round(float(kmph), 1),
+                    "speed_type": "very_slow_estimate",
+                    "speed_note": "BORDERLINE_LOW_SPEED"
+                }
+            elif kmph <= 165.0:
                 return {
                     "speed_kmph": round(float(kmph), 1),
                     "speed_type": "video_derived",
-                    "confidence": 0.5,
                     "speed_note": "UNSTABLE_RELEASE"
                 }
 
@@ -145,17 +155,29 @@ def calculate_ball_speed_kmph(positions, fps):
             if pixel_span > 0:
                 meters_per_px = 20.0 / pixel_span
                 kmph = avg_px * meters_per_px * fps * 3.6
+                if kmph < 40.0:
+                    return {
+                        "speed_kmph": None,
+                        "speed_type": "too_slow",
+                        "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+                    }
+                elif kmph < 55.0:
+                    return {
+                        "speed_kmph": round(float(kmph), 1),
+                        "speed_type": "very_slow_estimate",
+                        "speed_note": "BORDERLINE_LOW_SPEED"
+                    }
+
+                kmph = min(kmph, 165.0)
                 return {
                     "speed_kmph": round(float(kmph), 1),
                     "speed_type": "video_derived",
-                    "confidence": 0.35,
                     "speed_note": "RESTORED_FALLBACK_DERIVED"
                 }
 
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "confidence": 0.0,
             "speed_note": "NO_MOTION"
         }
 
@@ -166,19 +188,29 @@ def calculate_ball_speed_kmph(positions, fps):
     meters_per_px = 17.0 / 320.0
     raw_kmph = px_per_sec * meters_per_px * 3.6
 
-    # Human fast-bowling physics gate
-    if raw_kmph < 60.0 or raw_kmph > 170.0:
+    # LOW SPEED REALISM GUARD
+    if raw_kmph < 40.0:
         return {
-            "speed_kmph": round(raw_kmph, 1),
-            "speed_type": "low_confidence_physics",
-            "confidence": 0.4,
-            "speed_note": "OUT_OF_RANGE_BUT_REAL_MOTION"
+            "speed_kmph": None,
+            "speed_type": "too_slow",
+            "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+        }
+    elif raw_kmph < 55.0:
+        return {
+            "speed_kmph": round(float(raw_kmph), 1),
+            "speed_type": "very_slow_estimate",
+            "speed_note": "BORDERLINE_LOW_SPEED"
+        }
+    elif raw_kmph > 165.0:
+        return {
+            "speed_kmph": round(165.0, 1),
+            "speed_type": "derived_physics",
+            "speed_note": "HIGH_SPEED_SANITY_FALLBACK"
         }
 
     return {
         "speed_kmph": round(raw_kmph, 1),
-        "speed_type": "ai_estimated_release",
-        "confidence": round(min(1.0, len(seg_dists) / 6.0), 2),
+        "speed_type": "measured_release",
         "speed_note": "FULLTRACK_STYLE_WINDOWED"
     }
 

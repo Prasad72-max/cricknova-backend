@@ -50,7 +50,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     speed_kmph = None
     speed_type = "unavailable"
     speed_note = "INSUFFICIENT_PHYSICS_DATA"
-    confidence = 0.0
 
     MIN_FRAMES = 12
     if len(app.state.last_pos) >= MIN_FRAMES and len(app.state.last_time) >= MIN_FRAMES:
@@ -83,10 +82,19 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             meters_per_px = 17.0 / 320.0  # tuned release-to-bounce scale
             raw_kmph = px_per_sec * meters_per_px * 3.6
 
-            if 90.0 <= raw_kmph <= 155.0:
+            # LOW SPEED REALISM GUARD
+            if raw_kmph < 40:
+                speed_kmph = None
+                speed_type = "too_slow"
+                speed_note = "NON_BOWLING_OR_TRACKING_NOISE"
+            elif raw_kmph < 55:
                 speed_kmph = round(float(raw_kmph), 1)
-                speed_type = "ai_estimated_release"
-                confidence = round(min(1.0, len(seg_dists) / 6.0), 2)
+                speed_type = "very_slow_estimate"
+                speed_note = "BORDERLINE_LOW_SPEED"
+            elif 55.0 <= raw_kmph <= 165.0:
+                speed_kmph = round(float(raw_kmph), 1)
+                speed_type = "measured_release"
+                speed_note = "FULLTRACK_STYLE_WINDOWED"
 
     # -----------------------------
     # CONSERVATIVE VIDEO FALLBACK (NEVER NULL)
@@ -114,21 +122,23 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
                 kmph = avg_px * meters_per_px * fps_est * 3.6
 
-                # soft physical sanity only (no scripting)
-                if kmph < 60.0 or kmph > 170.0:
+                if kmph < 55.0 or kmph > 165.0:
                     kmph = None
 
-                if kmph is not None:
+                if kmph is not None and kmph < 55.0:
+                    speed_kmph = round(float(kmph), 1)
+                    speed_type = "very_slow_estimate"
+                    speed_note = "BORDERLINE_LOW_SPEED"
+
+                if kmph is not None and speed_kmph is None:
                     speed_kmph = round(float(kmph), 1)
                     speed_type = "video_derived"
                     speed_note = "PARTIAL_TRACK_PHYSICS"
-                    confidence = 0.55
 
     # HARD SAFETY: do NOT fabricate speed
     if speed_kmph is None:
         speed_type = "unavailable"
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
-        confidence = min(confidence, 0.25)
 
     # SWING CALCULATION
     if len(last_pos) > 4:
@@ -164,7 +174,6 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         "found": True,
         "speed_kmph": speed_kmph,
         "speed_type": speed_type,
-        "confidence": confidence,
         "speed_note": speed_note,
         "swing": swing,
         "spin": spin,

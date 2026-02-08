@@ -2,81 +2,6 @@ import cv2 as cv
 import numpy as np
 import math
 
-# --- LEGACY CONSERVATIVE VIDEO-DRIVEN SPEED (RESTORED) ---
-def compute_speed_kmph(ball_positions, fps=30):
-    """
-    Conservative, non-scripted, video-driven bowling speed.
-    Restored to ensure speed appears on most usable videos.
-    """
-
-    if not ball_positions or fps <= 0 or len(ball_positions) < fps // 2:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "speed_note": "INSUFFICIENT_FRAMES"
-        }
-
-    pixel_dists = []
-    for i in range(1, len(ball_positions)):
-        x1, y1 = ball_positions[i - 1][0], ball_positions[i - 1][1]
-        x2, y2 = ball_positions[i][0], ball_positions[i][1]
-        d = math.hypot(x2 - x1, y2 - y1)
-        if d > 0:
-            pixel_dists.append(d)
-
-    if not pixel_dists:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "speed_note": "NO_PIXEL_MOTION"
-        }
-
-    pixel_dists = np.array(pixel_dists)
-
-    # Remove jitter (bottom 25%)
-    pixel_dists = pixel_dists[pixel_dists > np.percentile(pixel_dists, 25)]
-    if len(pixel_dists) == 0:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "speed_note": "JITTER_ONLY"
-        }
-
-    avg_px_per_frame = float(np.mean(pixel_dists))
-
-    # Vertical span drives calibration
-    ys = [p[1] for p in ball_positions]
-    pixel_span = abs(max(ys) - min(ys))
-    if pixel_span <= 0:
-        return {
-            "speed_kmph": None,
-            "speed_type": "unavailable",
-            "speed_note": "ZERO_SPAN"
-        }
-
-    FRAME_METERS = 20.0  # same as last-month production behavior
-    meters_per_pixel = FRAME_METERS / pixel_span
-
-    meters_per_sec = avg_px_per_frame * meters_per_pixel * fps
-    kmph = meters_per_sec * 3.6
-
-    # Conservative smoothing (last-month behavior)
-    kmph = kmph * 0.85
-
-    return {
-        "speed_kmph": round(float(kmph), 1),
-        "speed_type": "video_derived",
-        "speed_note": "LEGACY_CONSERVATIVE"
-    }
-
-
-# --- Unified Speed API Wrapper ---
-def calculate_ball_speed_kmph(ball_positions, fps):
-    """
-    Backward-compatible wrapper used by server and motion modules.
-    """
-    return compute_speed_kmph(ball_positions, fps)
-
 # --- BOUNDED REAL-WORLD TRAVEL ---
 MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # max cricket ball travel (release → bat)
 
@@ -196,6 +121,111 @@ def track_ball_positions(video_path):
     return ball_positions, fps
 
 
+# --- Physics-based speed calculator ---
+def compute_speed_kmph(ball_positions, fps):
+    """
+    Full Track–style release speed calculation.
+    - Windowed post-release velocity
+    - Median-based smoothing
+    - Physics realism guards
+    - Method-aware output (no confidence)
+    """
+
+    if not ball_positions or fps <= 1 or len(ball_positions) < 3:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INSUFFICIENT_TRACK_POINTS"
+        }
+
+    fps = min(max(fps, 24), 240)
+
+    # Extract positions only
+    pts = [(p[0], p[1]) for p in ball_positions]
+
+    # Skip first 2 frames (hand separation jitter)
+    window_start = 2
+    window_end = min(10, len(pts) - 1)
+
+    seg_dists = []
+    for i in range(window_start, window_end):
+        d = math.hypot(
+            pts[i][0] - pts[i - 1][0],
+            pts[i][1] - pts[i - 1][1]
+        )
+        if 1.0 < d < 200.0:
+            seg_dists.append(d)
+
+    if len(seg_dists) < 3:
+        # Conservative video-based fallback
+        ys = [p[1] for p in ball_positions]
+        pixel_span = abs(max(ys) - min(ys))
+
+        if pixel_span > 0:
+            FRAME_METERS = 20.0
+            meters_per_px = FRAME_METERS / pixel_span
+            avg_px = float(np.mean(seg_dists)) if seg_dists else 1.0
+            kmph = avg_px * meters_per_px * fps * 3.6
+
+            if kmph < 40.0:
+                return {
+                    "speed_kmph": None,
+                    "speed_type": "too_slow",
+                    "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+                }
+            elif kmph < 55.0:
+                return {
+                    "speed_kmph": round(float(kmph), 1),
+                    "speed_type": "very_slow_estimate",
+                    "speed_note": "BORDERLINE_LOW_SPEED"
+                }
+
+            kmph = min(kmph, 165.0)
+            return {
+                "speed_kmph": round(float(kmph), 1),
+                "speed_type": "video_derived",
+                "speed_note": "PARTIAL_TRACK_PHYSICS"
+            }
+
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INSUFFICIENT_PIXEL_SPAN"
+        }
+
+    # Median px/sec over release window
+    px_per_sec = float(np.median(seg_dists)) * fps
+
+    # Realistic release-to-bounce scaling (fallback)
+    meters_per_px = 17.0 / 320.0
+    raw_kmph = px_per_sec * meters_per_px * 3.6
+
+    # LOW SPEED REALISM GUARD
+    if raw_kmph < 40.0:
+        return {
+            "speed_kmph": None,
+            "speed_type": "too_slow",
+            "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+        }
+    elif raw_kmph < 55.0:
+        return {
+            "speed_kmph": round(float(raw_kmph), 1),
+            "speed_type": "very_slow_estimate",
+            "speed_note": "BORDERLINE_LOW_SPEED"
+        }
+    elif raw_kmph > 165.0:
+        return {
+            "speed_kmph": round(165.0, 1),
+            "speed_type": "derived_physics",
+            "speed_note": "HIGH_SPEED_SANITY_FALLBACK"
+        }
+
+    return {
+        "speed_kmph": round(raw_kmph, 1),
+        "speed_type": "measured_release",
+        "speed_note": "FULLTRACK_STYLE_WINDOWED"
+    }
+
 def compute_swing(ball_positions):
     """
     Simple physics-based swing detection using lateral deviation.
@@ -247,3 +277,11 @@ def compute_spin(ball_positions):
         "spin": "off spin" if drift < 0 else "leg spin",
         "confidence": round(confidence, 2)
     }
+
+# --- Public speed API (restore compatibility) ---
+def calculate_ball_speed_kmph(ball_positions, fps):
+    """
+    Public API wrapper expected by backend.
+    Delegates to compute_speed_kmph.
+    """
+    return compute_speed_kmph(ball_positions, fps)

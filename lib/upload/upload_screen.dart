@@ -613,18 +613,31 @@ if (spinVal.contains("leg")) {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                       _metric(
-                        "Estimated Speed",
+                        "Speed",
                         speedKmph != null
-                            ? "${speedKmph!.toStringAsFixed(1)} km/h"
+                            ? ((speedType == "very_slow_estimate" ||
+                                    speedType == "camera_normalized" ||
+                                    speedType == "video_derived" ||
+                                    speedType == "derived_physics")
+                                ? "~${speedKmph!.toStringAsFixed(1)} km/h"
+                                : "${speedKmph!.toStringAsFixed(1)} km/h")
                             : "----",
                       ),
                       if (speedKmph != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Text(
-                            speedType == "ai_estimated_release"
-                                ? "AI release-point estimate"
-                                : "Estimated from video flight",
+                            speedType == "measured_release"
+                                ? "Measured speed"
+                                : speedType == "very_slow_estimate"
+                                    ? "Very slow delivery"
+                                    : speedType == "camera_normalized"
+                                        ? "Estimated from camera motion"
+                                        : speedType == "video_derived"
+                                            ? "Estimated from video motion"
+                                            : speedType == "derived_physics"
+                                                ? "Physics fallback estimate"
+                                                : "Speed unavailable",
                             style: const TextStyle(
                               color: Colors.white54,
                               fontSize: 12,

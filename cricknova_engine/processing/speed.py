@@ -121,14 +121,32 @@ def calculate_speed_pro(
     raw_kmph = px_per_sec * meters_per_px * 3.6
 
     # -----------------------------
+    # LOW SPEED HANDLING (REALISM GUARD)
+    # -----------------------------
+    # Speeds below realistic bowling threshold should not be shown as exact numbers
+    if raw_kmph < 40:
+        return {
+            "speed_kmph": None,
+            "speed_type": "too_slow",
+            "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+        }
+
+    if raw_kmph < 55:
+        return {
+            "speed_kmph": round(raw_kmph, 1),
+            "speed_type": "very_slow_estimate",
+            "speed_note": "BORDERLINE_LOW_SPEED"
+        }
+
+    # -----------------------------
     # PHYSICS SANITY FILTER
     # -----------------------------
-    if raw_kmph < 75 or raw_kmph > 165:
+    if raw_kmph > 165:
         derived = calculate_speed(ball_positions, fps)
         return {
             "speed_kmph": derived,
             "speed_type": "derived_camera_physics",
-            "speed_note": "SANITY_RELAXED"
+            "speed_note": "HIGH_SPEED_SANITY_FALLBACK"
         }
 
     # -----------------------------
@@ -144,9 +162,8 @@ def calculate_speed_pro(
 
     return {
         "speed_kmph": round(raw_kmph, 1),
-        "speed_type": "ai_estimated_release",
-        "speed_note": "FULLTRACK_STYLE_WINDOWED",
-        "confidence": round(min(1.0, len(segment_dists) / 6.0), 2)
+        "speed_type": "measured_release",
+        "speed_note": "FULLTRACK_STYLE_WINDOWED"
     }
 
 
@@ -201,7 +218,27 @@ def calculate_speed(ball_positions, fps=30):
     meters_per_px = assumed_meters / total_px
     kmph = px_per_sec * meters_per_px * 3.6
 
+    # Guard against unrealistically low bowling speeds
+    if kmph < 40:
+        return None
+
     if kmph <= 0 or math.isnan(kmph) or math.isinf(kmph):
         return None
 
     return round(kmph, 1)
+
+
+# --- Public API expected by backend (restore logic) ---
+def calculate_ball_speed_kmph(ball_positions, fps=30):
+    """
+    Backward-compatible public speed API.
+    Never scripts values. Delegates to camera-based physics.
+    """
+    result = calculate_speed_pro(ball_positions, pitch_corners=None, fps=fps)
+    if isinstance(result, dict):
+        return result
+    return {
+        "speed_kmph": result,
+        "speed_type": "camera_estimated",
+        "speed_note": "LEGACY_COMPAT"
+    }

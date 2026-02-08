@@ -751,9 +751,18 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if speed_kmph is None:
             fallback = fallback_speed_camera_normalized(ball_positions, fps)
             if fallback is not None:
-                speed_kmph = fallback
-                speed_type = "camera_normalized"
-                speed_note = "Fallback from real pixel motion (non-scripted)"
+                if fallback < 40.0:
+                    speed_kmph = None
+                    speed_type = "too_slow"
+                    speed_note = "NON_BOWLING_OR_TRACKING_NOISE"
+                elif fallback < 55.0:
+                    speed_kmph = round(float(fallback), 1)
+                    speed_type = "very_slow_estimate"
+                    speed_note = "BORDERLINE_LOW_SPEED"
+                else:
+                    speed_kmph = round(float(fallback), 1)
+                    speed_type = "camera_normalized"
+                    speed_note = "Fallback from real pixel motion (non-scripted)"
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
@@ -1200,9 +1209,18 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if speed_kmph is None:
             fallback = fallback_speed_camera_normalized(ball_positions, fps)
             if fallback is not None:
-                speed_kmph = fallback
-                speed_type = "camera_normalized"
-                speed_note = "Fallback from real pixel motion (non-scripted)"
+                if fallback < 40.0:
+                    speed_kmph = None
+                    speed_type = "too_slow"
+                    speed_note = "NON_BOWLING_OR_TRACKING_NOISE"
+                elif fallback < 55.0:
+                    speed_kmph = round(float(fallback), 1)
+                    speed_type = "very_slow_estimate"
+                    speed_note = "BORDERLINE_LOW_SPEED"
+                else:
+                    speed_kmph = round(float(fallback), 1)
+                    speed_type = "camera_normalized"
+                    speed_note = "Fallback from real pixel motion (non-scripted)"
 
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)

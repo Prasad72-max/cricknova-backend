@@ -3,11 +3,11 @@ from .speed import calculate_speed_pro
 
 def estimate_speed(video_path):
     """
-    Full Track–style AI estimated release speed.
+    Full Track–style release speed estimation.
     - Windowed post-release velocity
     - Physics sanity filtering
-    - Confidence-aware output
-    - Speed always shown with conservative fallback
+    - Method-aware output (no confidence meter)
+    - Conservative handling for low-quality input
     """
 
     tracker = BallTracker()
@@ -18,8 +18,7 @@ def estimate_speed(video_path):
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "speed_note": "INSUFFICIENT_TRACKING_DATA",
-            "confidence": 0.15
+            "speed_note": "INSUFFICIENT_TRACKING_DATA"
         }
 
     # Drop first frame to reduce detector jitter
@@ -40,8 +39,7 @@ def estimate_speed(video_path):
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "speed_note": "SPEED_ENGINE_ERROR",
-            "confidence": 0.15
+            "speed_note": "SPEED_ENGINE_ERROR"
         }
 
     speed_kmph = result.get("speed_kmph") or result.get("derived_kmph")
@@ -55,13 +53,11 @@ def estimate_speed(video_path):
         return {
             "speed_kmph": None,
             "speed_type": "unavailable",
-            "speed_note": "INVALID_OR_INSUFFICIENT_PHYSICS",
-            "confidence": 0.15
+            "speed_note": "INVALID_OR_INSUFFICIENT_PHYSICS"
         }
 
     return {
         "speed_kmph": speed_kmph,
         "speed_type": result.get("speed_type", "derived_physics"),
-        "speed_note": result.get("speed_note", "PHYSICS_FALLBACK_APPLIED"),
-        "confidence": max(result.get("confidence", 0.6), 0.35)
+        "speed_note": result.get("speed_note", "PHYSICS_FALLBACK_APPLIED")
     }
