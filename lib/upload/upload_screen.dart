@@ -210,29 +210,59 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-         final swingVal = analysis["swing"]?.toString().toLowerCase() ?? "";
+        // -------- SWING (confidence-aware, real only) --------
+        final rawSwing =
+            analysis["swing"] ??
+            analysis["swing_type"];
 
-if (swingVal.contains("in")) {
-  swing = "INSWING";
-} else if (swingVal.contains("out")) {
-  swing = "OUTSWING";
-} else if (swingVal.contains("straight")) {
-  swing = "STRAIGHT";
-} else {
-  swing = "UNDETECTED";
-}
+        final rawSwingConf =
+            analysis["swing_confidence"];
 
-final spinVal = analysis["spin"]?.toString().toLowerCase() ?? "";
+        if (rawSwing is String) {
+          final s = rawSwing.toUpperCase();
+          if (rawSwingConf is num && rawSwingConf < 0.35) {
+            swing = "UNDETECTED";
+          } else if (s.contains("INSWING")) {
+            swing = "INSWING";
+          } else if (s.contains("OUTSWING")) {
+            swing = "OUTSWING";
+          } else if (s.contains("STRAIGHT")) {
+            swing = "STRAIGHT";
+          } else {
+            swing = "UNDETECTED";
+          }
+        } else {
+          swing = "UNDETECTED";
+        }
 
-if (spinVal.contains("leg")) {
-  spin = "LEG SPIN";
-} else if (spinVal.contains("off")) {
-  spin = "OFF SPIN";
-} else if (spinVal.contains("spin")) {
-  spin = "SPIN";
-} else {
-  spin = "NO SPIN DETECTED";
-}
+        // -------- SPIN (confidence-aware, real only) --------
+        final rawSpin =
+            analysis["spin"] ??
+            analysis["spin_type"];
+
+        final rawSpinConf =
+            analysis["spin_confidence"];
+
+        if (rawSpin is String) {
+          final s = rawSpin.toUpperCase();
+          if (rawSpinConf is num && rawSpinConf < 0.30) {
+            spin = "NO SPIN";
+          } else if (s.contains("LEG")) {
+            spin = "LEG SPIN";
+          } else if (s.contains("OFF")) {
+            spin = "OFF SPIN";
+          } else if (s.contains("LEFT")) {
+            spin = "LEFT TURN SPIN";
+          } else if (s.contains("RIGHT")) {
+            spin = "RIGHT TURN SPIN";
+          } else if (s.contains("SPIN")) {
+            spin = "SPIN";
+          } else {
+            spin = "NO SPIN";
+          }
+        } else {
+          spin = "NO SPIN";
+        }
 
         trajectory = const [];
         showTrajectory = false;
