@@ -224,39 +224,37 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING ----------
-      final swingVal =
-          src["swing"] ??
-          src["swing_type"] ??
-          src["swingName"];
+      // ---------- SWING (STRICT) ----------
+      final rawSwing = src["swing"];
 
-      String _normalizeSwing(String? raw) {
-        if (raw == null) return "UNDETECTED";
-        final v = raw.toUpperCase();
-        if (v.contains("INSWING")) return "INSWING";
-        if (v.contains("OUTSWING")) return "OUTSWING";
-        if (v.contains("STRAIGHT")) return "STRAIGHT";
-        return "UNDETECTED";
+      if (rawSwing is String) {
+        final s = rawSwing.toUpperCase();
+        if (s.contains("INSWING")) {
+          swingName = "INSWING";
+        } else if (s.contains("OUTSWING")) {
+          swingName = "OUTSWING";
+        } else {
+          swingName = "STRAIGHT";
+        }
+      } else {
+        swingName = "STRAIGHT";
       }
 
-      swingName = _normalizeSwing(swingVal?.toString());
+      // ---------- SPIN (STRICT) ----------
+      final rawSpin = src["spin"];
 
-      // ---------- SPIN ----------
-      final spinVal =
-          src["spin"] ??
-          src["spin_type"] ??
-          src["spinType"];
-
-      String _normalizeSpin(String? raw) {
-        if (raw == null) return "NO SPIN";
-        final v = raw.toUpperCase();
-        if (v.contains("RIGHT TURN")) return "RIGHT TURN SPIN";
-        if (v.contains("LEFT TURN")) return "LEFT TURN SPIN";
-        if (v.contains("SPIN")) return "SPIN";
-        return "NO SPIN";
+      if (rawSpin is String) {
+        final s = rawSpin.toUpperCase();
+        if (s.contains("OFF")) {
+          spinType = "OFF SPIN";
+        } else if (s.contains("LEG")) {
+          spinType = "LEG SPIN";
+        } else {
+          spinType = "STRAIGHT";
+        }
+      } else {
+        spinType = "STRAIGHT";
       }
-
-      spinType = _normalizeSpin(spinVal?.toString());
 
       // ---------- TRAJECTORY ----------
       trajectory = src["trajectory"] is List

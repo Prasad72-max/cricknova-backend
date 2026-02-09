@@ -22,17 +22,22 @@ def _smooth(values, window=3):
     return out
 
 def calculate_spin(ball_positions, fps=30):
-    empty_result = {
-        "type": "none",
-        "name": "none",
-        "spin_degree": None
+    """
+    STRICT spin classification.
+    Allowed outputs ONLY:
+    Straight, Off Spin, Leg Spin
+    """
+
+    # Default: Straight (no post-bounce turn)
+    result = {
+        "name": "Straight"
     }
 
-    # Render-safe minimum frames (post-bounce physics still enforced)
-    if not ball_positions or len(ball_positions) < 4:
-        return empty_result
+    # Minimum frames required
+    if not ball_positions or len(ball_positions) < 6:
+        return result
 
-    # Limit frames to stable delivery window (Render-safe)
+    # Limit frames for render safety
     if len(ball_positions) > 120:
         ball_positions = ball_positions[:120]
 
@@ -40,50 +45,45 @@ def calculate_spin(ball_positions, fps=30):
     ys = np.array([p[1] for p in ball_positions])
     pitch_idx = int(np.argmax(ys))
 
-    # Need stable frames before & after bounce
-    if pitch_idx < 2 or pitch_idx + 3 >= len(ball_positions):
-        return empty_result
+    # Require frames after bounce
+    if pitch_idx < 2 or pitch_idx + 4 >= len(ball_positions):
+        return result
 
-    # --- Collect post-bounce trajectory ---
-    post = ball_positions[pitch_idx + 1 : pitch_idx + 14]
+    # --- Post-bounce trajectory ---
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 16]
     xs = [p[0] for p in post]
     ys = [p[1] for p in post]
 
-    # Require sufficient post-bounce samples
-    if len(xs) < 6:
-        return empty_result
+    if len(xs) < 5:
+        return result
 
-    # Smooth to reduce tracker jitter
+    # Smooth jitter
     xs = _smooth(xs)
     ys = _smooth(ys)
 
-    # Normalize lateral movement relative to first post-bounce point
+    # Normalize lateral movement
     x0 = xs[0]
     xs_norm = [x - x0 for x in xs]
 
     lateral_disp = xs_norm[-1] - xs_norm[0]
     forward_disp = ys[-1] - ys[0]
 
-    # Reject near-vertical / unreliable motion
-    if abs(forward_disp) < 1.8:
-        return empty_result
+    # Reject unreliable motion
+    if abs(forward_disp) < 1.2:
+        return result
 
-    # --- Spin angle estimation ---
+    # Compute turn angle
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
 
-    # Threshold: below this is visually straight after bounce
-    if turn_deg < 0.12:
-        return empty_result
+    # Threshold: below this = Straight
+    if turn_deg < 0.12 or abs(lateral_disp) < 0.4:
+        return result
 
-    # Direction based purely on screen-space deviation
-    if abs(lateral_disp) < 0.6:
-        return empty_result
+    # Direction (batter view convention)
+    if lateral_disp < 0:
+        result["name"] = "Off Spin"
+    else:
+        result["name"] = "Leg Spin"
 
-    spin_name = "RIGHT TURN SPIN" if lateral_disp > 0 else "LEFT TURN SPIN"
-
-    return {
-        "type": "spin",
-        "name": spin_name,
-        "spin_degree": round(float(turn_deg), 2)
-    }
+    return result

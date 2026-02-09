@@ -45,13 +45,10 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SAFE SWING (ROBUST) ----------
-    String swing = "UNDETECTED";
+    // ---------- SWING (STRICT) ----------
+    String swing = "STRAIGHT";
 
-    final rawSwing =
-        src["swing"] ??
-        src["swing_type"] ??
-        src["analysis"]?["swing"];
+    final rawSwing = src["swing"];
 
     if (rawSwing is String) {
       final s = rawSwing.toUpperCase();
@@ -59,31 +56,24 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         swing = "INSWING";
       } else if (s.contains("OUTSWING")) {
         swing = "OUTSWING";
-      } else if (s.contains("STRAIGHT")) {
-        swing = "STRAIGHT";
       } else {
-        swing = "UNDETECTED";
+        swing = "STRAIGHT";
       }
     }
 
-    // ---------- SAFE SPIN (ROBUST) ----------
-    String spin = "NO SPIN";
+    // ---------- SPIN (STRICT) ----------
+    String spin = "STRAIGHT";
 
-    final rawSpin =
-        src["spin"] ??
-        src["spin_type"] ??
-        src["analysis"]?["spin"];
+    final rawSpin = src["spin"];
 
     if (rawSpin is String) {
       final s = rawSpin.toUpperCase();
-      if (s.contains("RIGHT TURN")) {
-        spin = "RIGHT TURN SPIN";
-      } else if (s.contains("LEFT TURN")) {
-        spin = "LEFT TURN SPIN";
-      } else if (s.contains("SPIN")) {
-        spin = "SPIN";
+      if (s.contains("OFF")) {
+        spin = "OFF SPIN";
+      } else if (s.contains("LEG")) {
+        spin = "LEG SPIN";
       } else {
-        spin = "NO SPIN";
+        spin = "STRAIGHT";
       }
     }
 

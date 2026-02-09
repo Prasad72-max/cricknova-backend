@@ -29,14 +29,14 @@ class SwingHeatmap:
             norm_x = x - x0
 
             # Dead-zone to suppress camera jitter (px)
-            # Must align with swing physics thresholds
-            if abs(norm_x) < 3.0:
+            # Reduced to allow real swing on mobile videos
+            if abs(norm_x) < 1.2:
                 norm_x = 0.0
         else:
             norm_x = 0.0
 
-        # Do not record swing points if speed is unreliable (too slow / undetected)
-        if speed is not None and speed < 55.0:
+        # Do not record swing points only if speed is clearly invalid
+        if speed is not None and speed < 40.0:
             return
 
         # preserve signed lateral displacement for swing direction
@@ -70,8 +70,8 @@ class SwingHeatmap:
         No confidence scores, no exaggeration.
         """
         avg_speed = None
-        if len(self.speed_samples) >= 4:
-            # Conservative average to avoid exaggeration
+        if len(self.speed_samples) >= 2:
+            # Lightweight average; UI-only, not physics
             avg_speed = sum(self.speed_samples) / float(len(self.speed_samples))
 
         return {

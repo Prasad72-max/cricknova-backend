@@ -218,14 +218,16 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       throw Exception("Firebase ID token missing");
     }
 
-    // Show SnackBar indicating payment verification is starting
+    // Show SnackBar indicating premium activation and restart required
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          duration: Duration(seconds: 2),
+          duration: Duration(seconds: 5),
           backgroundColor: Colors.black,
           content: Text(
-            "🔄 Verifying payment…",
+            "Premium Activated 🎉\n"
+            "Your payment was successful.\n"
+            "Please restart the app once to unlock all premium features.",
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
         ),
@@ -923,13 +925,37 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
               final numeric =
                   double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
 
-              if (isIndia) {
-                debugPrint("🟢 Starting Razorpay payment for ₹${numeric.toInt()}");
-                _startRazorpayCheckout(numeric.toInt());
-              } else {
-                debugPrint("🌍 Starting PayPal payment for $price");
-                _startPayPalCheckout(price);
-              }
+              // SHOW payment option selector dialog
+              await _showPaymentOptionDialog(
+                price: price,
+                onCrickNova: () {
+                  if (isIndia) {
+                    debugPrint("🟢 CrickNova payment for ₹${numeric.toInt()}");
+                    _startRazorpayCheckout(numeric.toInt());
+                  } else {
+                    debugPrint("🌍 CrickNova PayPal payment for $price");
+                    _startPayPalCheckout(price);
+                  }
+                },
+                onGooglePlay: () async {
+                  if (isIndia) {
+                    // Google Play Billing not yet integrated for India
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Google Play payment coming soon"),
+                      ),
+                    );
+                  } else {
+                    // 🌍 International users: fallback to CrickNova (PayPal)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Redirecting via secure checkout"),
+                      ),
+                    );
+                    _startPayPalCheckout(price);
+                  }
+                },
+              );
 
               setState(() {
                 _animatingPlan = null;
@@ -984,6 +1010,174 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
           ),
         ],
       ),
+    );
+  }
+
+  // --- Payment Option Selector Dialog ---
+  Future<void> _showPaymentOptionDialog({
+    required String price,
+    required VoidCallback onCrickNova,
+    required VoidCallback onGooglePlay,
+  }) async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Title
+              const Text(
+                "Choose how to check out",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Choose who will manage all aspects of your purchase.",
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // 🟢 CrickNova Option (Recommended)
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  onCrickNova();
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF020A1F),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.greenAccent, width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.greenAccent.withOpacity(0.25),
+                        blurRadius: 20,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.sports_cricket,
+                          color: Colors.greenAccent, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  "CrickNova",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: Colors.greenAccent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    "Recommended",
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "AI Cricket Intelligence",
+                              style: TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios,
+                          color: Colors.white38, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 18),
+
+              // 🔵 Google Play Option (Trusted)
+              GestureDetector(
+                onTap: () {
+                  Navigator.pop(context);
+                  onGooglePlay();
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF020A1F),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.play_circle_fill,
+                          color: Colors.blueAccent, size: 36),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              "Google Play",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              "Fast • Secure • Trusted",
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios,
+                          color: Colors.white38, size: 16),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

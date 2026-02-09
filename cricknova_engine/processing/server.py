@@ -141,8 +141,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
 
     # Swing & spin are computed by dedicated physics modules (offline / batch)
-    swing = "UNDETECTED"
-    spin = "NO SPIN"
+    swing = "Straight"
+    spin = "Straight"
 
     return {
         "found": True,

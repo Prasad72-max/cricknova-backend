@@ -1,149 +1,62 @@
 import math
 import numpy as np
 
-def unmirror_positions(positions):
+def calculate_spin(ball_positions):
     """
-    Correct horizontal mirroring common in mobile cameras.
-    Only applies correction if horizontal motion dominates.
+    STRICT spin classification based on REAL post-pitch deviation.
+    Allowed outputs ONLY:
+    Straight, Off Spin, Leg Spin
     """
-    if len(positions) < 2:
-        return positions
 
-    dx = abs(positions[-1][0] - positions[0][0])
-    dy = abs(positions[-1][1] - positions[0][1])
+    # Default
+    result = {"name": "Straight"}
 
-    # If motion is mostly vertical, do NOT unmirror
-    if dx < dy * 0.3:
-        return positions
+    if not ball_positions or len(ball_positions) < 6:
+        return result
 
-    xs = [p[0] for p in positions]
-    min_x, max_x = min(xs), max(xs)
-    return [((max_x - (x - min_x)), y) for x, y in positions]
+    # --- Pitch detection (max Y = bounce) ---
+    ys = [p[1] for p in ball_positions]
+    pitch_idx = int(np.argmax(ys))
 
-def smooth_positions(positions, window=3):
-    """
-    Simple moving average smoothing to reduce tracker noise.
-    """
-    if len(positions) < window:
-        return positions
+    # Need frames after pitch
+    if pitch_idx < 2 or pitch_idx + 4 >= len(ball_positions):
+        return result
 
-    smoothed = []
-    for i in range(len(positions)):
-        xs, ys = [], []
-        for j in range(max(0, i - window), min(len(positions), i + window + 1)):
-            xs.append(positions[j][0])
-            ys.append(positions[j][1])
-        smoothed.append((sum(xs) / len(xs), sum(ys) / len(ys)))
-    return smoothed
+    # Post-bounce trajectory
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 16]
+    if len(post) < 5:
+        return result
 
-class SwingDetector:
-    def __init__(self, fps=30):
-        self.fps = fps
+    xs = [p[0] for p in post]
+    ys = [p[1] for p in post]
 
-    def _line_angle(self, p1, p2):
-        dx = p2[0] - p1[0]
-        dy = p2[1] - p1[1]
-        if abs(dx) < 1e-6:
-            return 90.0
-        return math.degrees(math.atan2(dy, dx))
+    # Smooth jitter
+    xs = np.convolve(xs, np.ones(3)/3, mode="same")
+    ys = np.convolve(ys, np.ones(3)/3, mode="same")
 
-    def _detect_pitch_index(self, positions):
-        """
-        Detect bounce using strongest vertical direction change.
-        Falls back safely when bounce is weak.
-        """
-        ys = [p[1] for p in positions]
-        diffs = np.diff(ys)
-        if len(diffs) < 3:
-            return None
+    # Normalize lateral movement
+    x0 = xs[0]
+    xs_norm = xs - x0
 
-        accel = np.abs(np.diff(diffs))
-        if len(accel) == 0 or np.max(accel) < 0.3:
-            return None
+    lateral_disp = xs_norm[-1] - xs_norm[0]
+    forward_disp = ys[-1] - ys[0]
 
-        idx = int(np.argmax(accel)) + 1
-        return max(2, min(idx, len(positions) - 3))
+    # Reject unreliable motion
+    if abs(forward_disp) < 1.2:
+        return result
 
-    def detect_swing(self, positions):
-        """
-        Returns raw swing angle (degrees) based purely on trajectory.
-        """
-        # Limit frames to stable delivery window
-        if len(positions) > 120:
-            positions = positions[:120]
+    # Turn angle
+    turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
+    turn_deg = math.degrees(turn_rad)
 
-        # Render-safe minimum frames (keeps physics honest)
-        if not positions or len(positions) < 4:
-            return None
+    # Threshold for visible spin
+    if turn_deg < 0.12 or abs(lateral_disp) < 0.4:
+        return result
 
-        positions = unmirror_positions(positions)
-        positions = smooth_positions(positions)
-
-        # Normalize camera direction (handles mirror / side-angle videos)
-        forward_dx = positions[-1][0] - positions[0][0]
-        camera_sign = 1 if forward_dx >= 0 else -1
-
-        pitch_idx = self._detect_pitch_index(positions)
-        if pitch_idx is None:
-            # fallback: use early vs late trajectory comparison
-            mid = len(positions) // 2
-            angle_pre = self._line_angle(positions[0], positions[mid - 1])
-            angle_post = self._line_angle(positions[mid], positions[-1])
-            delta = angle_post - angle_pre
-            # If deviation is extreme, treat as undetected (camera noise)
-            if abs(delta) > 25:
-                return None
-            return round(float(delta), 2)
-
-        pre_vec = (positions[pitch_idx - 2], positions[pitch_idx - 1])
-        post_vec = (positions[pitch_idx + 1], positions[min(pitch_idx + 2, len(positions) - 1)])
-
-        angle_pre = self._line_angle(*pre_vec)
-        angle_post = self._line_angle(*post_vec)
-
-        swing_angle = (angle_post - angle_pre) * camera_sign
-        # Extreme deviation is likely camera noise, not swing
-        if abs(swing_angle) > 25:
-            return None
-        return round(float(swing_angle), 2)
-
-def classify_swing(swing_deg):
-    """
-    Physics-only swing classification.
-    Names swing ONLY when lateral deviation is meaningful.
-    """
-    if swing_deg is None or math.isnan(swing_deg):
-        return "UNDETECTED"
-
-    # Dead zone: treat tiny deviation as straight
-    if abs(swing_deg) < 0.35:
-        return "STRAIGHT"
-
-    # Direction based on true lateral deviation
-    if swing_deg > 0:
-        return "OUTSWING"
+    # Direction (RH batter view)
+    if lateral_disp < 0:
+        result["name"] = "Off Spin"
     else:
-        return "INSWING"
+        result["name"] = "Leg Spin"
 
-def calculate_swing(ball_positions):
-    detector = SwingDetector()
-    deg = detector.detect_swing(ball_positions)
-    return classify_swing(deg)
-
-def calculate_swing_name(ball_positions):
-    return calculate_swing(ball_positions)
-
-def calculate_swing_full(ball_positions):
-    detector = SwingDetector()
-    swing_deg = detector.detect_swing(ball_positions)
-
-    if swing_deg is None:
-        return {
-            "swing": "UNDETECTED",
-            "swing_degree": None
-        }
-
-    return {
-        "swing": classify_swing(swing_deg),
-        "swing_degree": swing_deg
-    }
+    return result
