@@ -111,10 +111,6 @@ from cricknova_engine.processing.ball_tracker_motion import (
     calculate_ball_speed_kmph
 )
 
-# Physics classifiers (swing, spin)
-from cricknova_engine.processing.spin import calculate_spin
-from cricknova_engine.processing.swing import calculate_swing
-
 # -----------------------------
 # BALL POSITION NORMALIZATION
 # -----------------------------
@@ -620,8 +616,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Straight",
-                "spin": "Straight",
+                "swing": "UNDETECTED",
+                "spin": "NO SPIN",
                 "trajectory": []
             }
 
@@ -658,8 +654,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing = calculate_swing(ball_positions)
-        spin = calculate_spin(ball_positions).get("name", "Straight")
+        swing = speed_result.get("swing", "UNDETECTED")
+        spin = speed_result.get("spin", "NO SPIN")
 
         return {
             "status": "success",
@@ -762,8 +758,8 @@ Mention one mistake and one improvement.
                 "coach_feedback": feedback
             }
 
-        swing = calculate_swing(ball_positions)
-        spin_name = calculate_spin(ball_positions).get("name", "Straight")
+        swing = "UNDETECTED"
+        spin_name = "NO SPIN"
 
         prompt = f"""
 You are an elite cricket batting coach.
@@ -991,11 +987,11 @@ async def ai_coach_diff(
                 "difference": "Ball not detected clearly in one or both videos."
             }
 
-        left_swing = calculate_swing(left_positions)
-        right_swing = calculate_swing(right_positions)
+        left_swing = "UNDETECTED"
+        right_swing = "UNDETECTED"
 
-        left_spin = calculate_spin(left_positions).get("name", "Straight")
-        right_spin = calculate_spin(right_positions).get("name", "Straight")
+        left_spin = "NO SPIN"
+        right_spin = "NO SPIN"
 
         prompt = f"""
 You are an elite cricket batting coach.
@@ -1071,8 +1067,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Straight",
-                "spin": "Straight",
+                "swing": "UNDETECTED",
+                "spin": "NO SPIN",
                 "trajectory": []
             }
 
@@ -1107,8 +1103,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing = calculate_swing(ball_positions)
-        spin = calculate_spin(ball_positions).get("name", "Straight")
+        swing = speed_result.get("swing", "UNDETECTED")
+        spin = speed_result.get("spin", "NO SPIN")
 
         return {
             "status": "success",
