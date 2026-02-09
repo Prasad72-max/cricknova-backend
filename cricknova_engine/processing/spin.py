@@ -100,11 +100,12 @@ def calculate_spin(ball_positions, fps=30):
         result["name"] = _force_spin_fallback(int(abs(lateral_disp) * 10))
         return result
 
-    # Spin direction
+    # Spin direction — FIXED SIGN
+    # Coordinate system inverted: swap OFF / LEG
     if lateral_disp < 0:
-        result["name"] = "Off Spin"
-    else:
         result["name"] = "Leg Spin"
+    else:
+        result["name"] = "Off Spin"
 
     # Spin strength classification (realistic, conservative)
     if turn_deg < 0.35:

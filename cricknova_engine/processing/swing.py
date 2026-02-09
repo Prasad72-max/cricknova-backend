@@ -127,16 +127,16 @@ def calculate_swing(ball_positions, batter_hand="RH"):
         result["name"] = _force_swing_fallback(int(abs(lateral_air_curve) * 1000), batter_hand)
         return result
 
-    # Direction logic (relative to batter)
+    # Direction logic (relative to batter) — FIXED SIGN
     if batter_hand == "RH":
         if lateral_air_curve < 0:
-            result["name"] = "Out Swing"
-        else:
             result["name"] = "In Swing"
+        else:
+            result["name"] = "Out Swing"
     else:
         if lateral_air_curve < 0:
-            result["name"] = "In Swing"
-        else:
             result["name"] = "Out Swing"
+        else:
+            result["name"] = "In Swing"
 
     return result
