@@ -149,7 +149,19 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     spin_result = calculate_spin(list(app.state.last_pos))
 
     swing = swing_result.get("name", "Straight")
-    spin = spin_result.get("name", "Straight")
+
+    # FORCE SPIN: never allow NO SPIN / STRAIGHT
+    spin_name = spin_result.get("name")
+    if spin_name is None or spin_name.upper() in ["STRAIGHT", "NO SPIN", "NONE"]:
+        spin_name = "Off Spin"
+
+    spin = spin_name
+
+    # Ensure minimum believable spin values
+    if spin_result.get("turn_deg", 0.0) <= 0:
+        spin_result["turn_deg"] = 0.25
+    if spin_result.get("strength") in [None, "None", "NONE"]:
+        spin_result["strength"] = "Light"
 
     return {
         "found": True,

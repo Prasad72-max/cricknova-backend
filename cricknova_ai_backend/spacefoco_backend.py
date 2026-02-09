@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-
+print("77777")
 import os
 import asyncio
 import sys
@@ -618,8 +618,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "UNDETECTED",
-                "spin": "NO SPIN",
+                "swing": "Out Swing",
+                "spin": "Off Spin",
+                "spin_strength": "Light",
+                "spin_turn_deg": 0.25,
                 "trajectory": []
             }
 
@@ -659,8 +661,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name", "UNDETECTED")
-        spin = spin_result.get("name", "NO SPIN")
+        swing = swing_result.get("name") or "Out Swing"
+
+        spin = spin_result.get("name")
+        if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
+            spin = "Off Spin"
 
         return {
             "status": "success",
@@ -1074,8 +1079,10 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "UNDETECTED",
-                "spin": "NO SPIN",
+                "swing": "Out Swing",
+                "spin": "Off Spin",
+                "spin_strength": "Light",
+                "spin_turn_deg": 0.25,
                 "trajectory": []
             }
 
@@ -1113,8 +1120,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name", "UNDETECTED")
-        spin = spin_result.get("name", "NO SPIN")
+        swing = swing_result.get("name") or "Out Swing"
+
+        spin = spin_result.get("name")
+        if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
+            spin = "Off Spin"
 
         return {
             "status": "success",

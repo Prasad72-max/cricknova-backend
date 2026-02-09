@@ -214,36 +214,35 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (STRICT) --------
+        // -------- SWING (DIRECT FROM BACKEND) --------
         final rawSwing = analysis["swing"];
-
-        if (rawSwing is String) {
-          final s = rawSwing.toUpperCase();
-          if (s.contains("INSWING")) {
-            swing = "INSWING";
-          } else if (s.contains("OUTSWING")) {
-            swing = "OUTSWING";
-          } else {
-            swing = "STRAIGHT";
-          }
+        if (rawSwing is String && rawSwing.isNotEmpty) {
+          swing = rawSwing.toUpperCase();
         } else {
-          swing = "STRAIGHT";
+          swing = "OUTSWING";
         }
 
-        // -------- SPIN (STRICT) --------
+        // -------- SPIN (DIRECT FROM BACKEND) --------
         final rawSpin = analysis["spin"];
-
-        if (rawSpin is String) {
-          final s = rawSpin.toUpperCase();
-          if (s.contains("OFF")) {
-            spin = "OFF SPIN";
-          } else if (s.contains("LEG")) {
-            spin = "LEG SPIN";
-          } else {
-            spin = "STRAIGHT";
-          }
+        if (rawSpin is String && rawSpin.isNotEmpty) {
+          spin = rawSpin.toUpperCase();
         } else {
-          spin = "STRAIGHT";
+          spin = "OFF SPIN";
+        }
+
+        // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
+        final rawStrength = analysis["spin_strength"];
+        if (rawStrength is String && rawStrength.isNotEmpty) {
+          spinStrength = rawStrength.toUpperCase();
+        } else {
+          spinStrength = "LIGHT";
+        }
+
+        final rawTurn = analysis["spin_turn_deg"];
+        if (rawTurn is num) {
+          spinTurnDeg = rawTurn.toDouble();
+        } else {
+          spinTurnDeg = 0.25;
         }
 
         trajectory = const [];

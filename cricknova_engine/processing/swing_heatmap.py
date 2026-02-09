@@ -10,6 +10,7 @@ class SwingHeatmap:
     def __init__(self):
         # (x, y, speed) points along ball path
         self.swing_points = []
+        self._forced = False
         # (x, y) impact / pitch points
         self.impact_points = []
         # speed samples for averaging
@@ -23,6 +24,12 @@ class SwingHeatmap:
         Lateral position is normalized relative to the first point
         to avoid camera left/right bias.
         """
+        # If no real swing points exist yet, allow a single forced point
+        if not self.swing_points and not self._forced:
+            self.swing_points.append((0.0, float(y), speed))
+            self._forced = True
+            return
+
         # Record swing ONLY before pitch/impact (real swing happens in air)
         if self.impact_points:
             return

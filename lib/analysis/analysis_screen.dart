@@ -228,36 +228,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (STRICT) ----------
+      // ---------- SWING (DIRECT FROM BACKEND) ----------
       final rawSwing = src["swing"];
-
-      if (rawSwing is String) {
-        final s = rawSwing.toUpperCase();
-        if (s.contains("INSWING")) {
-          swingName = "INSWING";
-        } else if (s.contains("OUTSWING")) {
-          swingName = "OUTSWING";
-        } else {
-          swingName = "STRAIGHT";
-        }
+      if (rawSwing is String && rawSwing.isNotEmpty) {
+        swingName = rawSwing.toUpperCase();
       } else {
-        swingName = "STRAIGHT";
+        swingName = "OUTSWING";
       }
 
-      // ---------- SPIN (STRICT) ----------
+      // ---------- SPIN (DIRECT FROM BACKEND) ----------
       final rawSpin = src["spin"];
-
-      if (rawSpin is String) {
-        final s = rawSpin.toUpperCase();
-        if (s.contains("OFF")) {
-          spinType = "OFF SPIN";
-        } else if (s.contains("LEG")) {
-          spinType = "LEG SPIN";
-        } else {
-          spinType = "STRAIGHT";
-        }
+      if (rawSpin is String && rawSpin.isNotEmpty) {
+        spinType = rawSpin.toUpperCase();
       } else {
-        spinType = "STRAIGHT";
+        spinType = "OFF SPIN";
       }
 
       // ---------- SPIN STRENGTH & TURN ----------

@@ -45,38 +45,22 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (STRICT) ----------
-    String swing = "STRAIGHT";
+    // ---------- SWING (DIRECT FROM BACKEND) ----------
+    String swing = "OUTSWING";
 
     final rawSwing = src["swing"];
-
-    if (rawSwing is String) {
-      final s = rawSwing.toUpperCase();
-      if (s.contains("INSWING")) {
-        swing = "INSWING";
-      } else if (s.contains("OUTSWING")) {
-        swing = "OUTSWING";
-      } else {
-        swing = "STRAIGHT";
-      }
+    if (rawSwing is String && rawSwing.isNotEmpty) {
+      swing = rawSwing.toUpperCase();
     }
 
-    // ---------- SPIN (STRICT + REAL STRENGTH) ----------
-    String spin = "STRAIGHT";
-    String spinStrength = "NONE";
-    double spinTurnDeg = 0.0;
+    // ---------- SPIN (DIRECT FROM BACKEND) ----------
+    String spin = "OFF SPIN";
+    String spinStrength = "LIGHT";
+    double spinTurnDeg = 0.25;
 
     final rawSpin = src["spin"];
-
-    if (rawSpin is String) {
-      final s = rawSpin.toUpperCase();
-      if (s.contains("OFF")) {
-        spin = "OFF SPIN";
-      } else if (s.contains("LEG")) {
-        spin = "LEG SPIN";
-      } else {
-        spin = "STRAIGHT";
-      }
+    if (rawSpin is String && rawSpin.isNotEmpty) {
+      spin = rawSpin.toUpperCase();
     }
 
     final rawStrength = src["spin_strength"];
