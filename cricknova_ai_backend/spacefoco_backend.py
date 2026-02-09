@@ -110,6 +110,8 @@ from cricknova_engine.processing.ball_tracker_motion import (
     track_ball_positions,
     calculate_ball_speed_kmph
 )
+from cricknova_engine.processing.swing import calculate_swing
+from cricknova_engine.processing.spin import calculate_spin
 
 # -----------------------------
 # BALL POSITION NORMALIZATION
@@ -654,8 +656,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing = speed_result.get("swing", "UNDETECTED")
-        spin = speed_result.get("spin", "NO SPIN")
+        swing_result = calculate_swing(ball_positions, batter_hand="RH")
+        spin_result = calculate_spin(ball_positions)
+
+        swing = swing_result.get("name", "UNDETECTED")
+        spin = spin_result.get("name", "NO SPIN")
 
         return {
             "status": "success",
@@ -664,6 +669,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
+            "spin_strength": spin_result.get("strength", "None"),
+            "spin_turn_deg": spin_result.get("turn_deg", 0.0),
             "trajectory": []
         }
 
@@ -1103,8 +1110,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing = speed_result.get("swing", "UNDETECTED")
-        spin = speed_result.get("spin", "NO SPIN")
+        swing_result = calculate_swing(ball_positions, batter_hand="RH")
+        spin_result = calculate_spin(ball_positions)
+
+        swing = swing_result.get("name", "UNDETECTED")
+        spin = spin_result.get("name", "NO SPIN")
 
         return {
             "status": "success",
@@ -1113,6 +1123,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
+            "spin_strength": spin_result.get("strength", "None"),
+            "spin_turn_deg": spin_result.get("turn_deg", 0.0),
             "trajectory": []
         }
 

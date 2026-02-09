@@ -61,8 +61,10 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SPIN (STRICT) ----------
+    // ---------- SPIN (STRICT + REAL STRENGTH) ----------
     String spin = "STRAIGHT";
+    String spinStrength = "NONE";
+    double spinTurnDeg = 0.0;
 
     final rawSpin = src["spin"];
 
@@ -75,6 +77,16 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       } else {
         spin = "STRAIGHT";
       }
+    }
+
+    final rawStrength = src["spin_strength"];
+    if (rawStrength is String) {
+      spinStrength = rawStrength.toUpperCase();
+    }
+
+    final rawTurn = src["spin_turn_deg"];
+    if (rawTurn is num) {
+      spinTurnDeg = rawTurn.toDouble();
     }
 
     final List trajectory =
@@ -104,7 +116,12 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             speed,
           ),
           _metric("Swing", swing),
-          _metric("Spin", spin),
+          _metric(
+            "Spin",
+            spinStrength != "NONE"
+                ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
+                : spin,
+          ),
           const SizedBox(height: 25),
 
           _chartTitle("Ball Trajectory"),

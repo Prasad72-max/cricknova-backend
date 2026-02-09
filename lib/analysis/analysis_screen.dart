@@ -26,6 +26,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String? swingName;
   double? swingDegree;
   String? spinType;
+  String? spinStrength;
+  double? spinTurnDeg;
   List<dynamic>? trajectory;
 
   // CHANGE THIS TO YOUR IP:
@@ -80,7 +82,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin",
-              value: spinType ?? "NA",
+              value: (spinStrength != null && spinStrength != "NONE")
+                  ? "${spinType ?? "SPIN"} • $spinStrength (${(spinTurnDeg ?? 0).toStringAsFixed(2)}°)"
+                  : (spinType ?? "NA"),
               icon: Icons.autorenew,
               color: Colors.green,
             ),
@@ -254,6 +258,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         }
       } else {
         spinType = "STRAIGHT";
+      }
+
+      // ---------- SPIN STRENGTH & TURN ----------
+      final rawStrength = src["spin_strength"];
+      if (rawStrength is String) {
+        spinStrength = rawStrength.toUpperCase();
+      } else {
+        spinStrength = null;
+      }
+
+      final rawTurn = src["spin_turn_deg"];
+      if (rawTurn is num) {
+        spinTurnDeg = rawTurn.toDouble();
+      } else {
+        spinTurnDeg = null;
       }
 
       // ---------- TRAJECTORY ----------

@@ -30,7 +30,9 @@ def calculate_spin(ball_positions, fps=30):
 
     # Default: Straight (no post-bounce turn)
     result = {
-        "name": "Straight"
+        "name": "Straight",
+        "strength": "None",
+        "turn_deg": 0.0
     }
 
     # Minimum frames required
@@ -75,15 +77,24 @@ def calculate_spin(ball_positions, fps=30):
     # Compute turn angle
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
+    result["turn_deg"] = round(turn_deg, 3)
 
     # Threshold: below this = Straight
     if turn_deg < 0.12 or abs(lateral_disp) < 0.4:
         return result
 
-    # Direction (batter view convention)
+    # Spin direction
     if lateral_disp < 0:
         result["name"] = "Off Spin"
     else:
         result["name"] = "Leg Spin"
+
+    # Spin strength classification (realistic, conservative)
+    if turn_deg < 0.35:
+        result["strength"] = "Light"
+    elif turn_deg < 0.9:
+        result["strength"] = "Medium"
+    else:
+        result["strength"] = "Big Turn"
 
     return result

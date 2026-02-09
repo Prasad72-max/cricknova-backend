@@ -35,8 +35,12 @@ class _UploadScreenState extends State<UploadScreen> {
   double? speedKmph;
   String speedType = "unavailable";
   String speedNote = "";
+
   String swing = "NA";
   String spin = "NA";
+
+  String spinStrength = "NONE";
+  double spinTurnDeg = 0.0;
   @override
   void initState() {
     super.initState();
@@ -654,7 +658,12 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
-                        _metric("Spin", spin),
+                        _metric(
+                           "Spin",
+                          spinStrength != "NONE"
+                               ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
+                               : spin,
+),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

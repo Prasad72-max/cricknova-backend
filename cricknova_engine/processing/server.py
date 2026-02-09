@@ -5,6 +5,8 @@ import numpy as np
 import math
 import time
 from collections import deque
+from cricknova_engine.processing.swing import calculate_swing
+from cricknova_engine.processing.spin import calculate_spin
 
 app = FastAPI()
 
@@ -140,9 +142,14 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         speed_type = "unavailable"
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
 
-    # Swing & spin are computed by dedicated physics modules (offline / batch)
-    swing = "Straight"
-    spin = "Straight"
+    # -----------------------------
+    # REALISTIC SWING & SPIN (PHYSICS-BASED)
+    # -----------------------------
+    swing_result = calculate_swing(list(app.state.last_pos), batter_hand="RH")
+    spin_result = calculate_spin(list(app.state.last_pos))
+
+    swing = swing_result.get("name", "Straight")
+    spin = spin_result.get("name", "Straight")
 
     return {
         "found": True,
@@ -151,5 +158,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         "speed_note": speed_note,
         "swing": swing,
         "spin": spin,
+        "spin_strength": spin_result.get("strength", "None"),
+        "spin_turn_deg": spin_result.get("turn_deg", 0.0),
         "trajectory": list(last_pos)
     }

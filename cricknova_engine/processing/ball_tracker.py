@@ -13,13 +13,23 @@ def filter_positions(ball_positions):
         return []
 
     filtered = [ball_positions[0]]
-    for x, y, f in ball_positions[1:]:
-        lx, ly, lf = filtered[-1]
+    for item in ball_positions[1:]:
+        # Support both (x, y) and (x, y, frame) tuples
+        if len(item) == 3:
+            x, y, f = item
+        else:
+            x, y = item
+            f = None
+        last = filtered[-1]
+        lx, ly = last[0], last[1]
         dist = math.hypot(x - lx, y - ly)
 
         # Keep only reasonable motion; reject sudden jumps
         if 0 < dist < 200:
-            filtered.append((x, y, f))
+            if f is not None:
+                filtered.append((x, y, f))
+            else:
+                filtered.append((x, y))
 
     return filtered
 

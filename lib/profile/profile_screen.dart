@@ -60,6 +60,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> pickProfileImage() async {
     final XFile? picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("profileImagePath", picked.path);
       setState(() {
         profileImage = File(picked.path);
       });
@@ -424,6 +426,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final XFile? picked =
                       await _picker.pickImage(source: ImageSource.gallery);
                   if (picked != null) {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString("profileImagePath", picked.path);
                     setState(() {
                       profileImage = File(picked.path);
                     });
@@ -438,6 +442,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   final XFile? picked =
                       await _picker.pickImage(source: ImageSource.camera);
                   if (picked != null) {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString("profileImagePath", picked.path);
                     setState(() {
                       profileImage = File(picked.path);
                     });

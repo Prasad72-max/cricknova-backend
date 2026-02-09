@@ -23,14 +23,18 @@ class SwingHeatmap:
         Lateral position is normalized relative to the first point
         to avoid camera left/right bias.
         """
+        # Record swing ONLY before pitch/impact (real swing happens in air)
+        if self.impact_points:
+            return
+
         # Normalize x relative to first point to remove camera bias
         if self.swing_points:
             x0 = self.swing_points[0][0]
             norm_x = x - x0
 
             # Dead-zone to suppress camera jitter (px)
-            # Reduced to allow real swing on mobile videos
-            if abs(norm_x) < 1.2:
+            # Tuned for realistic swing without exaggeration
+            if abs(norm_x) < 0.8:
                 norm_x = 0.0
         else:
             norm_x = 0.0
