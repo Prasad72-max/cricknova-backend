@@ -73,6 +73,20 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       spinTurnDeg = rawTurn.toDouble();
     }
 
+    // ---------- DRS (DECISION REVIEW SYSTEM) ----------
+    String drsDecision = "NOT OUT";
+    String drsReason = "";
+
+    final rawDrs = src["drs_decision"];
+    if (rawDrs is String && rawDrs.isNotEmpty) {
+      drsDecision = rawDrs.toUpperCase();
+    }
+
+    final rawDrsReason = src["drs_reason"];
+    if (rawDrsReason is String && rawDrsReason.isNotEmpty) {
+      drsReason = rawDrsReason;
+    }
+
     final List trajectory =
         (src["trajectory"] is List) ? src["trajectory"] : [];
 
@@ -105,6 +119,12 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             spinStrength != "NONE"
                 ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
                 : spin,
+          ),
+          _metric(
+            "DRS",
+            drsReason.isNotEmpty
+                ? "$drsDecision • $drsReason"
+                : drsDecision,
           ),
           const SizedBox(height: 25),
 

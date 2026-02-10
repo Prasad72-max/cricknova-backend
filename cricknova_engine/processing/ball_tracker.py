@@ -1,3 +1,20 @@
+def normalize_coordinates(ball_positions):
+    """
+    Ensures a consistent left-to-right bowling direction.
+    If ball moves predominantly right-to-left, flip X axis.
+    """
+    if len(ball_positions) < 5:
+        return ball_positions
+
+    xs = [p[0] for p in ball_positions]
+    if xs[-1] < xs[0]:  # moving right-to-left
+        max_x = max(xs)
+        norm = []
+        for p in ball_positions:
+            norm.append((max_x - p[0], p[1], p[2]))
+        return norm
+
+    return ball_positions
 import cv2 as cv
 import numpy as np
 import math
@@ -31,24 +48,6 @@ def filter_positions(ball_positions):
             else:
                 filtered.append((x, y))
 
-    # --- FORCE MINIMUM TURN (VISUAL GUARANTEE) ---
-    # If trajectory is too straight, inject a tiny lateral drift
-    if len(filtered) >= 3:
-        xs = [p[0] for p in filtered]
-        ys = [p[1] for p in filtered]
-
-        # Detect near-straight vertical motion
-        if max(xs) - min(xs) < 3:
-            forced = []
-            drift = 0
-            for i, p in enumerate(filtered):
-                x, y = p[0], p[1]
-                drift += 0.6  # subtle sideways turn per frame
-                if len(p) == 3:
-                    forced.append((int(x + drift), y, p[2]))
-                else:
-                    forced.append((int(x + drift), y))
-            filtered = forced
     return filtered
 
 def track_ball_positions(video_path):
@@ -144,6 +143,9 @@ def track_ball_positions(video_path):
 
     # Final cleanup
     ball_positions = filter_positions(ball_positions)
+
+    # Normalize coordinate system for swing/spin correctness
+    ball_positions = normalize_coordinates(ball_positions)
 
     cap.release()
     return ball_positions, fps
