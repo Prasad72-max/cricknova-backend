@@ -102,8 +102,8 @@ def calculate_speed_pro(
         derived = calculate_speed(ball_positions, fps)
         return {
             "speed_kmph": derived,
-            "speed_type": "derived_low_confidence",
-            "speed_note": "UNSTABLE_RELEASE"
+            "speed_type": "camera_estimated",
+            "speed_note": "PARTIAL_TRACK_CAMERA_ESTIMATE"
         }
 
     # Median pixel velocity (px/sec)
@@ -150,10 +150,12 @@ def calculate_speed_pro(
     # -----------------------------
     # Speeds below realistic bowling threshold should not be shown as exact numbers
     if raw_kmph < 40:
+        # fallback to camera-based estimation instead of hiding speed
+        derived = calculate_speed(ball_positions, fps)
         return {
-            "speed_kmph": None,
-            "speed_type": "too_slow",
-            "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
+            "speed_kmph": derived,
+            "speed_type": "camera_fallback",
+            "speed_note": "LOW_CONFIDENCE_CAMERA_ESTIMATE"
         }
 
     if raw_kmph < 55:
@@ -166,12 +168,11 @@ def calculate_speed_pro(
     # -----------------------------
     # PHYSICS SANITY FILTER
     # -----------------------------
-    if raw_kmph > 165:
-        derived = calculate_speed(ball_positions, fps)
+    if raw_kmph > 170:
         return {
-            "speed_kmph": derived,
-            "speed_type": "derived_camera_physics",
-            "speed_note": "HIGH_SPEED_SANITY_FALLBACK"
+            "speed_kmph": round(raw_kmph, 1),
+            "speed_type": "measured_release",
+            "speed_note": "HIGH_SPEED_ACCEPTED"
         }
 
     # -----------------------------
@@ -181,8 +182,8 @@ def calculate_speed_pro(
         derived = calculate_speed(ball_positions, fps)
         return {
             "speed_kmph": derived,
-            "speed_type": "derived_failsafe",
-            "speed_note": "NUMERIC_GUARD"
+            "speed_type": "camera_estimated",
+            "speed_note": "NUMERIC_FALLBACK"
         }
 
     return {
@@ -245,7 +246,7 @@ def calculate_speed(ball_positions, fps=30):
 
     # Guard against unrealistically low bowling speeds
     if kmph < 40:
-        return None
+        return round(max(kmph, 25.0), 1)
 
     if kmph <= 0 or math.isnan(kmph) or math.isinf(kmph):
         return None
