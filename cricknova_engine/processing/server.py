@@ -84,11 +84,11 @@ async def analyze_live_frame(file: UploadFile = File(...)):
             meters_per_px = 17.0 / 320.0  # tuned release-to-bounce scale
             raw_kmph = px_per_sec * meters_per_px * 3.6
 
-            # LOW SPEED REALISM GUARD (fallback, not hide)
+            # LOW SPEED REALISM GUARD
             if raw_kmph < 40:
-                speed_kmph = round(float(raw_kmph), 1)
-                speed_type = "very_slow_estimate"
-                speed_note = "LOW_SPEED_CAMERA_ESTIMATE"
+                speed_kmph = None
+                speed_type = "too_slow"
+                speed_note = "NON_BOWLING_OR_TRACKING_NOISE"
             elif raw_kmph < 55:
                 speed_kmph = round(float(raw_kmph), 1)
                 speed_type = "very_slow_estimate"
@@ -137,29 +137,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
                     speed_type = "video_derived"
                     speed_note = "PARTIAL_TRACK_PHYSICS"
 
-    # HARD SAFETY: fallback to camera estimate instead of blank
-    if speed_kmph is None and len(app.state.last_pos) >= 6:
-        pts = list(app.state.last_pos)
-        pixel_dists = []
-        for i in range(1, len(pts)):
-            d = math.dist(pts[i], pts[i - 1])
-            if d > 1.0:
-                pixel_dists.append(d)
-
-        if len(pixel_dists) >= 3:
-            avg_px = float(np.mean(pixel_dists))
-            FRAME_METERS = 20.0
-            y_vals = [p[1] for p in pts]
-            pixel_span = abs(max(y_vals) - min(y_vals))
-            if pixel_span > 0:
-                meters_per_px = FRAME_METERS / pixel_span
-                fps_est = 30.0
-                kmph = avg_px * meters_per_px * fps_est * 3.6
-                speed_kmph = round(float(kmph), 1)
-                speed_type = "camera_estimated"
-                speed_note = "LIVE_CAMERA_FALLBACK"
-
-    # FINAL GUARARD (only if still None)
+    # HARD SAFETY: do NOT fabricate speed
     if speed_kmph is None:
         speed_type = "unavailable"
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
@@ -167,11 +145,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # REALISTIC SWING & SPIN (PHYSICS-BASED)
     # -----------------------------
-    # --- CAMERA MIRROR FIX (LIVE MODE) ---
-    # Flip horizontal axis for mirrored camera input
-    mirrored_positions = [(frame.shape[1] - x, y) for (x, y) in app.state.last_pos]
-    swing_result = calculate_swing(mirrored_positions, batter_hand="RH")
-    spin_result = calculate_spin(mirrored_positions)
+    swing_result = calculate_swing(list(app.state.last_pos), batter_hand="RH")
+    spin_result = calculate_spin(list(app.state.last_pos))
 
     swing = swing_result.get("name", "Straight")
 

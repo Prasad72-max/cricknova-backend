@@ -645,9 +645,18 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if speed_kmph is None:
             fallback = fallback_speed_camera_normalized(ball_positions, fps)
             if fallback is not None:
-                speed_kmph = round(float(fallback), 1)
-                speed_type = "camera_normalized"
-                speed_note = "Estimated from real pixel motion"
+                if fallback < 40.0:
+                    speed_kmph = None
+                    speed_type = "too_slow"
+                    speed_note = "NON_BOWLING_OR_TRACKING_NOISE"
+                elif fallback < 55.0:
+                    speed_kmph = round(float(fallback), 1)
+                    speed_type = "very_slow_estimate"
+                    speed_note = "BORDERLINE_LOW_SPEED"
+                else:
+                    speed_kmph = round(float(fallback), 1)
+                    speed_type = "camera_normalized"
+                    speed_note = "Fallback from real pixel motion (non-scripted)"
 
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)

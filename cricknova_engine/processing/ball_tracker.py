@@ -139,12 +139,7 @@ def track_ball_positions(video_path):
         else:
             miss_count = 0
 
-        # --- CAMERA MIRROR FIX (GLOBAL) ---
-        # Normalize horizontal axis so left/right is consistent across devices
-        frame_width = frame.shape[1]
-        mirrored_x = frame_width - chosen[0]
-        ball_positions.append((mirrored_x, chosen[1], frame_idx))
-
+        ball_positions.append((chosen[0], chosen[1], frame_idx))
         prev_center = chosen
 
     # Final cleanup
@@ -202,9 +197,9 @@ def compute_speed_kmph(ball_positions, fps):
 
             if kmph < 40.0:
                 return {
-                    "speed_kmph": round(max(kmph, 25.0), 1),
-                    "speed_type": "very_slow_estimate",
-                    "speed_note": "LOW_SPEED_CAMERA_ESTIMATE"
+                    "speed_kmph": None,
+                    "speed_type": "too_slow",
+                    "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
                 }
             elif kmph < 55.0:
                 return {
@@ -233,12 +228,12 @@ def compute_speed_kmph(ball_positions, fps):
     meters_per_px = 17.0 / 320.0
     raw_kmph = px_per_sec * meters_per_px * 3.6
 
-    # LOW SPEED REALISM GUARD (fallback, not hide)
+    # LOW SPEED REALISM GUARD
     if raw_kmph < 40.0:
         return {
-            "speed_kmph": round(max(raw_kmph, 25.0), 1),
-            "speed_type": "very_slow_estimate",
-            "speed_note": "LOW_SPEED_CAMERA_ESTIMATE"
+            "speed_kmph": None,
+            "speed_type": "too_slow",
+            "speed_note": "NON_BOWLING_OR_TRACKING_NOISE"
         }
     elif raw_kmph < 55.0:
         return {

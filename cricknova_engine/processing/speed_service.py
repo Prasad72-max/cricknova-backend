@@ -44,14 +44,12 @@ def estimate_speed(video_path):
 
     speed_kmph = result.get("speed_kmph")
 
-    # If physics fails, fall back to camera-based estimate
+    # Respect physics engine decision: do not coerce or invent speed
     if speed_kmph is None:
-        from .speed import calculate_speed
-        derived = calculate_speed(stable_positions, fps)
         return {
-            "speed_kmph": derived,
-            "speed_type": "camera_estimated",
-            "speed_note": "PHYSICS_UNSTABLE_CAMERA_FALLBACK"
+            "speed_kmph": None,
+            "speed_type": result.get("speed_type", "unavailable"),
+            "speed_note": result.get("speed_note", "INVALID_OR_INSUFFICIENT_PHYSICS")
         }
 
     # Final numeric sanity check (no rescue, no fallback)
@@ -60,16 +58,14 @@ def estimate_speed(video_path):
         if speed_kmph <= 0 or speed_kmph != speed_kmph:
             raise ValueError("Invalid speed")
     except Exception:
-        from .speed import calculate_speed
-        derived = calculate_speed(stable_positions, fps)
         return {
-            "speed_kmph": derived,
-            "speed_type": "camera_estimated",
-            "speed_note": "NUMERIC_FALLBACK_CAMERA_ESTIMATE"
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INVALID_OR_INSUFFICIENT_PHYSICS"
         }
 
     return {
-        "speed_kmph": round(speed_kmph, 1),
+        "speed_kmph": speed_kmph,
         "speed_type": result.get("speed_type", "derived_physics"),
-        "speed_note": result.get("speed_note", "PHYSICS_ENGINE_OUTPUT")
+        "speed_note": result.get("speed_note", "PHYSICS_FALLBACK_APPLIED")
     }
