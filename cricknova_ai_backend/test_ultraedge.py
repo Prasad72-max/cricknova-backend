@@ -32,10 +32,19 @@ confidence = float(result.get("confidence", 0.0))
 print(f"Contact    : {'YES (BAT/PAD)' if contact else 'NO CONTACT'}")
 print(f"Confidence : {confidence:.2f}")
 
-# Final DRS-style decision
-if contact:
-    print("DRS RESULT : 🟢 NOT OUT (UltraEdge spike detected)")
+# Final DRS-style decision (real logic)
+contact_type = result.get("type", "").upper()
+
+if contact_type == "BAT":
+    print("DRS RESULT : 🟢 NOT OUT (Bat involved)")
+
+elif contact_type == "PAD":
+    print("DRS RESULT : 🔴 OUT (Pad before wicket – LBW possible)")
+
+elif contact:
+    print("DRS RESULT : 🟡 CONTACT DETECTED (Proceed to ball tracking)")
+
 else:
-    print("DRS RESULT : 🔴 PROCEED TO BALL TRACKING")
+    print("DRS RESULT : 🟢 NOT OUT (No bat, proceed to ball tracking)")
 
 print("==========================\n")

@@ -6,9 +6,9 @@ import numpy as np
 
 class FusionEngine:
     def __init__(self):
-        self.edge_threshold = 0.48     # tuned sensitivity
-        self.min_dev_for_edge = 8      # degrees change after contact
-        self.min_speed_drop = 0.55     # 45%+ drop means possible edge
+        self.edge_threshold = 0.35      # more sensitive to real bat contact
+        self.min_dev_for_edge = 6       # allow smaller deflection
+        self.min_speed_drop = 0.65      # realistic post-bat slowdown
 
     def fuse(self, trajectory, ultraedge_data, positions, contact_frame):
         """
@@ -57,13 +57,23 @@ class FusionEngine:
                 }
 
         # ------------------------------------------------------------
-        # Vision-only detection (if angle deviation is huge)
+        # Vision-only detection (strong deviation + slowdown)
         # ------------------------------------------------------------
-        if deviation > 15 and speed_ratio < 0.65:
+        if deviation > 12 and speed_ratio < 0.70:
             return {
                 "result": "BAT",
-                "confidence": 0.45
+                "confidence": 0.5
             }
+
+        # ------------------------------------------------------------
+        # PAD / LBW DEFLECTION (no spike, but clear slowdown + drop)
+        # ------------------------------------------------------------
+        if not spike:
+            if speed_ratio < 0.55 and deviation < 4:
+                return {
+                    "result": "PAD",
+                    "confidence": 0.55
+                }
 
         # ------------------------------------------------------------
         # No edge

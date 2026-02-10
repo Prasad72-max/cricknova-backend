@@ -219,7 +219,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSwing is String && rawSwing.isNotEmpty) {
           swing = rawSwing.toUpperCase();
         } else {
-          swing = "OUTSWING";
+          swing = "UNDETECTED";
         }
 
         // -------- SPIN (DIRECT FROM BACKEND) --------
@@ -227,7 +227,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSpin is String && rawSpin.isNotEmpty) {
           spin = rawSpin.toUpperCase();
         } else {
-          spin = "OFF SPIN";
+          spin = "UNDETECTED";
         }
 
         // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
@@ -235,14 +235,14 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawStrength is String && rawStrength.isNotEmpty) {
           spinStrength = rawStrength.toUpperCase();
         } else {
-          spinStrength = "LIGHT";
+          spinStrength = "NONE";
         }
 
         final rawTurn = analysis["spin_turn_deg"];
         if (rawTurn is num) {
           spinTurnDeg = rawTurn.toDouble();
         } else {
-          spinTurnDeg = 0.25;
+          spinTurnDeg = 0.0;
         }
 
         trajectory = const [];

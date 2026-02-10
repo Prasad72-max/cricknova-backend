@@ -83,15 +83,14 @@ def analyze_training(data):
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.70:  # Raised threshold
+
+    elif stump_confidence >= 0.55:
         decision = "OUT"
-        reason = "Plumb LBW - stumps hit"
-    elif stump_confidence >= 0.45:
-        decision = "UMPIRE'S CALL"
-        reason = "Clipping stumps - marginal"
+        reason = "Ball hitting stumps"
+
     else:
         decision = "NOT OUT"
-        reason = "Missing stumps outside line"
+        reason = "No bat and insufficient stump impact"
     
     return {
         "drs": {

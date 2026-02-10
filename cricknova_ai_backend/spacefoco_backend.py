@@ -1154,8 +1154,8 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     if not ball_positions:
         return False, 0.0
 
-    stump_x_min = frame_width * 0.47
-    stump_x_max = frame_width * 0.53
+    stump_x_min = frame_width * 0.44
+    stump_x_max = frame_width * 0.56
     stump_y_min = frame_height * 0.64
     stump_y_max = frame_height * 0.90
 
@@ -1189,6 +1189,20 @@ def ball_near_bat_zone(ball_positions, frame_width, frame_height):
         if bat_x_min <= x <= bat_x_max and bat_y_min <= y <= bat_y_max:
             return True
 
+    return False
+
+def detect_lbw_from_positions(ball_positions, frame_width, frame_height):
+    if not ball_positions or len(ball_positions) < 6:
+        return False
+
+    pad_x_min = frame_width * 0.42
+    pad_x_max = frame_width * 0.58
+    pad_y_min = frame_height * 0.55
+    pad_y_max = frame_height * 0.78
+
+    for (x, y) in ball_positions[-6:]:
+        if pad_x_min <= x <= pad_x_max and pad_y_min <= y <= pad_y_max:
+            return True
     return False
 
 # -----------------------------
@@ -1267,18 +1281,30 @@ async def drs_review(file: UploadFile = File(...)):
             frame_height
         )
 
+        lbw_possible = detect_lbw_from_positions(
+            ball_positions,
+            frame_width,
+            frame_height
+        )
+
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)
         # -----------------------------
         if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
+
         elif hits_stumps:
             decision = "OUT"
             reason = "Ball hitting stumps"
+
+        elif lbw_possible:
+            decision = "OUT"
+            reason = "LBW – ball in line & hitting stumps"
+
         else:
             decision = "NOT OUT"
-            reason = "Ball missing stumps"
+            reason = "No bat, no stump impact"
 
         return {
             "status": "success",
