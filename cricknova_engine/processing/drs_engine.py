@@ -69,22 +69,22 @@ def analyze_training(data):
     ultraedge = bool(video_path and detect_ultraedge(video_path, trajectory))
     stump_confidence = detect_stump_hit(trajectory)
 
-    # PHYSICS-BASED DECISION TREE (TV DRS logic)
+    # PHYSICS-BASED DRS (NO DEFAULT NOT OUT)
     if ultraedge:
-        decision = "NOT OUT"
-        reason = "UltraEdge: Bat first contact"
+        decision = "OUT"
+        reason = "UltraEdge: Bat contact detected"
 
-    elif stump_confidence >= 0.55:
+    elif stump_confidence >= 0.6:
         decision = "OUT"
         reason = "Ball hitting stumps"
 
     elif not trajectory or len(trajectory) < 6:
         decision = "INCONCLUSIVE"
-        reason = "Insufficient ball tracking data for DRS"
+        reason = "Insufficient tracking data"
 
     else:
-        decision = "NOT OUT"
-        reason = "No bat and insufficient stump impact"
+        decision = "INCONCLUSIVE"
+        reason = "No conclusive bat or stump evidence"
 
     return {
         "drs": {

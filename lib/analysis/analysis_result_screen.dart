@@ -46,7 +46,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     }
 
     // ---------- SWING (DIRECT FROM BACKEND) ----------
-    String swing = "OUTSWING";
+    String swing = "NA";
 
     final rawSwing = src["swing"];
     if (rawSwing is String && rawSwing.isNotEmpty) {
@@ -54,9 +54,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     }
 
     // ---------- SPIN (DIRECT FROM BACKEND) ----------
-    String spin = "OFF SPIN";
-    String spinStrength = "LIGHT";
-    double spinTurnDeg = 0.25;
+    String spin = "NA";
+    String spinStrength = "NA";
+    double spinTurnDeg = 0.0;
 
     final rawSpin = src["spin"];
     if (rawSpin is String && rawSpin.isNotEmpty) {
@@ -74,7 +74,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     }
 
     // ---------- DRS (DECISION REVIEW SYSTEM) ----------
-    String drsDecision = "NOT OUT";
+    String drsDecision = "NA";
     String drsReason = "";
 
     final rawDrs = src["drs_decision"];

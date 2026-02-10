@@ -2,32 +2,42 @@ import numpy as np
 
 class ContactDetector:
 
-    def detect_contact(self, smoothed_positions, threshold=0.45):
+    def detect_contact(self, smoothed_positions, min_frames=6):
         """
-        Detects WHEN the bat impacts the ball.
-        smoothed_positions = list of (x,y) ball positions
-        threshold = how sharp the slowdown must be to count as contact
+        Detects WHEN the bat impacts the ball using adaptive deceleration.
+        Returns frame index of contact or None if evidence is insufficient.
         """
 
-        if len(smoothed_positions) < 5:
-            return None   # not enough frames
+        if len(smoothed_positions) < min_frames:
+            return None  # insufficient evidence
 
         velocities = []
 
-        # Calculate ball speed between frames
+        # Calculate per-frame ball speed
         for i in range(1, len(smoothed_positions)):
             p1 = np.array(smoothed_positions[i - 1])
             p2 = np.array(smoothed_positions[i])
-            dist = np.linalg.norm(p2 - p1)
-            velocities.append(dist)
+            velocities.append(np.linalg.norm(p2 - p1))
 
-        # Find sudden slowdown (ball loses speed at bat contact)
-        for i in range(2, len(velocities)):
-            prev_speed = velocities[i - 1]
-            curr_speed = velocities[i]
+        velocities = np.array(velocities)
 
-            # ball suddenly decelerates
-            if prev_speed > 0 and (curr_speed / prev_speed) < threshold:
-                return i  # this frame is contact
+        # Ignore near-zero noise
+        valid = velocities[velocities > 1e-3]
+        if len(valid) < 4:
+            return None
+
+        # Adaptive slowdown threshold based on median behaviour
+        median_speed = np.median(valid)
+        slowdown_indices = []
+
+        for i in range(1, len(velocities)):
+            if velocities[i - 1] > 0:
+                ratio = velocities[i] / velocities[i - 1]
+                if ratio < 0.6 and velocities[i - 1] > 0.5 * median_speed:
+                    slowdown_indices.append(i)
+
+        # Contact only if slowdown is sharp AND isolated
+        if slowdown_indices:
+            return slowdown_indices[0]
 
         return None

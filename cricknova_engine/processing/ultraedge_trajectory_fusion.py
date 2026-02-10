@@ -6,9 +6,9 @@ import numpy as np
 
 class FusionEngine:
     def __init__(self):
-        self.edge_threshold = 0.35      # more sensitive to real bat contact
-        self.min_dev_for_edge = 6       # allow smaller deflection
-        self.min_speed_drop = 0.65      # realistic post-bat slowdown
+        self.edge_threshold = 0.22      # lower: real bat edges often weak in video
+        self.min_dev_for_edge = 3.0     # degrees, allow micro deflections
+        self.min_speed_drop = 0.85      # realistic bat contact slowdown
 
     def fuse(self, trajectory, ultraedge_data, positions, contact_frame):
         """
@@ -37,43 +37,32 @@ class FusionEngine:
         speed_ratio  = speed_after / (speed_before + 0.0001)
 
         # ------------------------------------------------------------
-        # HARD EDGE CONFIRMATION RULE
+        # HARD EDGE CONFIRMATION (pure physics)
         # ------------------------------------------------------------
-        if spike and spike_power > self.edge_threshold:
-            if deviation > self.min_dev_for_edge and speed_ratio < self.min_speed_drop:
+        if spike:
+            if deviation >= self.min_dev_for_edge and speed_ratio <= self.min_speed_drop:
                 return {
                     "result": "BAT",
-                    "confidence": min(1.0, spike_power * 1.2)
+                    "confidence": min(1.0, 0.6 + spike_power)
                 }
 
         # ------------------------------------------------------------
-        # LIGHT EDGE (UltraEdge small spike + small deviation)
+        # VISION-ONLY EDGE (no audio spike, but real deflection)
         # ------------------------------------------------------------
-        if spike and spike_power > 0.25:
-            if deviation > 4 and speed_ratio < 0.80:
-                return {
-                    "result": "BAT",
-                    "confidence": spike_power
-                }
-
-        # ------------------------------------------------------------
-        # Vision-only detection (strong deviation + slowdown)
-        # ------------------------------------------------------------
-        if deviation > 12 and speed_ratio < 0.70:
+        if deviation >= 8 and speed_ratio <= 0.78:
             return {
                 "result": "BAT",
-                "confidence": 0.5
+                "confidence": 0.55
             }
 
         # ------------------------------------------------------------
-        # PAD / LBW DEFLECTION (no spike, but clear slowdown + drop)
+        # PAD / BODY CONTACT (no angular change, heavy energy loss)
         # ------------------------------------------------------------
-        if not spike:
-            if speed_ratio < 0.55 and deviation < 4:
-                return {
-                    "result": "PAD",
-                    "confidence": 0.55
-                }
+        if deviation < 3 and speed_ratio <= 0.60:
+            return {
+                "result": "PAD",
+                "confidence": 0.6
+            }
 
         # ------------------------------------------------------------
         # No edge

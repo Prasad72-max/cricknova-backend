@@ -144,8 +144,8 @@ def track_ball_positions(video_path):
     # Final cleanup
     ball_positions = filter_positions(ball_positions)
 
-    # Normalize coordinate system for swing/spin correctness
-    ball_positions = normalize_coordinates(ball_positions)
+    # Do NOT normalize direction: preserve real lateral movement for swing/spin
+    # ball_positions = normalize_coordinates(ball_positions)
 
     cap.release()
     return ball_positions, fps

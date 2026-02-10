@@ -1244,32 +1244,11 @@ async def drs_review(file: UploadFile = File(...)):
             frame_width, frame_height = 640, 360
 
         # -----------------------------
-        # ULTRAEDGE (STRICT PHYSICS)
+        # ULTRAEDGE (DISABLED – NO FAKE EDGE)
         # -----------------------------
+        # UltraEdge removed because geometry-only inference caused false NOT OUT.
+        # DRS decisions now rely strictly on ball tracking & LBW physics.
         ultraedge = False
-
-        if ball_near_bat_zone(ball_positions, frame_width, frame_height):
-            # Use only last frames near bat
-            recent = ball_positions[-6:]
-
-            xs = [p[0] for p in recent]
-            ys = [p[1] for p in recent]
-
-            # Horizontal deflection after bat contact
-            dx1 = xs[2] - xs[0]
-            dx2 = xs[5] - xs[3]
-
-            dy1 = ys[2] - ys[0]
-            dy2 = ys[5] - ys[3]
-
-            # Physics rules:
-            # 1. Forward motion must reduce suddenly
-            # 2. Lateral motion must increase suddenly
-            forward_drop = abs(dy2) < abs(dy1) * 0.55
-            lateral_jump = abs(dx2) > abs(dx1) * 1.8
-
-            if forward_drop and lateral_jump:
-                ultraedge = True
 
         # -----------------------------
         # BALL TRACKING (STUMP HIT)

@@ -32,19 +32,22 @@ confidence = float(result.get("confidence", 0.0))
 print(f"Contact    : {'YES (BAT/PAD)' if contact else 'NO CONTACT'}")
 print(f"Confidence : {confidence:.2f}")
 
-# Final DRS-style decision (real logic)
+# Final DRS-style decision (REAL ICC FLOW)
+# UltraEdge can NEVER force NOT OUT
+# It only informs contact, decision comes from ball tracking / impact
+
 contact_type = result.get("type", "").upper()
 
 if contact_type == "BAT":
-    print("DRS RESULT : 🟢 NOT OUT (Bat involved)")
+    print("DRS RESULT : 🟡 BAT CONTACT (Proceed to ball tracking)")
 
 elif contact_type == "PAD":
-    print("DRS RESULT : 🔴 OUT (Pad before wicket – LBW possible)")
+    print("DRS RESULT : 🟡 PAD CONTACT (Proceed to LBW check)")
 
 elif contact:
     print("DRS RESULT : 🟡 CONTACT DETECTED (Proceed to ball tracking)")
 
 else:
-    print("DRS RESULT : 🟢 NOT OUT (No bat, proceed to ball tracking)")
+    print("DRS RESULT : 🟡 NO CONTACT (Proceed to ball tracking)")
 
 print("==========================\n")

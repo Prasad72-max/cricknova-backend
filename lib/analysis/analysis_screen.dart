@@ -228,20 +228,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (DIRECT FROM BACKEND) ----------
+      // ---------- SWING (PURE BACKEND, NO DEFAULTS) ----------
       final rawSwing = src["swing"];
-      if (rawSwing is String && rawSwing.isNotEmpty) {
+      if (rawSwing is String && rawSwing.trim().isNotEmpty) {
         swingName = rawSwing.toUpperCase();
       } else {
-        swingName = "OUTSWING";
+        swingName = null; // truly unknown
       }
 
-      // ---------- SPIN (DIRECT FROM BACKEND) ----------
+      // ---------- SPIN (PURE BACKEND, NO DEFAULTS) ----------
       final rawSpin = src["spin"];
-      if (rawSpin is String && rawSpin.isNotEmpty) {
+      if (rawSpin is String && rawSpin.trim().isNotEmpty) {
         spinType = rawSpin.toUpperCase();
       } else {
-        spinType = "OFF SPIN";
+        spinType = null; // truly unknown
       }
 
       // ---------- SPIN STRENGTH & TURN ----------

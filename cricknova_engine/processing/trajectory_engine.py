@@ -1,5 +1,3 @@
-
-
 """
 trajectory_engine.py
 --------------------
@@ -107,10 +105,13 @@ class TrajectoryEngine:
             return None
 
     def _detect_swing(self, fit):
-        # lateral acceleration sign before pitch
+        # lateral acceleration before pitch (real physics only)
         ax = 2 * fit[0][0]
-        if abs(ax) < 0.02:
-            return "Straight"
+
+        # very small values are noise → no decision
+        if abs(ax) < 0.008:
+            return None
+
         return "In Swing" if ax < 0 else "Out Swing"
 
     def _detect_spin(self, pre, post):
@@ -118,8 +119,9 @@ class TrajectoryEngine:
         post_ax = 2 * post[0][0]
         delta = post_ax - pre_ax
 
-        if abs(delta) < 0.03:
-            return "No Spin"
+        # below noise floor → no spin detected
+        if abs(delta) < 0.01:
+            return None
 
         # sign convention: +ve = leg spin, -ve = off spin
         return "Leg Spin" if delta > 0 else "Off Spin"
