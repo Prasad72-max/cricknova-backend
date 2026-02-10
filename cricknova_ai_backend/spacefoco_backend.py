@@ -618,10 +618,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Out Swing",
-                "spin": "Off Spin",
-                "spin_strength": "Light",
-                "spin_turn_deg": 0.25,
+                "swing": "STRAIGHT",
+                "spin": "NO SPIN",
+                "spin_strength": "NONE",
+                "spin_turn_deg": 0.0,
                 "trajectory": []
             }
 
@@ -658,14 +658,18 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
+        # --- REAL SWING & SPIN (PHYSICS-BASED) ---
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Out Swing"
+        swing = swing_result.get("name") or "STRAIGHT"
 
         spin = spin_result.get("name")
         if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
-            spin = "Off Spin"
+            spin = "NO SPIN"
+
+        spin_strength = spin_result.get("strength", "None")
+        spin_turn_deg = spin_result.get("turn_deg", 0.0)
 
         return {
             "status": "success",
@@ -674,8 +678,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_result.get("strength", "None"),
-            "spin_turn_deg": spin_result.get("turn_deg", 0.0),
+            "spin_strength": spin_strength,
+            "spin_turn_deg": spin_turn_deg,
             "trajectory": []
         }
 
@@ -1079,10 +1083,10 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Out Swing",
-                "spin": "Off Spin",
-                "spin_strength": "Light",
-                "spin_turn_deg": 0.25,
+                "swing": "STRAIGHT",
+                "spin": "NO SPIN",
+                "spin_strength": "NONE",
+                "spin_turn_deg": 0.0,
                 "trajectory": []
             }
 
@@ -1120,11 +1124,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Out Swing"
+        swing = swing_result.get("name") or "STRAIGHT"
 
         spin = spin_result.get("name")
         if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
-            spin = "Off Spin"
+            spin = "NO SPIN"
 
         return {
             "status": "success",
