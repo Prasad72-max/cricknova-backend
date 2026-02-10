@@ -145,8 +145,11 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # REALISTIC SWING & SPIN (PHYSICS-BASED)
     # -----------------------------
-    swing_result = calculate_swing(list(app.state.last_pos), batter_hand="RH")
-    spin_result = calculate_spin(list(app.state.last_pos))
+    # --- CAMERA MIRROR FIX (LIVE MODE) ---
+    # Flip horizontal axis for mirrored camera input
+    mirrored_positions = [(frame.shape[1] - x, y) for (x, y) in app.state.last_pos]
+    swing_result = calculate_swing(mirrored_positions, batter_hand="RH")
+    spin_result = calculate_spin(mirrored_positions)
 
     swing = swing_result.get("name", "Straight")
 

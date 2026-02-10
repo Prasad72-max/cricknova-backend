@@ -39,6 +39,10 @@ class SwingHeatmap:
             x0 = self.swing_points[0][0]
             norm_x = x - x0
 
+            # --- CAMERA MIRROR FIX ---
+            # Flip horizontal axis so heatmap matches swing direction
+            norm_x *= -1
+
             # Dead-zone to suppress camera jitter (px)
             # Tuned for realistic swing without exaggeration
             if abs(norm_x) < 0.8:

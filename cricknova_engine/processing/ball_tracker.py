@@ -139,7 +139,12 @@ def track_ball_positions(video_path):
         else:
             miss_count = 0
 
-        ball_positions.append((chosen[0], chosen[1], frame_idx))
+        # --- CAMERA MIRROR FIX (GLOBAL) ---
+        # Normalize horizontal axis so left/right is consistent across devices
+        frame_width = frame.shape[1]
+        mirrored_x = frame_width - chosen[0]
+        ball_positions.append((mirrored_x, chosen[1], frame_idx))
+
         prev_center = chosen
 
     # Final cleanup

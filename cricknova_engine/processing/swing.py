@@ -57,6 +57,9 @@ def calculate_spin(ball_positions):
 
     # Accumulate lateral curvature
     lateral_curve = np.sum(dx)
+    # --- CAMERA MIRROR FIX ---
+    # Flip horizontal axis to correct mirrored videos
+    lateral_curve *= -1
 
     # Compute curvature ratio
     curvature_ratio = abs(lateral_curve) / (abs(forward_motion) + 1e-6)
@@ -118,6 +121,9 @@ def calculate_swing(ball_positions, batter_hand="RH"):
 
     # Accumulate lateral air movement
     lateral_air_curve = np.sum(dx)
+    # --- CAMERA MIRROR FIX ---
+    # Flip horizontal axis to correct mirrored videos
+    lateral_air_curve *= -1
 
     # Normalize by travel distance
     curve_ratio = abs(lateral_air_curve) / (abs(forward_motion) + 1e-6)
