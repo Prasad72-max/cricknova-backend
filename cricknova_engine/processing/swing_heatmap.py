@@ -24,11 +24,6 @@ class SwingHeatmap:
         Lateral position is normalized relative to the first point
         to avoid camera left/right bias.
         """
-        # If no real swing points exist yet, allow a single forced point
-        if not self.swing_points and not self._forced:
-            self.swing_points.append((0.0, float(y), speed))
-            self._forced = True
-            return
 
         # Record swing ONLY before pitch/impact (real swing happens in air)
         if self.impact_points:
@@ -38,15 +33,6 @@ class SwingHeatmap:
         if self.swing_points:
             x0 = self.swing_points[0][0]
             norm_x = x - x0
-
-            # --- CAMERA MIRROR FIX ---
-            # Flip horizontal axis so heatmap matches swing direction
-            norm_x *= -1
-
-            # Dead-zone to suppress camera jitter (px)
-            # Tuned for realistic swing without exaggeration
-            if abs(norm_x) < 0.8:
-                norm_x = 0.0
         else:
             norm_x = 0.0
 

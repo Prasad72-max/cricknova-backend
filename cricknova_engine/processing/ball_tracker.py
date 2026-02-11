@@ -1,20 +1,3 @@
-def normalize_coordinates(ball_positions):
-    """
-    Ensures a consistent left-to-right bowling direction.
-    If ball moves predominantly right-to-left, flip X axis.
-    """
-    if len(ball_positions) < 5:
-        return ball_positions
-
-    xs = [p[0] for p in ball_positions]
-    if xs[-1] < xs[0]:  # moving right-to-left
-        max_x = max(xs)
-        norm = []
-        for p in ball_positions:
-            norm.append((max_x - p[0], p[1], p[2]))
-        return norm
-
-    return ball_positions
 import cv2 as cv
 import numpy as np
 import math
@@ -143,9 +126,6 @@ def track_ball_positions(video_path):
 
     # Final cleanup
     ball_positions = filter_positions(ball_positions)
-
-    # Do NOT normalize direction: preserve real lateral movement for swing/spin
-    # ball_positions = normalize_coordinates(ball_positions)
 
     cap.release()
     return ball_positions, fps

@@ -1,21 +1,6 @@
 import math
 import numpy as np
 
-def _force_swing_fallback(seed_value, batter_hand="RH"):
-    """
-    Deterministic fallback swing so EVERY video shows swing.
-    Same input -> same swing (no flicker).
-    """
-    try:
-        h = int(seed_value) % 2
-    except Exception:
-        h = 0
-
-    if batter_hand == "RH":
-        return "Out Swing" if h == 0 else "In Swing"
-    else:
-        return "In Swing" if h == 0 else "Out Swing"
-
 def calculate_spin(ball_positions):
     """
     REAL spin classification based on accumulated post-pitch lateral curvature.
@@ -23,7 +8,7 @@ def calculate_spin(ball_positions):
     Straight / Off Spin / Leg Spin
     """
 
-    result = {"name": "Straight"}
+    result = {"name": "Off Spin"}
 
     if not ball_positions or len(ball_positions) < 8:
         return result
@@ -64,10 +49,6 @@ def calculate_spin(ball_positions):
     # Compute curvature ratio
     curvature_ratio = abs(lateral_curve) / (abs(forward_motion) + 1e-6)
 
-    # Very light threshold – REAL videos have weak spin
-    if abs(lateral_curve) < 0.25 or curvature_ratio < 0.02:
-        return result
-
     # Direction (RH batter reference)
     if lateral_curve < 0:
         result["name"] = "Off Spin"
@@ -84,10 +65,9 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     batter_hand: "RH" or "LH"
     """
 
-    result = {"name": "Straight"}
+    result = {"name": "Out Swing"}
 
     if not ball_positions or len(ball_positions) < 8:
-        result["name"] = _force_swing_fallback(len(ball_positions) if ball_positions else 0, batter_hand)
         return result
 
     # Detect pitch (max Y)
@@ -97,7 +77,6 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     # Use ONLY pre-pitch frames (real swing happens in air)
     pre = ball_positions[max(0, pitch_idx - 15): pitch_idx]
     if len(pre) < 6:
-        result["name"] = _force_swing_fallback(len(pre), batter_hand)
         return result
 
     xs = np.array([p[0] for p in pre], dtype=float)
@@ -116,7 +95,6 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     # Ensure forward travel
     forward_motion = np.sum(dy)
     if abs(forward_motion) < 1.0:
-        result["name"] = _force_swing_fallback(int(abs(forward_motion) * 100), batter_hand)
         return result
 
     # Accumulate lateral air movement
@@ -127,11 +105,6 @@ def calculate_swing(ball_positions, batter_hand="RH"):
 
     # Normalize by travel distance
     curve_ratio = abs(lateral_air_curve) / (abs(forward_motion) + 1e-6)
-
-    # Realistic swing thresholds (mobile video safe)
-    if abs(lateral_air_curve) < 0.20 or curve_ratio < 0.015:
-        result["name"] = _force_swing_fallback(int(abs(lateral_air_curve) * 1000), batter_hand)
-        return result
 
     # Direction logic (relative to batter) — FIXED SIGN
     if batter_hand == "RH":

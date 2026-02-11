@@ -45,21 +45,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (DIRECT FROM BACKEND) ----------
+    // ---------- SWING (DIRECT FROM BACKEND - NO DEFAULTS) ----------
     String swing = "NA";
 
     final rawSwing = src["swing"];
-    if (rawSwing is String && rawSwing.isNotEmpty) {
+    if (rawSwing is String && rawSwing.trim().isNotEmpty) {
       swing = rawSwing.toUpperCase();
     }
 
-    // ---------- SPIN (DIRECT FROM BACKEND) ----------
+    // ---------- SPIN (DIRECT FROM BACKEND - NO DEFAULTS) ----------
     String spin = "NA";
-    String spinStrength = "NA";
+    String spinStrength = "NONE";
     double spinTurnDeg = 0.0;
 
     final rawSpin = src["spin"];
-    if (rawSpin is String && rawSpin.isNotEmpty) {
+    if (rawSpin is String && rawSpin.trim().isNotEmpty) {
       spin = rawSpin.toUpperCase();
     }
 
@@ -71,20 +71,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     final rawTurn = src["spin_turn_deg"];
     if (rawTurn is num) {
       spinTurnDeg = rawTurn.toDouble();
-    }
-
-    // ---------- DRS (DECISION REVIEW SYSTEM) ----------
-    String drsDecision = "NA";
-    String drsReason = "";
-
-    final rawDrs = src["drs_decision"];
-    if (rawDrs is String && rawDrs.isNotEmpty) {
-      drsDecision = rawDrs.toUpperCase();
-    }
-
-    final rawDrsReason = src["drs_reason"];
-    if (rawDrsReason is String && rawDrsReason.isNotEmpty) {
-      drsReason = rawDrsReason;
     }
 
     final List trajectory =
@@ -119,12 +105,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             spinStrength != "NONE"
                 ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
                 : spin,
-          ),
-          _metric(
-            "DRS",
-            drsReason.isNotEmpty
-                ? "$drsDecision • $drsReason"
-                : drsDecision,
           ),
           const SizedBox(height: 25),
 

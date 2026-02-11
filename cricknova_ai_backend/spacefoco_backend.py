@@ -618,10 +618,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Out Swing",
-                "spin": "Off Spin",
-                "spin_strength": "Light",
-                "spin_turn_deg": 0.25,
+                "swing": None,
+                "spin": None,
+                "spin_strength": None,
+                "spin_turn_deg": 0.0,
                 "trajectory": []
             }
 
@@ -661,11 +661,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Out Swing"
+        swing = swing_result.get("name")
 
         spin = spin_result.get("name")
-        if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
-            spin = "Off Spin"
 
         return {
             "status": "success",
@@ -1079,10 +1077,10 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Out Swing",
-                "spin": "Off Spin",
-                "spin_strength": "Light",
-                "spin_turn_deg": 0.25,
+                "swing": None,
+                "spin": None,
+                "spin_strength": None,
+                "spin_turn_deg": 0.0,
                 "trajectory": []
             }
 
@@ -1120,11 +1118,9 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Out Swing"
+        swing = swing_result.get("name")
 
         spin = spin_result.get("name")
-        if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
-            spin = "Off Spin"
 
         return {
             "status": "success",
@@ -1154,8 +1150,8 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     if not ball_positions:
         return False, 0.0
 
-    stump_x_min = frame_width * 0.44
-    stump_x_max = frame_width * 0.56
+    stump_x_min = frame_width * 0.47
+    stump_x_max = frame_width * 0.53
     stump_y_min = frame_height * 0.64
     stump_y_max = frame_height * 0.90
 
@@ -1189,20 +1185,6 @@ def ball_near_bat_zone(ball_positions, frame_width, frame_height):
         if bat_x_min <= x <= bat_x_max and bat_y_min <= y <= bat_y_max:
             return True
 
-    return False
-
-def detect_lbw_from_positions(ball_positions, frame_width, frame_height):
-    if not ball_positions or len(ball_positions) < 6:
-        return False
-
-    pad_x_min = frame_width * 0.42
-    pad_x_max = frame_width * 0.58
-    pad_y_min = frame_height * 0.55
-    pad_y_max = frame_height * 0.78
-
-    for (x, y) in ball_positions[-6:]:
-        if pad_x_min <= x <= pad_x_max and pad_y_min <= y <= pad_y_max:
-            return True
     return False
 
 # -----------------------------
@@ -1244,11 +1226,32 @@ async def drs_review(file: UploadFile = File(...)):
             frame_width, frame_height = 640, 360
 
         # -----------------------------
-        # ULTRAEDGE (DISABLED – NO FAKE EDGE)
+        # ULTRAEDGE (STRICT PHYSICS)
         # -----------------------------
-        # UltraEdge removed because geometry-only inference caused false NOT OUT.
-        # DRS decisions now rely strictly on ball tracking & LBW physics.
         ultraedge = False
+
+        if ball_near_bat_zone(ball_positions, frame_width, frame_height):
+            # Use only last frames near bat
+            recent = ball_positions[-6:]
+
+            xs = [p[0] for p in recent]
+            ys = [p[1] for p in recent]
+
+            # Horizontal deflection after bat contact
+            dx1 = xs[2] - xs[0]
+            dx2 = xs[5] - xs[3]
+
+            dy1 = ys[2] - ys[0]
+            dy2 = ys[5] - ys[3]
+
+            # Physics rules:
+            # 1. Forward motion must reduce suddenly
+            # 2. Lateral motion must increase suddenly
+            forward_drop = abs(dy2) < abs(dy1) * 0.55
+            lateral_jump = abs(dx2) > abs(dx1) * 1.8
+
+            if forward_drop and lateral_jump:
+                ultraedge = True
 
         # -----------------------------
         # BALL TRACKING (STUMP HIT)
@@ -1260,30 +1263,18 @@ async def drs_review(file: UploadFile = File(...)):
             frame_height
         )
 
-        lbw_possible = detect_lbw_from_positions(
-            ball_positions,
-            frame_width,
-            frame_height
-        )
-
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)
         # -----------------------------
         if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
-
         elif hits_stumps:
             decision = "OUT"
             reason = "Ball hitting stumps"
-
-        elif lbw_possible:
-            decision = "OUT"
-            reason = "LBW – ball in line & hitting stumps"
-
         else:
             decision = "NOT OUT"
-            reason = "No bat, no stump impact"
+            reason = "Ball missing stumps"
 
         return {
             "status": "success",

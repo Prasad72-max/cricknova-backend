@@ -219,7 +219,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSwing is String && rawSwing.isNotEmpty) {
           swing = rawSwing.toUpperCase();
         } else {
-          swing = "UNDETECTED";
+          swing = "NA";
         }
 
         // -------- SPIN (DIRECT FROM BACKEND) --------
@@ -227,7 +227,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSpin is String && rawSpin.isNotEmpty) {
           spin = rawSpin.toUpperCase();
         } else {
-          spin = "UNDETECTED";
+          spin = "NA";
         }
 
         // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
@@ -273,7 +273,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
     setState(() {
       showDRS = true;
-      drsResult = "";
+      drsResult = "Reviewing decision...";
     });
 
     final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
@@ -300,27 +300,20 @@ class _UploadScreenState extends State<UploadScreen> {
         final data = jsonDecode(respStr);
 
         final drs = data["drs"];
+        final decision = drs?["decision"]?.toString().toUpperCase() ?? "UNKNOWN";
+        final reason = drs?["reason"]?.toString() ?? "";
 
-        if (drs == null || drs["decision"] == null) {
-          setState(() {
-            drsResult = "NA";
-          });
-        } else {
-          final decision = drs["decision"].toString().toUpperCase();
-          final reason = drs["reason"]?.toString() ?? "";
-
-          setState(() {
-            drsResult = reason.isNotEmpty ? "$decision\n$reason" : decision;
-          });
-        }
+        setState(() {
+          drsResult = "$decision\n$reason";
+        });
       } else {
         setState(() {
-          drsResult = "NA";
+          drsResult = "DRS FAILED\nServer error";
         });
       }
     } catch (e) {
       setState(() {
-        drsResult = "NA";
+        drsResult = "DRS FAILED\nConnection error";
       });
     }
   }

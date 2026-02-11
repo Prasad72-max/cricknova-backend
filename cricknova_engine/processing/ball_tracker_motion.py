@@ -84,6 +84,7 @@ def track_ball_positions(video_path, max_frames=120):
     # Normalize positions to pure (x, y) tuples for downstream physics (swing/spin)
     positions = [(int(p[0]), int(p[1])) for p in positions]
 
+
     return positions, fps
 
 

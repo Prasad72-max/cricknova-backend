@@ -143,25 +143,15 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
 
     # -----------------------------
-    # REALISTIC SWING & SPIN (PHYSICS-BASED)
+    # HONEST SWING & SPIN (PURE PHYSICS ONLY)
     # -----------------------------
     swing_result = calculate_swing(list(app.state.last_pos), batter_hand="RH")
     spin_result = calculate_spin(list(app.state.last_pos))
 
-    swing = swing_result.get("name", "Straight")
-
-    # FORCE SPIN: never allow NO SPIN / STRAIGHT
-    spin_name = spin_result.get("name")
-    if spin_name is None or spin_name.upper() in ["STRAIGHT", "NO SPIN", "NONE"]:
-        spin_name = "Off Spin"
-
-    spin = spin_name
-
-    # Ensure minimum believable spin values
-    if spin_result.get("turn_deg", 0.0) <= 0:
-        spin_result["turn_deg"] = 0.25
-    if spin_result.get("strength") in [None, "None", "NONE"]:
-        spin_result["strength"] = "Light"
+    # Do NOT force swing or spin.
+    # Whatever physics returns is final.
+    swing = swing_result.get("name")
+    spin = spin_result.get("name")
 
     return {
         "found": True,

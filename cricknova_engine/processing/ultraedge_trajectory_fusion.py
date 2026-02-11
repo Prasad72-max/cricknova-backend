@@ -6,9 +6,9 @@ import numpy as np
 
 class FusionEngine:
     def __init__(self):
-        self.edge_threshold = 0.22      # lower: real bat edges often weak in video
-        self.min_dev_for_edge = 3.0     # degrees, allow micro deflections
-        self.min_speed_drop = 0.85      # realistic bat contact slowdown
+        self.edge_threshold = 0.48     # tuned sensitivity
+        self.min_dev_for_edge = 8      # degrees change after contact
+        self.min_speed_drop = 0.55     # 45%+ drop means possible edge
 
     def fuse(self, trajectory, ultraedge_data, positions, contact_frame):
         """
@@ -37,31 +37,32 @@ class FusionEngine:
         speed_ratio  = speed_after / (speed_before + 0.0001)
 
         # ------------------------------------------------------------
-        # HARD EDGE CONFIRMATION (pure physics)
+        # HARD EDGE CONFIRMATION RULE
         # ------------------------------------------------------------
-        if spike:
-            if deviation >= self.min_dev_for_edge and speed_ratio <= self.min_speed_drop:
+        if spike and spike_power > self.edge_threshold:
+            if deviation > self.min_dev_for_edge and speed_ratio < self.min_speed_drop:
                 return {
                     "result": "BAT",
-                    "confidence": min(1.0, 0.6 + spike_power)
+                    "confidence": min(1.0, spike_power * 1.2)
                 }
 
         # ------------------------------------------------------------
-        # VISION-ONLY EDGE (no audio spike, but real deflection)
+        # LIGHT EDGE (UltraEdge small spike + small deviation)
         # ------------------------------------------------------------
-        if deviation >= 8 and speed_ratio <= 0.78:
-            return {
-                "result": "BAT",
-                "confidence": 0.55
-            }
+        if spike and spike_power > 0.25:
+            if deviation > 4 and speed_ratio < 0.80:
+                return {
+                    "result": "BAT",
+                    "confidence": spike_power
+                }
 
         # ------------------------------------------------------------
-        # PAD / BODY CONTACT (no angular change, heavy energy loss)
+        # Vision-only detection (if angle deviation is huge)
         # ------------------------------------------------------------
-        if deviation < 3 and speed_ratio <= 0.60:
+        if deviation > 15 and speed_ratio < 0.65:
             return {
-                "result": "PAD",
-                "confidence": 0.6
+                "result": "BAT",
+                "confidence": 0.45
             }
 
         # ------------------------------------------------------------
