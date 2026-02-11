@@ -214,20 +214,36 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (DIRECT FROM BACKEND) --------
+        // -------- SWING (NORMALIZED FULL WORDS) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.isNotEmpty) {
-          swing = rawSwing.toUpperCase();
+          final normalized = rawSwing.toUpperCase();
+
+          if (normalized == "OS") {
+            swing = "OUTSWING";
+          } else if (normalized == "IS") {
+            swing = "INSWING";
+          } else {
+            swing = normalized;
+          }
         } else {
-          swing = "OUTSWING";
+          swing = "NA";
         }
 
-        // -------- SPIN (DIRECT FROM BACKEND) --------
+        // -------- SPIN (NORMALIZED FULL WORDS) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.isNotEmpty) {
-          spin = rawSpin.toUpperCase();
+          final normalizedSpin = rawSpin.toUpperCase();
+
+          if (normalizedSpin == "OS") {
+            spin = "OFF SPIN";
+          } else if (normalizedSpin == "LS") {
+            spin = "LEG SPIN";
+          } else {
+            spin = normalizedSpin;
+          }
         } else {
-          spin = "OFF SPIN";
+          spin = "NA";
         }
 
         // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
@@ -558,9 +574,25 @@ class _UploadScreenState extends State<UploadScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Always go back to previous screen, never jump to Home
-        Navigator.of(context).pop();
-        return false;
+        // If video is open → reset to upload screen
+        if (controller != null) {
+          controller?.dispose();
+          controller = null;
+          video = null;
+
+          setState(() {
+            showTrajectory = false;
+            showDRS = false;
+            showCoach = false;
+            drsResult = null;
+            coachReply = null;
+          });
+
+          return false; // stay on Upload screen
+        }
+
+        // If already on Upload screen (no video) → allow normal pop to Home
+        return true;
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -569,7 +601,22 @@ class _UploadScreenState extends State<UploadScreen> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
-              Navigator.of(context).pop();
+              if (controller != null) {
+                controller?.dispose();
+                controller = null;
+                video = null;
+
+                setState(() {
+                  showTrajectory = false;
+                  showDRS = false;
+                  showCoach = false;
+                  drsResult = null;
+                  coachReply = null;
+                });
+              } else {
+                // If already on Upload screen → go Home
+                Navigator.of(context).pop();
+              }
             },
           ),
           title: const Text("Upload Training Video"),
@@ -658,11 +705,11 @@ class _UploadScreenState extends State<UploadScreen> {
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
                         _metric(
-                           "Spin",
+                          "Spin",
                           spinStrength != "NONE"
-                               ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
-                               : spin,
-),
+                              ? "$spin • $spinStrength"
+                              : spin,
+                        ),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

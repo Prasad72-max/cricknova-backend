@@ -83,7 +83,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             _metricBox(
               title: "Spin",
               value: (spinStrength != null && spinStrength != "NONE")
-                  ? "${spinType ?? "SPIN"} • $spinStrength (${(spinTurnDeg ?? 0).toStringAsFixed(2)}°)"
+                  ? "${spinType ?? "SPIN"} • $spinStrength"
                   : (spinType ?? "NA"),
               icon: Icons.autorenew,
               color: Colors.green,
@@ -231,17 +231,31 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // ---------- SWING (DIRECT FROM BACKEND) ----------
       final rawSwing = src["swing"];
       if (rawSwing is String && rawSwing.isNotEmpty) {
-        swingName = rawSwing.toUpperCase();
+        final normalized = rawSwing.toUpperCase();
+        if (normalized == "OS") {
+          swingName = "OUTSWING";
+        } else if (normalized == "IS") {
+          swingName = "INSWING";
+        } else {
+          swingName = normalized;
+        }
       } else {
-        swingName = "OUTSWING";
+        swingName = null;
       }
 
       // ---------- SPIN (DIRECT FROM BACKEND) ----------
       final rawSpin = src["spin"];
       if (rawSpin is String && rawSpin.isNotEmpty) {
-        spinType = rawSpin.toUpperCase();
+        final normalizedSpin = rawSpin.toUpperCase();
+        if (normalizedSpin == "OS") {
+          spinType = "OFF SPIN";
+        } else if (normalizedSpin == "LS") {
+          spinType = "LEG SPIN";
+        } else {
+          spinType = normalizedSpin;
+        }
       } else {
-        spinType = "OFF SPIN";
+        spinType = null;
       }
 
       // ---------- SPIN STRENGTH & TURN ----------

@@ -10,7 +10,6 @@ class SwingHeatmap:
     def __init__(self):
         # (x, y, speed) points along ball path
         self.swing_points = []
-        self._forced = False
         # (x, y) impact / pitch points
         self.impact_points = []
         # speed samples for averaging

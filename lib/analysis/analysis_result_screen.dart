@@ -45,30 +45,46 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (DIRECT FROM BACKEND) ----------
-    String swing = "OUTSWING";
+    // ---------- SWING (DIRECT FROM BACKEND, NORMALIZED) ----------
+    String swing = "NA";
 
     final rawSwing = src["swing"];
     if (rawSwing is String && rawSwing.isNotEmpty) {
-      swing = rawSwing.toUpperCase();
+      final normalized = rawSwing.toUpperCase();
+
+      if (normalized == "OS") {
+        swing = "OUTSWING";
+      } else if (normalized == "IS") {
+        swing = "INSWING";
+      } else {
+        swing = normalized;
+      }
     }
 
-    // ---------- SPIN (DIRECT FROM BACKEND) ----------
-    String spin = "OFF SPIN";
-    String spinStrength = "LIGHT";
-    double spinTurnDeg = 0.25;
+    // ---------- SPIN (DIRECT FROM BACKEND, NORMALIZED) ----------
+    String spin = "NA";
+    String spinStrength = "NONE";
 
     final rawSpin = src["spin"];
     if (rawSpin is String && rawSpin.isNotEmpty) {
-      spin = rawSpin.toUpperCase();
+      final normalizedSpin = rawSpin.toUpperCase();
+
+      if (normalizedSpin == "OS") {
+        spin = "OFF SPIN";
+      } else if (normalizedSpin == "LS") {
+        spin = "LEG SPIN";
+      } else {
+        spin = normalizedSpin;
+      }
     }
 
     final rawStrength = src["spin_strength"];
-    if (rawStrength is String) {
+    if (rawStrength is String && rawStrength.isNotEmpty) {
       spinStrength = rawStrength.toUpperCase();
     }
 
     final rawTurn = src["spin_turn_deg"];
+    double spinTurnDeg = 0.25;
     if (rawTurn is num) {
       spinTurnDeg = rawTurn.toDouble();
     }
@@ -103,7 +119,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           _metric(
             "Spin",
             spinStrength != "NONE"
-                ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
+                ? "$spin • $spinStrength"
                 : spin,
           ),
           const SizedBox(height: 25),
