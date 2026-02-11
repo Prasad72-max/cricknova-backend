@@ -219,7 +219,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSwing is String && rawSwing.isNotEmpty) {
           swing = rawSwing.toUpperCase();
         } else {
-          swing = "NA";
+          swing = "----";
         }
 
         // -------- SPIN (DIRECT FROM BACKEND) --------
@@ -227,7 +227,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSpin is String && rawSpin.isNotEmpty) {
           spin = rawSpin.toUpperCase();
         } else {
-          spin = "NA";
+          spin = "----";
         }
 
         // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------

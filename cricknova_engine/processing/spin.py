@@ -68,13 +68,10 @@ def calculate_spin(ball_positions, fps=30):
     xs_norm = [x - x0 for x in xs]
 
     lateral_disp = xs_norm[-1] - xs_norm[0]
-    # --- CAMERA MIRROR FIX ---
-    # Flip horizontal axis to correct mirrored video input
-    lateral_disp *= -1
     forward_disp = ys[-1] - ys[0]
 
     # Reject unreliable motion
-    if abs(forward_disp) < 1.2:
+    if abs(forward_disp) < 0.5:
         return result
 
     # Compute turn angle
@@ -82,8 +79,8 @@ def calculate_spin(ball_positions, fps=30):
     turn_deg = math.degrees(turn_rad)
     result["turn_deg"] = round(turn_deg, 3)
 
-    # Threshold: below this = Straight
-    if turn_deg < 0.12 or abs(lateral_disp) < 0.4:
+    # Threshold: below this = Straight (more sensitive, still physics-based)
+    if turn_deg < 0.05 or abs(lateral_disp) < 0.15:
         return result
 
     # Spin direction — FIXED SIGN

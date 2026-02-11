@@ -1,121 +1,104 @@
 import math
 import numpy as np
 
-def calculate_spin(ball_positions):
+def unmirror_positions(positions):
     """
-    REAL spin classification based on accumulated post-pitch lateral curvature.
-    Outputs:
-    Straight / Off Spin / Leg Spin
+    Fix horizontal camera mirroring from mobile videos.
     """
+    xs = [p[0] for p in positions]
+    min_x, max_x = min(xs), max(xs)
 
-    result = {"name": "Off Spin"}
+    return [((max_x - (x - min_x)), y) for x, y in positions]
 
-    if not ball_positions or len(ball_positions) < 8:
-        return result
+class SwingDetector:
 
-    # Detect pitch (max Y)
-    ys = [p[1] for p in ball_positions]
-    pitch_idx = int(np.argmax(ys))
+    def __init__(self, fps=30):
+        self.fps = fps
 
-    # Require sufficient post-pitch frames
-    post = ball_positions[pitch_idx + 1 : pitch_idx + 20]
-    if len(post) < 6:
-        return result
+    def _line_angle(self, p1, p2):
+        """
+        Returns angle of line (deg) between 2 points.
+        """
+        x1, y1 = p1
+        x2, y2 = p2
 
-    xs = np.array([p[0] for p in post], dtype=float)
-    ys = np.array([p[1] for p in post], dtype=float)
+        dx = x2 - x1
+        dy = y2 - y1
 
-    # Smooth jitter lightly (do NOT over-smooth)
-    if len(xs) >= 5:
-        kernel = np.ones(3) / 3
-        xs = np.convolve(xs, kernel, mode="same")
-        ys = np.convolve(ys, kernel, mode="same")
+        if dx == 0:
+            return 90.0
 
-    # Compute frame-to-frame deltas
-    dx = np.diff(xs)
-    dy = np.diff(ys)
+        angle = math.degrees(math.atan2(dy, dx))
+        return angle
 
-    # Reject if no forward motion
-    forward_motion = np.sum(dy)
-    if abs(forward_motion) < 0.8:
-        return result
+    def detect_swing(self, positions):
+        """
+        positions: list of (x, y) from ball_tracker.
 
-    # Accumulate lateral curvature
-    lateral_curve = np.sum(dx)
-    # --- CAMERA MIRROR FIX ---
-    # Flip horizontal axis to correct mirrored videos
-    lateral_curve *= -1
+        Returns:
+            float swing_angle_deg
+        """
+        if len(positions) < 6:
+            return 0.0
 
-    # Compute curvature ratio
-    curvature_ratio = abs(lateral_curve) / (abs(forward_motion) + 1e-6)
+        # Fix mirrored camera coordinates before angle calculation
+        positions = unmirror_positions(positions)
 
-    # Direction (RH batter reference)
-    if lateral_curve < 0:
-        result["name"] = "Off Spin"
+        # AUTO SPLIT POINT (pitch impact)
+        # The largest drop in vertical speed = bounce
+        diffs = [positions[i+1][1] - positions[i][1] for i in range(len(positions)-1)]
+        pitch_index = np.argmax(diffs)  # y-increase is biggest at bounce
+
+        # protect boundaries
+        pitch_index = max(1, min(pitch_index, len(positions)-2))
+
+        # pre-bounce (frames before pitch)
+        pre1 = positions[pitch_index - 2]
+        pre2 = positions[pitch_index - 1]
+
+        # post-bounce (frames after pitch)
+        post1 = positions[pitch_index + 1]
+        post2 = positions[pitch_index + 3] if pitch_index + 3 < len(positions) else positions[-1]
+
+        # Calculate angles
+        angle_pre = self._line_angle(pre1, pre2)
+        angle_post = self._line_angle(post1, post2)
+
+        swing_angle = angle_post - angle_pre
+
+        # Clamp swing to realistic cricket range (-8° to +8°)
+        swing_angle = max(min(swing_angle, 8.0), -8.0)
+
+        return round(swing_angle, 2)
+
+def calculate_swing(ball_positions):
+    """
+    Returns ONLY swing name: inswing / outswing / straight
+    """
+    detector = SwingDetector()
+    swing_deg = detector.detect_swing(ball_positions)
+    return classify_swing(swing_deg)
+
+def calculate_swing_name(ball_positions):
+    """
+    Explicit helper to return ONLY swing name.
+    """
+    detector = SwingDetector()
+    swing_deg = detector.detect_swing(ball_positions)
+    return classify_swing(swing_deg)
+
+def classify_swing(swing_deg: float):
+    """
+    Cricket-correct swing classification after unmirroring.
+    """
+    if abs(swing_deg) < 1.0:
+        return "straight"
+
+    # NOTE:
+    # Positive angle after unmirror = ball moves AWAY from body
+    # Negative angle = ball moves INTO body
+
+    if swing_deg < 0:
+        return "inswing"
     else:
-        result["name"] = "Leg Spin"
-
-    return result
-
-def calculate_swing(ball_positions, batter_hand="RH"):
-    """
-    REAL swing detection based on pre-pitch lateral curvature.
-    Detects: Straight / Inswing / Outswing
-
-    batter_hand: "RH" or "LH"
-    """
-
-    result = {"name": "Out Swing"}
-
-    if not ball_positions or len(ball_positions) < 8:
-        return result
-
-    # Detect pitch (max Y)
-    ys = [p[1] for p in ball_positions]
-    pitch_idx = int(np.argmax(ys))
-
-    # Use ONLY pre-pitch frames (real swing happens in air)
-    pre = ball_positions[max(0, pitch_idx - 15): pitch_idx]
-    if len(pre) < 6:
-        return result
-
-    xs = np.array([p[0] for p in pre], dtype=float)
-    ys = np.array([p[1] for p in pre], dtype=float)
-
-    # Light smoothing to remove tracking noise (no overfitting)
-    if len(xs) >= 5:
-        kernel = np.ones(3) / 3
-        xs = np.convolve(xs, kernel, mode="same")
-        ys = np.convolve(ys, kernel, mode="same")
-
-    # Frame-to-frame motion
-    dx = np.diff(xs)
-    dy = np.diff(ys)
-
-    # Ensure forward travel
-    forward_motion = np.sum(dy)
-    if abs(forward_motion) < 1.0:
-        return result
-
-    # Accumulate lateral air movement
-    lateral_air_curve = np.sum(dx)
-    # --- CAMERA MIRROR FIX ---
-    # Flip horizontal axis to correct mirrored videos
-    lateral_air_curve *= -1
-
-    # Normalize by travel distance
-    curve_ratio = abs(lateral_air_curve) / (abs(forward_motion) + 1e-6)
-
-    # Direction logic (relative to batter) — FIXED SIGN
-    if batter_hand == "RH":
-        if lateral_air_curve < 0:
-            result["name"] = "In Swing"
-        else:
-            result["name"] = "Out Swing"
-    else:
-        if lateral_air_curve < 0:
-            result["name"] = "Out Swing"
-        else:
-            result["name"] = "In Swing"
-
-    return result
+        return "outswing"

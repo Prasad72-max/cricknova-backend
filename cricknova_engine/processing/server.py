@@ -26,7 +26,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
 
     # detect ball
-    results = model.predict(frame, conf=0.15, imgsz=640)
+    results = model.predict(frame, conf=0.08, imgsz=640)
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
@@ -53,7 +53,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     speed_type = "unavailable"
     speed_note = "INSUFFICIENT_PHYSICS_DATA"
 
-    MIN_FRAMES = 12
+    MIN_FRAMES = 8
     if len(app.state.last_pos) >= MIN_FRAMES and len(app.state.last_time) >= MIN_FRAMES:
         pts = list(app.state.last_pos)
         times = list(app.state.last_time)
@@ -101,7 +101,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # CONSERVATIVE VIDEO FALLBACK (NEVER NULL)
     # -----------------------------
-    if speed_kmph is None and len(app.state.last_pos) >= 6:
+    if speed_kmph is None and len(app.state.last_pos) >= 4:
         pts = list(app.state.last_pos)
 
         pixel_dists = []
