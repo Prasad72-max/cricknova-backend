@@ -149,9 +149,9 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     swing_result = calculate_swing(list(app.state.last_pos), batter_hand="RH")
     spin_result = calculate_spin(list(app.state.last_pos))
 
-    # Always guarantee visible swing & spin for UI
-    swing = swing_result.get("name") or "Straight"
-    spin = spin_result.get("name") or "Straight"
+    # Backend-only swing & spin (no forced defaults)
+    swing = swing_result.get("name")
+    spin = spin_result.get("name")
 
     return {
         "found": True,

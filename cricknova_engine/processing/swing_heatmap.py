@@ -29,19 +29,12 @@ class SwingHeatmap:
         if self.impact_points:
             return
 
-        # Normalize x relative to first point to remove camera bias
-        if self.swing_points:
-            x0 = self.swing_points[0][0]
-            norm_x = x - x0
-        else:
-            norm_x = 0.0
+        # Preserve raw lateral displacement (do not re-normalize here)
+        norm_x = float(x)
 
-        # Do not record swing points only if speed is clearly invalid
-        if speed is not None and speed < 40.0:
-            return
 
         # preserve signed lateral displacement for swing direction
-        self.swing_points.append((float(norm_x), float(y), speed))
+        self.swing_points.append((norm_x, float(y), speed))
 
         if speed is not None:
             self.speed_samples.append(speed)
@@ -78,9 +71,6 @@ class SwingHeatmap:
         else:
             avg_speed = 0.0
 
-        # Guarantee at least one swing point so UI never shows blank
-        if not self.swing_points:
-            self.swing_points.append((0.0, 0.0, avg_speed))
 
         return {
             "swing_points": self.swing_points,

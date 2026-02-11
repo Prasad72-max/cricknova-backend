@@ -51,8 +51,8 @@ def calculate_spin(ball_positions, fps=30):
     if pitch_idx < 2 or pitch_idx + 4 >= len(ball_positions):
         pitch_idx = max(1, min(pitch_idx, len(ball_positions) - 5))
 
-    # --- Post-bounce trajectory ---
-    post = ball_positions[pitch_idx + 1 : pitch_idx + 16]
+    # Use longer post-bounce window for better turn measurement
+    post = ball_positions[pitch_idx + 1 : pitch_idx + 22]
     xs = [p[0] for p in post]
     ys = [p[1] for p in post]
 
@@ -60,9 +60,9 @@ def calculate_spin(ball_positions, fps=30):
         xs = xs + xs
         ys = ys + ys
 
-    # Smooth jitter
-    xs = _smooth(xs)
-    ys = _smooth(ys)
+    # Light smoothing only (avoid killing real deviation)
+    xs = _smooth(xs, window=1)
+    ys = _smooth(ys, window=1)
 
     # Normalize lateral movement
     x0 = xs[0]
@@ -80,16 +80,15 @@ def calculate_spin(ball_positions, fps=30):
     turn_deg = math.degrees(turn_rad)
     result["turn_deg"] = round(turn_deg, 3)
 
-    # Lower threshold to always classify visible turn
-    if turn_deg < 0.01 and abs(lateral_disp) < 0.05:
+    # Detect real turn based purely on lateral displacement (more stable than tiny degree thresholds)
+    if abs(lateral_disp) < 0.008:
         return result
 
-    # Spin direction — FIXED SIGN
-    # Coordinate system inverted: swap OFF / LEG
+    # Spin direction (based on post-bounce lateral shift)
     if lateral_disp < 0:
-        result["name"] = "Leg Spin"
-    else:
         result["name"] = "Off Spin"
+    else:
+        result["name"] = "Leg Spin"
 
     # Spin strength classification (realistic, conservative)
     if turn_deg < 0.35:

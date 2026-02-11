@@ -49,6 +49,10 @@ def calculate_spin(ball_positions):
     # Compute curvature ratio
     curvature_ratio = abs(lateral_curve) / (abs(forward_motion) + 1e-6)
 
+    # Ignore very small deviation (reduce false straight / false spin)
+    if curvature_ratio < 0.02:
+        return {"name": "Straight"}
+
     # Direction (RH batter reference)
     if lateral_curve < 0:
         result["name"] = "Off Spin"
@@ -82,43 +86,35 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     xs = np.array([p[0] for p in pre], dtype=float)
     ys = np.array([p[1] for p in pre], dtype=float)
 
-    # Light smoothing to remove tracking noise (no overfitting)
+    # Light smoothing (very minimal, preserve real deviation)
     if len(xs) >= 5:
         kernel = np.ones(3) / 3
         xs = np.convolve(xs, kernel, mode="same")
         ys = np.convolve(ys, kernel, mode="same")
 
-    # Frame-to-frame motion
-    dx = np.diff(xs)
-    dy = np.diff(ys)
+    # Measure total lateral shift in air (before bounce)
+    lateral_shift = xs[-1] - xs[0]
+    forward_travel = ys[-1] - ys[0]
 
-    # Ensure forward travel
-    forward_motion = np.sum(dy)
-    if abs(forward_motion) < 1.0:
+    # Require real forward movement
+    if abs(forward_travel) < 1.0:
         return {"name": "Straight"}
 
-    # Accumulate lateral air movement
-    lateral_air_curve = np.sum(dx)
     # --- CAMERA MIRROR FIX ---
-    # Flip horizontal axis to correct mirrored videos
-    lateral_air_curve *= -1
+    lateral_shift *= -1
 
-    # Normalize by travel distance
-    curve_ratio = abs(lateral_air_curve) / (abs(forward_motion) + 1e-6)
+    # Detect real swing using absolute lateral displacement
+    if abs(lateral_shift) < 0.01:
+        return {"name": "Straight"}
 
-    # Direction logic (relative to batter) — FIXED SIGN
+    # Direction logic (relative to batter)
     if batter_hand == "RH":
-        if lateral_air_curve < 0:
-            result["name"] = "In Swing"
+        if lateral_shift < 0:
+            return {"name": "In Swing"}
         else:
-            result["name"] = "Out Swing"
+            return {"name": "Out Swing"}
     else:
-        if lateral_air_curve < 0:
-            result["name"] = "Out Swing"
+        if lateral_shift < 0:
+            return {"name": "Out Swing"}
         else:
-            result["name"] = "In Swing"
-
-    if result["name"] is None:
-        result["name"] = "Straight"
-
-    return result
+            return {"name": "In Swing"}

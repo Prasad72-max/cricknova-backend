@@ -606,7 +606,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
-        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         # Keep enough frames for verified physics (>=10)
@@ -662,8 +661,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Straight"
-        spin = spin_result.get("name") or "Straight"
+        swing = swing_result.get("name")
+        spin = spin_result.get("name")
 
         return {
             "status": "success",
@@ -1064,7 +1063,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
-        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         # Keep enough frames for verified physics (>=10)
@@ -1118,8 +1116,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Straight"
-        spin = spin_result.get("name") or "Straight"
+        swing = swing_result.get("name")
+        spin = spin_result.get("name")
 
         return {
             "status": "success",
