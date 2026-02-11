@@ -62,8 +62,8 @@ def detect_stump_hit(trajectory):
     hits = 0
     for p in post_pitch:
         x, y = _get_xy(p)
-        # REAL stump zone (3 stumps width, top 30% height)
-        if 0.46 <= x <= 0.54 and 0.68 <= y <= 0.92:  # Tighter + higher
+        # UPDATED stump zone (wider + more realistic LBW corridor)
+        if 0.43 <= x <= 0.57 and 0.60 <= y <= 0.95:
             hits += 1
     
     return hits / len(post_pitch)
@@ -83,12 +83,12 @@ def analyze_training(data):
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.70:  # Raised threshold
+    elif stump_confidence >= 0.55:
         decision = "OUT"
-        reason = "Plumb LBW - stumps hit"
-    elif stump_confidence >= 0.45:
+        reason = "LBW - hitting stumps"
+    elif stump_confidence >= 0.30:
         decision = "UMPIRE'S CALL"
-        reason = "Clipping stumps - marginal"
+        reason = "Clipping stumps - marginal impact"
     else:
         decision = "NOT OUT"
         reason = "Missing stumps outside line"
