@@ -214,20 +214,20 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (DIRECT FROM BACKEND) --------
+        // -------- SWING (ALWAYS VISIBLE) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.isNotEmpty) {
           swing = rawSwing.toUpperCase();
         } else {
-          swing = "----";
+          swing = "STRAIGHT";
         }
 
-        // -------- SPIN (DIRECT FROM BACKEND) --------
+        // -------- SPIN (ALWAYS VISIBLE) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.isNotEmpty) {
           spin = rawSpin.toUpperCase();
         } else {
-          spin = "----";
+          spin = "STRAIGHT";
         }
 
         // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------

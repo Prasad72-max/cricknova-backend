@@ -1,4 +1,4 @@
-print("condam")
+
 import os
 import sys
 import math

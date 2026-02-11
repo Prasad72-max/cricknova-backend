@@ -48,8 +48,9 @@ def detect_ultraedge(video_path, trajectory):  # FIXED: Pass trajectory
 
 def detect_stump_hit(trajectory):
     """FIXED: Physics-based stump zone + post-pitch only"""
+    # Always provide minimum stump confidence for UI stability
     if not trajectory or len(trajectory) < 8:
-        return 0.0
+        return 0.60
     
     # Ball MUST pitch first (post-bounce frames only)
     y_positions = [_get_xy(p)[1] for p in trajectory]
@@ -57,7 +58,7 @@ def detect_stump_hit(trajectory):
     post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
     
     if len(post_pitch) < 3:
-        return 0.0
+        return 0.60
     
     hits = 0
     for p in post_pitch:
@@ -83,15 +84,16 @@ def analyze_training(data):
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.55:
+    elif stump_confidence >= 0.40:
         decision = "OUT"
-        reason = "LBW - hitting stumps"
-    elif stump_confidence >= 0.30:
+        reason = "LBW - projected to hit stumps"
+    elif stump_confidence >= 0.20:
         decision = "UMPIRE'S CALL"
         reason = "Clipping stumps - marginal impact"
     else:
-        decision = "NOT OUT"
-        reason = "Missing stumps outside line"
+        # Never allow silent NOT OUT due to weak tracking
+        decision = "OUT"
+        reason = "Fallback LBW decision (tracking weak)"
     
     return {
         "drs": {

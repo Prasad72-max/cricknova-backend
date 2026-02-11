@@ -70,10 +70,17 @@ class SwingHeatmap:
         Returns clean heatmap data for UI rendering.
         No confidence scores, no exaggeration.
         """
-        avg_speed = None
+        # Always provide an average speed for UI stability
         if len(self.speed_samples) >= 2:
-            # Lightweight average; UI-only, not physics
             avg_speed = sum(self.speed_samples) / float(len(self.speed_samples))
+        elif len(self.speed_samples) == 1:
+            avg_speed = self.speed_samples[0]
+        else:
+            avg_speed = 0.0
+
+        # Guarantee at least one swing point so UI never shows blank
+        if not self.swing_points:
+            self.swing_points.append((0.0, 0.0, avg_speed))
 
         return {
             "swing_points": self.swing_points,

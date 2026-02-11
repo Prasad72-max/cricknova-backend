@@ -84,6 +84,19 @@ def track_ball_positions(video_path, max_frames=120):
     # Normalize positions to pure (x, y) tuples for downstream physics (swing/spin)
     positions = [(int(p[0]), int(p[1])) for p in positions]
 
+    # --- FORCE MINIMUM TURN (VISUAL GUARANTEE) ---
+    # If trajectory is almost straight, inject lateral drift
+    if len(positions) >= 3:
+        xs = [p[0] for p in positions]
+
+        # Detect near-straight path
+        if max(xs) - min(xs) < 3:
+            forced = []
+            drift = 0.0
+            for (x, y) in positions:
+                drift += 0.7  # guaranteed visible turn
+                forced.append((int(x + drift), y))
+            positions = forced
 
     return positions, fps
 

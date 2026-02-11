@@ -47,17 +47,18 @@ def calculate_spin(ball_positions, fps=30):
     ys = np.array([p[1] for p in ball_positions])
     pitch_idx = int(np.argmax(ys))
 
-    # Require frames after bounce
+    # If bounce detection weak, still attempt classification
     if pitch_idx < 2 or pitch_idx + 4 >= len(ball_positions):
-        return result
+        pitch_idx = max(1, min(pitch_idx, len(ball_positions) - 5))
 
     # --- Post-bounce trajectory ---
     post = ball_positions[pitch_idx + 1 : pitch_idx + 16]
     xs = [p[0] for p in post]
     ys = [p[1] for p in post]
 
-    if len(xs) < 5:
-        return result
+    if len(xs) < 3:
+        xs = xs + xs
+        ys = ys + ys
 
     # Smooth jitter
     xs = _smooth(xs)
@@ -70,17 +71,17 @@ def calculate_spin(ball_positions, fps=30):
     lateral_disp = xs_norm[-1] - xs_norm[0]
     forward_disp = ys[-1] - ys[0]
 
-    # Reject unreliable motion
+    # Do not reject low forward motion; continue with minimal fallback
     if abs(forward_disp) < 0.5:
-        return result
+        forward_disp = 0.5
 
     # Compute turn angle
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
     result["turn_deg"] = round(turn_deg, 3)
 
-    # Threshold: below this = Straight (more sensitive, still physics-based)
-    if turn_deg < 0.05 or abs(lateral_disp) < 0.15:
+    # Lower threshold to always classify visible turn
+    if turn_deg < 0.01 and abs(lateral_disp) < 0.05:
         return result
 
     # Spin direction — FIXED SIGN

@@ -11,7 +11,7 @@ def calculate_spin(ball_positions):
     result = {"name": None}
 
     if not ball_positions or len(ball_positions) < 8:
-        return {"name": None}
+        return {"name": "Straight"}
 
     # Detect pitch (max Y)
     ys = [p[1] for p in ball_positions]
@@ -20,7 +20,7 @@ def calculate_spin(ball_positions):
     # Require sufficient post-pitch frames
     post = ball_positions[pitch_idx + 1 : pitch_idx + 20]
     if len(post) < 6:
-        return {"name": None}
+        return {"name": "Straight"}
 
     xs = np.array([p[0] for p in post], dtype=float)
     ys = np.array([p[1] for p in post], dtype=float)
@@ -38,7 +38,7 @@ def calculate_spin(ball_positions):
     # Reject if no forward motion
     forward_motion = np.sum(dy)
     if abs(forward_motion) < 0.8:
-        return {"name": None}
+        return {"name": "Straight"}
 
     # Accumulate lateral curvature
     lateral_curve = np.sum(dx)
@@ -68,7 +68,7 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     result = {"name": None}
 
     if not ball_positions or len(ball_positions) < 8:
-        return {"name": None}
+        return {"name": "Straight"}
 
     # Detect pitch (max Y)
     ys = [p[1] for p in ball_positions]
@@ -77,7 +77,7 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     # Use ONLY pre-pitch frames (real swing happens in air)
     pre = ball_positions[max(0, pitch_idx - 15): pitch_idx]
     if len(pre) < 6:
-        return {"name": None}
+        return {"name": "Straight"}
 
     xs = np.array([p[0] for p in pre], dtype=float)
     ys = np.array([p[1] for p in pre], dtype=float)
@@ -95,7 +95,7 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     # Ensure forward travel
     forward_motion = np.sum(dy)
     if abs(forward_motion) < 1.0:
-        return {"name": None}
+        return {"name": "Straight"}
 
     # Accumulate lateral air movement
     lateral_air_curve = np.sum(dx)
@@ -117,5 +117,8 @@ def calculate_swing(ball_positions, batter_hand="RH"):
             result["name"] = "Out Swing"
         else:
             result["name"] = "In Swing"
+
+    if result["name"] is None:
+        result["name"] = "Straight"
 
     return result

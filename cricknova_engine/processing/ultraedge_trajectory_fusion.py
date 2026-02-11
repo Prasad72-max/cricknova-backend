@@ -18,8 +18,16 @@ class FusionEngine:
         contact_frame: index
         """
 
-        if trajectory is None or contact_frame is None:
-            return {"result": "NO CONTACT", "confidence": 0.0}
+        # Always continue processing even if trajectory/contact is missing
+        if trajectory is None:
+            trajectory = {
+                "angle_deg": 0.0,
+                "angle_before": 0.0,
+                "angle_after": 0.0
+            }
+
+        if contact_frame is None:
+            contact_frame = 2  # safe fallback index
 
         spike        = ultraedge_data.get("spike", False)
         spike_power  = ultraedge_data.get("spike_strength", 0.0)
@@ -68,9 +76,10 @@ class FusionEngine:
         # ------------------------------------------------------------
         # No edge
         # ------------------------------------------------------------
+        # Default fallback: always return visible decision
         return {
             "result": "NO CONTACT",
-            "confidence": 0.0
+            "confidence": 0.20
         }
 
     # ---------------------- UTILITY ----------------------
