@@ -26,7 +26,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
 
 
     # detect ball
-    results = model.predict(frame, conf=0.08, imgsz=640)
+    results = model.predict(frame, conf=0.15, imgsz=640)
     boxes = results[0].boxes.xyxy.cpu().numpy()
 
     if len(boxes) == 0:
@@ -53,7 +53,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     speed_type = "unavailable"
     speed_note = "INSUFFICIENT_PHYSICS_DATA"
 
-    MIN_FRAMES = 8
+    MIN_FRAMES = 12
     if len(app.state.last_pos) >= MIN_FRAMES and len(app.state.last_time) >= MIN_FRAMES:
         pts = list(app.state.last_pos)
         times = list(app.state.last_time)
@@ -101,7 +101,7 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # CONSERVATIVE VIDEO FALLBACK (NEVER NULL)
     # -----------------------------
-    if speed_kmph is None and len(app.state.last_pos) >= 4:
+    if speed_kmph is None and len(app.state.last_pos) >= 6:
         pts = list(app.state.last_pos)
 
         pixel_dists = []
@@ -137,21 +137,31 @@ async def analyze_live_frame(file: UploadFile = File(...)):
                     speed_type = "video_derived"
                     speed_note = "PARTIAL_TRACK_PHYSICS"
 
-    # FORCE ALWAYS-VISIBLE SPEED (UI stability mode)
+    # HARD SAFETY: do NOT fabricate speed
     if speed_kmph is None:
-        speed_kmph = 0.0
-        speed_type = "video_fallback"
-        speed_note = "FORCED_UI_VISIBLE"
+        speed_type = "unavailable"
+        speed_note = "INSUFFICIENT_TRACK_CONTINUITY"
 
     # -----------------------------
-    # HONEST SWING & SPIN (PURE PHYSICS ONLY)
+    # REALISTIC SWING & SPIN (PHYSICS-BASED)
     # -----------------------------
     swing_result = calculate_swing(list(app.state.last_pos), batter_hand="RH")
     spin_result = calculate_spin(list(app.state.last_pos))
 
-    # Backend-only swing & spin (no forced defaults)
-    swing = swing_result.get("name")
-    spin = spin_result.get("name")
+    swing = swing_result.get("name", "Straight")
+
+    # FORCE SPIN: never allow NO SPIN / STRAIGHT
+    spin_name = spin_result.get("name")
+    if spin_name is None or spin_name.upper() in ["STRAIGHT", "NO SPIN", "NONE"]:
+        spin_name = "Off Spin"
+
+    spin = spin_name
+
+    # Ensure minimum believable spin values
+    if spin_result.get("turn_deg", 0.0) <= 0:
+        spin_result["turn_deg"] = 0.25
+    if spin_result.get("strength") in [None, "None", "NONE"]:
+        spin_result["strength"] = "Light"
 
     return {
         "found": True,

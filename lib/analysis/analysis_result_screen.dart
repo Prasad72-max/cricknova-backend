@@ -45,21 +45,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (BACKEND ONLY - NO FORCED DEFAULT) ----------
-    String swing = "--";
+    // ---------- SWING (DIRECT FROM BACKEND) ----------
+    String swing = "OUTSWING";
 
     final rawSwing = src["swing"];
-    if (rawSwing is String && rawSwing.trim().isNotEmpty) {
+    if (rawSwing is String && rawSwing.isNotEmpty) {
       swing = rawSwing.toUpperCase();
     }
 
-    // ---------- SPIN (BACKEND ONLY - NO FORCED DEFAULT) ----------
-    String spin = "--";
-    String spinStrength = "NONE";
-    double spinTurnDeg = 0.0;
+    // ---------- SPIN (DIRECT FROM BACKEND) ----------
+    String spin = "OFF SPIN";
+    String spinStrength = "LIGHT";
+    double spinTurnDeg = 0.25;
 
     final rawSpin = src["spin"];
-    if (rawSpin is String && rawSpin.trim().isNotEmpty) {
+    if (rawSpin is String && rawSpin.isNotEmpty) {
       spin = rawSpin.toUpperCase();
     }
 

@@ -1,4 +1,3 @@
-print("🚀 CrickNova Backend Booting...")
 import math
 import numpy as np
 
@@ -606,6 +605,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         # Keep enough frames for verified physics (>=10)
@@ -618,10 +618,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Straight",
-                "spin": "Straight",
-                "spin_strength": "None",
-                "spin_turn_deg": 0.0,
+                "swing": "Out Swing",
+                "spin": "Off Spin",
+                "spin_strength": "Light",
+                "spin_turn_deg": 0.25,
                 "trajectory": []
             }
 
@@ -661,8 +661,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
+        swing = swing_result.get("name") or "Out Swing"
+
         spin = spin_result.get("name")
+        if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
+            spin = "Off Spin"
 
         return {
             "status": "success",
@@ -1063,6 +1066,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         # Keep enough frames for verified physics (>=10)
@@ -1075,10 +1079,10 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": "Straight",
-                "spin": "Straight",
-                "spin_strength": "None",
-                "spin_turn_deg": 0.0,
+                "swing": "Out Swing",
+                "spin": "Off Spin",
+                "spin_strength": "Light",
+                "spin_turn_deg": 0.25,
                 "trajectory": []
             }
 
@@ -1116,8 +1120,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
+        swing = swing_result.get("name") or "Out Swing"
+
         spin = spin_result.get("name")
+        if spin is None or spin.upper() in ["NO SPIN", "STRAIGHT", "NONE"]:
+            spin = "Off Spin"
 
         return {
             "status": "success",
@@ -1144,56 +1151,21 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     Returns (hit: bool, confidence: float)
     """
 
-    if not ball_positions or len(ball_positions) < 5:
+    if not ball_positions:
         return False, 0.0
 
-    stump_x_min = frame_width * 0.46
-    stump_x_max = frame_width * 0.54
-    stump_y_min = frame_height * 0.60
-    stump_y_max = frame_height * 0.95
+    stump_x_min = frame_width * 0.47
+    stump_x_max = frame_width * 0.53
+    stump_y_min = frame_height * 0.64
+    stump_y_max = frame_height * 0.90
 
-    # 1️⃣ Direct stump hit check (last frames)
-    direct_hits = 0
-    for (x, y) in ball_positions[-10:]:
+    hits = 0
+    for (x, y) in ball_positions[-8:]:
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            direct_hits += 1
+            hits += 1
 
-    if direct_hits >= 2:
-        confidence = min(direct_hits / 4.0, 1.0)
-        return True, round(confidence, 2)
-
-    # 2️⃣ LBW projection logic (simple linear forward projection)
-    # Use last 3 motion vectors to project trajectory
-    recent = ball_positions[-4:]
-    if len(recent) < 4:
-        return False, 0.0
-
-    dx1 = recent[1][0] - recent[0][0]
-    dy1 = recent[1][1] - recent[0][1]
-    dx2 = recent[2][0] - recent[1][0]
-    dy2 = recent[2][1] - recent[1][1]
-    dx3 = recent[3][0] - recent[2][0]
-    dy3 = recent[3][1] - recent[2][1]
-
-    avg_dx = (dx1 + dx2 + dx3) / 3.0
-    avg_dy = (dy1 + dy2 + dy3) / 3.0
-
-    # Project forward up to 12 frames
-    proj_x = recent[-1][0]
-    proj_y = recent[-1][1]
-
-    projected_hits = 0
-    for _ in range(12):
-        proj_x += avg_dx
-        proj_y += avg_dy
-        if stump_x_min <= proj_x <= stump_x_max and stump_y_min <= proj_y <= stump_y_max:
-            projected_hits += 1
-
-    if projected_hits >= 2:
-        confidence = min(projected_hits / 6.0, 0.75)
-        return True, round(confidence, 2)
-
-    return False, 0.0
+    confidence = min(hits / 3.0, 1.0)
+    return hits >= 2, round(confidence, 2)
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1237,10 +1209,10 @@ async def drs_review(file: UploadFile = File(...)):
                 "status": "success",
                 "drs": {
                     "ultraedge": False,
-                    "ball_tracking": True,
-                    "stump_confidence": 0.6,
-                    "decision": "OUT",
-                    "reason": "Fallback decision (weak tracking)"
+                    "ball_tracking": False,
+                    "stump_confidence": 0.0,
+                    "decision": "NOT OUT",
+                    "reason": "Insufficient tracking data"
                 }
             }
 

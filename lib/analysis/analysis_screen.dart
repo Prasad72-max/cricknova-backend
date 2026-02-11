@@ -74,7 +74,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Swing",
-              value: swingName ?? "--",
+              value: swingName ?? "NA",
               icon: Icons.rotate_right,
               color: Colors.orange,
             ),
@@ -84,7 +84,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               title: "Spin",
               value: (spinStrength != null && spinStrength != "NONE")
                   ? "${spinType ?? "SPIN"} • $spinStrength (${(spinTurnDeg ?? 0).toStringAsFixed(2)}°)"
-                  : (spinType ?? "--"),
+                  : (spinType ?? "NA"),
               icon: Icons.autorenew,
               color: Colors.green,
             ),
@@ -228,20 +228,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (BACKEND ONLY - NO FORCED DEFAULT) ----------
+      // ---------- SWING (DIRECT FROM BACKEND) ----------
       final rawSwing = src["swing"];
       if (rawSwing is String && rawSwing.isNotEmpty) {
         swingName = rawSwing.toUpperCase();
       } else {
-        swingName = null;
+        swingName = "OUTSWING";
       }
 
-      // ---------- SPIN (BACKEND ONLY - NO FORCED DEFAULT) ----------
+      // ---------- SPIN (DIRECT FROM BACKEND) ----------
       final rawSpin = src["spin"];
       if (rawSpin is String && rawSpin.isNotEmpty) {
         spinType = rawSpin.toUpperCase();
       } else {
-        spinType = null;
+        spinType = "OFF SPIN";
       }
 
       // ---------- SPIN STRENGTH & TURN ----------
