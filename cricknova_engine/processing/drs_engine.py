@@ -53,7 +53,7 @@ def detect_stump_hit(trajectory):
     
     # Ball MUST pitch first (post-bounce frames only)
     y_positions = [_get_xy(p)[1] for p in trajectory]
-    pitch_frame = np.argmax(y_positions)  # Lowest point = bounce
+    pitch_frame = int(np.argmin(y_positions))  # FIXED: Bounce = lowest Y (min), not max
     post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
     
     if len(post_pitch) < 3:
@@ -101,6 +101,6 @@ def analyze_training(data):
             "stump_confidence": round(stump_confidence, 2),
             "decision": decision,
             "reason": reason,
-            "pitch_frame": int(np.argmax([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
+            "pitch_frame": int(np.argmin([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
         }
     }

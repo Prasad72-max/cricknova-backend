@@ -218,7 +218,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSwing is String && rawSwing.isNotEmpty) {
           swing = rawSwing;
         } else {
-          swing = "----";
+          swing = "NA";
         }
 
         // -------- SPIN (FROM BACKEND ONLY, NO MODIFICATION) --------
@@ -226,7 +226,7 @@ class _UploadScreenState extends State<UploadScreen> {
         if (rawSpin is String && rawSpin.isNotEmpty) {
           spin = rawSpin;
         } else {
-          spin = "----";
+          spin = "NA";
         }
 
         final rawStrength = analysis["spin_strength"];
@@ -267,9 +267,12 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = "Reviewing decision...";
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
+    final uri = Uri.parse(
+        "https://cricknova-backend.onrender.com/training/drs");
+
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw Exception("USER_NOT_AUTHENTICATED");
@@ -281,18 +284,27 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     request.headers["Authorization"] = "Bearer $idToken";
-    request.files.add(await http.MultipartFile.fromPath("file", video!.path));
+    request.files.add(
+        await http.MultipartFile.fromPath("file", video!.path));
 
     try {
       final response = await request.send();
       print("DRS STATUS => ${response.statusCode}");
+
+      final respStr = await response.stream.bytesToString();
+      print("DRS RAW RESPONSE => $respStr");
+
       if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
         final data = jsonDecode(respStr);
 
-        final drs = data["drs"];
-        final decision = drs?["decision"]?.toString().toUpperCase() ?? "UNKNOWN";
-        final reason = drs?["reason"]?.toString() ?? "";
+        // Support both nested and flat response formats
+        final dynamic drsBlock = data["drs"] ?? data;
+
+        final decision =
+            drsBlock?["decision"]?.toString().toUpperCase() ?? "UNKNOWN";
+
+        final reason =
+            drsBlock?["reason"]?.toString() ?? "";
 
         setState(() {
           drsResult = "$decision\n$reason";

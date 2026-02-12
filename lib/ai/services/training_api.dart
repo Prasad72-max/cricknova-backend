@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class TrainingApi {
-  static const String baseUrl = "http://192.168.1.14:8000";
+  static const String baseUrl = "https://cricknova-backend.onrender.com";
 
   static Future<Map<String, dynamic>> analyzeVideo(File video) async {
     var request = http.MultipartRequest(
