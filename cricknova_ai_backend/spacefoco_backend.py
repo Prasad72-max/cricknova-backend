@@ -1245,8 +1245,8 @@ async def drs_review(file: UploadFile = File(...)):
                     "ultraedge": False,
                     "ball_tracking": False,
                     "stump_confidence": 0.0,
-                    "decision": "NOT OUT",
-                    "reason": "Insufficient tracking data"
+                    "decision": "INSUFFICIENT DATA",
+                    "reason": "Tracking data not reliable for decision"
                 }
             }
 

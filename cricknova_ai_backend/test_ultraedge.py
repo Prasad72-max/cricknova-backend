@@ -36,7 +36,21 @@ print(f"Confidence : {confidence:.2f}")
 if contact:
     print("DRS RESULT : 🟢 NOT OUT (UltraEdge spike detected)")
 else:
-    print("DRS RESULT : 🔴 PROCEED TO BALL TRACKING")
+    # If no edge, simulate ball tracking + stump check
+    ball_positions = result.get("ball_positions", [])
+    frame_width = result.get("frame_width", 1)
+    frame_height = result.get("frame_height", 1)
+
+    hit, stump_conf = detect_stump_hit_from_positions(
+        ball_positions,
+        frame_width,
+        frame_height
+    )
+
+    if hit:
+        print(f"DRS RESULT : 🔴 OUT (Ball hitting stumps, confidence={stump_conf})")
+    else:
+        print("DRS RESULT : 🟢 NOT OUT (Ball missing stumps)")
 
 print("==========================\n")
 

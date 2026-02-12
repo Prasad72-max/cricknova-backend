@@ -31,10 +31,21 @@ class FusionEngine:
         # angle deviation
         deviation = abs(angle_after - angle_before)
 
-        # ball speed drop
-        speed_before = self._speed(positions, contact_frame - 1, contact_frame - 2)
-        speed_after  = self._speed(positions, contact_frame + 1, contact_frame)
-        speed_ratio  = speed_after / (speed_before + 0.0001)
+        # safe frame bounds handling
+        max_index = len(positions) - 1
+
+        before_1 = max(0, contact_frame - 1)
+        before_2 = max(0, contact_frame - 2)
+        after_1  = min(max_index, contact_frame + 1)
+
+        speed_before = self._speed(positions, before_1, before_2)
+        speed_after  = self._speed(positions, after_1, contact_frame)
+
+        # prevent false zero division or unstable ratios
+        if speed_before <= 0.0001:
+            speed_ratio = 1.0
+        else:
+            speed_ratio = speed_after / speed_before
 
         # ------------------------------------------------------------
         # HARD EDGE CONFIRMATION RULE
@@ -68,6 +79,14 @@ class FusionEngine:
         # ------------------------------------------------------------
         # No edge
         # ------------------------------------------------------------
+        # If spike exists but physics conditions not strong enough,
+        # still return weak BAT signal instead of full NO CONTACT
+        if spike and spike_power > 0.30:
+            return {
+                "result": "BAT",
+                "confidence": spike_power * 0.6
+            }
+
         return {
             "result": "NO CONTACT",
             "confidence": 0.0

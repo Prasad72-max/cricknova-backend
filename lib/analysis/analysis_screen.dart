@@ -253,11 +253,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
 
       // ---------- TRAJECTORY ----------
-      trajectory = src["trajectory"] is List
-          ? List<dynamic>.from(src["trajectory"])
-          : [];
-
-      _showTrajectoryAfterVideo = trajectory!.isNotEmpty;
+      if (src["trajectory"] is List &&
+          (src["trajectory"] as List).isNotEmpty) {
+        trajectory = List<dynamic>.from(src["trajectory"]);
+        _showTrajectoryAfterVideo = true;
+      } else {
+        trajectory = null;
+        _showTrajectoryAfterVideo = false;
+      }
     });
   }
 
