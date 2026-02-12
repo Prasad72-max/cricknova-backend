@@ -672,8 +672,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            # Ensure spin_strength is always numeric
-            "spin_strength": float(spin_result.get("strength") or 0.0),
+            "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
             "trajectory": []
         }
@@ -1130,8 +1129,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            # Ensure spin_strength is always numeric
-            "spin_strength": float(spin_result.get("strength") or 0.0),
+            "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
             "trajectory": []
         }

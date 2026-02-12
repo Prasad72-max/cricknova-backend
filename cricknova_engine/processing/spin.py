@@ -31,7 +31,7 @@ def calculate_spin(ball_positions, fps=30):
     # Default: Straight (no post-bounce turn)
     result = {
         "name": "Straight",
-        "strength": "Light"
+        "strength": 0.0
     }
 
     # Minimum frames required
@@ -95,14 +95,12 @@ def calculate_spin(ball_positions, fps=30):
     else:
         result["name"] = "Off Spin"
 
-    # Strength classification based on lateral displacement only
+    # Strength as numeric lateral displacement magnitude
     abs_disp = abs(lateral_disp)
 
-    if abs_disp < 0.03:
-        result["strength"] = "Light"
-    elif abs_disp < 0.08:
-        result["strength"] = "Medium"
-    else:
-        result["strength"] = "Big Turn"
+    # Clamp to reasonable normalized range (0–1)
+    strength_value = max(0.0, min(abs_disp, 1.0))
+
+    result["strength"] = strength_value
 
     return result
