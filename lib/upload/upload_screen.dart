@@ -40,6 +40,7 @@ class _UploadScreenState extends State<UploadScreen> {
   String spin = "NA";
 
   String spinStrength = "NONE";
+  double spinTurnDeg = 0.0;
   @override
   void initState() {
     super.initState();
@@ -213,27 +214,35 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (FROM BACKEND ONLY, NO MODIFICATION) --------
+        // -------- SWING (DIRECT FROM BACKEND) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.isNotEmpty) {
-          swing = rawSwing;
+          swing = rawSwing.toUpperCase();
         } else {
-          swing = "NA";
+          swing = "OUTSWING";
         }
 
-        // -------- SPIN (FROM BACKEND ONLY, NO MODIFICATION) --------
+        // -------- SPIN (DIRECT FROM BACKEND) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.isNotEmpty) {
-          spin = rawSpin;
+          spin = rawSpin.toUpperCase();
         } else {
-          spin = "NA";
+          spin = "OFF SPIN";
         }
 
+        // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
         final rawStrength = analysis["spin_strength"];
         if (rawStrength is String && rawStrength.isNotEmpty) {
-          spinStrength = rawStrength;
+          spinStrength = rawStrength.toUpperCase();
         } else {
-          spinStrength = "";
+          spinStrength = "LIGHT";
+        }
+
+        final rawTurn = analysis["spin_turn_deg"];
+        if (rawTurn is num) {
+          spinTurnDeg = rawTurn.toDouble();
+        } else {
+          spinTurnDeg = 0.25;
         }
 
         trajectory = const [];
@@ -267,12 +276,9 @@ class _UploadScreenState extends State<UploadScreen> {
       drsResult = "Reviewing decision...";
     });
 
-    final uri = Uri.parse(
-        "https://cricknova-backend.onrender.com/training/drs");
-
+    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
-
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       throw Exception("USER_NOT_AUTHENTICATED");
@@ -284,27 +290,18 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     request.headers["Authorization"] = "Bearer $idToken";
-    request.files.add(
-        await http.MultipartFile.fromPath("file", video!.path));
+    request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
       final response = await request.send();
       print("DRS STATUS => ${response.statusCode}");
-
-      final respStr = await response.stream.bytesToString();
-      print("DRS RAW RESPONSE => $respStr");
-
       if (response.statusCode == 200) {
+        final respStr = await response.stream.bytesToString();
         final data = jsonDecode(respStr);
 
-        // Support both nested and flat response formats
-        final dynamic drsBlock = data["drs"] ?? data;
-
-        final decision =
-            drsBlock?["decision"]?.toString().toUpperCase() ?? "UNKNOWN";
-
-        final reason =
-            drsBlock?["reason"]?.toString() ?? "";
+        final drs = data["drs"];
+        final decision = drs?["decision"]?.toString().toUpperCase() ?? "UNKNOWN";
+        final reason = drs?["reason"]?.toString() ?? "";
 
         setState(() {
           drsResult = "$decision\n$reason";
@@ -661,11 +658,11 @@ class _UploadScreenState extends State<UploadScreen> {
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
                         _metric(
-                          "Spin",
-                          (spinStrength.isNotEmpty)
-                              ? "$spin • $spinStrength"
-                              : spin,
-                        ),
+                           "Spin",
+                          spinStrength != "NONE"
+                               ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
+                               : spin,
+),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

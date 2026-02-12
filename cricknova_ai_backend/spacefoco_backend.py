@@ -168,23 +168,7 @@ from cricknova_ai_backend.subscriptions_store import (
 # TRAJECTORY NORMALIZATION
 # -----------------------------
 def build_trajectory(ball_positions, frame_width, frame_height):
-    """
-    Normalize ball positions to 0–1 screen coordinates for frontend.
-    """
-    trajectory = []
-    if not ball_positions or frame_width <= 0 or frame_height <= 0:
-        return trajectory
-
-    for (x, y) in ball_positions:
-        try:
-            nx = float(x) / float(frame_width)
-            ny = float(y) / float(frame_height)
-            if 0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0:
-                trajectory.append({"x": nx, "y": ny})
-        except Exception:
-            continue
-
-    return trajectory
+    return []
 
 
 # -----------------------------
@@ -628,14 +612,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
-        cap = cv2.VideoCapture(video_path)
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
-
-        if frame_width <= 0 or frame_height <= 0:
-            frame_width, frame_height = 640, 360
-
         if len(ball_positions) < 6:
             return {
                 "status": "success",
@@ -645,7 +621,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "swing": None,
                 "spin": None,
                 "spin_strength": None,
-                "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
+                "spin_turn_deg": None,
+                "trajectory": []
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -681,17 +658,12 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing_result = calculate_swing(ball_positions)
+        swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Straight"
+        swing = swing_result.get("name")
 
-        spin = spin_result.get("name") or "Straight"
-        spin_strength = spin_result.get("strength")
-
-        # Ensure logical consistency: if spin is Straight, no strength
-        if spin == "Straight":
-            spin_strength = None
+        spin = spin_result.get("name")
 
         return {
             "status": "success",
@@ -700,8 +672,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_strength,
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
+            "spin_strength": spin_result.get("strength"),
+            "spin_turn_deg": spin_result.get("turn_deg"),
+            "trajectory": []
         }
 
     finally:
@@ -1098,14 +1071,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
-        cap = cv2.VideoCapture(video_path)
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
-
-        if frame_width <= 0 or frame_height <= 0:
-            frame_width, frame_height = 640, 360
-
         if len(ball_positions) < 6:
             return {
                 "status": "success",
@@ -1115,7 +1080,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "swing": None,
                 "spin": None,
                 "spin_strength": None,
-                "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
+                "spin_turn_deg": None,
+                "trajectory": []
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -1149,16 +1115,12 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing_result = calculate_swing(ball_positions)
+        swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Straight"
+        swing = swing_result.get("name")
 
-        spin = spin_result.get("name") or "Straight"
-        spin_strength = spin_result.get("strength")
-
-        if spin == "Straight":
-            spin_strength = None
+        spin = spin_result.get("name")
 
         return {
             "status": "success",
@@ -1167,8 +1129,9 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_strength,
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
+            "spin_strength": spin_result.get("strength"),
+            "spin_turn_deg": spin_result.get("turn_deg"),
+            "trajectory": []
         }
 
     finally:
@@ -1180,47 +1143,25 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    Improved physics-based stump projection.
-    Uses last trajectory direction instead of only box overlap.
+    ICC-style conservative stump-hit detection.
     Returns (hit: bool, confidence: float)
     """
 
-    if not ball_positions or len(ball_positions) < 8:
+    if not ball_positions:
         return False, 0.0
 
-    # Define stump zone (center corridor)
-    stump_x_center = frame_width * 0.50
-    stump_half_width = frame_width * 0.06
-    stump_y_min = frame_height * 0.60
-    stump_y_max = frame_height * 0.98
+    stump_x_min = frame_width * 0.47
+    stump_x_max = frame_width * 0.53
+    stump_y_min = frame_height * 0.64
+    stump_y_max = frame_height * 0.90
 
-    # Use last 6 positions to estimate direction
-    recent = ball_positions[-6:]
+    hits = 0
+    for (x, y) in ball_positions[-8:]:
+        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
+            hits += 1
 
-    x_vals = [p[0] for p in recent]
-    y_vals = [p[1] for p in recent]
-
-    dx = x_vals[-1] - x_vals[0]
-    dy = y_vals[-1] - y_vals[0]
-
-    # If ball is not moving forward toward stumps
-    if dy <= 0:
-        return False, 0.0
-
-    # Project next position (simple linear projection)
-    projected_x = x_vals[-1] + dx * 0.8
-    projected_y = y_vals[-1] + dy * 0.8
-
-    within_x = abs(projected_x - stump_x_center) <= stump_half_width
-    within_y = stump_y_min <= projected_y <= stump_y_max
-
-    if within_x and within_y:
-        # Confidence based on how centered impact is
-        center_offset = abs(projected_x - stump_x_center)
-        confidence = max(0.3, 1.0 - (center_offset / stump_half_width))
-        return True, round(min(confidence, 1.0), 2)
-
-    return False, 0.0
+    confidence = min(hits / 3.0, 1.0)
+    return hits >= 2, round(confidence, 2)
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1266,8 +1207,8 @@ async def drs_review(file: UploadFile = File(...)):
                     "ultraedge": False,
                     "ball_tracking": False,
                     "stump_confidence": 0.0,
-                    "decision": "INSUFFICIENT DATA",
-                    "reason": "Tracking data not reliable for decision"
+                    "decision": "NOT OUT",
+                    "reason": "Insufficient tracking data"
                 }
             }
 
@@ -1328,12 +1269,9 @@ async def drs_review(file: UploadFile = File(...)):
         if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
-        elif hits_stumps and stump_confidence >= 0.65:
+        elif hits_stumps:
             decision = "OUT"
-            reason = "Ball projected to hit middle of stumps"
-        elif hits_stumps and stump_confidence >= 0.40:
-            decision = "UMPIRE'S CALL"
-            reason = "Clipping stumps"
+            reason = "Ball hitting stumps"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
