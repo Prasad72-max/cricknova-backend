@@ -628,6 +628,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
 
+        cap = cv2.VideoCapture(video_path)
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+
+        if frame_width <= 0 or frame_height <= 0:
+            frame_width, frame_height = 640, 360
+
         if len(ball_positions) < 6:
             return {
                 "status": "success",
@@ -1084,6 +1092,14 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         # Keep enough frames for verified physics (>=10)
         if len(ball_positions) > 120:
             ball_positions = ball_positions[:120]
+
+        cap = cv2.VideoCapture(video_path)
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+
+        if frame_width <= 0 or frame_height <= 0:
+            frame_width, frame_height = 640, 360
 
         if len(ball_positions) < 6:
             return {

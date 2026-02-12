@@ -35,9 +35,9 @@ def calculate_spin(ball_positions):
     dx = np.diff(xs)
     dy = np.diff(ys)
 
-    # Reject if no forward motion
-    forward_motion = np.sum(dy)
-    if abs(forward_motion) < 0.8:
+    # Reject if no forward motion (normalized coordinates safe)
+    forward_motion = float(np.sum(dy))
+    if abs(forward_motion) < 0.05:
         return result
 
     # Use total lateral displacement instead of summed jitter-prone deltas
@@ -94,9 +94,9 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     dx = np.diff(xs)
     dy = np.diff(ys)
 
-    # Ensure forward travel
-    forward_motion = np.sum(dy)
-    if abs(forward_motion) < 1.0:
+    # Ensure forward travel (normalized coordinates safe)
+    forward_motion = float(np.sum(dy))
+    if abs(forward_motion) < 0.05:
         return result
 
     # Use total lateral displacement in air phase

@@ -72,16 +72,16 @@ def calculate_spin(ball_positions, fps=30):
     lateral_disp *= -1
     forward_disp = ys[-1] - ys[0]
 
-    # Reject unreliable motion
-    if abs(forward_disp) < 0.5:
+    # Reject unreliable motion (normalized coordinates safe)
+    if abs(forward_disp) < 0.05:
         return result
 
     # Compute turn angle
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
 
-    # Sensitive real-world threshold (normalized coordinates)
-    dynamic_threshold = max(0.01, abs(forward_disp) * 0.01)
+    # More sensitive threshold for normalized 0–1 coordinates
+    dynamic_threshold = max(0.004, abs(forward_disp) * 0.006)
 
     if abs(lateral_disp) < dynamic_threshold:
         return result

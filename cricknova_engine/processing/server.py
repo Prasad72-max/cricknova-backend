@@ -145,7 +145,14 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # REALISTIC SWING & SPIN (PHYSICS-BASED)
     # -----------------------------
-    ball_positions = list(last_pos)
+    ball_positions_px = list(last_pos)
+
+    # Normalize positions to 0–1 scale for physics engine
+    h, w = frame.shape[:2]
+    ball_positions = []
+    if w > 0 and h > 0:
+        for (x, y) in ball_positions_px:
+            ball_positions.append((float(x) / float(w), float(y) / float(h)))
 
     swing_result = calculate_swing(ball_positions)
     spin_result = calculate_spin(ball_positions)
@@ -161,5 +168,8 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         "swing": swing,
         "spin": spin,
         "spin_strength": spin_result.get("strength"),
-        "trajectory": list(last_pos)
+        "trajectory": [
+            {"x": float(x) / float(w), "y": float(y) / float(h)}
+            for (x, y) in ball_positions_px
+        ]
     }
