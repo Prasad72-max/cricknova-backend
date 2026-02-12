@@ -33,13 +33,12 @@ async def analyze_video(file: UploadFile = File(...)):
         result = analyze_first_ball(video_path, model_path)
         
         if result.get("status") == "error":
-            # Fallback to basic analysis if detection fails
             return {
-                "status": "success",
-                "speed_kmph": 125.0,
-                "swing": "Straight",
-                "spin": "No Spin",
+                "status": "error",
                 "message": result.get("message", "Could not detect ball"),
+                "speed_kmph": None,
+                "swing": None,
+                "spin": None,
                 "trajectory": []
             }
         
@@ -49,8 +48,8 @@ async def analyze_video(file: UploadFile = File(...)):
         # Analyze swing from trajectory
         swing = analyze_swing(result)
         
-        # Analyze spin (basic estimation)
-        spin = "No Spin"  # Placeholder for now
+        # Analyze spin from post-bounce trajectory
+        spin = analyze_spin(result)
         
         return {
             "status": "success",
@@ -106,8 +105,8 @@ def calculate_speed(ball_data):
     speed_ms = distance_meters / time_seconds
     speed_kmph = speed_ms * 3.6
     
-    # Clamp to realistic bowling speeds (100-150 km/h)
-    speed_kmph = max(100, min(150, speed_kmph))
+    # Clamp to realistic bowling speeds (80-165 km/h)
+    speed_kmph = max(80, min(165, speed_kmph))
     
     return round(speed_kmph, 1)
 
@@ -141,5 +140,32 @@ def analyze_swing(ball_data):
         return "Outswing"
     elif deviation < -swing_threshold:
         return "Inswing"
+    else:
+        return "Straight"
+
+
+def analyze_spin(ball_data):
+    """
+    Analyze spin using post-bounce trajectory.
+    Measures horizontal deviation after bounce.
+    """
+    post_bounce = ball_data.get("post_bounce_trajectory", [])
+
+    if len(post_bounce) < 4:
+        return "Straight"
+
+    x_positions = [p["x"] for p in post_bounce]
+
+    start_x = x_positions[0]
+    end_x = x_positions[-1]
+
+    deviation = end_x - start_x
+
+    spin_threshold = 0.03  # smaller threshold after bounce
+
+    if deviation > spin_threshold:
+        return "Leg Spin"
+    elif deviation < -spin_threshold:
+        return "Off Spin"
     else:
         return "Straight"

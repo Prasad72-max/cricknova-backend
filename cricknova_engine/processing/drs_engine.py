@@ -1,106 +1,88 @@
-import numpy as np
-import librosa
+"""
+Clean DRS Engine for CrickNova
+--------------------------------
+Uses trajectory points to decide OUT / NOT OUT
+No hardcoded fallback decisions.
+"""
 
-def _get_xy(p):
-    if isinstance(p, dict):
-        return p.get("x", 0.0), p.get("y", 0.0)
-    if isinstance(p, (list, tuple)) and len(p) >= 2:
-        return float(p[0]), float(p[1])
-    return 0.0, 0.0
+import math
 
-# FIXED: Static class variable bug
-ball_near_bat_cache = False  # Global instead of ._ball_near_bat
 
-def ball_near_bat(trajectory):
-    """Bat zone detection - FIXED tighter window"""
-    if not trajectory or len(trajectory) < 3:
-        return False
-    
-    for p in trajectory:
-        x, y = _get_xy(p)
-        # TIGHTER bat zone (realistic swing path)
-        if 0.45 <= x <= 0.55 and 0.25 <= y <= 0.38:  # Was too wide
-            return True
-    return False
+class DRSEngine:
 
-def detect_ultraedge(video_path, trajectory):  # FIXED: Pass trajectory
-    global ball_near_bat_cache
-    if not ball_near_bat_cache:  # Use global cache
-        return False
-    
-    try:
-        audio, sr = librosa.load(video_path, sr=None, duration=5.0)  # Limit duration
-    except:
-        return False
+    def __init__(self):
+        # Normalized stump zone (0–1 screen space)
+        # Adjust if needed based on camera calibration
+        self.stump_left = 0.45
+        self.stump_right = 0.55
 
-    # FIXED: Better spike detection
-    frame_len = int(0.008 * sr)  # 8ms (sharper)
-    hop_len = int(0.004 * sr)    # 4ms
-    
-    energy = librosa.feature.rms(y=audio, frame_length=frame_len, hop_length=hop_len)[0]
-    
-    # ADAPTIVE threshold (pitch noise varies)
-    mean_energy = np.mean(energy)
-    std_energy = np.std(energy)
-    if len(energy) > 10 and np.max(energy) > mean_energy + 8 * std_energy:
-        return True
-    return False
+    def _project_to_stumps(self, trajectory):
+        """
+        Simple linear projection using last 3 trajectory points
+        """
+        if len(trajectory) < 3:
+            return None
 
-def detect_stump_hit(trajectory):
-    """FIXED: Physics-based stump zone + post-pitch only"""
-    if not trajectory or len(trajectory) < 8:
-        return 0.0
-    
-    # Ball MUST pitch first (post-bounce frames only)
-    y_positions = [_get_xy(p)[1] for p in trajectory]
-    pitch_frame = int(np.argmin(y_positions))  # FIXED: Bounce = lowest Y (min), not max
-    post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
-    
-    if len(post_pitch) < 3:
-        return 0.0
-    
-    hits = 0
-    for p in post_pitch:
-        x, y = _get_xy(p)
-        # REAL stump zone (3 stumps width, top 30% height)
-        if 0.44 <= x <= 0.56 and 0.65 <= y <= 0.95:  # Tighter + higher
-            hits += 1
-    
-    return hits / len(post_pitch)
+        p1 = trajectory[-3]
+        p2 = trajectory[-2]
+        p3 = trajectory[-1]
 
-def analyze_training(data):
-    trajectory = data.get("trajectory", [])
-    video_path = data.get("video_path")
-    
-    global ball_near_bat_cache
-    ball_near_bat_cache = ball_near_bat(trajectory)  # FIXED cache
-    
-    # FIXED UltraEdge logic
-    ultraedge = False
-    if video_path:
-        ultraedge = detect_ultraedge(video_path, trajectory)
-    stump_confidence = detect_stump_hit(trajectory)
-    
-    # PHYSICS-BASED DECISION TREE (TV DRS logic)
-    if ultraedge:
-        decision = "NOT OUT"
-        reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.55:
-        decision = "OUT"
-        reason = "Ball projected to hit stumps"
-    elif stump_confidence >= 0.30:
-        decision = "UMPIRE'S CALL"
-        reason = "Clipping top of stumps"
-    else:
-        decision = "NOT OUT"
-        reason = "Ball missing stumps"
-    
-    return {
-        "drs": {
-            "ultraedge": ultraedge,
-            "stump_confidence": round(stump_confidence, 2),
-            "decision": decision,
-            "reason": reason,
-            "pitch_frame": int(np.argmin([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
+        dx = p3["x"] - p1["x"]
+        dy = p3["y"] - p1["y"]
+
+        if abs(dy) < 1e-5:
+            return None
+
+        # Project to y = 1.0 (batsman end)
+        slope = dx / dy
+        remaining_y = 1.0 - p3["y"]
+        projected_x = p3["x"] + slope * remaining_y
+
+        return projected_x
+
+    def evaluate(self, trajectory):
+        """
+        trajectory: list of dicts [{"x": float, "y": float}]
+
+        Returns:
+        {
+            "decision": "OUT" | "NOT_OUT",
+            "impact_zone": str,
+            "stump_projection": float | None
         }
-    }
+        """
+
+        if not trajectory or len(trajectory) < 6:
+            return {
+                "decision": "NOT_OUT",
+                "impact_zone": "INSUFFICIENT_DATA",
+                "stump_projection": None
+            }
+
+        projected_x = self._project_to_stumps(trajectory)
+
+        if projected_x is None:
+            return {
+                "decision": "NOT_OUT",
+                "impact_zone": "NO_PROJECTION",
+                "stump_projection": None
+            }
+
+        # Check stump zone
+        if self.stump_left <= projected_x <= self.stump_right:
+            decision = "OUT"
+            zone = "HITTING"
+        else:
+            decision = "NOT_OUT"
+            zone = "MISSING"
+
+        return {
+            "decision": decision,
+            "impact_zone": zone,
+            "stump_projection": round(projected_x, 3)
+        }
+
+
+def calculate_drs(trajectory):
+    engine = DRSEngine()
+    return engine.evaluate(trajectory)
