@@ -49,8 +49,13 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     String swing = "NA";
 
     final rawSwing = src["swing"];
-    if (rawSwing is String && rawSwing.isNotEmpty) {
-      swing = rawSwing;
+    if (rawSwing is String) {
+      final s = rawSwing.toLowerCase().trim();
+      if (s == "inswing" || s == "outswing") {
+        swing = s;
+      } else {
+        swing = "NA";
+      }
     }
 
     // ---------- SPIN (DIRECT FROM BACKEND, NO MODIFICATION) ----------
@@ -58,13 +63,20 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     String spinStrength = "";
 
     final rawSpin = src["spin"];
-    if (rawSpin is String && rawSpin.isNotEmpty) {
-      spin = rawSpin;
+    if (rawSpin is String) {
+      final s = rawSpin.toLowerCase().trim();
+      if (s == "leg spin" || s == "off spin") {
+        spin = s;
+      } else {
+        spin = "NA";
+      }
     }
 
     final rawStrength = src["spin_strength"];
-    if (rawStrength is String && rawStrength.isNotEmpty) {
+    if (rawStrength is String && rawStrength.isNotEmpty && spin != "NA") {
       spinStrength = rawStrength;
+    } else {
+      spinStrength = "";
     }
 
 

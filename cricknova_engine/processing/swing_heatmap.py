@@ -33,6 +33,11 @@ class SwingHeatmap:
             self._baseline_x = float(x)
         norm_x = float(x) - getattr(self, "_baseline_x", float(x))
 
+        # ---- Noise filter to prevent fake swing from tiny tracking jitter ----
+        # If lateral displacement is extremely small, treat it as straight
+        if abs(norm_x) < 0.8:
+            norm_x = 0.0
+
 
         # preserve signed lateral displacement for swing direction
         self.swing_points.append((norm_x, float(y), speed))

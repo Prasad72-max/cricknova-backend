@@ -80,10 +80,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin",
-              value: (spinType != null && spinType!.isNotEmpty)
-                  ? (spinStrength != null && spinStrength != "NONE"
-                      ? "${spinType!} • $spinStrength"
-                      : spinType!)
+              value: (spinType != null)
+                  ? spinType!
                   : "NA",
               icon: Icons.autorenew,
               color: Colors.green,
@@ -228,18 +226,28 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (USE BACKEND VALUE EXACTLY) ----------
+      // ---------- SWING (STRICT NORMALIZATION) ----------
       final rawSwing = src["swing"];
-      if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-        swingName = rawSwing.trim();
+      if (rawSwing is String) {
+        final s = rawSwing.trim().toLowerCase();
+        if (s.isEmpty || s == "unknown" || s == "none" || s == "straight") {
+          swingName = null;
+        } else {
+          swingName = s;
+        }
       } else {
         swingName = null;
       }
 
-      // ---------- SPIN (USE BACKEND VALUE EXACTLY) ----------
+      // ---------- SPIN (STRICT NORMALIZATION) ----------
       final rawSpin = src["spin"];
-      if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-        spinType = rawSpin.trim();
+      if (rawSpin is String) {
+        final s = rawSpin.trim().toLowerCase();
+        if (s.isEmpty || s == "none" || s == "unknown") {
+          spinType = null;
+        } else {
+          spinType = s;
+        }
       } else {
         spinType = null;
       }

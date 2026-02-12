@@ -661,9 +661,19 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
+        # --- Strict swing filtering (avoid fake detection) ---
+        swing_strength = swing_result.get("strength", 0.0)
+        if swing_strength and swing_strength >= 0.015:
+            swing = swing_result.get("name")
+        else:
+            swing = None
 
-        spin = spin_result.get("name")
+        # --- Strict spin filtering (avoid fake detection) ---
+        spin_strength = spin_result.get("strength", 0.0)
+        if spin_strength and spin_strength >= 0.02:
+            spin = spin_result.get("name")
+        else:
+            spin = None
 
         return {
             "status": "success",
@@ -672,8 +682,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_result.get("strength"),
-            "spin_turn_deg": spin_result.get("turn_deg"),
             "trajectory": []
         }
 
@@ -1118,9 +1126,19 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
+        # --- Strict swing filtering (avoid fake detection) ---
+        swing_strength = swing_result.get("strength", 0.0)
+        if swing_strength and swing_strength >= 0.015:
+            swing = swing_result.get("name")
+        else:
+            swing = None
 
-        spin = spin_result.get("name")
+        # --- Strict spin filtering (avoid fake detection) ---
+        spin_strength = spin_result.get("strength", 0.0)
+        if spin_strength and spin_strength >= 0.02:
+            spin = spin_result.get("name")
+        else:
+            spin = None
 
         return {
             "status": "success",
@@ -1129,8 +1147,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_result.get("strength"),
-            "spin_turn_deg": spin_result.get("turn_deg"),
             "trajectory": []
         }
 

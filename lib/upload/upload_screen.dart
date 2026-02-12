@@ -214,36 +214,30 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (DIRECT FROM BACKEND) --------
+        // -------- SWING (STRICT FROM BACKEND, NO FAKE DEFAULTS) --------
         final rawSwing = analysis["swing"];
-        if (rawSwing is String && rawSwing.isNotEmpty) {
+        if (rawSwing is String &&
+            rawSwing.isNotEmpty &&
+            rawSwing.toLowerCase() != "unknown" &&
+            rawSwing.toLowerCase() != "straight") {
           swing = rawSwing.toUpperCase();
         } else {
-          swing = "OUTSWING";
+          swing = "NA";
         }
 
-        // -------- SPIN (DIRECT FROM BACKEND) --------
+        // -------- SPIN (STRICT FROM BACKEND, NO FAKE DEFAULTS) --------
         final rawSpin = analysis["spin"];
-        if (rawSpin is String && rawSpin.isNotEmpty) {
+        if (rawSpin is String &&
+            rawSpin.isNotEmpty &&
+            rawSpin.toLowerCase() != "none") {
           spin = rawSpin.toUpperCase();
         } else {
-          spin = "OFF SPIN";
+          spin = "NONE";
         }
 
-        // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
-        final rawStrength = analysis["spin_strength"];
-        if (rawStrength is String && rawStrength.isNotEmpty) {
-          spinStrength = rawStrength.toUpperCase();
-        } else {
-          spinStrength = "LIGHT";
-        }
-
-        final rawTurn = analysis["spin_turn_deg"];
-        if (rawTurn is num) {
-          spinTurnDeg = rawTurn.toDouble();
-        } else {
-          spinTurnDeg = 0.25;
-        }
+        // Disable spin strength + degree display (avoid fake visuals)
+        spinStrength = "NONE";
+        spinTurnDeg = 0.0;
 
         trajectory = const [];
         showTrajectory = false;
@@ -657,12 +651,7 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
-                        _metric(
-                           "Spin",
-                          spinStrength != "NONE"
-                               ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
-                               : spin,
-),
+                        _metric("Spin", spin),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,
