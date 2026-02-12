@@ -40,14 +40,13 @@ def calculate_spin(ball_positions):
     if abs(forward_motion) < 0.8:
         return result
 
-    # Accumulate lateral curvature
-    lateral_curve = np.sum(dx)
+    # Use total lateral displacement instead of summed jitter-prone deltas
+    lateral_curve = float(xs[-1] - xs[0])
     # --- CAMERA MIRROR FIX ---
-    # Flip horizontal axis to correct mirrored videos
     lateral_curve *= -1
 
-    # Sensitive but real-world threshold (normalized coordinates)
-    dynamic_spin_threshold = max(0.01, abs(forward_motion) * 0.01)
+    # More sensitive threshold to avoid excessive "Straight"
+    dynamic_spin_threshold = max(0.004, abs(forward_motion) * 0.006)
 
     if abs(lateral_curve) < dynamic_spin_threshold:
         return result
@@ -100,14 +99,13 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     if abs(forward_motion) < 1.0:
         return result
 
-    # Accumulate lateral air movement
-    lateral_air_curve = np.sum(dx)
+    # Use total lateral displacement in air phase
+    lateral_air_curve = float(xs[-1] - xs[0])
     # --- CAMERA MIRROR FIX ---
-    # Flip horizontal axis to correct mirrored videos
     lateral_air_curve *= -1
 
-    # Dynamic swing sensitivity (works for normalized 0–1 scale)
-    dynamic_swing_threshold = max(0.008, abs(forward_motion) * 0.012)
+    # More sensitive swing detection to reduce false "Straight"
+    dynamic_swing_threshold = max(0.0035, abs(forward_motion) * 0.007)
 
     if abs(lateral_air_curve) < dynamic_swing_threshold:
         return result

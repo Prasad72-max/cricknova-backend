@@ -1,7 +1,7 @@
 import cv2
 import os
 
-def split_deliveries(video_path, output_folder, min_movement=15, idle_frames=25):
+def split_deliveries(video_path, output_folder, min_movement=8, idle_frames=35):
     """
     Automatically splits a cricket net session video into separate deliveries.
     
@@ -40,7 +40,9 @@ def split_deliveries(video_path, output_folder, min_movement=15, idle_frames=25)
 
         # Difference between frames
         diff = cv2.absdiff(prev_gray, gray)
-        movement = cv2.countNonZero(cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)[1])
+        _, thresh = cv2.threshold(diff, 20, 255, cv2.THRESH_BINARY)
+        thresh = cv2.medianBlur(thresh, 5)
+        movement = cv2.countNonZero(thresh)
 
         # Ball (movement) detected
         if movement > min_movement:
@@ -71,6 +73,11 @@ def split_deliveries(video_path, output_folder, min_movement=15, idle_frames=25)
 
         prev_gray = gray
         frame_id += 1
+
+    # If still recording at end of video, save last delivery
+    if recording and out is not None:
+        out.release()
+        print(f"Delivery {delivery_id} saved (end of video).")
 
     # Clean up
     cap.release()

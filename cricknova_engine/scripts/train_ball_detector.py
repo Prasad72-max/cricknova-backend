@@ -14,12 +14,17 @@ def train_ball_detector():
 
     # Train the model
     model.train(
-        data="cricknova_engine/data/ball_dataset.yaml",   # dataset path
-        epochs=50,
+        data="cricknova_engine/data/ball_dataset.yaml",
+        epochs=80,
         imgsz=640,
         batch=16,
         name="ball_detector",
-        patience=20,
+        patience=30,
+        workers=4,
+        cache=True,
+        cos_lr=True,
+        close_mosaic=10,
+        lr0=0.002,
         augment=True
     )
 

@@ -28,8 +28,10 @@ class SwingHeatmap:
         if self.impact_points:
             return
 
-        # Preserve raw lateral displacement (do not re-normalize here)
-        norm_x = float(x)
+        # Normalize relative to first swing point to capture true lateral movement
+        if not self.swing_points:
+            self._baseline_x = float(x)
+        norm_x = float(x) - getattr(self, "_baseline_x", float(x))
 
 
         # preserve signed lateral displacement for swing direction

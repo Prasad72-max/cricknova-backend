@@ -24,7 +24,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double? speedKmph;
   String? speedType;
   String? swingName;
-  double? swingDegree;
   String? spinType;
   String? spinStrength;
   List<dynamic>? trajectory;
@@ -81,15 +80,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin",
-              value: (spinStrength != null && spinStrength != "NONE")
-                  ? "${spinType ?? "SPIN"} • $spinStrength"
-                  : (spinType ?? "NA"),
+              value: (spinType != null && spinType!.isNotEmpty)
+                  ? (spinStrength != null && spinStrength != "NONE"
+                      ? "${spinType!} • $spinStrength"
+                      : spinType!)
+                  : "NA",
               icon: Icons.autorenew,
               color: Colors.green,
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: (speedKmph == null && swingName == null && spinType == null)
+              onPressed: (speedKmph == null && swingName == null && spinType == null && spinStrength == null)
                   ? null
                   : () async {
                       Navigator.push(

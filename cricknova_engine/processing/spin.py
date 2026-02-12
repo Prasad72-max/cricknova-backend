@@ -31,8 +31,7 @@ def calculate_spin(ball_positions, fps=30):
     # Default: Straight (no post-bounce turn)
     result = {
         "name": "Straight",
-        "strength": "Light",
-        "turn_deg": 0.0
+        "strength": "Light"
     }
 
     # Minimum frames required
@@ -80,7 +79,6 @@ def calculate_spin(ball_positions, fps=30):
     # Compute turn angle
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
-    result["turn_deg"] = round(turn_deg, 3)
 
     # Sensitive real-world threshold (normalized coordinates)
     dynamic_threshold = max(0.01, abs(forward_disp) * 0.01)

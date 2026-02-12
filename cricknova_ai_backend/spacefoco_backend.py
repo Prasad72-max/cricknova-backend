@@ -168,7 +168,23 @@ from cricknova_ai_backend.subscriptions_store import (
 # TRAJECTORY NORMALIZATION
 # -----------------------------
 def build_trajectory(ball_positions, frame_width, frame_height):
-    return []
+    """
+    Normalize ball positions to 0–1 screen coordinates for frontend.
+    """
+    trajectory = []
+    if not ball_positions or frame_width <= 0 or frame_height <= 0:
+        return trajectory
+
+    for (x, y) in ball_positions:
+        try:
+            nx = float(x) / float(frame_width)
+            ny = float(y) / float(frame_height)
+            if 0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0:
+                trajectory.append({"x": nx, "y": ny})
+        except Exception:
+            continue
+
+    return trajectory
 
 
 # -----------------------------
@@ -621,7 +637,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "swing": None,
                 "spin": None,
                 "spin_strength": None,
-                "trajectory": []
+                "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -672,7 +688,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "swing": swing,
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
-            "trajectory": []
+            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
         }
 
     finally:
@@ -1078,7 +1094,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "swing": None,
                 "spin": None,
                 "spin_strength": None,
-                "trajectory": []
+                "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -1127,7 +1143,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "swing": swing,
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
-            "trajectory": []
+            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
         }
 
     finally:

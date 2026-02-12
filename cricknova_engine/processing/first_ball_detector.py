@@ -164,8 +164,8 @@ class FirstBallDetector:
             prev_frame = detections[i-1][0]
             curr_frame = detections[i][0]
             
-            # If gap is too large, assume first ball ended
-            if curr_frame - prev_frame > 10:
+            # Allow slightly larger gaps to avoid premature cut
+            if curr_frame - prev_frame > 18:
                 break
             
             first_delivery.append(detections[i])
@@ -204,11 +204,11 @@ class FirstBallDetector:
             prev_vy = velocities[i-1][1]
             curr_vy = velocities[i][1]
             
-            # Bounce detected: motion reversal or significant slowdown
-            if prev_vy > 5 and curr_vy < -2:
+            # More sensitive bounce detection
+            if prev_vy > 3 and curr_vy < -1:
                 bounce_idx = velocities[i][0]
                 break
-            elif prev_vy > 10 and abs(curr_vy) < 2:
+            elif prev_vy > 6 and abs(curr_vy) < 1.5:
                 bounce_idx = velocities[i][0]
                 break
         

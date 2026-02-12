@@ -113,7 +113,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           _metric("Swing", swing),
           _metric(
             "Spin",
-            spinStrength != "NONE"
+            (spin != "NA" && spin.toUpperCase() != "STRAIGHT" && spinStrength != "NONE")
                 ? "$spin • $spinStrength"
                 : spin,
           ),

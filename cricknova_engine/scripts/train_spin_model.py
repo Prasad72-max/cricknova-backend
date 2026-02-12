@@ -9,17 +9,21 @@ def train_spin_detector():
 
     print("🔥 Training Spin/Seam Detector Started...")
 
-    # Using YOLOv8s for better small-object detection
-    model = YOLO("yolov8s.pt")
+    # Use nano model for faster experimentation or small dataset stability
+    model = YOLO("yolov8n.pt")
 
     model.train(
         data="cricknova_engine/data/seam_dataset.yaml",
-        epochs=60,
+        epochs=80,
         imgsz=640,
-        batch=12,
+        batch=16,
         name="seam_detector",
-        patience=25,
+        patience=30,
         workers=4,
+        cache=True,
+        cos_lr=True,
+        close_mosaic=10,
+        lr0=0.002,
         augment=True
     )
 
