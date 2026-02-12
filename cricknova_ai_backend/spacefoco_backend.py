@@ -168,7 +168,25 @@ from cricknova_ai_backend.subscriptions_store import (
 # TRAJECTORY NORMALIZATION
 # -----------------------------
 def build_trajectory(ball_positions, frame_width, frame_height):
-    return []
+    """
+    Build normalized trajectory (0–1 scale) for frontend + physics use.
+    """
+    trajectory = []
+
+    if not ball_positions or frame_width <= 0 or frame_height <= 0:
+        return trajectory
+
+    for (x, y) in ball_positions:
+        try:
+            nx = float(x) / float(frame_width)
+            ny = float(y) / float(frame_height)
+
+            if math.isfinite(nx) and math.isfinite(ny):
+                trajectory.append({"x": nx, "y": ny})
+        except Exception:
+            continue
+
+    return trajectory
 
 
 # -----------------------------
@@ -674,7 +692,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": []
+            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
         }
 
     finally:
@@ -1131,7 +1149,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": []
+            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
         }
 
     finally:
