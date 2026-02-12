@@ -298,14 +298,12 @@ class _UploadScreenState extends State<UploadScreen> {
       if (response.statusCode == 200) {
         final respStr = await response.stream.bytesToString();
         final data = jsonDecode(respStr);
-        final src = data["analysis"] ?? data;
 
-        // New backend structure support
-        final rawDecision =
-            src["drs_decision"] ?? src["decision"];
+        // Backend returns DRS inside "drs" object
+        final drs = data["drs"];
 
-        final rawConfidence =
-            src["stump_confidence"] ?? src["confidence"];
+        final rawDecision = drs?["decision"];
+        final rawConfidence = drs?["stump_confidence"];
 
         String decisionText =
             rawDecision?.toString().toUpperCase() ?? "UNKNOWN";

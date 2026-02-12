@@ -1143,28 +1143,40 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    ICC-style conservative stump-hit detection.
+    Adaptive stump-hit detection based on final ball trajectory.
     Returns (hit: bool, confidence: float)
     """
 
-    if not ball_positions:
+    if not ball_positions or len(ball_positions) < 6:
         return False, 0.0
 
-    # Slightly wider, camera-tolerant stump zone
-    stump_x_min = frame_width * 0.44
-    stump_x_max = frame_width * 0.56
-    stump_y_min = frame_height * 0.60
-    stump_y_max = frame_height * 0.95
+    # Use last 15 frames for end-trajectory analysis
+    recent = ball_positions[-15:]
+
+    xs = [p[0] for p in recent]
+    ys = [p[1] for p in recent]
+
+    # Estimate stump center dynamically from median x-position
+    median_x = float(np.median(xs))
+
+    # Define adaptive stump zone width (camera tolerant)
+    zone_width = frame_width * 0.12
+    stump_x_min = median_x - zone_width
+    stump_x_max = median_x + zone_width
+
+    # Lower half of frame typically contains stumps
+    stump_y_min = frame_height * 0.50
+    stump_y_max = frame_height * 0.98
 
     hits = 0
-    # Check last 12 frames for better confidence
-    for (x, y) in ball_positions[-12:]:
+    for (x, y) in recent:
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
 
-    # More sensitive hit detection
-    confidence = min(hits / 2.5, 1.0)
-    return hits >= 1, round(confidence, 2)
+    # Confidence scaled by number of frames inside zone
+    confidence = min(hits / 4.0, 1.0)
+
+    return hits >= 2, round(confidence, 2)
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR

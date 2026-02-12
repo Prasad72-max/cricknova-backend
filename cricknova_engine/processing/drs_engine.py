@@ -62,10 +62,22 @@ def detect_stump_hit(trajectory):
         return 0.0
     
     hits = 0
+
+    # Use dynamic stump center based on median x after pitch
+    xs = [_get_xy(p)[0] for p in post_pitch]
+    median_x = float(np.median(xs)) if xs else 0.5
+
+    zone_width = 0.08  # 8% width tolerance (normalized scale)
+    stump_x_min = median_x - zone_width
+    stump_x_max = median_x + zone_width
+
+    # Assume lower half contains stumps
+    stump_y_min = 0.55
+    stump_y_max = 0.98
+
     for p in post_pitch:
         x, y = _get_xy(p)
-        # REAL stump zone (3 stumps width, top 30% height)
-        if 0.46 <= x <= 0.54 and 0.68 <= y <= 0.92:  # Tighter + higher
+        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
     
     return hits / len(post_pitch)
@@ -101,6 +113,6 @@ def analyze_training(data):
             "stump_confidence": round(stump_confidence, 2),
             "decision": decision,
             "reason": reason,
-            "pitch_frame": int(np.argmax([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
+            "pitch_frame": int(np.argmin([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
         }
     }
