@@ -72,8 +72,8 @@ def calculate_spin(ball_positions, fps=30):
     lateral_disp *= -1
     forward_disp = ys[-1] - ys[0]
 
-    # Reject unreliable motion (normalized coordinates safe)
-    if abs(forward_disp) < 0.05:
+    # Reject unreliable motion (more sensitive for subtle spin)
+    if abs(forward_disp) < 0.01:
         return result
 
     # Compute turn angle
@@ -81,10 +81,12 @@ def calculate_spin(ball_positions, fps=30):
     turn_deg = math.degrees(turn_rad)
 
     # More sensitive threshold for normalized 0–1 coordinates
-    dynamic_threshold = max(0.004, abs(forward_disp) * 0.006)
+    dynamic_threshold = max(0.002, abs(forward_disp) * 0.003)
 
     if abs(lateral_disp) < dynamic_threshold:
-        return result
+        dynamic_threshold *= 0.6
+        if abs(lateral_disp) < dynamic_threshold:
+            return result
 
     # Spin direction — FIXED SIGN
     # Coordinate system inverted: swap OFF / LEG

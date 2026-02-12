@@ -37,7 +37,7 @@ def calculate_spin(ball_positions):
 
     # Reject if no forward motion (normalized coordinates safe)
     forward_motion = float(np.sum(dy))
-    if abs(forward_motion) < 0.05:
+    if abs(forward_motion) < 0.01:
         return result
 
     # Use total lateral displacement instead of summed jitter-prone deltas
@@ -46,10 +46,10 @@ def calculate_spin(ball_positions):
     lateral_curve *= -1
 
     # More sensitive threshold to avoid excessive "Straight"
-    dynamic_spin_threshold = max(0.004, abs(forward_motion) * 0.006)
+    dynamic_spin_threshold = max(0.002, abs(forward_motion) * 0.003)
 
     if abs(lateral_curve) < dynamic_spin_threshold:
-        return result
+        dynamic_spin_threshold *= 0.6
 
     # Direction (RH batter reference)
     if lateral_curve < 0:
@@ -96,7 +96,7 @@ def calculate_swing(ball_positions, batter_hand="RH"):
 
     # Ensure forward travel (normalized coordinates safe)
     forward_motion = float(np.sum(dy))
-    if abs(forward_motion) < 0.05:
+    if abs(forward_motion) < 0.01:
         return result
 
     # Use total lateral displacement in air phase
@@ -105,10 +105,10 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     lateral_air_curve *= -1
 
     # More sensitive swing detection to reduce false "Straight"
-    dynamic_swing_threshold = max(0.0035, abs(forward_motion) * 0.007)
+    dynamic_swing_threshold = max(0.0018, abs(forward_motion) * 0.0035)
 
     if abs(lateral_air_curve) < dynamic_swing_threshold:
-        return result
+        dynamic_swing_threshold *= 0.6
 
     # Direction logic (relative to batter) — FIXED SIGN
     if batter_hand == "RH":

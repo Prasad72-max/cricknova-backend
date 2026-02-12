@@ -45,42 +45,26 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (DIRECT FROM BACKEND, NORMALIZED) ----------
+    // ---------- SWING (DIRECT FROM BACKEND, NO MODIFICATION) ----------
     String swing = "NA";
 
     final rawSwing = src["swing"];
     if (rawSwing is String && rawSwing.isNotEmpty) {
-      final normalized = rawSwing.toUpperCase();
-
-      if (normalized == "OS") {
-        swing = "OUTSWING";
-      } else if (normalized == "IS") {
-        swing = "INSWING";
-      } else {
-        swing = normalized;
-      }
+      swing = rawSwing;
     }
 
-    // ---------- SPIN (DIRECT FROM BACKEND, NORMALIZED) ----------
+    // ---------- SPIN (DIRECT FROM BACKEND, NO MODIFICATION) ----------
     String spin = "NA";
-    String spinStrength = "NONE";
+    String spinStrength = "";
 
     final rawSpin = src["spin"];
     if (rawSpin is String && rawSpin.isNotEmpty) {
-      final normalizedSpin = rawSpin.toUpperCase();
-
-      if (normalizedSpin == "OS") {
-        spin = "OFF SPIN";
-      } else if (normalizedSpin == "LS") {
-        spin = "LEG SPIN";
-      } else {
-        spin = normalizedSpin;
-      }
+      spin = rawSpin;
     }
 
     final rawStrength = src["spin_strength"];
     if (rawStrength is String && rawStrength.isNotEmpty) {
-      spinStrength = rawStrength.toUpperCase();
+      spinStrength = rawStrength;
     }
 
 
@@ -113,7 +97,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           _metric("Swing", swing),
           _metric(
             "Spin",
-            (spin != "NA" && spin.toUpperCase() != "STRAIGHT" && spinStrength != "NONE")
+            (spinStrength.isNotEmpty)
                 ? "$spin • $spinStrength"
                 : spin,
           ),

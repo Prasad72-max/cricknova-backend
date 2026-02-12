@@ -684,9 +684,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions)
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
+        swing = swing_result.get("name") or "Straight"
 
-        spin = spin_result.get("name")
+        spin = spin_result.get("name") or "Straight"
+        spin_strength = spin_result.get("strength")
+
+        # Ensure logical consistency: if spin is Straight, no strength
+        if spin == "Straight":
+            spin_strength = None
 
         return {
             "status": "success",
@@ -695,7 +700,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_result.get("strength"),
+            "spin_strength": spin_strength,
             "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
         }
 
@@ -1147,9 +1152,13 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions)
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
+        swing = swing_result.get("name") or "Straight"
 
-        spin = spin_result.get("name")
+        spin = spin_result.get("name") or "Straight"
+        spin_strength = spin_result.get("strength")
+
+        if spin == "Straight":
+            spin_strength = None
 
         return {
             "status": "success",
@@ -1158,7 +1167,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "speed_note": speed_note or "Speed shown only when physics is valid.",
             "swing": swing,
             "spin": spin,
-            "spin_strength": spin_result.get("strength"),
+            "spin_strength": spin_strength,
             "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
         }
 
@@ -1178,18 +1187,19 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     if not ball_positions:
         return False, 0.0
 
-    stump_x_min = frame_width * 0.47
-    stump_x_max = frame_width * 0.53
-    stump_y_min = frame_height * 0.64
-    stump_y_max = frame_height * 0.90
+    # Slightly wider and taller realistic stump zone
+    stump_x_min = frame_width * 0.44
+    stump_x_max = frame_width * 0.56
+    stump_y_min = frame_height * 0.60
+    stump_y_max = frame_height * 0.95
 
     hits = 0
     for (x, y) in ball_positions[-8:]:
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
 
-    confidence = min(hits / 3.0, 1.0)
-    return hits >= 2, round(confidence, 2)
+    confidence = min(hits / 2.5, 1.0)
+    return hits >= 1, round(confidence, 2)
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1297,9 +1307,12 @@ async def drs_review(file: UploadFile = File(...)):
         if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
-        elif hits_stumps:
+        elif hits_stumps and stump_confidence >= 0.55:
             decision = "OUT"
-            reason = "Ball hitting stumps"
+            reason = "Ball projected to hit stumps"
+        elif hits_stumps and stump_confidence >= 0.30:
+            decision = "UMPIRE'S CALL"
+            reason = "Clipping stumps"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"

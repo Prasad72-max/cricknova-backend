@@ -63,7 +63,7 @@ def detect_stump_hit(trajectory):
     for p in post_pitch:
         x, y = _get_xy(p)
         # REAL stump zone (3 stumps width, top 30% height)
-        if 0.46 <= x <= 0.54 and 0.68 <= y <= 0.92:  # Tighter + higher
+        if 0.44 <= x <= 0.56 and 0.65 <= y <= 0.95:  # Tighter + higher
             hits += 1
     
     return hits / len(post_pitch)
@@ -76,22 +76,24 @@ def analyze_training(data):
     ball_near_bat_cache = ball_near_bat(trajectory)  # FIXED cache
     
     # FIXED UltraEdge logic
-    ultraedge = bool(video_path and ball_near_bat_cache and detect_ultraedge(video_path, trajectory))
+    ultraedge = False
+    if video_path:
+        ultraedge = detect_ultraedge(video_path, trajectory)
     stump_confidence = detect_stump_hit(trajectory)
     
     # PHYSICS-BASED DECISION TREE (TV DRS logic)
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.70:  # Raised threshold
+    elif stump_confidence >= 0.55:
         decision = "OUT"
-        reason = "Plumb LBW - stumps hit"
-    elif stump_confidence >= 0.45:
+        reason = "Ball projected to hit stumps"
+    elif stump_confidence >= 0.30:
         decision = "UMPIRE'S CALL"
-        reason = "Clipping stumps - marginal"
+        reason = "Clipping top of stumps"
     else:
         decision = "NOT OUT"
-        reason = "Missing stumps outside line"
+        reason = "Ball missing stumps"
     
     return {
         "drs": {

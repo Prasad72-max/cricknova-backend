@@ -157,8 +157,13 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     swing_result = calculate_swing(ball_positions)
     spin_result = calculate_spin(ball_positions)
 
-    swing = swing_result.get("name") or "Straight"
-    spin = spin_result.get("name") or "Straight"
+    swing = swing_result.get("name")
+    if not swing:
+        swing = None
+
+    spin = spin_result.get("name")
+    if not spin:
+        spin = None
 
     return {
         "found": True,
