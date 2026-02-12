@@ -67,12 +67,11 @@ def detect_stump_hit(trajectory):
     xs = [_get_xy(p)[0] for p in post_pitch]
     median_x = float(np.median(xs)) if xs else 0.5
 
-    zone_width = 0.08  # 8% width tolerance (normalized scale)
+    zone_width = 0.15  # Wider tolerance for real match camera variation
     stump_x_min = median_x - zone_width
     stump_x_max = median_x + zone_width
-
     # Assume lower half contains stumps
-    stump_y_min = 0.55
+    stump_y_min = 0.50  # Allow slightly higher impact frames
     stump_y_max = 0.98
 
     for p in post_pitch:
@@ -80,7 +79,8 @@ def detect_stump_hit(trajectory):
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
     
-    return hits / len(post_pitch)
+    # Scale confidence more realistically (avoid dilution by long trajectories)
+    return min(hits / 4.0, 1.0)
 
 def analyze_training(data):
     trajectory = data.get("trajectory", [])

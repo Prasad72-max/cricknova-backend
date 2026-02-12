@@ -71,12 +71,14 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     String drsDecision = "NA";
     String drsConfidenceText = "";
 
-    final rawDrs = src["drs_decision"];
+    final drs = src["drs"];
+
+    final rawDrs = drs?["decision"];
     if (rawDrs is String && rawDrs.trim().isNotEmpty) {
       drsDecision = rawDrs.trim().toUpperCase();
     }
 
-    final rawConfidence = src["stump_confidence"];
+    final rawConfidence = drs?["stump_confidence"];
     if (rawConfidence is num) {
       drsConfidenceText =
           " (${(rawConfidence.toDouble() * 100).toStringAsFixed(0)}%)";

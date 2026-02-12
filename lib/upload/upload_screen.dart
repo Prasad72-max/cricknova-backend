@@ -230,20 +230,19 @@ class _UploadScreenState extends State<UploadScreen> {
           spin = "OFF SPIN";
         }
 
-        // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
+        // -------- SPIN STRENGTH & TURN (BACKEND: NUMERIC STRENGTH 0–1) --------
         final rawStrength = analysis["spin_strength"];
-        if (rawStrength is String && rawStrength.isNotEmpty) {
+        if (rawStrength is num) {
+          // Backend now returns numeric strength (0–1)
+          spinStrength = "${(rawStrength * 100).toStringAsFixed(0)}%";
+        } else if (rawStrength is String && rawStrength.isNotEmpty) {
           spinStrength = rawStrength.toUpperCase();
         } else {
-          spinStrength = "LIGHT";
+          spinStrength = "0%";
         }
 
-        final rawTurn = analysis["spin_turn_deg"];
-        if (rawTurn is num) {
-          spinTurnDeg = rawTurn.toDouble();
-        } else {
-          spinTurnDeg = 0.25;
-        }
+        // Spin turn degree no longer shown in UI
+        spinTurnDeg = 0.0;
 
         trajectory = const [];
         showTrajectory = false;
@@ -302,20 +301,33 @@ class _UploadScreenState extends State<UploadScreen> {
         // Backend returns DRS inside "drs" object
         final drs = data["drs"];
 
-        final rawDecision = drs?["decision"];
-        final rawConfidence = drs?["stump_confidence"];
+        if (drs == null || drs is! Map) {
+          setState(() {
+            drsResult = "DRS DATA INVALID";
+          });
+          return;
+        }
+
+        final rawDecision = drs["decision"];
+        final rawConfidence = drs["stump_confidence"];
+        final rawReason = drs["reason"];
 
         String decisionText =
             rawDecision?.toString().toUpperCase() ?? "UNKNOWN";
 
         String confidenceText = "";
         if (rawConfidence is num) {
-          confidenceText =
-              " (${(rawConfidence.toDouble() * 100).toStringAsFixed(0)}%)";
+          final percent = (rawConfidence.toDouble() * 100);
+          confidenceText = " (${percent.toStringAsFixed(0)}%)";
+        }
+
+        String reasonText = "";
+        if (rawReason is String && rawReason.isNotEmpty) {
+          reasonText = "\n${rawReason}";
         }
 
         setState(() {
-          drsResult = "$decisionText$confidenceText";
+          drsResult = "$decisionText$confidenceText$reasonText";
         });
       } else {
         setState(() {
@@ -669,11 +681,11 @@ class _UploadScreenState extends State<UploadScreen> {
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
                         _metric(
-                           "Spin",
-                          spinStrength != "NONE"
-                               ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
-                               : spin,
-),
+                          "Spin",
+                          spinStrength != "0%"
+                              ? "$spin • $spinStrength"
+                              : spin,
+                        ),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

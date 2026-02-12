@@ -758,6 +758,8 @@ async def ai_coach_analyze(
     try:
         raw_positions, _ = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
+        ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
         if not ball_positions or len(ball_positions) < 6:
             prompt = """
