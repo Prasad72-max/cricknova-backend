@@ -83,11 +83,6 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       spinStrength = rawStrength.toUpperCase();
     }
 
-    final rawTurn = src["spin_turn_deg"];
-    double spinTurnDeg = 0.25;
-    if (rawTurn is num) {
-      spinTurnDeg = rawTurn.toDouble();
-    }
 
     final List trajectory =
         (src["trajectory"] is List) ? src["trajectory"] : [];

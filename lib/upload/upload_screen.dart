@@ -40,7 +40,6 @@ class _UploadScreenState extends State<UploadScreen> {
   String spin = "NA";
 
   String spinStrength = "NONE";
-  double spinTurnDeg = 0.0;
   @override
   void initState() {
     super.initState();
@@ -214,51 +213,27 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (NORMALIZED FULL WORDS) --------
+        // -------- SWING (FROM BACKEND ONLY) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.isNotEmpty) {
-          final normalized = rawSwing.toUpperCase();
-
-          if (normalized == "OS") {
-            swing = "OUTSWING";
-          } else if (normalized == "IS") {
-            swing = "INSWING";
-          } else {
-            swing = normalized;
-          }
+          swing = rawSwing.toUpperCase();
         } else {
           swing = "NA";
         }
 
-        // -------- SPIN (NORMALIZED FULL WORDS) --------
+        // -------- SPIN (FROM BACKEND ONLY) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.isNotEmpty) {
-          final normalizedSpin = rawSpin.toUpperCase();
-
-          if (normalizedSpin == "OS") {
-            spin = "OFF SPIN";
-          } else if (normalizedSpin == "LS") {
-            spin = "LEG SPIN";
-          } else {
-            spin = normalizedSpin;
-          }
+          spin = rawSpin.toUpperCase();
         } else {
           spin = "NA";
         }
 
-        // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
         final rawStrength = analysis["spin_strength"];
         if (rawStrength is String && rawStrength.isNotEmpty) {
           spinStrength = rawStrength.toUpperCase();
         } else {
-          spinStrength = "LIGHT";
-        }
-
-        final rawTurn = analysis["spin_turn_deg"];
-        if (rawTurn is num) {
-          spinTurnDeg = rawTurn.toDouble();
-        } else {
-          spinTurnDeg = 0.25;
+          spinStrength = "NONE";
         }
 
         trajectory = const [];
@@ -574,25 +549,9 @@ class _UploadScreenState extends State<UploadScreen> {
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // If video is open → reset to upload screen
-        if (controller != null) {
-          controller?.dispose();
-          controller = null;
-          video = null;
-
-          setState(() {
-            showTrajectory = false;
-            showDRS = false;
-            showCoach = false;
-            drsResult = null;
-            coachReply = null;
-          });
-
-          return false; // stay on Upload screen
-        }
-
-        // If already on Upload screen (no video) → allow normal pop to Home
-        return true;
+        // Always go back to previous screen, never jump to Home
+        Navigator.of(context).pop();
+        return false;
       },
       child: Scaffold(
         backgroundColor: Colors.black,
@@ -601,22 +560,7 @@ class _UploadScreenState extends State<UploadScreen> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
-              if (controller != null) {
-                controller?.dispose();
-                controller = null;
-                video = null;
-
-                setState(() {
-                  showTrajectory = false;
-                  showDRS = false;
-                  showCoach = false;
-                  drsResult = null;
-                  coachReply = null;
-                });
-              } else {
-                // If already on Upload screen → go Home
-                Navigator.of(context).pop();
-              }
+              Navigator.of(context).pop();
             },
           ),
           title: const Text("Upload Training Video"),

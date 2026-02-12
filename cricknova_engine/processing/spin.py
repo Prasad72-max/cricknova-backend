@@ -32,7 +32,7 @@ def calculate_spin(ball_positions, fps=30):
     result = {
         "name": "Straight",
         "strength": "Light",
-        "turn_deg": 0.25
+        "turn_deg": 0.0
     }
 
     # Minimum frames required
@@ -74,7 +74,7 @@ def calculate_spin(ball_positions, fps=30):
     forward_disp = ys[-1] - ys[0]
 
     # Reject unreliable motion
-    if abs(forward_disp) < 1.2:
+    if abs(forward_disp) < 0.5:
         return result
 
     # Compute turn angle
@@ -82,8 +82,10 @@ def calculate_spin(ball_positions, fps=30):
     turn_deg = math.degrees(turn_rad)
     result["turn_deg"] = round(turn_deg, 3)
 
-    # Threshold: below this = Straight
-    if turn_deg < 0.12 or abs(lateral_disp) < 0.4:
+    # Sensitive real-world threshold (normalized coordinates)
+    dynamic_threshold = max(0.01, abs(forward_disp) * 0.01)
+
+    if abs(lateral_disp) < dynamic_threshold:
         return result
 
     # Spin direction — FIXED SIGN
@@ -93,10 +95,12 @@ def calculate_spin(ball_positions, fps=30):
     else:
         result["name"] = "Off Spin"
 
-    # Spin strength classification (realistic, conservative)
-    if turn_deg < 0.35:
+    # Strength classification based on lateral displacement only
+    abs_disp = abs(lateral_disp)
+
+    if abs_disp < 0.03:
         result["strength"] = "Light"
-    elif turn_deg < 0.9:
+    elif abs_disp < 0.08:
         result["strength"] = "Medium"
     else:
         result["strength"] = "Big Turn"

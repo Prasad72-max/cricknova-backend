@@ -27,7 +27,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double? swingDegree;
   String? spinType;
   String? spinStrength;
-  double? spinTurnDeg;
   List<dynamic>? trajectory;
 
   // CHANGE THIS TO YOUR IP:
@@ -264,13 +263,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         spinStrength = rawStrength.toUpperCase();
       } else {
         spinStrength = null;
-      }
-
-      final rawTurn = src["spin_turn_deg"];
-      if (rawTurn is num) {
-        spinTurnDeg = rawTurn.toDouble();
-      } else {
-        spinTurnDeg = null;
       }
 
       // ---------- TRAJECTORY ----------

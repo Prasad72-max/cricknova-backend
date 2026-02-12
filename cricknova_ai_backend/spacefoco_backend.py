@@ -621,7 +621,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "swing": None,
                 "spin": None,
                 "spin_strength": None,
-                "spin_turn_deg": None,
                 "trajectory": []
             }
 
@@ -658,7 +657,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing_result = calculate_swing(ball_positions, batter_hand="RH")
+        swing_result = calculate_swing(ball_positions)
         spin_result = calculate_spin(ball_positions)
 
         swing = swing_result.get("name")
@@ -673,7 +672,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "swing": swing,
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
-            "spin_turn_deg": spin_result.get("turn_deg"),
             "trajectory": []
         }
 
@@ -1080,7 +1078,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "swing": None,
                 "spin": None,
                 "spin_strength": None,
-                "spin_turn_deg": None,
                 "trajectory": []
             }
 
@@ -1115,7 +1112,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                     speed_type = "camera_normalized"
                     speed_note = "Fallback from real pixel motion (non-scripted)"
 
-        swing_result = calculate_swing(ball_positions, batter_hand="RH")
+        swing_result = calculate_swing(ball_positions)
         spin_result = calculate_spin(ball_positions)
 
         swing = swing_result.get("name")
@@ -1130,7 +1127,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "swing": swing,
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
-            "spin_turn_deg": spin_result.get("turn_deg"),
             "trajectory": []
         }
 

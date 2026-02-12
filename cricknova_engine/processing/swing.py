@@ -46,11 +46,10 @@ def calculate_spin(ball_positions):
     # Flip horizontal axis to correct mirrored videos
     lateral_curve *= -1
 
-    # Compute curvature ratio
-    curvature_ratio = abs(lateral_curve) / (abs(forward_motion) + 1e-6)
+    # Sensitive but real-world threshold (normalized coordinates)
+    dynamic_spin_threshold = max(0.01, abs(forward_motion) * 0.01)
 
-    # Very light threshold – REAL videos have weak spin
-    if abs(lateral_curve) < 0.25 or curvature_ratio < 0.02:
+    if abs(lateral_curve) < dynamic_spin_threshold:
         return result
 
     # Direction (RH batter reference)
@@ -107,11 +106,10 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     # Flip horizontal axis to correct mirrored videos
     lateral_air_curve *= -1
 
-    # Normalize by travel distance
-    curve_ratio = abs(lateral_air_curve) / (abs(forward_motion) + 1e-6)
+    # Dynamic swing sensitivity (works for normalized 0–1 scale)
+    dynamic_swing_threshold = max(0.008, abs(forward_motion) * 0.012)
 
-    # Realistic swing thresholds (mobile video safe)
-    if abs(lateral_air_curve) < 0.20 or curve_ratio < 0.015:
+    if abs(lateral_air_curve) < dynamic_swing_threshold:
         return result
 
     # Direction logic (relative to batter) — FIXED SIGN

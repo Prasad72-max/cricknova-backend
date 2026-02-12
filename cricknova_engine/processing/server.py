@@ -145,8 +145,12 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     # -----------------------------
     # REALISTIC SWING & SPIN (PHYSICS-BASED)
     # -----------------------------
-    swing = swing_result.get("name")
+    ball_positions = list(last_pos)
 
+    swing_result = calculate_swing(ball_positions)
+    spin_result = calculate_spin(ball_positions)
+
+    swing = swing_result.get("name")
     spin = spin_result.get("name")
 
     return {
