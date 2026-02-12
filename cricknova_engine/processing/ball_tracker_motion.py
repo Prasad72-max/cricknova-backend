@@ -187,8 +187,20 @@ def calculate_ball_speed_kmph(positions, fps):
     # Median px/sec over release window
     px_per_sec = float(np.median(seg_dists)) * fps
 
-    # Realistic release-to-bounce scaling (fallback)
-    meters_per_px = 17.0 / 320.0
+    # ---- Dynamic pitch-based scaling (REALISTIC) ----
+    ys = [p[1] for p in positions]
+    pixel_span = abs(max(ys) - min(ys))
+
+    if pixel_span <= 0:
+        return {
+            "speed_kmph": None,
+            "speed_type": "unavailable",
+            "speed_note": "INVALID_PIXEL_SPAN"
+        }
+
+    # Use real pitch length (20.12m) mapped to visible pixel span
+    meters_per_px = 20.12 / float(pixel_span)
+
     raw_kmph = px_per_sec * meters_per_px * 3.6
 
     # LOW SPEED REALISM GUARD

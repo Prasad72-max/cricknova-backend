@@ -1180,26 +1180,47 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    ICC-style conservative stump-hit detection.
+    Improved physics-based stump projection.
+    Uses last trajectory direction instead of only box overlap.
     Returns (hit: bool, confidence: float)
     """
 
-    if not ball_positions:
+    if not ball_positions or len(ball_positions) < 8:
         return False, 0.0
 
-    # Slightly wider and taller realistic stump zone
-    stump_x_min = frame_width * 0.44
-    stump_x_max = frame_width * 0.56
+    # Define stump zone (center corridor)
+    stump_x_center = frame_width * 0.50
+    stump_half_width = frame_width * 0.06
     stump_y_min = frame_height * 0.60
-    stump_y_max = frame_height * 0.95
+    stump_y_max = frame_height * 0.98
 
-    hits = 0
-    for (x, y) in ball_positions[-8:]:
-        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            hits += 1
+    # Use last 6 positions to estimate direction
+    recent = ball_positions[-6:]
 
-    confidence = min(hits / 2.5, 1.0)
-    return hits >= 1, round(confidence, 2)
+    x_vals = [p[0] for p in recent]
+    y_vals = [p[1] for p in recent]
+
+    dx = x_vals[-1] - x_vals[0]
+    dy = y_vals[-1] - y_vals[0]
+
+    # If ball is not moving forward toward stumps
+    if dy <= 0:
+        return False, 0.0
+
+    # Project next position (simple linear projection)
+    projected_x = x_vals[-1] + dx * 0.8
+    projected_y = y_vals[-1] + dy * 0.8
+
+    within_x = abs(projected_x - stump_x_center) <= stump_half_width
+    within_y = stump_y_min <= projected_y <= stump_y_max
+
+    if within_x and within_y:
+        # Confidence based on how centered impact is
+        center_offset = abs(projected_x - stump_x_center)
+        confidence = max(0.3, 1.0 - (center_offset / stump_half_width))
+        return True, round(min(confidence, 1.0), 2)
+
+    return False, 0.0
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1307,10 +1328,10 @@ async def drs_review(file: UploadFile = File(...)):
         if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
-        elif hits_stumps and stump_confidence >= 0.55:
+        elif hits_stumps and stump_confidence >= 0.65:
             decision = "OUT"
-            reason = "Ball projected to hit stumps"
-        elif hits_stumps and stump_confidence >= 0.30:
+            reason = "Ball projected to hit middle of stumps"
+        elif hits_stumps and stump_confidence >= 0.40:
             decision = "UMPIRE'S CALL"
             reason = "Clipping stumps"
         else:
