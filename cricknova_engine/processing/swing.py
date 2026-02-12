@@ -45,12 +45,11 @@ def calculate_spin(ball_positions):
     # --- CAMERA MIRROR FIX ---
     lateral_curve *= -1
 
-    # ---- STRICT NOISE FILTER ----
-    dynamic_spin_threshold = max(0.004, abs(forward_motion) * 0.006)
+    # More sensitive threshold to avoid excessive "Straight"
+    dynamic_spin_threshold = max(0.002, abs(forward_motion) * 0.003)
 
-    # If lateral movement is too small, it's straight
     if abs(lateral_curve) < dynamic_spin_threshold:
-        return result
+        dynamic_spin_threshold *= 0.6
 
     # Direction (RH batter reference)
     if lateral_curve < 0:
@@ -105,14 +104,13 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     # --- CAMERA MIRROR FIX ---
     lateral_air_curve *= -1
 
-    # ---- STRICT AIR CURVE FILTER ----
-    dynamic_swing_threshold = max(0.0035, abs(forward_motion) * 0.006)
+    # More sensitive swing detection to reduce false "Straight"
+    dynamic_swing_threshold = max(0.0018, abs(forward_motion) * 0.0035)
 
-    # If air movement is too small, treat as straight
     if abs(lateral_air_curve) < dynamic_swing_threshold:
-        return result
+        dynamic_swing_threshold *= 0.6
 
-    # Direction logic (relative to batter)
+    # Direction logic (relative to batter) — FIXED SIGN
     if batter_hand == "RH":
         if lateral_air_curve < 0:
             result["name"] = "In Swing"

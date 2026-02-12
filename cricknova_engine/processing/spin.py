@@ -67,23 +67,30 @@ def calculate_spin(ball_positions, fps=30):
     xs_norm = [x - x0 for x in xs]
 
     lateral_disp = xs_norm[-1] - xs_norm[0]
+    # --- CAMERA MIRROR FIX ---
+    # Flip horizontal axis to correct mirrored video input
+    lateral_disp *= -1
     forward_disp = ys[-1] - ys[0]
 
-    # Strict threshold to prevent fake spin
-    # Require minimum visible lateral deviation
-    if abs(lateral_disp) < 0.01:
+    # Reject unreliable motion (more sensitive for subtle spin)
+    if abs(forward_disp) < 0.01:
         return result
 
     # Compute turn angle
     turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
     turn_deg = math.degrees(turn_rad)
 
-    # Require minimum measurable turn angle
-    if turn_deg < 1.2:
-        return result
+    # More sensitive threshold for normalized 0–1 coordinates
+    dynamic_threshold = max(0.002, abs(forward_disp) * 0.003)
 
-    # Spin direction (no artificial axis flipping)
-    if lateral_disp > 0:
+    if abs(lateral_disp) < dynamic_threshold:
+        dynamic_threshold *= 0.6
+        if abs(lateral_disp) < dynamic_threshold:
+            return result
+
+    # Spin direction — FIXED SIGN
+    # Coordinate system inverted: swap OFF / LEG
+    if lateral_disp < 0:
         result["name"] = "Leg Spin"
     else:
         result["name"] = "Off Spin"

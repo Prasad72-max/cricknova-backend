@@ -48,15 +48,17 @@ def detect_ultraedge(video_path, trajectory):  # FIXED: Pass trajectory
 
 def detect_stump_hit(trajectory):
     """FIXED: Physics-based stump zone + post-pitch only"""
-    if not trajectory or len(trajectory) < 8:
+    if not trajectory or len(trajectory) < 5:
         return 0.0
     
     # Ball MUST pitch first (post-bounce frames only)
     y_positions = [_get_xy(p)[1] for p in trajectory]
-    pitch_frame = np.argmax(y_positions)  # Lowest point = bounce
-    post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
+    # Bounce is lowest Y point (ball hits pitch)
+    pitch_frame = int(np.argmin(y_positions))
+    # Use frames strictly AFTER bounce
+    post_pitch = trajectory[pitch_frame + 1:]
     
-    if len(post_pitch) < 3:
+    if not post_pitch or len(post_pitch) < 2:
         return 0.0
     
     hits = 0

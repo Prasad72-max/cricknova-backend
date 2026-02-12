@@ -157,29 +157,13 @@ async def analyze_live_frame(file: UploadFile = File(...)):
     swing_result = calculate_swing(ball_positions)
     spin_result = calculate_spin(ball_positions)
 
-    # -----------------------------
-    # STRICT SWING VALIDATION
-    # -----------------------------
-    swing = None
-    if len(ball_positions) >= 10:
-        swing_name = swing_result.get("name")
-        swing_strength = swing_result.get("strength", 0.0)
+    swing = swing_result.get("name")
+    if not swing:
+        swing = None
 
-        # Require minimum strength to avoid fake swing
-        if swing_name and swing_strength and swing_strength >= 0.015:
-            swing = swing_name
-
-    # -----------------------------
-    # STRICT SPIN VALIDATION
-    # -----------------------------
-    spin = None
-    if len(ball_positions) >= 12:
-        spin_name = spin_result.get("name")
-        spin_strength = spin_result.get("strength", 0.0)
-
-        # Require clear lateral deviation
-        if spin_name and spin_strength and spin_strength >= 0.02:
-            spin = spin_name
+    spin = spin_result.get("name")
+    if not spin:
+        spin = None
 
     return {
         "found": True,

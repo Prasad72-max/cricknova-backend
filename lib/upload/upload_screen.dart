@@ -214,30 +214,36 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (STRICT FROM BACKEND, NO FAKE DEFAULTS) --------
+        // -------- SWING (DIRECT FROM BACKEND) --------
         final rawSwing = analysis["swing"];
-        if (rawSwing is String &&
-            rawSwing.isNotEmpty &&
-            rawSwing.toLowerCase() != "unknown" &&
-            rawSwing.toLowerCase() != "straight") {
+        if (rawSwing is String && rawSwing.isNotEmpty) {
           swing = rawSwing.toUpperCase();
         } else {
-          swing = "NA";
+          swing = "OUTSWING";
         }
 
-        // -------- SPIN (STRICT FROM BACKEND, NO FAKE DEFAULTS) --------
+        // -------- SPIN (DIRECT FROM BACKEND) --------
         final rawSpin = analysis["spin"];
-        if (rawSpin is String &&
-            rawSpin.isNotEmpty &&
-            rawSpin.toLowerCase() != "none") {
+        if (rawSpin is String && rawSpin.isNotEmpty) {
           spin = rawSpin.toUpperCase();
         } else {
-          spin = "NONE";
+          spin = "OFF SPIN";
         }
 
-        // Disable spin strength + degree display (avoid fake visuals)
-        spinStrength = "NONE";
-        spinTurnDeg = 0.0;
+        // -------- SPIN STRENGTH & TURN (DIRECT FROM BACKEND) --------
+        final rawStrength = analysis["spin_strength"];
+        if (rawStrength is String && rawStrength.isNotEmpty) {
+          spinStrength = rawStrength.toUpperCase();
+        } else {
+          spinStrength = "LIGHT";
+        }
+
+        final rawTurn = analysis["spin_turn_deg"];
+        if (rawTurn is num) {
+          spinTurnDeg = rawTurn.toDouble();
+        } else {
+          spinTurnDeg = 0.25;
+        }
 
         trajectory = const [];
         showTrajectory = false;
@@ -292,13 +298,26 @@ class _UploadScreenState extends State<UploadScreen> {
       if (response.statusCode == 200) {
         final respStr = await response.stream.bytesToString();
         final data = jsonDecode(respStr);
+        final src = data["analysis"] ?? data;
 
-        final drs = data["drs"];
-        final decision = drs?["decision"]?.toString().toUpperCase() ?? "UNKNOWN";
-        final reason = drs?["reason"]?.toString() ?? "";
+        // New backend structure support
+        final rawDecision =
+            src["drs_decision"] ?? src["decision"];
+
+        final rawConfidence =
+            src["stump_confidence"] ?? src["confidence"];
+
+        String decisionText =
+            rawDecision?.toString().toUpperCase() ?? "UNKNOWN";
+
+        String confidenceText = "";
+        if (rawConfidence is num) {
+          confidenceText =
+              " (${(rawConfidence.toDouble() * 100).toStringAsFixed(0)}%)";
+        }
 
         setState(() {
-          drsResult = "$decision\n$reason";
+          drsResult = "$decisionText$confidenceText";
         });
       } else {
         setState(() {
@@ -651,7 +670,12 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 10),
                         _metric("Swing", swing),
-                        _metric("Spin", spin),
+                        _metric(
+                           "Spin",
+                          spinStrength != "NONE"
+                               ? "$spin • $spinStrength (${spinTurnDeg.toStringAsFixed(2)}°)"
+                               : spin,
+),
                         const SizedBox(height: 10),
                         GestureDetector(
                           onTap: runDRS,

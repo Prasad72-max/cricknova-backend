@@ -49,13 +49,8 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     String swing = "NA";
 
     final rawSwing = src["swing"];
-    if (rawSwing is String) {
-      final s = rawSwing.toLowerCase().trim();
-      if (s == "inswing" || s == "outswing") {
-        swing = s;
-      } else {
-        swing = "NA";
-      }
+    if (rawSwing is String && rawSwing.isNotEmpty) {
+      swing = rawSwing;
     }
 
     // ---------- SPIN (DIRECT FROM BACKEND, NO MODIFICATION) ----------
@@ -63,20 +58,28 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     String spinStrength = "";
 
     final rawSpin = src["spin"];
-    if (rawSpin is String) {
-      final s = rawSpin.toLowerCase().trim();
-      if (s == "leg spin" || s == "off spin") {
-        spin = s;
-      } else {
-        spin = "NA";
-      }
+    if (rawSpin is String && rawSpin.isNotEmpty) {
+      spin = rawSpin;
     }
 
     final rawStrength = src["spin_strength"];
-    if (rawStrength is String && rawStrength.isNotEmpty && spin != "NA") {
+    if (rawStrength is String && rawStrength.isNotEmpty) {
       spinStrength = rawStrength;
-    } else {
-      spinStrength = "";
+    }
+
+    // ---------- DRS ----------
+    String drsDecision = "NA";
+    String drsConfidenceText = "";
+
+    final rawDrs = src["drs_decision"];
+    if (rawDrs is String && rawDrs.trim().isNotEmpty) {
+      drsDecision = rawDrs.trim().toUpperCase();
+    }
+
+    final rawConfidence = src["stump_confidence"];
+    if (rawConfidence is num) {
+      drsConfidenceText =
+          " (${(rawConfidence.toDouble() * 100).toStringAsFixed(0)}%)";
     }
 
 
@@ -112,6 +115,12 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             (spinStrength.isNotEmpty)
                 ? "$spin • $spinStrength"
                 : spin,
+          ),
+          _metric(
+            "DRS",
+            drsDecision == "NA"
+                ? "NA"
+                : "$drsDecision$drsConfidenceText",
           ),
           const SizedBox(height: 25),
 

@@ -27,6 +27,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String? spinType;
   String? spinStrength;
   List<dynamic>? trajectory;
+  String? drsDecision;
+  double? stumpConfidence;
 
   // CHANGE THIS TO YOUR IP:
   final String backendUrl = "https://cricknova-backend.onrender.com/training/analyze";
@@ -80,13 +82,32 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin",
-              value: (spinType != null)
-                  ? spinType!
+              value: (spinType != null && spinType!.isNotEmpty)
+                  ? (spinStrength != null && spinStrength != "NONE"
+                      ? "${spinType!} • $spinStrength"
+                      : spinType!)
                   : "NA",
               icon: Icons.autorenew,
               color: Colors.green,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 15),
+
+            _metricBox(
+              title: "DRS Decision",
+              value: drsDecision != null
+                  ? (stumpConfidence != null
+                      ? "$drsDecision (${(stumpConfidence! * 100).toStringAsFixed(0)}%)"
+                      : drsDecision!)
+                  : "NA",
+              icon: Icons.gavel,
+              color: drsDecision == "OUT"
+                  ? Colors.red
+                  : (drsDecision == "NOT OUT"
+                      ? Colors.green
+                      : Colors.grey),
+            ),
+            const SizedBox(height: 15),
+
             ElevatedButton(
               onPressed: (speedKmph == null && swingName == null && spinType == null && spinStrength == null)
                   ? null
@@ -226,28 +247,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (STRICT NORMALIZATION) ----------
+      // ---------- SWING (USE BACKEND VALUE EXACTLY) ----------
       final rawSwing = src["swing"];
-      if (rawSwing is String) {
-        final s = rawSwing.trim().toLowerCase();
-        if (s.isEmpty || s == "unknown" || s == "none" || s == "straight") {
-          swingName = null;
-        } else {
-          swingName = s;
-        }
+      if (rawSwing is String && rawSwing.trim().isNotEmpty) {
+        swingName = rawSwing.trim();
       } else {
         swingName = null;
       }
 
-      // ---------- SPIN (STRICT NORMALIZATION) ----------
+      // ---------- SPIN (USE BACKEND VALUE EXACTLY) ----------
       final rawSpin = src["spin"];
-      if (rawSpin is String) {
-        final s = rawSpin.trim().toLowerCase();
-        if (s.isEmpty || s == "none" || s == "unknown") {
-          spinType = null;
-        } else {
-          spinType = s;
-        }
+      if (rawSpin is String && rawSpin.trim().isNotEmpty) {
+        spinType = rawSpin.trim();
       } else {
         spinType = null;
       }
@@ -268,6 +279,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       } else {
         trajectory = null;
         _showTrajectoryAfterVideo = false;
+      }
+
+      // ---------- DRS ----------
+      final rawDrs = src["drs_decision"];
+      if (rawDrs is String && rawDrs.trim().isNotEmpty) {
+        drsDecision = rawDrs.trim().toUpperCase();
+      } else {
+        drsDecision = null;
+      }
+
+      final rawConfidence = src["stump_confidence"];
+      if (rawConfidence is num) {
+        stumpConfidence = rawConfidence.toDouble();
+      } else {
+        stumpConfidence = null;
       }
     });
   }
