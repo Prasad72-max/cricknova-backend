@@ -1176,16 +1176,15 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     xs = [p[0] for p in recent]
     ys = [p[1] for p in recent]
 
-    # Estimate stump center dynamically from median x-position
-    median_x = float(np.median(xs))
+    # FIXED CENTER STUMP ZONE (camera stable)
+    stump_center_x = frame_width * 0.50
+    stump_half_width = frame_width * 0.06
 
-    # Define adaptive stump zone width (camera tolerant)
-    zone_width = frame_width * 0.12
-    stump_x_min = median_x - zone_width
-    stump_x_max = median_x + zone_width
+    stump_x_min = stump_center_x - stump_half_width
+    stump_x_max = stump_center_x + stump_half_width
 
-    # Lower half of frame typically contains stumps
-    stump_y_min = frame_height * 0.50
+    # Bottom 40% of frame where stumps actually exist
+    stump_y_min = frame_height * 0.60
     stump_y_max = frame_height * 0.98
 
     hits = 0
@@ -1194,7 +1193,7 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
             hits += 1
 
     # Confidence scaled by number of frames inside zone
-    confidence = min(hits / 4.0, 1.0)
+    confidence = min(hits / 5.0, 1.0)
 
     return hits >= 2, round(confidence, 2)
 

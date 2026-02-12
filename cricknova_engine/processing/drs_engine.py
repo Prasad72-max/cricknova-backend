@@ -63,24 +63,20 @@ def detect_stump_hit(trajectory):
     
     hits = 0
 
-    # Use dynamic stump center based on median x after pitch
-    xs = [_get_xy(p)[0] for p in post_pitch]
-    median_x = float(np.median(xs)) if xs else 0.5
-
-    zone_width = 0.15  # Wider tolerance for real match camera variation
-    stump_x_min = median_x - zone_width
-    stump_x_max = median_x + zone_width
-    # Assume lower half contains stumps
-    stump_y_min = 0.50  # Allow slightly higher impact frames
-    stump_y_max = 0.98
+    # FIXED central stump zone (normalized 0–1 scale, behind-bowler view)
+    stump_x_min = 0.47
+    stump_x_max = 0.53
+    stump_y_min = 0.65
+    stump_y_max = 0.95
 
     for p in post_pitch:
         x, y = _get_xy(p)
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
-    
-    # Scale confidence more realistically (avoid dilution by long trajectories)
-    return min(hits / 4.0, 1.0)
+
+    # Require stronger evidence for OUT
+    confidence = min(hits / 5.0, 1.0)
+    return confidence
 
 def analyze_training(data):
     trajectory = data.get("trajectory", [])
