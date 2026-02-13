@@ -1270,14 +1270,14 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
 
     # FIXED CENTER STUMP ZONE (camera stable)
     stump_center_x = frame_width * 0.50
-    stump_half_width = frame_width * 0.08  # slightly wider realistic stump zone
+    stump_half_width = frame_width * 0.15  # NORMAL MODE: wider stump zone for broadcast camera
 
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
 
-    # Bottom 40% of frame where stumps actually exist
-    stump_y_min = frame_height * 0.60
-    stump_y_max = frame_height * 0.98
+    # Bottom impact zone for stumps (wider for normal mode)
+    stump_y_min = frame_height * 0.55   # allow slightly higher impact zone
+    stump_y_max = frame_height * 1.00   # allow full bottom frame
 
     hits = 0
     for (x, y) in recent:
