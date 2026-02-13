@@ -281,23 +281,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _showTrajectoryAfterVideo = false;
       }
 
-      // ---------- DRS ----------
-      final rawDrs = src["drs"];
-      if (rawDrs is Map<String, dynamic>) {
-        final decision = rawDrs["decision"];
-        final confidence = rawDrs["stump_confidence"];
+      // ---------- DRS 2.0 (Projection Based) ----------
+      if (src["drs"] is Map<String, dynamic>) {
+        final drsMap = Map<String, dynamic>.from(src["drs"]);
 
-        if (decision is String && decision.trim().isNotEmpty) {
-          drsDecision = decision.trim();
-        } else {
-          drsDecision = null;
-        }
+        final decision = drsMap["decision"];
+        final confidence = drsMap["stump_confidence"];
 
-        if (confidence is num) {
-          stumpConfidence = confidence.toDouble();
-        } else {
-          stumpConfidence = null;
-        }
+        drsDecision = (decision is String && decision.isNotEmpty)
+            ? decision.toUpperCase()
+            : null;
+
+        stumpConfidence = (confidence is num)
+            ? confidence.toDouble()
+            : null;
       } else {
         drsDecision = null;
         stumpConfidence = null;

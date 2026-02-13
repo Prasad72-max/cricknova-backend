@@ -67,29 +67,25 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       spinStrength = rawStrength;
     }
 
-    // ---------- DRS ----------
+    // ---------- DRS 2.0 (Projection Based) ----------
     String drsDecision = "NA";
     String drsConfidenceText = "";
 
     final drs = src["drs"];
 
-    final rawDrs = drs?["decision"];
-    if (rawDrs is String && rawDrs.trim().isNotEmpty) {
-      drsDecision = rawDrs.trim().toUpperCase();
-    }
+    if (drs is Map<String, dynamic>) {
+      final decision = drs["decision"];
+      final confidence = drs["stump_confidence"];
 
-    final rawConfidence = drs?["stump_confidence"];
-    if (rawConfidence is num) {
-      double confidenceValue = rawConfidence.toDouble();
-
-      // If backend sends 0–1 range, convert to percentage.
-      // If backend already sends 0–100, use directly.
-      if (confidenceValue <= 1.0) {
-        confidenceValue = confidenceValue * 100;
+      if (decision is String && decision.isNotEmpty) {
+        drsDecision = decision.toUpperCase();
       }
 
-      drsConfidenceText =
-          " (${confidenceValue.toStringAsFixed(0)}%)";
+      if (confidence is num) {
+        final percent = (confidence.toDouble() * 100);
+        drsConfidenceText =
+            " (${percent.toStringAsFixed(0)}%)";
+      }
     }
 
 

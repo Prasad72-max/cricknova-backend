@@ -1163,43 +1163,63 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    Adaptive stump-hit detection based on final ball trajectory.
+    DRS 2.0 – Projection Based Ball Tracking (Hawk-Eye Lite)
     Returns (hit: bool, confidence: float)
     """
 
     if not ball_positions or len(ball_positions) < 6:
         return False, 0.0
 
-    # Use last 15 frames for end-trajectory analysis
-    recent = ball_positions[-15:]
-    print("FINAL X MEDIAN:", float(np.median([p[0] for p in recent])))
-    print("FRAME WIDTH:", frame_width)
+    # ---- 1️⃣ Find Bounce (highest Y = closest to ground) ----
+    ys = [p[1] for p in ball_positions]
+    pitch_frame = int(np.argmax(ys))
 
-    xs = [p[0] for p in recent]
-    ys = [p[1] for p in recent]
+    # Reject very short balls (bouncer logic)
+    if pitch_frame < len(ball_positions) * 0.25:
+        return False, 0.0
 
-    # ADAPTIVE STUMP ZONE (align with actual ball line)
-    # Use median of final trajectory X as projected stump line
-    projected_center_x = float(np.median(xs))
+    post_pitch = ball_positions[pitch_frame:]
 
-    stump_half_width = frame_width * 0.04  # tighter realistic width
+    if len(post_pitch) < 3:
+        return False, 0.0
 
-    stump_x_min = projected_center_x - stump_half_width
-    stump_x_max = projected_center_x + stump_half_width
+    # ---- 2️⃣ Normalize to 0–1 scale ----
+    norm_points = [
+        (p[0] / frame_width, p[1] / frame_height)
+        for p in post_pitch
+        if frame_width > 0 and frame_height > 0
+    ]
 
-    # Bottom 30% of frame where stumps visually exist
-    stump_y_min = frame_height * 0.70
-    stump_y_max = frame_height * 0.98
+    xs = np.array([p[0] for p in norm_points])
+    ys = np.array([p[1] for p in norm_points])
 
-    hits = 0
-    for (x, y) in recent:
-        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            hits += 1
+    if len(xs) < 3:
+        return False, 0.0
 
-    # Confidence scaled by number of frames inside zone
-    confidence = min(hits / 5.0, 1.0)
+    # ---- 3️⃣ Fit Linear Model (x = m*y + c) ----
+    try:
+        m, c = np.polyfit(ys, xs, 1)
+    except Exception:
+        return False, 0.0
 
-    return hits >= 2, round(confidence, 2)
+    # ---- 4️⃣ Project To Stump Plane ----
+    stump_y_plane = 0.90
+    projected_x = m * stump_y_plane + c
+
+    # ---- 5️⃣ Fixed Stump Geometry (Normalized) ----
+    stump_center_x = 0.50
+    stump_half_width = 0.06
+
+    stump_x_min = stump_center_x - stump_half_width
+    stump_x_max = stump_center_x + stump_half_width
+
+    # ---- 6️⃣ Confidence Calculation ----
+    if stump_x_min <= projected_x <= stump_x_max:
+        stability = 1 - min(np.std(xs), 0.1)
+        confidence = max(min(stability, 1.0), 0.4)
+        return True, round(confidence, 2)
+
+    return False, 0.0
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1300,6 +1320,8 @@ async def drs_review(file: UploadFile = File(...)):
             frame_width,
             frame_height
         )
+        print("HITS STUMPS:", hits_stumps)
+        print("STUMP CONFIDENCE:", stump_confidence)
 
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)

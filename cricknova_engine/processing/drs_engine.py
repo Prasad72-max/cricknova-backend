@@ -47,42 +47,59 @@ def detect_ultraedge(video_path, trajectory):
     return False
 
 def detect_stump_hit(trajectory):
-    """FIXED: Physics-based stump detection + adaptive confidence"""
-    if not trajectory or len(trajectory) < 5:
-        print("DRS DEBUG → Insufficient trajectory")
+    """DRS 2.0 – Projection Based Ball Tracking"""
+
+    if not trajectory or len(trajectory) < 6:
+        print("DRS 2.0 → insufficient trajectory")
         return 0.0
-    
-    # Find pitch bounce (HIGHEST Y point in normalized coords)
-    # In your coordinate system, larger Y = ball closer to ground
+
+    # ---- 1️⃣ Find Bounce (highest Y = closest to ground) ----
     y_positions = [_get_xy(p)[1] for p in trajectory]
     pitch_frame = int(np.argmax(y_positions))
 
-    # Include bounce frame itself for projection safety
-    post_pitch = trajectory[pitch_frame:]
-    
-    if not post_pitch or len(post_pitch) < 2:
-        print("DRS DEBUG → No post-pitch frames")
+    # Reject very short balls (bouncer logic)
+    if pitch_frame < len(trajectory) * 0.25:
+        print("DRS 2.0 → short ball")
         return 0.0
-    
-    hits = 0
-    # Calibrated for normalized 0–1 trajectory scale
-    stump_x_min, stump_x_max = 0.56, 0.68
-    stump_y_min, stump_y_max = 0.83, 0.95
 
-    for p in post_pitch:
-        x, y = _get_xy(p)
-        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            hits += 1
+    post_pitch = trajectory[pitch_frame:]
 
-    # FIXED: Adaptive confidence based on ACTUAL post-pitch length
-    confidence = min(hits / max(len(post_pitch), 3), 1.0)
-    
-    print("DRS DEBUG → total frames:", len(trajectory))
-    print("DRS DEBUG → pitch_frame:", pitch_frame)
-    print("DRS DEBUG → post_pitch frames:", len(post_pitch))
-    print("DRS DEBUG → hits:", hits)
-    print("DRS DEBUG → confidence:", round(confidence, 2))
-    return confidence
+    if len(post_pitch) < 3:
+        print("DRS 2.0 → not enough post-bounce data")
+        return 0.0
+
+    # ---- 2️⃣ Fit Linear Model (x = m*y + c) ----
+    xs = np.array([_get_xy(p)[0] for p in post_pitch])
+    ys = np.array([_get_xy(p)[1] for p in post_pitch])
+
+    try:
+        m, c = np.polyfit(ys, xs, 1)
+    except:
+        print("DRS 2.0 → polyfit failed")
+        return 0.0
+
+    # ---- 3️⃣ Project To Stump Plane ----
+    stump_y_plane = 0.90
+    projected_x = m * stump_y_plane + c
+
+    # ---- 4️⃣ Stump Geometry (Normalized 0–1 scale) ----
+    stump_center_x = 0.62
+    stump_half_width = 0.07
+
+    stump_x_min = stump_center_x - stump_half_width
+    stump_x_max = stump_center_x + stump_half_width
+
+    print("DRS 2.0 → projected_x:", round(projected_x, 3))
+
+    # ---- 5️⃣ Decision Confidence ----
+    if stump_x_min <= projected_x <= stump_x_max:
+        stability = 1 - min(np.std(xs), 0.1)
+        confidence = max(min(stability, 1.0), 0.4)
+        print("DRS 2.0 → HITTING")
+        return confidence
+
+    print("DRS 2.0 → MISSING")
+    return 0.0
 
 def analyze_training(data):
     """Main DRS analysis - TV DRS physics logic"""

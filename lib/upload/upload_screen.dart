@@ -332,7 +332,6 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final rawDecision = drs["decision"];
       final rawConfidence = drs["stump_confidence"];
-      final rawReason = drs["reason"];
 
       String decisionText =
           rawDecision?.toString().toUpperCase() ?? "UNKNOWN";
@@ -343,13 +342,8 @@ class _UploadScreenState extends State<UploadScreen> {
         confidenceText = " (${percent.toStringAsFixed(0)}%)";
       }
 
-      String reasonText = "";
-      if (rawReason is String && rawReason.isNotEmpty) {
-        reasonText = "\n$rawReason";
-      }
-
       setState(() {
-        drsResult = "$decisionText$confidenceText$reasonText";
+        drsResult = "$decisionText$confidenceText";
         drsLoading = false;
       });
     } catch (e) {
@@ -802,11 +796,10 @@ class _UploadScreenState extends State<UploadScreen> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: drsResult != null &&
-                                        drsResult!.contains("OUT") &&
-                                        !drsResult!.contains("NOT OUT")
+                                        drsResult!.startsWith("OUT")
                                     ? Colors.red
                                     : drsResult != null &&
-                                            drsResult!.contains("NOT OUT")
+                                            drsResult!.startsWith("NOT OUT")
                                         ? Colors.green
                                         : Colors.orange,
                                 fontSize: 18,
