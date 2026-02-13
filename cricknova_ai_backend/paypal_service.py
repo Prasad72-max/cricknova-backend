@@ -5,6 +5,15 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 from subscriptions_store import create_or_update_subscription
 
+# 🔐 Secure backend price validation
+PLAN_PRICES = {
+    "MONTHLY": "29.99",
+    "SIX_MONTH": "49.99",
+    "YEARLY": "69.99",
+    "ULTRA": "159.99",
+}
+
+
 load_dotenv()
 
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
@@ -132,7 +141,13 @@ def create_paypal_order(body: PayPalCreateOrderBody):
     if not PAYPAL_CLIENT_ID or not PAYPAL_SECRET:
         raise HTTPException(status_code=500, detail="PayPal not configured")
     try:
-        order = create_order(body.amount_usd)
+        # 🔐 Validate plan and enforce backend pricing
+        expected_amount = PLAN_PRICES.get(body.plan)
+        if not expected_amount:
+            raise HTTPException(status_code=400, detail="Invalid plan selected")
+
+        # Always use backend price, never trust frontend amount
+        order = create_order(float(expected_amount))
         if not order.get("approval_url"):
             raise HTTPException(status_code=400, detail="Approval URL not generated")
         print("✅ PayPal approval_url:", order["approval_url"])
@@ -154,19 +169,39 @@ def capture_paypal_order(body: PayPalCaptureBody):
         raise HTTPException(status_code=500, detail="PayPal not configured")
     try:
         result = capture_order(body.order_id)
-        if result.get("status") != "COMPLETED":
-            return {
-                "status": "not_paid"
-            }
 
+        if result.get("status") != "COMPLETED":
+            return {"status": "not_paid"}
+
+        # 🔍 Extract actual paid amount from PayPal response
+        raw = result.get("raw", {})
+        try:
+            paid_amount = (
+                raw["purchase_units"][0]
+                ["payments"]["captures"][0]
+                ["amount"]["value"]
+            )
+        except Exception:
+            raise HTTPException(status_code=400, detail="Unable to verify payment amount")
+
+        expected_amount = PLAN_PRICES.get(body.plan)
+        if not expected_amount:
+            raise HTTPException(status_code=400, detail="Invalid plan selected")
+
+        if paid_amount != expected_amount:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Price mismatch. Paid {paid_amount}, expected {expected_amount}",
+            )
+
+        # ✅ Activate subscription only after secure validation
         create_or_update_subscription(
             user_id=body.user_id,
             plan=body.plan,
             payment_id=result.get("id"),
             order_id=body.order_id,
         )
-        return {
-            "status": "success"
-        }
+
+        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

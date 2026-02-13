@@ -13,43 +13,152 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/premium_service.dart';
 
 Future<void> showRestartRequiredDialog(BuildContext context) async {
-  await showDialog(
+  await showGeneralDialog(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) {
-      return AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          "Premium Activated 🎉",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: const Text(
-          "Your payment was successful.\n\n"
-          "Please close and reopen the app to activate Premium features.",
-          style: TextStyle(
-            color: Colors.white70,
-            height: 1.4,
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
-            ),
-            onPressed: () {
-              Future.delayed(const Duration(milliseconds: 300), () {
-                exit(0);
-              });
+    barrierColor: Colors.black.withOpacity(0.85),
+    transitionDuration: const Duration(milliseconds: 400),
+    pageBuilder: (context, animation, secondaryAnimation) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF020A1F),
+        body: SafeArea(
+          child: AnimatedBuilder(
+            animation: animation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: animation.value,
+                child: Transform.translate(
+                  offset: Offset(0, (1 - animation.value) * 60),
+                  child: child,
+                ),
+              );
             },
-            child: const Text("Restart App"),
+            child: Column(
+              children: [
+                // 🔥 TOP NOTCH STYLE GLOW HEADER
+                TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 700),
+                  tween: Tween(begin: 0.8, end: 1.0),
+                  curve: Curves.easeOutBack,
+                  builder: (context, value, child) {
+                    return Transform.scale(
+                      scale: value,
+                      child: child,
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF38BDF8), Color(0xFF7C3AED)],
+                      ),
+                      borderRadius: BorderRadius.vertical(
+                        bottom: Radius.circular(36),
+                      ),
+                    ),
+                    child: Column(
+                      children: const [
+                        Icon(Icons.workspace_premium,
+                            size: 60, color: Colors.white),
+                        SizedBox(height: 12),
+                        Text(
+                          "PREMIUM UNLOCKED",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                ),
+
+                const SizedBox(height: 50),
+
+                const Text(
+                  "You’re Now Elite 👑",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 30),
+                  child: Text(
+                    "Your payment was successful.\n\nRestart the app once to activate all Premium features.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+
+                const Spacer(),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: GestureDetector(
+                    onTap: () {
+                      Future.delayed(const Duration(milliseconds: 200), () {
+                        exit(0);
+                      });
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF38BDF8), Color(0xFF7C3AED)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0xFF38BDF8),
+                            blurRadius: 20,
+                          )
+                        ],
+                      ),
+                      child: const Center(
+                        child: Text(
+                          "Restart & Enter Premium",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
-        ],
+        ),
+      );
+    },
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(
+        opacity: animation,
+        child: ScaleTransition(
+          scale: CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          ),
+          child: child,
+        ),
       );
     },
   );

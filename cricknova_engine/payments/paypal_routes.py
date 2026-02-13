@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 from paypalcheckoutsdk.core import PayPalHttpClient, SandboxEnvironment, LiveEnvironment
 from paypalcheckoutsdk.orders import OrdersCreateRequest
+from paypalcheckoutsdk.orders import OrdersCaptureRequest
+from subscription_service import activate_subscription
 
 router = APIRouter(prefix="/paypal", tags=["PayPal"])
 
@@ -78,4 +80,37 @@ def paypal_create_order(req: PayPalCreateOrder):
         "success": True,
         "order_id": response.result.id,
         "approval_url": approval_url,
+    }
+
+
+# --- PayPal Capture Endpoint ---
+class PayPalCaptureOrder(BaseModel):
+    order_id: str
+    user_id: str
+    plan_code: str  # Example: YEARLY, ULTRA, MONTHLY
+
+
+@router.post("/capture")
+def paypal_capture_order(req: PayPalCaptureOrder):
+    client = get_paypal_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="PayPal not configured")
+
+    capture_request = OrdersCaptureRequest(req.order_id)
+    capture_request.request_body({})
+
+    response = client.execute(capture_request)
+
+    status = response.result.status
+
+    if status != "COMPLETED":
+        raise HTTPException(status_code=400, detail=f"Payment not completed. Status: {status}")
+
+    # Activate subscription after successful payment
+    subscription = activate_subscription(req.user_id, req.plan_code)
+
+    return {
+        "success": True,
+        "status": status,
+        "subscription": subscription,
     }

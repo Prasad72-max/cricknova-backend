@@ -62,7 +62,16 @@ print("🔑 OPENAI KEY LOADED:", bool(os.getenv("OPENAI_API_KEY")))
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 from cricknova_ai_backend.paypal_service import router as paypal_router
 
+
 from cricknova_ai_backend.subscriptions_store import get_current_user
+
+# 🔐 Secure backend price validation (USD plans only)
+PLAN_PRICES = {
+    "MONTHLY": 29.99,
+    "SIX_MONTH": 49.99,
+    "YEARLY": 69.99,
+    "ULTRA": 159.99,
+}
 
 # Helper to extract Bearer token from Authorization header
 def extract_bearer_token(auth_header: str | None):
@@ -231,12 +240,18 @@ async def paypal_create_order(req: PayPalCreateOrderRequest):
 
     request_obj = OrdersCreateRequest()
     request_obj.prefer("return=representation")
+
+    # 🔐 Validate plan and enforce backend pricing (ignore frontend amount)
+    expected_price = PLAN_PRICES.get(req.plan.upper())
+    if not expected_price:
+        raise HTTPException(status_code=400, detail="INVALID_PLAN")
+
     request_obj.request_body({
         "intent": "CAPTURE",
         "purchase_units": [{
             "amount": {
                 "currency_code": "USD",
-                "value": f"{req.amount_usd:.2f}"
+                "value": f"{expected_price:.2f}"
             }
         }],
         "application_context": {
@@ -276,6 +291,26 @@ async def paypal_capture(req: PayPalCaptureRequest):
     response = paypal_client.execute(request_obj)
     if response.result.status != "COMPLETED":
         raise HTTPException(status_code=400, detail="Payment not completed")
+
+    # 🔍 Extract actual paid amount from PayPal response
+    try:
+        paid_amount = float(
+            response.result.purchase_units[0]
+            .payments.captures[0]
+            .amount.value
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Unable to verify payment amount")
+
+    expected_price = PLAN_PRICES.get(req.plan.upper())
+    if not expected_price:
+        raise HTTPException(status_code=400, detail="INVALID_PLAN")
+
+    if abs(paid_amount - expected_price) > 0.01:
+        raise HTTPException(
+            status_code=400,
+            detail=f"PRICE_MISMATCH: paid {paid_amount}, expected {expected_price}"
+        )
 
     from cricknova_ai_backend.subscriptions_store import create_or_update_subscription, get_subscription
 
