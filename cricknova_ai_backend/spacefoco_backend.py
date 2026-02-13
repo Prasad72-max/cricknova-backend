@@ -112,7 +112,6 @@ from cricknova_engine.processing.ball_tracker_motion import (
 )
 from cricknova_engine.processing.swing import calculate_swing
 from cricknova_engine.processing.spin import calculate_spin
-from cricknova_engine.processing.drs_engine import detect_stump_hit
 
 # -----------------------------
 # BALL POSITION NORMALIZATION
@@ -1159,6 +1158,44 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if os.path.exists(video_path):
             os.remove(video_path)
 
+# -----------------------------
+# PHYSICS-ONLY STUMP HIT DETECTOR
+# -----------------------------
+def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
+    """
+    Adaptive stump-hit detection based on final ball trajectory.
+    Returns (hit: bool, confidence: float)
+    """
+
+    if not ball_positions or len(ball_positions) < 6:
+        return False, 0.0
+
+    # Use last 15 frames for end-trajectory analysis
+    recent = ball_positions[-15:]
+
+    xs = [p[0] for p in recent]
+    ys = [p[1] for p in recent]
+
+    # FIXED CENTER STUMP ZONE (camera stable)
+    stump_center_x = frame_width * 0.50
+    stump_half_width = frame_width * 0.06
+
+    stump_x_min = stump_center_x - stump_half_width
+    stump_x_max = stump_center_x + stump_half_width
+
+    # Bottom 40% of frame where stumps actually exist
+    stump_y_min = frame_height * 0.60
+    stump_y_max = frame_height * 0.98
+
+    hits = 0
+    for (x, y) in recent:
+        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
+            hits += 1
+
+    # Confidence scaled by number of frames inside zone
+    confidence = min(hits / 5.0, 1.0)
+
+    return hits >= 2, round(confidence, 2)
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1254,14 +1291,11 @@ async def drs_review(file: UploadFile = File(...)):
         # BALL TRACKING (STUMP HIT)
         # -----------------------------
 
-        stump_confidence = detect_stump_hit(
-            build_trajectory(ball_positions, frame_width, frame_height)
+        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+            ball_positions,
+            frame_width,
+            frame_height
         )
-
-        hits_stumps = stump_confidence >= 0.70
-
-        print("HITS STUMPS:", hits_stumps)
-        print("STUMP CONFIDENCE:", stump_confidence)
 
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)
