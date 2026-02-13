@@ -805,6 +805,8 @@ async def ai_coach_analyze(
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
         ball_positions = smooth_positions(ball_positions, window=3)
+        ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
         if not ball_positions or len(ball_positions) < 6:
             prompt = """
@@ -1374,27 +1376,23 @@ async def drs_review(file: UploadFile = File(...)):
         ultraedge = False
 
         if ball_near_bat_zone(ball_positions, frame_width, frame_height):
-            # Use only last frames near bat
-            recent = ball_positions[-6:]
+            recent = ball_positions[-8:] if len(ball_positions) >= 8 else ball_positions
 
-            xs = [p[0] for p in recent]
-            ys = [p[1] for p in recent]
+            if len(recent) >= 6:
+                xs = [p[0] for p in recent]
+                ys = [p[1] for p in recent]
 
-            # Horizontal deflection after bat contact
-            dx1 = xs[2] - xs[0]
-            dx2 = xs[5] - xs[3]
+                dx1 = xs[2] - xs[0]
+                dx2 = xs[-1] - xs[-3]
 
-            dy1 = ys[2] - ys[0]
-            dy2 = ys[5] - ys[3]
+                dy1 = ys[2] - ys[0]
+                dy2 = ys[-1] - ys[-3]
 
-            # Physics rules:
-            # 1. Forward motion must reduce suddenly
-            # 2. Lateral motion must increase suddenly
-            forward_drop = abs(dy2) < abs(dy1) * 0.55
-            lateral_jump = abs(dx2) > abs(dx1) * 1.8
+                forward_drop = abs(dy2) < abs(dy1) * 0.65
+                lateral_jump = abs(dx2) > abs(dx1) * 1.6
 
-            if forward_drop and lateral_jump:
-                ultraedge = True
+                if forward_drop and lateral_jump:
+                    ultraedge = True
 
         # -----------------------------
         # BALL TRACKING (STUMP HIT)
@@ -1412,9 +1410,12 @@ async def drs_review(file: UploadFile = File(...)):
         if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
+        elif hits_stumps and stump_confidence >= 0.5:
+            decision = "OUT"
+            reason = "Ball projected to hit stumps"
         elif hits_stumps:
             decision = "OUT"
-            reason = "Ball hitting stumps"
+            reason = "Ball contacting stumps"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
