@@ -65,10 +65,9 @@ def detect_stump_hit(trajectory):
         return 0.0
     
     hits = 0
-    # UPDATED: Adjusted stump zone for your normalized trajectory scale
-    # (Your trajectory Y values are around 1.6–1.9 range)
-    stump_x_min, stump_x_max = 0.44, 0.56   # Slightly wider for variance
-    stump_y_min, stump_y_max = 1.55, 1.90   # Match real trajectory height scale
+    # Calibrated for normalized 0–1 trajectory scale
+    stump_x_min, stump_x_max = 0.56, 0.68
+    stump_y_min, stump_y_max = 0.83, 0.95
 
     for p in post_pitch:
         x, y = _get_xy(p)

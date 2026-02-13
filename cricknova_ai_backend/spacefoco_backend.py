@@ -624,8 +624,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
         ball_positions = smooth_positions(ball_positions, window=3)
-        ball_positions = stabilize_ball_positions(ball_positions)
-        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         # Keep enough frames for verified physics (>=10)
@@ -1178,15 +1176,17 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     xs = [p[0] for p in recent]
     ys = [p[1] for p in recent]
 
-    # FIXED CENTER STUMP ZONE (camera stable)
-    stump_center_x = frame_width * 0.50
-    stump_half_width = frame_width * 0.06
+    # ADAPTIVE STUMP ZONE (align with actual ball line)
+    # Use median of final trajectory X as projected stump line
+    projected_center_x = float(np.median(xs))
 
-    stump_x_min = stump_center_x - stump_half_width
-    stump_x_max = stump_center_x + stump_half_width
+    stump_half_width = frame_width * 0.04  # tighter realistic width
 
-    # Bottom 40% of frame where stumps actually exist
-    stump_y_min = frame_height * 0.60
+    stump_x_min = projected_center_x - stump_half_width
+    stump_x_max = projected_center_x + stump_half_width
+
+    # Bottom 30% of frame where stumps visually exist
+    stump_y_min = frame_height * 0.70
     stump_y_max = frame_height * 0.98
 
     hits = 0
