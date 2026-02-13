@@ -1172,6 +1172,8 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
 
     # Use last 15 frames for end-trajectory analysis
     recent = ball_positions[-15:]
+    print("FINAL X MEDIAN:", float(np.median([p[0] for p in recent])))
+    print("FRAME WIDTH:", frame_width)
 
     xs = [p[0] for p in recent]
     ys = [p[1] for p in recent]
