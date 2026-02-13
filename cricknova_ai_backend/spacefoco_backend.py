@@ -699,8 +699,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 dy1 = ys[2] - ys[0]
                 dy2 = ys[5] - ys[3]
 
-                forward_drop = abs(dy2) < abs(dy1) * 0.55
-                lateral_jump = abs(dx2) > abs(dx1) * 1.8
+                forward_drop = abs(dy2) < abs(dy1) * 0.35
+                lateral_jump = abs(dx2) > abs(dx1) * 2.5
 
                 if forward_drop and lateral_jump:
                     ultraedge = True
@@ -711,12 +711,12 @@ async def analyze_training_video(file: UploadFile = File(...)):
             frame_height
         )
 
-        if ultraedge:
-            decision = "NOT OUT"
-            reason = "Bat involved (UltraEdge detected)"
-        elif hits_stumps:
+        if hits_stumps:
             decision = "OUT"
             reason = "Ball hitting stumps"
+        elif ultraedge:
+            decision = "NOT OUT"
+            reason = "Bat involved (UltraEdge detected)"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
@@ -1205,8 +1205,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 dy1 = ys[2] - ys[0]
                 dy2 = ys[5] - ys[3]
 
-                forward_drop = abs(dy2) < abs(dy1) * 0.55
-                lateral_jump = abs(dx2) > abs(dx1) * 1.8
+                forward_drop = abs(dy2) < abs(dy1) * 0.35
+                lateral_jump = abs(dx2) > abs(dx1) * 2.5
 
                 if forward_drop and lateral_jump:
                     ultraedge = True
@@ -1217,12 +1217,12 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             frame_height
         )
 
-        if ultraedge:
-            decision = "NOT OUT"
-            reason = "Bat involved (UltraEdge detected)"
-        elif hits_stumps:
+        if hits_stumps:
             decision = "OUT"
             reason = "Ball hitting stumps"
+        elif ultraedge:
+            decision = "NOT OUT"
+            reason = "Bat involved (UltraEdge detected)"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
@@ -1388,8 +1388,8 @@ async def drs_review(file: UploadFile = File(...)):
                 dy1 = ys[2] - ys[0]
                 dy2 = ys[-1] - ys[-3]
 
-                forward_drop = abs(dy2) < abs(dy1) * 0.65
-                lateral_jump = abs(dx2) > abs(dx1) * 1.6
+                forward_drop = abs(dy2) < abs(dy1) * 0.35
+                lateral_jump = abs(dx2) > abs(dx1) * 2.5
 
                 if forward_drop and lateral_jump:
                     ultraedge = True
@@ -1407,15 +1407,12 @@ async def drs_review(file: UploadFile = File(...)):
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)
         # -----------------------------
-        if ultraedge:
+        if hits_stumps:
+            decision = "OUT"
+            reason = "Ball hitting stumps"
+        elif ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
-        elif hits_stumps and stump_confidence >= 0.5:
-            decision = "OUT"
-            reason = "Ball projected to hit stumps"
-        elif hits_stumps:
-            decision = "OUT"
-            reason = "Ball contacting stumps"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
