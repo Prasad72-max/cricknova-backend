@@ -1163,61 +1163,54 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    DRS 2.0 – Projection Based Ball Tracking (Hawk-Eye Lite)
-    Returns (hit: bool, confidence: float)
+    DRS 2.1 – Pure geometric projection (no bounce rejection)
+    Uses last stable trajectory window for accurate stump intersection.
     """
 
-    if not ball_positions or len(ball_positions) < 6:
+    if not ball_positions or len(ball_positions) < 8:
         return False, 0.0
 
-    # ---- 1️⃣ Find Bounce (highest Y = closest to ground) ----
-    ys = [p[1] for p in ball_positions]
-    pitch_frame = int(np.argmax(ys))
-
-    # Reject very short balls (bouncer logic)
-    if pitch_frame < len(ball_positions) * 0.25:
+    if frame_width <= 0 or frame_height <= 0:
         return False, 0.0
 
-    post_pitch = ball_positions[pitch_frame:]
-
-    if len(post_pitch) < 3:
-        return False, 0.0
-
-    # ---- 2️⃣ Normalize to 0–1 scale ----
+    # ---- Normalize full trajectory ----
     norm_points = [
         (p[0] / frame_width, p[1] / frame_height)
-        for p in post_pitch
-        if frame_width > 0 and frame_height > 0
+        for p in ball_positions
     ]
 
-    xs = np.array([p[0] for p in norm_points])
-    ys = np.array([p[1] for p in norm_points])
+    # ---- Use last 8 stable points for direction ----
+    recent = norm_points[-8:]
 
-    if len(xs) < 3:
+    xs = np.array([p[0] for p in recent])
+    ys = np.array([p[1] for p in recent])
+
+    if len(xs) < 4:
         return False, 0.0
 
-    # ---- 3️⃣ Fit Linear Model (x = m*y + c) ----
+    # ---- Linear regression (x = m*y + c) ----
     try:
         m, c = np.polyfit(ys, xs, 1)
     except Exception:
         return False, 0.0
 
-    # ---- 4️⃣ Project To Stump Plane ----
-    stump_y_plane = 0.90
+    # ---- Project to realistic stump plane ----
+    stump_y_plane = 0.78
     projected_x = m * stump_y_plane + c
 
-    # ---- 5️⃣ Fixed Stump Geometry (Normalized) ----
+    # ---- Calibrated stump zone (slightly wider for phone camera angle) ----
     stump_center_x = 0.50
-    stump_half_width = 0.06
+    stump_half_width = 0.12
 
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
 
-    # ---- 6️⃣ Confidence Calculation ----
+    # ---- Confidence based on stability ----
+    stability = 1 - min(np.std(xs), 0.08)
+    stability = max(min(stability, 1.0), 0.4)
+
     if stump_x_min <= projected_x <= stump_x_max:
-        stability = 1 - min(np.std(xs), 0.1)
-        confidence = max(min(stability, 1.0), 0.4)
-        return True, round(confidence, 2)
+        return True, round(stability, 2)
 
     return False, 0.0
 
