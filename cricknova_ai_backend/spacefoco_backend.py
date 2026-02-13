@@ -683,6 +683,44 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         spin = spin_result.get("name")
 
+        # -----------------------------
+        # DRS (AUTO-INCLUDED IN ANALYZE)
+        # -----------------------------
+        ultraedge = False
+
+        if ball_near_bat_zone(ball_positions, frame_width, frame_height):
+            recent = ball_positions[-6:]
+            if len(recent) >= 6:
+                xs = [p[0] for p in recent]
+                ys = [p[1] for p in recent]
+
+                dx1 = xs[2] - xs[0]
+                dx2 = xs[5] - xs[3]
+                dy1 = ys[2] - ys[0]
+                dy2 = ys[5] - ys[3]
+
+                forward_drop = abs(dy2) < abs(dy1) * 0.55
+                lateral_jump = abs(dx2) > abs(dx1) * 1.8
+
+                if forward_drop and lateral_jump:
+                    ultraedge = True
+
+        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+            ball_positions,
+            frame_width,
+            frame_height
+        )
+
+        if ultraedge:
+            decision = "NOT OUT"
+            reason = "Bat involved (UltraEdge detected)"
+        elif hits_stumps:
+            decision = "OUT"
+            reason = "Ball hitting stumps"
+        else:
+            decision = "NOT OUT"
+            reason = "Ball missing stumps"
+
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
@@ -692,7 +730,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
+            "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
+            "drs": {
+                "ultraedge": ultraedge,
+                "ball_tracking": hits_stumps,
+                "stump_confidence": stump_confidence,
+                "decision": decision,
+                "reason": reason
+            }
         }
 
     finally:
@@ -1142,6 +1187,44 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         spin = spin_result.get("name")
 
+        # -----------------------------
+        # DRS (AUTO-INCLUDED IN ANALYZE)
+        # -----------------------------
+        ultraedge = False
+
+        if ball_near_bat_zone(ball_positions, frame_width, frame_height):
+            recent = ball_positions[-6:]
+            if len(recent) >= 6:
+                xs = [p[0] for p in recent]
+                ys = [p[1] for p in recent]
+
+                dx1 = xs[2] - xs[0]
+                dx2 = xs[5] - xs[3]
+                dy1 = ys[2] - ys[0]
+                dy2 = ys[5] - ys[3]
+
+                forward_drop = abs(dy2) < abs(dy1) * 0.55
+                lateral_jump = abs(dx2) > abs(dx1) * 1.8
+
+                if forward_drop and lateral_jump:
+                    ultraedge = True
+
+        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+            ball_positions,
+            frame_width,
+            frame_height
+        )
+
+        if ultraedge:
+            decision = "NOT OUT"
+            reason = "Bat involved (UltraEdge detected)"
+        elif hits_stumps:
+            decision = "OUT"
+            reason = "Ball hitting stumps"
+        else:
+            decision = "NOT OUT"
+            reason = "Ball missing stumps"
+
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
@@ -1151,7 +1234,14 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height)
+            "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
+            "drs": {
+                "ultraedge": ultraedge,
+                "ball_tracking": hits_stumps,
+                "stump_confidence": stump_confidence,
+                "decision": decision,
+                "reason": reason
+            }
         }
 
     finally:
