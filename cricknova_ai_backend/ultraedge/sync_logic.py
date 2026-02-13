@@ -1,5 +1,3 @@
-
-
 """
 UltraEdge + Ball Path + Stump Sync Logic
 Science-based DRS decision engine (NON-SCRIPTED)
@@ -63,6 +61,8 @@ def decide_drs(
         return inside
 
     stumps_hit = False
+    print("TRAJECTORY SAMPLE:", ball_trajectory[-3:] if len(ball_trajectory) >= 3 else ball_trajectory)
+    print("STUMP POLYGON:", stump_polygon)
 
     # 1️⃣ Direct intersection check
     for p in ball_trajectory:

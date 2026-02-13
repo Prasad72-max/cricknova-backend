@@ -52,10 +52,13 @@ def detect_stump_hit(trajectory):
         print("DRS DEBUG → Insufficient trajectory")
         return 0.0
     
-    # Find pitch bounce (lowest Y point)
+    # Find pitch bounce (HIGHEST Y point in normalized coords)
+    # In your coordinate system, larger Y = ball closer to ground
     y_positions = [_get_xy(p)[1] for p in trajectory]
-    pitch_frame = int(np.argmin(y_positions))
-    post_pitch = trajectory[pitch_frame + 1:]
+    pitch_frame = int(np.argmax(y_positions))
+
+    # Include bounce frame itself for projection safety
+    post_pitch = trajectory[pitch_frame:]
     
     if not post_pitch or len(post_pitch) < 2:
         print("DRS DEBUG → No post-pitch frames")
