@@ -651,6 +651,24 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
+        # -----------------------------
+        # AUTO CENTER CROP (50% WIDTH)
+        # -----------------------------
+        crop_x_start = int(frame_width * 0.25)
+        crop_x_end = int(frame_width * 0.75)
+        cropped_width = crop_x_end - crop_x_start
+
+        # Adjust ball positions to cropped coordinate system
+        cropped_positions = []
+        for (x, y) in ball_positions:
+            if crop_x_start <= x <= crop_x_end:
+                cropped_positions.append((x - crop_x_start, y))
+
+        # Only replace if we still have enough tracking points
+        if len(cropped_positions) >= 6:
+            ball_positions = cropped_positions
+            frame_width = cropped_width
+
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
         speed_result = calculate_ball_speed_kmph(ball_positions, fps)
@@ -1145,6 +1163,24 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
+        # -----------------------------
+        # AUTO CENTER CROP (50% WIDTH)
+        # -----------------------------
+        crop_x_start = int(frame_width * 0.25)
+        crop_x_end = int(frame_width * 0.75)
+        cropped_width = crop_x_end - crop_x_start
+
+        # Adjust ball positions to cropped coordinate system
+        cropped_positions = []
+        for (x, y) in ball_positions:
+            if crop_x_start <= x <= crop_x_end:
+                cropped_positions.append((x - crop_x_start, y))
+
+        # Only replace if we still have enough tracking points
+        if len(cropped_positions) >= 6:
+            ball_positions = cropped_positions
+            frame_width = cropped_width
+
         speed_result = calculate_ball_speed_kmph(ball_positions, fps)
 
         speed_kmph = speed_result.get("speed_kmph")
@@ -1340,6 +1376,24 @@ async def drs_review(file: UploadFile = File(...)):
 
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
+
+        # -----------------------------
+        # AUTO CENTER CROP (50% WIDTH)
+        # -----------------------------
+        crop_x_start = int(frame_width * 0.25)
+        crop_x_end = int(frame_width * 0.75)
+        cropped_width = crop_x_end - crop_x_start
+
+        # Adjust ball positions to cropped coordinate system
+        cropped_positions = []
+        for (x, y) in ball_positions:
+            if crop_x_start <= x <= crop_x_end:
+                cropped_positions.append((x - crop_x_start, y))
+
+        # Only replace if we still have enough tracking points
+        if len(cropped_positions) >= 6:
+            ball_positions = cropped_positions
+            frame_width = cropped_width
 
         # -----------------------------
         # ULTRAEDGE (STRICT PHYSICS)
