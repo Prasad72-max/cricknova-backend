@@ -120,3 +120,4 @@ def analyze_training(data):
             "reason": reason,
         }
     }
+print("DRS 3.0 ACTIVE")

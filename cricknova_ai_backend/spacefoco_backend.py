@@ -112,6 +112,7 @@ from cricknova_engine.processing.ball_tracker_motion import (
 )
 from cricknova_engine.processing.swing import calculate_swing
 from cricknova_engine.processing.spin import calculate_spin
+from cricknova_engine.processing.drs_engine import detect_stump_hit
 
 # -----------------------------
 # BALL POSITION NORMALIZATION
@@ -1158,61 +1159,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if os.path.exists(video_path):
             os.remove(video_path)
 
-# -----------------------------
-# PHYSICS-ONLY STUMP HIT DETECTOR
-# -----------------------------
-def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
-    """
-    DRS 2.1 – Pure geometric projection (no bounce rejection)
-    Uses last stable trajectory window for accurate stump intersection.
-    """
-
-    if not ball_positions or len(ball_positions) < 8:
-        return False, 0.0
-
-    if frame_width <= 0 or frame_height <= 0:
-        return False, 0.0
-
-    # ---- Normalize full trajectory ----
-    norm_points = [
-        (p[0] / frame_width, p[1] / frame_height)
-        for p in ball_positions
-    ]
-
-    # ---- Use last 8 stable points for direction ----
-    recent = norm_points[-8:]
-
-    xs = np.array([p[0] for p in recent])
-    ys = np.array([p[1] for p in recent])
-
-    if len(xs) < 4:
-        return False, 0.0
-
-    # ---- Linear regression (x = m*y + c) ----
-    try:
-        m, c = np.polyfit(ys, xs, 1)
-    except Exception:
-        return False, 0.0
-
-    # ---- Project to realistic stump plane ----
-    stump_y_plane = 0.78
-    projected_x = m * stump_y_plane + c
-
-    # ---- Calibrated stump zone (slightly wider for phone camera angle) ----
-    stump_center_x = 0.50
-    stump_half_width = 0.12
-
-    stump_x_min = stump_center_x - stump_half_width
-    stump_x_max = stump_center_x + stump_half_width
-
-    # ---- Confidence based on stability ----
-    stability = 1 - min(np.std(xs), 0.08)
-    stability = max(min(stability, 1.0), 0.4)
-
-    if stump_x_min <= projected_x <= stump_x_max:
-        return True, round(stability, 2)
-
-    return False, 0.0
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1308,11 +1254,12 @@ async def drs_review(file: UploadFile = File(...)):
         # BALL TRACKING (STUMP HIT)
         # -----------------------------
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
-            ball_positions,
-            frame_width,
-            frame_height
+        stump_confidence = detect_stump_hit(
+            build_trajectory(ball_positions, frame_width, frame_height)
         )
+
+        hits_stumps = stump_confidence >= 0.70
+
         print("HITS STUMPS:", hits_stumps)
         print("STUMP CONFIDENCE:", stump_confidence)
 
