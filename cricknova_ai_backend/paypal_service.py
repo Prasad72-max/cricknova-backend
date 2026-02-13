@@ -142,7 +142,8 @@ def create_paypal_order(body: PayPalCreateOrderBody):
         raise HTTPException(status_code=500, detail="PayPal not configured")
     try:
         # 🔐 Validate plan and enforce backend pricing
-        expected_amount = PLAN_PRICES.get(body.plan)
+        plan_key = body.plan.upper()
+        expected_amount = PLAN_PRICES.get(plan_key)
         if not expected_amount:
             raise HTTPException(status_code=400, detail="Invalid plan selected")
 
@@ -184,7 +185,8 @@ def capture_paypal_order(body: PayPalCaptureBody):
         except Exception:
             raise HTTPException(status_code=400, detail="Unable to verify payment amount")
 
-        expected_amount = PLAN_PRICES.get(body.plan)
+        plan_key = body.plan.upper()
+        expected_amount = PLAN_PRICES.get(plan_key)
         if not expected_amount:
             raise HTTPException(status_code=400, detail="Invalid plan selected")
 
@@ -197,7 +199,7 @@ def capture_paypal_order(body: PayPalCaptureBody):
         # ✅ Activate subscription only after secure validation
         create_or_update_subscription(
             user_id=body.user_id,
-            plan=body.plan,
+            plan=plan_key,
             payment_id=result.get("id"),
             order_id=body.order_id,
         )
