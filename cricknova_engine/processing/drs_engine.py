@@ -8,38 +8,38 @@ def _get_xy(p):
         return float(p[0]), float(p[1])
     return 0.0, 0.0
 
-# FIXED: Static class variable bug
-ball_near_bat_cache = False  # Global instead of ._ball_near_bat
+# Global cache for bat detection
+ball_near_bat_cache = False
 
 def ball_near_bat(trajectory):
-    """Bat zone detection - FIXED tighter window"""
+    """Bat zone detection - realistic swing path"""
     if not trajectory or len(trajectory) < 3:
         return False
     
     for p in trajectory:
         x, y = _get_xy(p)
-        # TIGHTER bat zone (realistic swing path)
-        if 0.45 <= x <= 0.55 and 0.25 <= y <= 0.38:  # Was too wide
+        # Tighter bat zone (normalized screen coords)
+        if 0.45 <= x <= 0.55 and 0.25 <= y <= 0.38:
             return True
     return False
 
-def detect_ultraedge(video_path, trajectory):  # FIXED: Pass trajectory
+def detect_ultraedge(video_path, trajectory):
+    """UltraEdge snick detection with adaptive threshold"""
     global ball_near_bat_cache
-    if not ball_near_bat_cache:  # Use global cache
+    if not ball_near_bat_cache:
         return False
     
     try:
-        audio, sr = librosa.load(video_path, sr=None, duration=5.0)  # Limit duration
+        audio, sr = librosa.load(video_path, sr=None, duration=5.0)
     except:
         return False
 
-    # FIXED: Better spike detection
-    frame_len = int(0.008 * sr)  # 8ms (sharper)
-    hop_len = int(0.004 * sr)    # 4ms
+    frame_len = int(0.008 * sr)  # 8ms windows
+    hop_len = int(0.004 * sr)    # 4ms hop
     
     energy = librosa.feature.rms(y=audio, frame_length=frame_len, hop_length=hop_len)[0]
     
-    # ADAPTIVE threshold (pitch noise varies)
+    # Adaptive threshold for varying pitch noise
     mean_energy = np.mean(energy)
     std_energy = np.std(energy)
     if len(energy) > 10 and np.max(energy) > mean_energy + 8 * std_energy:
@@ -47,61 +47,60 @@ def detect_ultraedge(video_path, trajectory):  # FIXED: Pass trajectory
     return False
 
 def detect_stump_hit(trajectory):
-    """FIXED: Physics-based stump zone + post-pitch only"""
+    """FIXED: Physics-based stump detection + adaptive confidence"""
     if not trajectory or len(trajectory) < 5:
+        print("DRS DEBUG → Insufficient trajectory")
         return 0.0
     
-    # Ball MUST pitch first (post-bounce frames only)
+    # Find pitch bounce (lowest Y point)
     y_positions = [_get_xy(p)[1] for p in trajectory]
-    # Bounce is lowest Y point (ball hits pitch)
     pitch_frame = int(np.argmin(y_positions))
-    # Use frames strictly AFTER bounce
     post_pitch = trajectory[pitch_frame + 1:]
     
     if not post_pitch or len(post_pitch) < 2:
+        print("DRS DEBUG → No post-pitch frames")
         return 0.0
     
     hits = 0
-
-    # FIXED central stump zone (normalized 0–1 scale, behind-bowler view)
-    stump_x_min = 0.47
-    stump_x_max = 0.53
-    stump_y_min = 0.65
-    stump_y_max = 0.95
+    # FIXED: Wider zones for phone video variance (Hawk-Eye tolerance)
+    stump_x_min, stump_x_max = 0.46, 0.54  # 8% screen width
+    stump_y_min, stump_y_max = 0.60, 0.98   # Full stump depth
 
     for p in post_pitch:
         x, y = _get_xy(p)
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
 
-    # Require stronger evidence for OUT
-    confidence = min(hits / 5.0, 1.0)
-    print("DRS DEBUG → total trajectory frames:", len(trajectory))
+    # FIXED: Adaptive confidence based on ACTUAL post-pitch length
+    confidence = min(hits / max(len(post_pitch), 3), 1.0)
+    
+    print("DRS DEBUG → total frames:", len(trajectory))
     print("DRS DEBUG → pitch_frame:", pitch_frame)
     print("DRS DEBUG → post_pitch frames:", len(post_pitch))
-    print("DRS DEBUG → hits inside stump zone:", hits)
-    print("DRS DEBUG → calculated confidence:", confidence)
+    print("DRS DEBUG → hits:", hits)
+    print("DRS DEBUG → confidence:", round(confidence, 2))
     return confidence
 
 def analyze_training(data):
+    """Main DRS analysis - TV DRS physics logic"""
     trajectory = data.get("trajectory", [])
     video_path = data.get("video_path")
     
     global ball_near_bat_cache
-    ball_near_bat_cache = ball_near_bat(trajectory)  # FIXED cache
+    ball_near_bat_cache = ball_near_bat(trajectory)
     
-    # FIXED UltraEdge logic
+    # UltraEdge first (highest priority)
     ultraedge = bool(video_path and ball_near_bat_cache and detect_ultraedge(video_path, trajectory))
     stump_confidence = detect_stump_hit(trajectory)
     
-    # PHYSICS-BASED DECISION TREE (TV DRS logic)
+    # FIXED: Realistic decision thresholds
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.70:  # Raised threshold
+    elif stump_confidence >= 0.60:  # Plumb LBW
         decision = "OUT"
         reason = "Plumb LBW - stumps hit"
-    elif stump_confidence >= 0.45:
+    elif stump_confidence >= 0.40:  # Marginal
         decision = "UMPIRE'S CALL"
         reason = "Clipping stumps - marginal"
     else:
@@ -109,6 +108,10 @@ def analyze_training(data):
         reason = "Missing stumps outside line"
     
     return {
+        "speed": data.get("speed", 0),
+        "swing": data.get("swing", "None"),
+        "spin": data.get("spin", "None"),
+        "trajectory": trajectory,
         "drs": {
             "ultraedge": ultraedge,
             "stump_confidence": round(stump_confidence, 2),
