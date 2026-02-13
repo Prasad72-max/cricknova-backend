@@ -74,15 +74,25 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     final drs = src["drs"];
 
     if (drs is Map<String, dynamic>) {
-      final decision = drs["decision"];
-      final confidence = drs["stump_confidence"];
+      final decisionRaw = drs["decision"];
+      final confidenceRaw = drs["stump_confidence"];
 
-      if (decision is String && decision.isNotEmpty) {
-        drsDecision = decision.toUpperCase();
+      if (decisionRaw != null) {
+        final normalized =
+            decisionRaw.toString().toLowerCase().trim();
+
+        if (normalized.contains("not") &&
+            normalized.contains("out")) {
+          drsDecision = "NOT OUT";
+        } else if (normalized.contains("out")) {
+          drsDecision = "OUT";
+        } else {
+          drsDecision = normalized.toUpperCase();
+        }
       }
 
-      if (confidence is num) {
-        final percent = (confidence.toDouble() * 100);
+      if (confidenceRaw is num && confidenceRaw > 0) {
+        final percent = confidenceRaw.toDouble() * 100;
         drsConfidenceText =
             " (${percent.toStringAsFixed(0)}%)";
       }

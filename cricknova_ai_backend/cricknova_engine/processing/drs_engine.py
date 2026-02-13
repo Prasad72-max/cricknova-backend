@@ -46,7 +46,7 @@ def detect_stump_hit(trajectory):
     
     # Ball MUST pitch first (post-bounce frames only)
     y_positions = [p.get("y", 0) for p in trajectory]
-    pitch_frame = np.argmax(y_positions)  # Lowest point = bounce
+    pitch_frame = np.argmin(y_positions)  # Lowest point = bounce (FIXED)
     post_pitch = trajectory[max(0, pitch_frame):]  # ONLY post-pitch
     
     if len(post_pitch) < 3:
@@ -55,10 +55,25 @@ def detect_stump_hit(trajectory):
     hits = 0
     for p in post_pitch:
         x, y = p.get("x", 0), p.get("y", 0)
-        # REAL stump zone (3 stumps width, top 30% height)
-        if 0.46 <= x <= 0.54 and 0.68 <= y <= 0.92:  # Tighter + higher
+        # IMPROVED stump zone (realistic full stump height)
+        if 0.44 <= x <= 0.56 and 0.60 <= y <= 0.95:
             hits += 1
-    
+
+    # If no direct hits detected, project future path (basic linear physics)
+    if hits == 0 and len(post_pitch) >= 3:
+        last_points = post_pitch[-3:]
+        dx = last_points[-1]["x"] - last_points[-2]["x"]
+        dy = last_points[-1]["y"] - last_points[-2]["y"]
+
+        proj_x = last_points[-1]["x"]
+        proj_y = last_points[-1]["y"]
+
+        for _ in range(12):  # project next 12 frames
+            proj_x += dx
+            proj_y += dy
+            if 0.44 <= proj_x <= 0.56 and 0.60 <= proj_y <= 0.95:
+                return 0.75  # strong projected hit confidence
+
     return hits / len(post_pitch)
 
 def analyze_training(data):

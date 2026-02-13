@@ -333,13 +333,27 @@ class _UploadScreenState extends State<UploadScreen> {
       final rawDecision = drs["decision"];
       final rawConfidence = drs["stump_confidence"];
 
-      String decisionText =
-          rawDecision?.toString().toUpperCase() ?? "UNKNOWN";
+      String decisionText = "UNKNOWN";
+
+      if (rawDecision != null) {
+        final normalized =
+            rawDecision.toString().toLowerCase().trim();
+
+        if (normalized.contains("not") &&
+            normalized.contains("out")) {
+          decisionText = "NOT OUT";
+        } else if (normalized.contains("out")) {
+          decisionText = "OUT";
+        } else {
+          decisionText = normalized.toUpperCase();
+        }
+      }
 
       String confidenceText = "";
-      if (rawConfidence is num) {
+      if (rawConfidence is num && rawConfidence > 0) {
         final percent = rawConfidence.toDouble() * 100;
-        confidenceText = " (${percent.toStringAsFixed(0)}%)";
+        confidenceText =
+            " (${percent.toStringAsFixed(0)}%)";
       }
 
       setState(() {

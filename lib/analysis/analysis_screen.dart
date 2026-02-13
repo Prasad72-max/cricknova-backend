@@ -285,19 +285,33 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (src["drs"] is Map<String, dynamic>) {
         final drsMap = Map<String, dynamic>.from(src["drs"]);
 
-        final decision = drsMap["decision"];
-        final confidence = drsMap["stump_confidence"];
+        final decisionRaw = drsMap["decision"];
+        final confidenceRaw = drsMap["stump_confidence"];
 
-        drsDecision = (decision is String && decision.isNotEmpty)
-            ? decision.toUpperCase()
-            : null;
+        if (decisionRaw != null) {
+          final normalized =
+              decisionRaw.toString().toLowerCase().trim();
 
-        stumpConfidence = (confidence is num)
-            ? confidence.toDouble()
-            : null;
+          if (normalized.contains("not") &&
+              normalized.contains("out")) {
+            drsDecision = "NOT OUT";
+          } else if (normalized.contains("out")) {
+            drsDecision = "OUT";
+          } else {
+            drsDecision = normalized.toUpperCase();
+          }
+        } else {
+          drsDecision = null;
+        }
+
+        if (confidenceRaw is num && confidenceRaw > 0) {
+          stumpConfidence = confidenceRaw.toDouble();
+        } else {
+          stumpConfidence = 0.0;
+        }
       } else {
         drsDecision = null;
-        stumpConfidence = null;
+        stumpConfidence = 0.0;
       }
     });
   }

@@ -1170,15 +1170,15 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     if not ball_positions or len(ball_positions) < 6:
         return False, 0.0
 
-    # Use last 15 frames for end-trajectory analysis
-    recent = ball_positions[-15:]
+    # Use last 20 frames for stronger end-trajectory analysis
+    recent = ball_positions[-20:] if len(ball_positions) >= 20 else ball_positions
 
     xs = [p[0] for p in recent]
     ys = [p[1] for p in recent]
 
     # FIXED CENTER STUMP ZONE (camera stable)
     stump_center_x = frame_width * 0.50
-    stump_half_width = frame_width * 0.06
+    stump_half_width = frame_width * 0.08  # slightly wider realistic stump zone
 
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
@@ -1192,8 +1192,27 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
 
+    # --- FUTURE PROJECTION (Hawk-Eye style basic physics) ---
+    if hits == 0 and len(recent) >= 3:
+        x1, y1 = recent[-3]
+        x2, y2 = recent[-2]
+        x3, y3 = recent[-1]
+
+        dx = x3 - x2
+        dy = y3 - y2
+
+        proj_x = x3
+        proj_y = y3
+
+        for _ in range(15):  # project next 15 frames
+            proj_x += dx
+            proj_y += dy
+
+            if stump_x_min <= proj_x <= stump_x_max and stump_y_min <= proj_y <= stump_y_max:
+                return True, 0.85  # strong projected hit
+
     # Confidence scaled by number of frames inside zone
-    confidence = min(hits / 5.0, 1.0)
+    confidence = min(hits / 4.0, 1.0)
 
     return hits >= 2, round(confidence, 2)
 
