@@ -1,5 +1,4 @@
 import numpy as np
-import librosa
 
 # Global cache
 ball_near_bat_cache = False
@@ -18,31 +17,10 @@ def ball_near_bat(trajectory):
 
 
 def detect_ultraedge(video_path, trajectory):
-    global ball_near_bat_cache
-
-    if not ball_near_bat_cache:
-        return False
-
-    try:
-        audio, sr = librosa.load(video_path, sr=None, duration=5.0)
-    except Exception:
-        return False
-
-    frame_len = int(0.008 * sr)
-    hop_len = int(0.004 * sr)
-
-    energy = librosa.feature.rms(
-        y=audio,
-        frame_length=frame_len,
-        hop_length=hop_len
-    )[0]
-
-    mean_energy = np.mean(energy)
-    std_energy = np.std(energy)
-
-    if len(energy) > 10 and np.max(energy) > mean_energy + 8 * std_energy:
-        return True
-
+    """
+    UltraEdge disabled (no audio processing on Render).
+    Geometry-only DRS mode.
+    """
     return False
 
 
