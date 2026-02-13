@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-print("77777")
+print("77777❤️")
 import os
 import asyncio
 import sys
@@ -1227,58 +1227,57 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    Adaptive stump-hit detection based on final ball trajectory.
+    Improved physics-based stump-hit detection.
+    Uses adaptive stump zone + stronger forward projection.
     Returns (hit: bool, confidence: float)
     """
 
     if not ball_positions or len(ball_positions) < 6:
         return False, 0.0
 
-    # Use last 20 frames for stronger end-trajectory analysis
-    recent = ball_positions[-20:] if len(ball_positions) >= 20 else ball_positions
+    recent = ball_positions[-25:] if len(ball_positions) >= 25 else ball_positions
 
-    xs = [p[0] for p in recent]
-    ys = [p[1] for p in recent]
-
-    # FIXED CENTER STUMP ZONE (camera stable)
+    # --- Realistic stump zone (middle 18% width, realistic height band) ---
     stump_center_x = frame_width * 0.50
-    stump_half_width = frame_width * 0.15  # NORMAL MODE: wider stump zone for broadcast camera
+    stump_half_width = frame_width * 0.09  # tighter and realistic
 
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
 
-    # Bottom impact zone for stumps (wider for normal mode)
-    stump_y_min = frame_height * 0.48   # lowered for realistic stump reach
-    stump_y_max = frame_height * 1.00   # allow full bottom frame
+    stump_y_min = frame_height * 0.30   # allow hitting above pad height
+    stump_y_max = frame_height * 0.75   # realistic stump top height
 
+    # --- Direct frame intersection check ---
     hits = 0
     for (x, y) in recent:
         if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
             hits += 1
 
-    # --- FUTURE PROJECTION (Hawk-Eye style basic physics) ---
-    if hits == 0 and len(recent) >= 3:
-        x1, y1 = recent[-3]
-        x2, y2 = recent[-2]
-        x3, y3 = recent[-1]
+    if hits >= 2:
+        confidence = min(hits / 5.0, 1.0)
+        return True, round(confidence, 2)
 
-        dx = x3 - x2
-        dy = y3 - y2
+    # --- Stronger forward projection (Hawk‑Eye style) ---
+    if len(recent) >= 4:
+        x1, y1 = recent[-4]
+        x2, y2 = recent[-3]
+        x3, y3 = recent[-2]
+        x4, y4 = recent[-1]
 
-        proj_x = x3
-        proj_y = y3
+        dx = (x4 - x2) / 2.0
+        dy = (y4 - y2) / 2.0
 
-        for _ in range(18):  # extended projection for realistic continuation
+        proj_x = x4
+        proj_y = y4
+
+        for _ in range(25):  # deeper continuation
             proj_x += dx
             proj_y += dy
 
             if stump_x_min <= proj_x <= stump_x_max and stump_y_min <= proj_y <= stump_y_max:
-                return True, 0.85  # strong projected hit
+                return True, 0.85
 
-    # Confidence scaled by number of frames inside zone
-    confidence = min(hits / 3.0, 1.0)  # smoother confidence scaling
-
-    return hits >= 1, round(confidence, 2)  # trigger OUT if even 1 strong hit frame
+    return False, 0.0
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
