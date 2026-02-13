@@ -60,7 +60,6 @@ from dotenv import load_dotenv
 load_dotenv()
 print("🔑 OPENAI KEY LOADED:", bool(os.getenv("OPENAI_API_KEY")))
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
-from cricknova_ai_backend.paypal_service import router as paypal_router
 
 
 from cricknova_ai_backend.subscriptions_store import get_current_user
@@ -198,10 +197,6 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return trajectory
 
 
-# -----------------------------
-# PAYPAL ROUTER (REGISTER)
-# -----------------------------
-app.include_router(paypal_router)
 # -----------------------------
 # PAYPAL MODELS (MUST LOAD BEFORE ROUTES)
 # -----------------------------
