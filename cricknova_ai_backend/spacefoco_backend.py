@@ -1248,7 +1248,7 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     stump_x_max = stump_center_x + stump_half_width
 
     # Bottom impact zone for stumps (wider for normal mode)
-    stump_y_min = frame_height * 0.55   # allow slightly higher impact zone
+    stump_y_min = frame_height * 0.48   # lowered for realistic stump reach
     stump_y_max = frame_height * 1.00   # allow full bottom frame
 
     hits = 0
@@ -1268,7 +1268,7 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
         proj_x = x3
         proj_y = y3
 
-        for _ in range(8):  # lighter projection, reduce false hits
+        for _ in range(18):  # extended projection for realistic continuation
             proj_x += dx
             proj_y += dy
 
