@@ -302,7 +302,8 @@ async def paypal_capture(req: PayPalCaptureRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Unable to verify payment amount")
 
-    expected_price = PLAN_PRICES.get(req.plan.upper())
+    plan_key = (req.plan or "").upper()
+    expected_price = PLAN_PRICES.get(plan_key)
     if not expected_price:
         raise HTTPException(status_code=400, detail="INVALID_PLAN")
 
@@ -318,7 +319,7 @@ async def paypal_capture(req: PayPalCaptureRequest):
 
     create_or_update_subscription(
         user_id=req.user_id,
-        plan=req.plan,
+        plan=plan_key,
         payment_id=capture_id,
         order_id=req.order_id
     )
