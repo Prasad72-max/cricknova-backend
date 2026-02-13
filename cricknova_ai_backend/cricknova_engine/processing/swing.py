@@ -47,7 +47,7 @@ class SwingDetector:
         # AUTO SPLIT POINT (pitch impact)
         # The largest drop in vertical speed = bounce
         diffs = [positions[i+1][1] - positions[i][1] for i in range(len(positions)-1)]
-        pitch_index = np.argmax(diffs)  # y-increase is biggest at bounce
+        pitch_index = np.argmax(np.abs(diffs))  # use largest vertical change for stable bounce detection
 
         # protect boundaries
         pitch_index = max(1, min(pitch_index, len(positions)-2))
@@ -66,8 +66,8 @@ class SwingDetector:
 
         swing_angle = angle_post - angle_pre
 
-        # Clamp swing to realistic cricket range (-8° to +8°)
-        swing_angle = max(min(swing_angle, 8.0), -8.0)
+        # Clamp swing to realistic cricket range (-12° to +12°)
+        swing_angle = max(min(swing_angle, 12.0), -12.0)
 
         return round(swing_angle, 2)
 
@@ -91,14 +91,17 @@ def classify_swing(swing_deg: float):
     """
     Cricket-correct swing classification after unmirroring.
     """
-    if abs(swing_deg) < 1.0:
+    if abs(swing_deg) < 2.5:
         return "straight"
 
     # NOTE:
     # Positive angle after unmirror = ball moves AWAY from body
     # Negative angle = ball moves INTO body
 
-    if swing_deg < 0:
+    # Only classify as swing if horizontal change dominates
+    if swing_deg <= -2.5:
         return "inswing"
-    else:
+    elif swing_deg >= 2.5:
         return "outswing"
+    else:
+        return "straight"

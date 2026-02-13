@@ -215,20 +215,36 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (DIRECT FROM BACKEND) --------
+        // -------- SWING (NORMALIZED & NO SCRIPTED DEFAULT) --------
         final rawSwing = analysis["swing"];
-        if (rawSwing is String && rawSwing.isNotEmpty) {
-          swing = rawSwing.toUpperCase();
+        if (rawSwing is String && rawSwing.trim().isNotEmpty) {
+          final normalized = rawSwing.trim().toLowerCase();
+          if (normalized.contains("in")) {
+            swing = "INSWING";
+          } else if (normalized.contains("out")) {
+            swing = "OUTSWING";
+          } else {
+            swing = "STRAIGHT";
+          }
         } else {
-          swing = "OUTSWING";
+          swing = "STRAIGHT";
         }
 
-        // -------- SPIN (DIRECT FROM BACKEND) --------
+        // -------- SPIN (NORMALIZED & NO SCRIPTED DEFAULT) --------
         final rawSpin = analysis["spin"];
-        if (rawSpin is String && rawSpin.isNotEmpty) {
-          spin = rawSpin.toUpperCase();
+        if (rawSpin is String && rawSpin.trim().isNotEmpty) {
+          final normalized = rawSpin.trim().toLowerCase();
+          if (normalized.contains("off")) {
+            spin = "OFF SPIN";
+          } else if (normalized.contains("leg")) {
+            spin = "LEG SPIN";
+          } else if (normalized.contains("chinaman")) {
+            spin = "CHINAMAN";
+          } else {
+            spin = "NO SPIN";
+          }
         } else {
-          spin = "OFF SPIN";
+          spin = "NO SPIN";
         }
 
         // -------- SPIN STRENGTH & TURN (BACKEND: NUMERIC STRENGTH 0–1) --------

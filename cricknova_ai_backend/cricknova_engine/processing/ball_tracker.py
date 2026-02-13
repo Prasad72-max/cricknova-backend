@@ -6,6 +6,7 @@ def track_ball_positions(video_path):
     cap = cv.VideoCapture(video_path)
     ball_positions = []
     prev_center = None
+    prev_direction = None
     frame_idx = 0
 
     backSub = cv.createBackgroundSubtractorMOG2(
@@ -80,6 +81,29 @@ def track_ball_positions(video_path):
                     chosen = (circles[0][0][0], circles[0][0][1])
 
         if chosen is not None:
+
+            # Direction consistency filter
+            if prev_center is not None:
+                dx = chosen[0] - prev_center[0]
+                dy = chosen[1] - prev_center[1]
+
+                current_direction = (dx, dy)
+
+                if prev_direction is not None:
+                    dot = dx * prev_direction[0] + dy * prev_direction[1]
+
+                    # If direction suddenly flips, ignore noisy jump
+                    if dot < 0:
+                        continue
+
+                prev_direction = current_direction
+
+            # Smooth trajectory (simple averaging to reduce jitter)
+            if prev_center is not None:
+                smoothed_x = int((chosen[0] + prev_center[0]) / 2)
+                smoothed_y = int((chosen[1] + prev_center[1]) / 2)
+                chosen = (smoothed_x, smoothed_y)
+
             ball_positions.append((chosen[0], chosen[1], frame_idx))
             prev_center = chosen
 

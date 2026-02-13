@@ -10,6 +10,8 @@ def track_ball_positions(video_path, max_frames=60):
         fps = 30.0
 
     positions = []
+    prev_position = None
+    prev_direction = None
     prev_gray = None
     frame_count = 0
 
@@ -56,7 +58,31 @@ def track_ball_positions(video_path, max_frames=60):
                 max_area = area
 
         if ball_candidate:
+
+            # Direction consistency filter
+            if prev_position is not None:
+                dx = ball_candidate[0] - prev_position[0]
+                dy = ball_candidate[1] - prev_position[1]
+
+                current_direction = (dx, dy)
+
+                if prev_direction is not None:
+                    dot = dx * prev_direction[0] + dy * prev_direction[1]
+
+                    # Ignore sudden direction flips (noise)
+                    if dot < 0:
+                        prev_gray = gray
+                        continue
+
+                prev_direction = current_direction
+
+                # Smooth position to reduce jitter
+                smoothed_x = int((ball_candidate[0] + prev_position[0]) / 2)
+                smoothed_y = int((ball_candidate[1] + prev_position[1]) / 2)
+                ball_candidate = (smoothed_x, smoothed_y)
+
             positions.append(ball_candidate)
+            prev_position = ball_candidate
 
         prev_gray = gray
 

@@ -247,20 +247,36 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (USE BACKEND VALUE EXACTLY) ----------
+      // ---------- SWING (Normalized) ----------
       final rawSwing = src["swing"];
       if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-        swingName = rawSwing.trim();
+        final normalized = rawSwing.trim().toLowerCase();
+        if (normalized.contains("in")) {
+          swingName = "Inswing";
+        } else if (normalized.contains("out")) {
+          swingName = "Outswing";
+        } else {
+          swingName = "Straight";
+        }
       } else {
-        swingName = null;
+        swingName = "Straight";
       }
 
-      // ---------- SPIN (USE BACKEND VALUE EXACTLY) ----------
+      // ---------- SPIN (Normalized) ----------
       final rawSpin = src["spin"];
       if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-        spinType = rawSpin.trim();
+        final normalized = rawSpin.trim().toLowerCase();
+        if (normalized.contains("off")) {
+          spinType = "Off Spin";
+        } else if (normalized.contains("leg")) {
+          spinType = "Leg Spin";
+        } else if (normalized.contains("chinaman")) {
+          spinType = "Chinaman";
+        } else {
+          spinType = "No Spin";
+        }
       } else {
-        spinType = null;
+        spinType = "No Spin";
       }
 
       // ---------- SPIN STRENGTH & TURN ----------
@@ -304,8 +320,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           drsDecision = null;
         }
 
-        if (confidenceRaw is num && confidenceRaw > 0) {
-          stumpConfidence = confidenceRaw.toDouble();
+        if (confidenceRaw is num) {
+          stumpConfidence = confidenceRaw.toDouble().clamp(0.0, 1.0);
         } else {
           stumpConfidence = 0.0;
         }

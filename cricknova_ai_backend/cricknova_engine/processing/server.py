@@ -47,18 +47,43 @@ async def analyze_live_frame(file: UploadFile = File(...)):
         speed_mps = dist_meters * 30  # 30 FPS
         speed_kmh = speed_mps * 3.6
 
-    # SWING CALCULATION
-    if len(last_pos) > 4:
+    # SWING CALCULATION (horizontal deviation based, no fake angles)
+    swing_angle = 0
+    swing_type = "straight"
+
+    if len(last_pos) > 6:
+        xs = [p[0] for p in last_pos]
+        ys = [p[1] for p in last_pos]
+
+        # Fit simple straight line using first and last point
         x_start, y_start = last_pos[0]
         x_end, y_end = last_pos[-1]
-        swing_angle = math.degrees(math.atan2((y_end - y_start),
-                                              (x_end - x_start)))
-    else:
-        swing_angle = 0
+
+        dx = x_end - x_start
+        dy = y_end - y_start
+
+        if abs(dy) > 5:  # ensure meaningful vertical movement
+            predicted_x_end = x_start + dx
+            actual_x_end = x_end
+
+            horizontal_deviation = actual_x_end - predicted_x_end
+
+            # Ignore very tiny noise
+            if abs(horizontal_deviation) > 3:
+                swing_angle = math.degrees(math.atan2(horizontal_deviation, dy))
+
+                if horizontal_deviation > 0:
+                    swing_type = "outswing"
+                else:
+                    swing_type = "inswing"
+            else:
+                swing_angle = 0
+                swing_type = "straight"
 
     return {
         "found": True,
         "speed_kmh": round(speed_kmh, 2),
         "swing_angle": round(swing_angle, 2),
+        "swing_type": swing_type,
         "path": last_pos
     }

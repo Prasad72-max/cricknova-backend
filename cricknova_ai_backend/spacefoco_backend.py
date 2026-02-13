@@ -680,30 +680,19 @@ async def analyze_training_video(file: UploadFile = File(...)):
         spin_result = calculate_spin(ball_positions)
 
         swing = swing_result.get("name")
+        if not swing or swing.lower() == "straight":
+            swing = "Straight"
+        elif swing.lower() not in ["inswing", "outswing"]:
+            swing = "Straight"
 
         spin = spin_result.get("name")
+        if not spin or spin.upper() in ["NO SPIN", "NONE"]:
+            spin = "No Spin"
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)
         # -----------------------------
-        ultraedge = False
-
-        if ball_near_bat_zone(ball_positions, frame_width, frame_height):
-            recent = ball_positions[-6:]
-            if len(recent) >= 6:
-                xs = [p[0] for p in recent]
-                ys = [p[1] for p in recent]
-
-                dx1 = xs[2] - xs[0]
-                dx2 = xs[5] - xs[3]
-                dy1 = ys[2] - ys[0]
-                dy2 = ys[5] - ys[3]
-
-                forward_drop = abs(dy2) < abs(dy1) * 0.35
-                lateral_jump = abs(dx2) > abs(dx1) * 2.5
-
-                if forward_drop and lateral_jump:
-                    ultraedge = True
+        ultraedge = False  # Disabled for stability (no scripted edge detection)
 
         hits_stumps, stump_confidence = detect_stump_hit_from_positions(
             ball_positions,
@@ -714,9 +703,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if hits_stumps:
             decision = "OUT"
             reason = "Ball hitting stumps"
-        elif ultraedge:
-            decision = "NOT OUT"
-            reason = "Bat involved (UltraEdge detected)"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
@@ -1186,30 +1172,19 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         spin_result = calculate_spin(ball_positions)
 
         swing = swing_result.get("name")
+        if not swing or swing.lower() == "straight":
+            swing = "Straight"
+        elif swing.lower() not in ["inswing", "outswing"]:
+            swing = "Straight"
 
         spin = spin_result.get("name")
+        if not spin or spin.upper() in ["NO SPIN", "NONE"]:
+            spin = "No Spin"
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)
         # -----------------------------
-        ultraedge = False
-
-        if ball_near_bat_zone(ball_positions, frame_width, frame_height):
-            recent = ball_positions[-6:]
-            if len(recent) >= 6:
-                xs = [p[0] for p in recent]
-                ys = [p[1] for p in recent]
-
-                dx1 = xs[2] - xs[0]
-                dx2 = xs[5] - xs[3]
-                dy1 = ys[2] - ys[0]
-                dy2 = ys[5] - ys[3]
-
-                forward_drop = abs(dy2) < abs(dy1) * 0.35
-                lateral_jump = abs(dx2) > abs(dx1) * 2.5
-
-                if forward_drop and lateral_jump:
-                    ultraedge = True
+        ultraedge = False  # Disabled for stability (no scripted edge detection)
 
         hits_stumps, stump_confidence = detect_stump_hit_from_positions(
             ball_positions,
@@ -1220,9 +1195,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         if hits_stumps:
             decision = "OUT"
             reason = "Ball hitting stumps"
-        elif ultraedge:
-            decision = "NOT OUT"
-            reason = "Bat involved (UltraEdge detected)"
         else:
             decision = "NOT OUT"
             reason = "Ball missing stumps"
@@ -1296,7 +1268,7 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
         proj_x = x3
         proj_y = y3
 
-        for _ in range(15):  # project next 15 frames
+        for _ in range(8):  # lighter projection, reduce false hits
             proj_x += dx
             proj_y += dy
 
@@ -1304,9 +1276,9 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
                 return True, 0.85  # strong projected hit
 
     # Confidence scaled by number of frames inside zone
-    confidence = min(hits / 4.0, 1.0)
+    confidence = min(hits / 3.0, 1.0)  # smoother confidence scaling
 
-    return hits >= 2, round(confidence, 2)
+    return hits >= 1, round(confidence, 2)  # trigger OUT if even 1 strong hit frame
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR

@@ -45,17 +45,20 @@ def calculate_spin(ball_positions, fps=30):
     lateral_disp = post_x[-1] - post_x[0]
     forward_disp = post_y[-1] - post_y[0]
 
-    # Avoid math explosion
-    if abs(forward_disp) < 5:
+    # Normalize displacement (avoid resolution dependency)
+    norm_forward = abs(forward_disp)
+    norm_lateral = abs(lateral_disp)
+
+    if norm_forward < 0.002:  # too little forward movement
         return empty_result
 
     # Geometry-based turn angle using stable atan2
-    turn_rad = math.atan2(abs(lateral_disp), abs(forward_disp))
+    turn_rad = math.atan2(norm_lateral, norm_forward)
     turn_deg = math.degrees(turn_rad)
 
     # ---- Cricket-realistic nearby spin bands ----
     # Allow very slight but real spin to be reported
-    if turn_deg < 0.15:
+    if turn_deg < 0.8:
         return empty_result
 
     if turn_deg < 1.5:
@@ -66,7 +69,7 @@ def calculate_spin(ball_positions, fps=30):
         confidence = "high"
 
     # Hard clamp: mobile single-camera cannot exceed this
-    turn_deg = min(turn_deg, 6.0)
+    turn_deg = min(turn_deg, 12.0)  # allow stronger visible spin
 
     # Spin direction based purely on post-bounce lateral movement
     # Positive X movement (to the right on screen) -> leg-spin
@@ -79,5 +82,6 @@ def calculate_spin(ball_positions, fps=30):
     return {
         "type": "spin_estimate",
         "name": spin_name,
+        "turn_est_deg": round(turn_deg, 2),
         "confidence": confidence
     }

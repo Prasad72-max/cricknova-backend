@@ -45,26 +45,42 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (DIRECT FROM BACKEND, NO MODIFICATION) ----------
-    String swing = "NA";
+    // ---------- SWING (NORMALIZED FOR STABILITY) ----------
+    String swing = "Straight";
 
     final rawSwing = src["swing"];
-    if (rawSwing is String && rawSwing.isNotEmpty) {
-      swing = rawSwing;
+    if (rawSwing is String && rawSwing.trim().isNotEmpty) {
+      final normalized = rawSwing.trim().toLowerCase();
+      if (normalized.contains("in")) {
+        swing = "Inswing";
+      } else if (normalized.contains("out")) {
+        swing = "Outswing";
+      } else {
+        swing = "Straight";
+      }
     }
 
-    // ---------- SPIN (DIRECT FROM BACKEND, NO MODIFICATION) ----------
-    String spin = "NA";
+    // ---------- SPIN (NORMALIZED FOR STABILITY) ----------
+    String spin = "No Spin";
     String spinStrength = "";
 
     final rawSpin = src["spin"];
-    if (rawSpin is String && rawSpin.isNotEmpty) {
-      spin = rawSpin;
+    if (rawSpin is String && rawSpin.trim().isNotEmpty) {
+      final normalized = rawSpin.trim().toLowerCase();
+      if (normalized.contains("off")) {
+        spin = "Off Spin";
+      } else if (normalized.contains("leg")) {
+        spin = "Leg Spin";
+      } else if (normalized.contains("chinaman")) {
+        spin = "Chinaman";
+      } else {
+        spin = "No Spin";
+      }
     }
 
     final rawStrength = src["spin_strength"];
-    if (rawStrength is String && rawStrength.isNotEmpty) {
-      spinStrength = rawStrength;
+    if (rawStrength is String && rawStrength.trim().isNotEmpty) {
+      spinStrength = rawStrength.trim();
     }
 
     // ---------- DRS 2.0 (Projection Based) ----------
@@ -91,8 +107,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         }
       }
 
-      if (confidenceRaw is num && confidenceRaw > 0) {
-        final percent = confidenceRaw.toDouble() * 100;
+      if (confidenceRaw is num) {
+        final percent =
+            (confidenceRaw.toDouble().clamp(0.0, 1.0)) * 100;
         drsConfidenceText =
             " (${percent.toStringAsFixed(0)}%)";
       }
