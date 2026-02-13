@@ -80,8 +80,16 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
 
     final rawConfidence = drs?["stump_confidence"];
     if (rawConfidence is num) {
+      double confidenceValue = rawConfidence.toDouble();
+
+      // If backend sends 0–1 range, convert to percentage.
+      // If backend already sends 0–100, use directly.
+      if (confidenceValue <= 1.0) {
+        confidenceValue = confidenceValue * 100;
+      }
+
       drsConfidenceText =
-          " (${(rawConfidence.toDouble() * 100).toStringAsFixed(0)}%)";
+          " (${confidenceValue.toStringAsFixed(0)}%)";
     }
 
 
@@ -123,6 +131,11 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
             drsDecision == "NA"
                 ? "NA"
                 : "$drsDecision$drsConfidenceText",
+            valueColor: drsDecision == "OUT"
+                ? Colors.red
+                : drsDecision == "NOT OUT"
+                    ? Colors.green
+                    : Colors.orange,
           ),
           const SizedBox(height: 25),
 
@@ -141,7 +154,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     );
   }
 
-  Widget _metric(String title, String value) {
+  Widget _metric(String title, String value, {Color? valueColor}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -158,7 +171,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
               value,
               style: GoogleFonts.poppins(
                 fontSize: 18,
-                color: Colors.blueAccent,
+                color: valueColor ?? Colors.blueAccent,
               ),
             ),
           ),

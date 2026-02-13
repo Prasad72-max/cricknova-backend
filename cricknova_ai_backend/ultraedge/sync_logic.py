@@ -63,10 +63,31 @@ def decide_drs(
         return inside
 
     stumps_hit = False
+
+    # 1️⃣ Direct intersection check
     for p in ball_trajectory:
         if point_in_polygon(p["x"], p["y"], stump_polygon):
             stumps_hit = True
             break
+
+    # 2️⃣ If no direct hit, try simple forward projection (LBW cases)
+    if not stumps_hit and len(ball_trajectory) >= 3:
+        p1 = ball_trajectory[-3]
+        p2 = ball_trajectory[-1]
+
+        dx = p2["x"] - p1["x"]
+        dy = p2["y"] - p1["y"]
+
+        # Avoid division errors
+        if abs(dy) > 1e-6:
+            # Project slightly forward
+            projected = {
+                "x": p2["x"] + dx * 0.5,
+                "y": p2["y"] + dy * 0.5,
+            }
+
+            if point_in_polygon(projected["x"], projected["y"], stump_polygon):
+                stumps_hit = True
 
     # -----------------------------
     # 3. Final DRS decision logic

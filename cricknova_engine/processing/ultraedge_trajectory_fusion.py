@@ -77,14 +77,14 @@ class FusionEngine:
             }
 
         # ------------------------------------------------------------
-        # No edge
+        # Fallback: Any meaningful spike should influence decision
         # ------------------------------------------------------------
-        # If spike exists but physics conditions not strong enough,
-        # still return weak BAT signal instead of full NO CONTACT
-        if spike and spike_power > 0.30:
+        if spike:
+            # Even weak spike should not be ignored completely
+            adjusted_confidence = max(0.20, min(1.0, spike_power * 0.75))
             return {
                 "result": "BAT",
-                "confidence": spike_power * 0.6
+                "confidence": adjusted_confidence
             }
 
         return {

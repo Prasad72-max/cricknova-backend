@@ -624,6 +624,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
         ball_positions = smooth_positions(ball_positions, window=3)
+        ball_positions = stabilize_ball_positions(ball_positions)
+        ball_positions = smooth_positions(ball_positions, window=3)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         # Keep enough frames for verified physics (>=10)

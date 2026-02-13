@@ -62,9 +62,10 @@ def detect_stump_hit(trajectory):
         return 0.0
     
     hits = 0
-    # FIXED: Wider zones for phone video variance (Hawk-Eye tolerance)
-    stump_x_min, stump_x_max = 0.46, 0.54  # 8% screen width
-    stump_y_min, stump_y_max = 0.60, 0.98   # Full stump depth
+    # UPDATED: Adjusted stump zone for your normalized trajectory scale
+    # (Your trajectory Y values are around 1.6–1.9 range)
+    stump_x_min, stump_x_max = 0.44, 0.56   # Slightly wider for variance
+    stump_y_min, stump_y_max = 1.55, 1.90   # Match real trajectory height scale
 
     for p in post_pitch:
         x, y = _get_xy(p)
@@ -97,12 +98,12 @@ def analyze_training(data):
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.60:  # Plumb LBW
+    elif stump_confidence >= 0.45:  # Strong hit
         decision = "OUT"
-        reason = "Plumb LBW - stumps hit"
-    elif stump_confidence >= 0.40:  # Marginal
+        reason = "Ball projected to hit stumps"
+    elif stump_confidence >= 0.25:  # Marginal
         decision = "UMPIRE'S CALL"
-        reason = "Clipping stumps - marginal"
+        reason = "Clipping stumps - marginal impact"
     else:
         decision = "NOT OUT"
         reason = "Missing stumps outside line"

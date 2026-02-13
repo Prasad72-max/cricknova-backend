@@ -61,6 +61,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   bool showDRS = false;
   String? drsResult;
+  bool drsLoading = false;
 
   bool showCoach = false;
   String? coachReply;
@@ -268,75 +269,93 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> runDRS() async {
-    if (video == null) return;
+    if (video == null || drsLoading) return;
 
     setState(() {
       showDRS = true;
+      drsLoading = true;
       drsResult = "Reviewing decision...";
     });
 
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/training/drs");
+    final uri =
+        Uri.parse("https://cricknova-backend.onrender.com/training/drs");
+
     final request = http.MultipartRequest("POST", uri);
     request.headers["Accept"] = "application/json";
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      throw Exception("USER_NOT_AUTHENTICATED");
+      setState(() {
+        drsResult = "USER NOT AUTHENTICATED";
+        drsLoading = false;
+      });
+      return;
     }
 
     final String? idToken = await user.getIdToken(true);
     if (idToken == null || idToken.isEmpty) {
-      throw Exception("USER_NOT_AUTHENTICATED");
+      setState(() {
+        drsResult = "USER NOT AUTHENTICATED";
+        drsLoading = false;
+      });
+      return;
     }
 
     request.headers["Authorization"] = "Bearer $idToken";
-    request.files.add(await http.MultipartFile.fromPath("file", video!.path));
+    request.files.add(
+        await http.MultipartFile.fromPath("file", video!.path));
 
     try {
-      final response = await request.send();
-      print("DRS STATUS => ${response.statusCode}");
-      if (response.statusCode == 200) {
-        final respStr = await response.stream.bytesToString();
-        final data = jsonDecode(respStr);
+      final response =
+          await request.send().timeout(const Duration(seconds: 40));
 
-        // Backend returns DRS inside "drs" object
-        final drs = data["drs"];
+      final respStr = await response.stream.bytesToString();
 
-        if (drs == null || drs is! Map) {
-          setState(() {
-            drsResult = "DRS DATA INVALID";
-          });
-          return;
-        }
-
-        final rawDecision = drs["decision"];
-        final rawConfidence = drs["stump_confidence"];
-        final rawReason = drs["reason"];
-
-        String decisionText =
-            rawDecision?.toString().toUpperCase() ?? "UNKNOWN";
-
-        String confidenceText = "";
-        if (rawConfidence is num) {
-          final percent = (rawConfidence.toDouble() * 100);
-          confidenceText = " (${percent.toStringAsFixed(0)}%)";
-        }
-
-        String reasonText = "";
-        if (rawReason is String && rawReason.isNotEmpty) {
-          reasonText = "\n${rawReason}";
-        }
-
-        setState(() {
-          drsResult = "$decisionText$confidenceText$reasonText";
-        });
-      } else {
+      if (response.statusCode != 200) {
         setState(() {
           drsResult = "DRS FAILED\nServer error";
+          drsLoading = false;
         });
+        return;
       }
+
+      final data = jsonDecode(respStr);
+      final drs = data["drs"];
+
+      if (drs == null || drs is! Map) {
+        setState(() {
+          drsResult = "DRS DATA INVALID";
+          drsLoading = false;
+        });
+        return;
+      }
+
+      final rawDecision = drs["decision"];
+      final rawConfidence = drs["stump_confidence"];
+      final rawReason = drs["reason"];
+
+      String decisionText =
+          rawDecision?.toString().toUpperCase() ?? "UNKNOWN";
+
+      String confidenceText = "";
+      if (rawConfidence is num) {
+        final percent = rawConfidence.toDouble() * 100;
+        confidenceText = " (${percent.toStringAsFixed(0)}%)";
+      }
+
+      String reasonText = "";
+      if (rawReason is String && rawReason.isNotEmpty) {
+        reasonText = "\n$rawReason";
+      }
+
+      setState(() {
+        drsResult = "$decisionText$confidenceText$reasonText";
+        drsLoading = false;
+      });
     } catch (e) {
       setState(() {
         drsResult = "DRS FAILED\nConnection error";
+        drsLoading = false;
       });
     }
   }
@@ -688,22 +707,31 @@ class _UploadScreenState extends State<UploadScreen> {
                         ),
                         const SizedBox(height: 10),
                         GestureDetector(
-                          onTap: runDRS,
+                          onTap: drsLoading ? null : runDRS,
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                              color: Colors.redAccent,
+                              color: drsLoading ? Colors.grey : Colors.redAccent,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Center(
-                              child: Text(
-                                "DRS",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16),
-                              ),
+                            child: Center(
+                              child: drsLoading
+                                  ? const SizedBox(
+                                      height: 18,
+                                      width: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Text(
+                                      "DRS",
+                                      style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16),
+                                    ),
                             ),
                           ),
                         ),
@@ -772,10 +800,18 @@ class _UploadScreenState extends State<UploadScreen> {
                             Text(
                               drsResult ?? "",
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600),
+                              style: TextStyle(
+                                color: drsResult != null &&
+                                        drsResult!.contains("OUT") &&
+                                        !drsResult!.contains("NOT OUT")
+                                    ? Colors.red
+                                    : drsResult != null &&
+                                            drsResult!.contains("NOT OUT")
+                                        ? Colors.green
+                                        : Colors.orange,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 30),
                             ElevatedButton(

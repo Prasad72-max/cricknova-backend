@@ -41,25 +41,31 @@ def generate_waveform(audio, sr, max_points=500):
     return waveform, sr
 
 
-def detect_ultraedge_spike(rms_waveform, threshold_factor=4.0):
+def detect_ultraedge_spike(rms_waveform, threshold_factor=2.5):
     """
-    Detect bat/pad contact using RMS energy spikes.
+    Improved UltraEdge spike detection.
     - Uses adaptive baseline (median)
-    - Returns True if a sharp spike is detected
+    - More realistic broadcast sensitivity
+    - Returns (detected: bool, confidence: float)
     """
 
     if rms_waveform is None or len(rms_waveform) < 5:
-        return False
+        return False, 0.0
 
     data = np.asarray(rms_waveform, dtype=np.float32)
 
     baseline = np.median(data)
     max_val = np.max(data)
 
-    # Spike must be significantly above background noise
     if baseline <= 0:
-        return False
+        return False, 0.0
 
     spike_ratio = max_val / baseline
 
-    return spike_ratio >= threshold_factor
+    # Confidence scaled between 0–1
+    confidence = min(1.0, spike_ratio / (threshold_factor * 2.0))
+
+    if spike_ratio >= threshold_factor:
+        return True, round(confidence, 2)
+
+    return False, round(confidence, 2)

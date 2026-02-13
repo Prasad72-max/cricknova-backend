@@ -4,7 +4,8 @@ from .spike_detector import detect_spikes
 
 class UltraEdgeEngine:
 
-    def __init__(self, threshold=0.2):
+    def __init__(self, threshold=2.8):
+        # Threshold aligned with adaptive spike detector (z-score based)
         self.threshold = threshold
 
     def analyze(self, audio_path):

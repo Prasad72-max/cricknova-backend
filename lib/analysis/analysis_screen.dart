@@ -282,10 +282,26 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
 
       // ---------- DRS ----------
-      // /training/analyze does not return DRS.
-      // Clear previous DRS values to avoid stale or incorrect display.
-      drsDecision = null;
-      stumpConfidence = null;
+      final rawDrs = src["drs"];
+      if (rawDrs is Map<String, dynamic>) {
+        final decision = rawDrs["decision"];
+        final confidence = rawDrs["stump_confidence"];
+
+        if (decision is String && decision.trim().isNotEmpty) {
+          drsDecision = decision.trim();
+        } else {
+          drsDecision = null;
+        }
+
+        if (confidence is num) {
+          stumpConfidence = confidence.toDouble();
+        } else {
+          stumpConfidence = null;
+        }
+      } else {
+        drsDecision = null;
+        stumpConfidence = null;
+      }
     });
   }
 
