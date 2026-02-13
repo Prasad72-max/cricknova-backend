@@ -698,14 +698,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         spin_result = calculate_spin(ball_positions)
 
         swing = swing_result.get("name")
-        if not swing or swing.lower() == "straight":
-            swing = "Straight"
-        elif swing.lower() not in ["inswing", "outswing"]:
-            swing = "Straight"
-
         spin = spin_result.get("name")
-        if not spin or spin.upper() in ["NO SPIN", "NONE"]:
-            spin = "No Spin"
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)
@@ -1208,14 +1201,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         spin_result = calculate_spin(ball_positions)
 
         swing = swing_result.get("name")
-        if not swing or swing.lower() == "straight":
-            swing = "Straight"
-        elif swing.lower() not in ["inswing", "outswing"]:
-            swing = "Straight"
-
         spin = spin_result.get("name")
-        if not spin or spin.upper() in ["NO SPIN", "NONE"]:
-            spin = "No Spin"
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)
