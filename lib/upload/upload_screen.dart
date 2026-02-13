@@ -215,34 +215,18 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
-        // -------- SWING (NORMALIZED & NO SCRIPTED DEFAULT) --------
+        // -------- SWING (Direct Backend Value) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-          final normalized = rawSwing.trim().toLowerCase();
-          if (normalized.contains("in")) {
-            swing = "INSWING";
-          } else if (normalized.contains("out")) {
-            swing = "OUTSWING";
-          } else {
-            swing = "STRAIGHT";
-          }
+          swing = rawSwing.trim().toUpperCase();
         } else {
           swing = "STRAIGHT";
         }
 
-        // -------- SPIN (NORMALIZED & NO SCRIPTED DEFAULT) --------
+        // -------- SPIN (Direct Backend Value) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-          final normalized = rawSpin.trim().toLowerCase();
-          if (normalized.contains("off")) {
-            spin = "OFF SPIN";
-          } else if (normalized.contains("leg")) {
-            spin = "LEG SPIN";
-          } else if (normalized.contains("chinaman")) {
-            spin = "CHINAMAN";
-          } else {
-            spin = "NO SPIN";
-          }
+          spin = rawSpin.trim().toUpperCase();
         } else {
           spin = "NO SPIN";
         }

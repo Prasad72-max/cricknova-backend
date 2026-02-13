@@ -45,37 +45,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (NORMALIZED FOR STABILITY) ----------
+    // ---------- SWING (Direct Backend Value) ----------
     String swing = "Straight";
 
     final rawSwing = src["swing"];
     if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-      final normalized = rawSwing.trim().toLowerCase();
-      if (normalized.contains("in")) {
-        swing = "Inswing";
-      } else if (normalized.contains("out")) {
-        swing = "Outswing";
-      } else {
-        swing = "Straight";
-      }
+      swing = rawSwing.trim();
     }
 
-    // ---------- SPIN (NORMALIZED FOR STABILITY) ----------
+    // ---------- SPIN (Direct Backend Value) ----------
     String spin = "No Spin";
     String spinStrength = "";
 
     final rawSpin = src["spin"];
     if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-      final normalized = rawSpin.trim().toLowerCase();
-      if (normalized.contains("off")) {
-        spin = "Off Spin";
-      } else if (normalized.contains("leg")) {
-        spin = "Leg Spin";
-      } else if (normalized.contains("chinaman")) {
-        spin = "Chinaman";
-      } else {
-        spin = "No Spin";
-      }
+      spin = rawSpin.trim();
     }
 
     final rawStrength = src["spin_strength"];

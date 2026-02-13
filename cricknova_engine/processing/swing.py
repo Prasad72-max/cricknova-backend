@@ -45,12 +45,6 @@ def calculate_spin(ball_positions):
     # --- CAMERA MIRROR FIX ---
     lateral_curve *= -1
 
-    # More sensitive threshold to avoid excessive "Straight"
-    dynamic_spin_threshold = max(0.002, abs(forward_motion) * 0.003)
-
-    if abs(lateral_curve) < dynamic_spin_threshold:
-        dynamic_spin_threshold *= 0.6
-
     # Direction (RH batter reference)
     if lateral_curve < 0:
         result["name"] = "Off Spin"
@@ -103,12 +97,6 @@ def calculate_swing(ball_positions, batter_hand="RH"):
     lateral_air_curve = float(xs[-1] - xs[0])
     # --- CAMERA MIRROR FIX ---
     lateral_air_curve *= -1
-
-    # More sensitive swing detection to reduce false "Straight"
-    dynamic_swing_threshold = max(0.0018, abs(forward_motion) * 0.0035)
-
-    if abs(lateral_air_curve) < dynamic_swing_threshold:
-        dynamic_swing_threshold *= 0.6
 
     # Direction logic (relative to batter) — FIXED SIGN
     if batter_hand == "RH":

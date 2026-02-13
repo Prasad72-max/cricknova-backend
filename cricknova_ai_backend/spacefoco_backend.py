@@ -697,8 +697,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
-        spin = spin_result.get("name")
+        swing = swing_result.get("name") or "Straight"
+        spin = spin_result.get("name") or "No Spin"
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)
@@ -1200,8 +1200,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name")
-        spin = spin_result.get("name")
+        swing = swing_result.get("name") or "Straight"
+        spin = spin_result.get("name") or "No Spin"
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)

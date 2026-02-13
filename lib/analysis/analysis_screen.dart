@@ -247,34 +247,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         speedKmph = null;
       }
 
-      // ---------- SWING (Normalized) ----------
+      // ---------- SWING (Direct Backend Value) ----------
       final rawSwing = src["swing"];
       if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-        final normalized = rawSwing.trim().toLowerCase();
-        if (normalized.contains("in")) {
-          swingName = "Inswing";
-        } else if (normalized.contains("out")) {
-          swingName = "Outswing";
-        } else {
-          swingName = "Straight";
-        }
+        swingName = rawSwing.trim();
       } else {
         swingName = "Straight";
       }
 
-      // ---------- SPIN (Normalized) ----------
+      // ---------- SPIN (Direct Backend Value) ----------
       final rawSpin = src["spin"];
       if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-        final normalized = rawSpin.trim().toLowerCase();
-        if (normalized.contains("off")) {
-          spinType = "Off Spin";
-        } else if (normalized.contains("leg")) {
-          spinType = "Leg Spin";
-        } else if (normalized.contains("chinaman")) {
-          spinType = "Chinaman";
-        } else {
-          spinType = "No Spin";
-        }
+        spinType = rawSpin.trim();
       } else {
         spinType = "No Spin";
       }

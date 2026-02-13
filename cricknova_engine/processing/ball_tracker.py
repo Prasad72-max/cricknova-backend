@@ -24,8 +24,8 @@ def filter_positions(ball_positions):
         lx, ly = last[0], last[1]
         dist = math.hypot(x - lx, y - ly)
 
-        # Keep only reasonable motion; reject sudden jumps
-        if 0 < dist < 200:
+        # Keep any forward motion (no upper suppression for swing sensitivity)
+        if dist > 0:
             if f is not None:
                 filtered.append((x, y, f))
             else:
