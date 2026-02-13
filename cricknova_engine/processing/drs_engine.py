@@ -76,6 +76,11 @@ def detect_stump_hit(trajectory):
 
     # Require stronger evidence for OUT
     confidence = min(hits / 5.0, 1.0)
+    print("DRS DEBUG → total trajectory frames:", len(trajectory))
+    print("DRS DEBUG → pitch_frame:", pitch_frame)
+    print("DRS DEBUG → post_pitch frames:", len(post_pitch))
+    print("DRS DEBUG → hits inside stump zone:", hits)
+    print("DRS DEBUG → calculated confidence:", confidence)
     return confidence
 
 def analyze_training(data):
