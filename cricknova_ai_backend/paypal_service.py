@@ -136,6 +136,12 @@ def capture_order(order_id: str) -> dict:
 
 
 # FastAPI routes
+@router.get("/create-order")
+def create_order_get_test():
+    return {
+        "message": "This endpoint requires POST method with JSON body."
+    }
+
 @router.post("/create-order")
 def create_paypal_order(body: PayPalCreateOrderBody):
     if not PAYPAL_CLIENT_ID or not PAYPAL_SECRET:

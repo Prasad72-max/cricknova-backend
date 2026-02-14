@@ -500,12 +500,18 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
           throw Exception("Invalid PayPal plan");
       }
 
-      // 1️⃣ Create PayPal order (backend)
+      // 1️⃣ Create PayPal order (backend) via POST
+      final String? idToken = await user.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception("Firebase ID token missing");
+      }
+
       final createRes = await http.post(
         Uri.parse("https://cricknova-backend.onrender.com/paypal/create-order"),
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/json",
+          "authorization": "Bearer $idToken",
         },
         body: jsonEncode({
           "amount_usd": amount,
@@ -520,15 +526,17 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
 
       final createData = jsonDecode(createRes.body);
 
-      if (!createData.containsKey("approval_url") ||
-          createData["approval_url"] == null ||
-          createData["approval_url"].toString().isEmpty) {
+      debugPrint("🧾 PAYPAL CREATE RESPONSE = $createData");
+
+      final String orderId = createData["order_id"];
+
+      final String? approvalUrl =
+          createData["approval_url"] ?? createData["approvalUrl"];
+
+      if (approvalUrl == null || approvalUrl.isEmpty) {
         debugPrint("❌ PayPal response invalid: $createData");
         throw Exception("PayPal approval URL missing");
       }
-
-      final String orderId = createData["order_id"];
-      final String approvalUrl = createData["approval_url"];
 
       debugPrint("🔥 PAYPAL APPROVAL URL = $approvalUrl");
 
@@ -539,16 +547,33 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         _payingPlan = null;
       });
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PayPalWebViewScreen(
-            approvalUrl: approvalUrl,
-            orderId: orderId,
-            planId: planCode,
+      final Uri uri = Uri.parse(approvalUrl);
+
+      bool launched = false;
+
+      try {
+        launched = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+      } catch (e) {
+        debugPrint("❌ Launch exception: $e");
+      }
+
+      if (!launched) {
+        debugPrint("⚠️ Falling back to in-app WebView");
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PayPalWebViewScreen(
+              approvalUrl: approvalUrl,
+              orderId: orderId,
+              planId: planCode,
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

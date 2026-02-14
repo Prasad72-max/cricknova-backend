@@ -227,6 +227,14 @@ def paypal_config():
         "mode": PAYPAL_MODE
     }
 
+@app.get("/paypal/create-order", tags=["PayPal"])
+def paypal_create_order_get_info():
+    return {
+        "message": "Use POST method to create PayPal order.",
+        "endpoint": "/paypal/create-order",
+        "method_required": "POST"
+    }
+
 @app.post("/paypal/create-order", tags=["PayPal"])
 async def paypal_create_order(req: PayPalCreateOrderRequest):
     paypal_client = get_paypal_client()

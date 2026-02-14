@@ -5,11 +5,12 @@ import os
 from pydantic import BaseModel
 
 try:
-    from paypalcheckoutsdk.core import PayPalHttpClient, LiveEnvironment
+    from paypalcheckoutsdk.core import PayPalHttpClient, LiveEnvironment, SandboxEnvironment
     from paypalcheckoutsdk.orders import OrdersCreateRequest, OrdersCaptureRequest
 except Exception:
     PayPalHttpClient = None
     LiveEnvironment = None
+    SandboxEnvironment = None
     OrdersCreateRequest = None
     OrdersCaptureRequest = None
 
@@ -22,23 +23,33 @@ PAYPAL_MODE = os.getenv("PAYPAL_MODE", "live")
 def get_paypal_client():
     if not PAYPAL_CLIENT_ID or not PAYPAL_SECRET:
         return None
-    if PAYPAL_MODE != "live":
+
+    if PayPalHttpClient is None:
         return None
-    env = LiveEnvironment(
-        client_id=PAYPAL_CLIENT_ID,
-        client_secret=PAYPAL_SECRET
-    )
+
+    if PAYPAL_MODE == "live":
+        env = LiveEnvironment(
+            client_id=PAYPAL_CLIENT_ID,
+            client_secret=PAYPAL_SECRET
+        )
+    else:
+        env = SandboxEnvironment(
+            client_id=PAYPAL_CLIENT_ID,
+            client_secret=PAYPAL_SECRET
+        )
+
     return PayPalHttpClient(env)
+
 
 @router.get("/health")
 def paypal_health():
     if not PAYPAL_CLIENT_ID or not PAYPAL_SECRET:
         return {"ok": False, "reason": "Missing PayPal credentials"}
+
     if PayPalHttpClient is None:
         return {"ok": False, "reason": "PayPal SDK not installed"}
-    if PAYPAL_MODE != "live":
-        return {"ok": False, "reason": "PAYPAL_MODE must be live"}
-    return {"ok": True, "mode": "live"}
+
+    return {"ok": True, "mode": PAYPAL_MODE}
 
 class PayPalCreateOrderRequest(BaseModel):
     amount_usd: float

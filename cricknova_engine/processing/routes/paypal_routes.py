@@ -13,6 +13,14 @@ def paypal_test():
 def paypal_test_alias():
     return {"paypal": "ok"}
 
+@router.get("/health")
+def paypal_health():
+    return {
+        "ok": True,
+        "mode": PAYPAL_MODE,
+        "base_url": BASE_URL
+    }
+
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_SECRET = os.getenv("PAYPAL_SECRET")
 PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
@@ -105,6 +113,14 @@ def create_paypal_order(req: CreatePayPalOrder):
         "approvalUrl": approval_url,
         "links": data.get("links", []),
         "status": data["status"]
+    }
+
+@router.get("/create-order")
+def create_paypal_order_get():
+    return {
+        "message": "Use POST method for this endpoint",
+        "endpoint": "/paypal/create-order",
+        "method_required": "POST"
     }
 
 

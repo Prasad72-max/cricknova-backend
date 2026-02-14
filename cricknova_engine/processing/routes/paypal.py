@@ -7,6 +7,14 @@ import requests
 
 router = APIRouter(prefix="/paypal", tags=["PayPal"])
 
+# Health endpoint for PayPal route
+@router.get("/health")
+def paypal_health():
+    return {
+        "ok": True,
+        "mode": PAYPAL_MODE
+    }
+
 
 # Test endpoint for PayPal route
 @router.get("/__test")
@@ -51,6 +59,14 @@ class CreateOrder(BaseModel):
     amount_usd: float
     plan: str
     user_id: str
+
+# Fallback GET route to prevent "Method Not Allowed" errors at /create-order
+@router.get("/create-order")
+def create_order_get():
+    return {
+        "error": "Method Not Allowed",
+        "message": "Use POST method for this endpoint."
+    }
 
 @router.post("/create-order")
 def create_order(req: CreateOrder):

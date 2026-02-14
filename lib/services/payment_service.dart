@@ -139,18 +139,21 @@ class PaymentService {
 
       final uri = Uri.parse(approvalUrl.toString());
 
-      final canLaunch = await canLaunchUrl(uri);
-      if (!canLaunch) {
-        throw StateError("Cannot launch PayPal URL: $uri");
-      }
-
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
 
       if (!launched) {
-        throw StateError("PayPal launchUrl returned false");
+        // Fallback: try opening inside in-app browser
+        final fallbackLaunched = await launchUrl(
+          uri,
+          mode: LaunchMode.inAppBrowserView,
+        );
+
+        if (!fallbackLaunched) {
+          throw StateError("Unable to open PayPal checkout page");
+        }
       }
     } catch (e) {
       // Let UI stop loader & show error

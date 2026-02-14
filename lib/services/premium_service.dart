@@ -495,8 +495,10 @@ class PremiumService {
         "authorization": "Bearer $idToken",
       },
       body: jsonEncode({
-        "amount": amount,
+        "amount_usd": amount,
         "currency": "USD",
+        "plan": plan,
+        "user_id": user.uid,
       }),
     );
 
@@ -540,13 +542,28 @@ class PremiumService {
     final uri = Uri.parse(approvalUrl);
     debugPrint("🌍 Opening PayPal URL: $approvalUrl");
 
-    final opened = await launchUrl(
+    // First ensure the URL can be launched
+    final canLaunch = await canLaunchUrl(uri);
+    if (!canLaunch) {
+      throw Exception("No application available to open PayPal URL");
+    }
+
+    // Try opening in external browser first
+    bool opened = await launchUrl(
       uri,
       mode: LaunchMode.externalApplication,
     );
 
+    // Fallback to platform default if external fails
     if (!opened) {
-      throw Exception('Could not open PayPal approval URL');
+      opened = await launchUrl(
+        uri,
+        mode: LaunchMode.platformDefault,
+      );
+    }
+
+    if (!opened) {
+      throw Exception("Unable to open PayPal. Please install or enable a browser.");
     }
   }
 
