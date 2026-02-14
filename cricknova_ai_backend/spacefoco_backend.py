@@ -67,8 +67,12 @@ from cricknova_ai_backend.subscriptions_store import get_current_user
 # 🔐 Secure backend price validation (USD plans only)
 PLAN_PRICES = {
     "MONTHLY": 29.99,
+    "MONTH": 29.99,
     "SIX_MONTH": 49.99,
+    "SIX_MONTHS": 49.99,
+    "HALF_YEAR": 49.99,
     "YEARLY": 69.99,
+    "YEAR": 69.99,
     "ULTRA": 159.99,
 }
 
@@ -245,9 +249,14 @@ async def paypal_create_order(req: PayPalCreateOrderRequest):
     request_obj.prefer("return=representation")
 
     # 🔐 Validate plan and enforce backend pricing (ignore frontend amount)
-    expected_price = PLAN_PRICES.get(req.plan.upper())
-    if not expected_price:
-        raise HTTPException(status_code=400, detail="INVALID_PLAN")
+    plan_key = (req.plan or "").strip().upper()
+    print("🧾 Incoming PayPal plan =", plan_key)
+
+    expected_price = PLAN_PRICES.get(plan_key)
+
+    if expected_price is None:
+        print("❌ INVALID PLAN RECEIVED:", req.plan)
+        raise HTTPException(status_code=400, detail=f"INVALID_PLAN:{req.plan}")
 
     request_obj.request_body({
         "intent": "CAPTURE",
