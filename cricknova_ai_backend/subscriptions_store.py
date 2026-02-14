@@ -139,15 +139,22 @@ def create_or_update_subscription(user_id: str, plan: str, payment_id: str, orde
         raise ValueError(f"Invalid plan: {plan}")
 
     now = datetime.utcnow()
-    # Determine duration_days based on plan type (assuming 30 days for monthly, etc.)
-    # Since PLAN_LIMITS doesn't have duration_days, let's default to 30 days for simplicity
-    duration_days = 30
-    if plan in ["IN_299", "INT_6_MONTHS"]:
+    # -----------------------------
+    # PLAN DURATION LOGIC
+    # -----------------------------
+    duration_days = 30  # default monthly
+
+    if plan in ["IN_299", "INT_6_MONTHS", "SIX_MONTH"]:
         duration_days = 180
-    elif plan in ["IN_499", "INT_YEARLY"]:
+
+    elif plan in ["IN_499", "INT_YEARLY", "YEARLY"]:
         duration_days = 365
-    elif plan in ["IN_1999", "INT_ULTRA"]:
+
+    elif plan in ["IN_1999", "INT_ULTRA", "ULTRA"]:
         duration_days = 365
+
+    elif plan in ["IN_99", "INT_MONTHLY", "MONTHLY"]:
+        duration_days = 30
 
     expiry = now + timedelta(days=duration_days)
 
