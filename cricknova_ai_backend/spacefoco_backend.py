@@ -81,6 +81,8 @@ PLAN_PRICES = {
     "INTL_SIX_MONTH": 49.99,
     "INTL_SIX_MONTHS": 49.99,
     "INTL_YEARLY": 69.99,
+    "INTL_6M": 49.99,
+    "INTL_ULTRA": 159.99,
 }
 
 # Helper to extract Bearer token from Authorization header
@@ -276,8 +278,8 @@ async def paypal_create_order(req: PayPalCreateOrderRequest):
         "application_context": {
             "brand_name": "CrickNova AI",
             "user_action": "PAY_NOW",
-            "return_url": "https://cricknova.app/paypal-success",
-            "cancel_url": "https://cricknova.app/paypal-cancel"
+            "return_url": "cricknova://paypal-success",
+            "cancel_url": "cricknova://paypal-cancel"
         }
     })
 
