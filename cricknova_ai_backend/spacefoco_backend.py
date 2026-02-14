@@ -66,6 +66,7 @@ from cricknova_ai_backend.subscriptions_store import get_current_user
 
 # 🔐 Secure backend price validation (USD plans only)
 PLAN_PRICES = {
+    # --- Standard USD Plans ---
     "MONTHLY": 29.99,
     "MONTH": 29.99,
     "SIX_MONTH": 49.99,
@@ -74,6 +75,12 @@ PLAN_PRICES = {
     "YEARLY": 69.99,
     "YEAR": 69.99,
     "ULTRA": 159.99,
+
+    # --- International Plan Aliases (Flutter sends these) ---
+    "INTL_MONTHLY": 29.99,
+    "INTL_SIX_MONTH": 49.99,
+    "INTL_SIX_MONTHS": 49.99,
+    "INTL_YEARLY": 69.99,
 }
 
 # Helper to extract Bearer token from Authorization header

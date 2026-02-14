@@ -552,16 +552,14 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       bool launched = false;
 
       try {
-        launched = await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication,
-        );
+        // Open using default handler (system decides best option)
+        launched = await launchUrl(uri);
       } catch (e) {
         debugPrint("❌ Launch exception: $e");
       }
 
       if (!launched) {
-        debugPrint("⚠️ Falling back to in-app WebView");
+        debugPrint("⚠️ Falling back to internal WebView");
 
         Navigator.push(
           context,
