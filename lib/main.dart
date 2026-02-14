@@ -77,9 +77,27 @@ class _MyAppState extends State<MyApp> {
 
     if (uri.scheme == 'cricknova' && uri.host == 'paypal-success') {
       debugPrint("✅ PayPal success detected");
+
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await PremiumService.syncFromBackend(user.uid);
+      final String? orderId = uri.queryParameters['token'];
+      final String? plan = uri.queryParameters['plan'];
+
+      if (user != null && orderId != null) {
+        debugPrint("🚀 Capturing PayPal order: $orderId");
+
+        try {
+          await PremiumService.handlePayPalSuccess(
+            orderId: orderId,
+            userId: user.uid,
+            plan: plan ?? "SIX_MONTH",
+          );
+
+          debugPrint("🎉 Premium activated successfully");
+        } catch (e) {
+          debugPrint("❌ PayPal capture failed: $e");
+        }
+      } else {
+        debugPrint("⚠️ Missing user or orderId in deep link");
       }
     }
 

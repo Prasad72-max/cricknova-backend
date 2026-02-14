@@ -547,31 +547,17 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         _payingPlan = null;
       });
 
-      final Uri uri = Uri.parse(approvalUrl);
-
-      bool launched = false;
-
-      try {
-        // Open using default handler (system decides best option)
-        launched = await launchUrl(uri);
-      } catch (e) {
-        debugPrint("❌ Launch exception: $e");
-      }
-
-      if (!launched) {
-        debugPrint("⚠️ Falling back to internal WebView");
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PayPalWebViewScreen(
-              approvalUrl: approvalUrl,
-              orderId: orderId,
-              planId: planCode,
-            ),
+      // Always open PayPal inside in-app WebView
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PayPalWebViewScreen(
+            approvalUrl: approvalUrl,
+            orderId: orderId,
+            planId: planCode,
           ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

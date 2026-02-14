@@ -308,10 +308,18 @@ async def paypal_capture(req: PayPalCaptureRequest):
     if not paypal_client:
         raise HTTPException(status_code=500, detail="PayPal not configured")
 
-    request_obj = OrdersCaptureRequest(req.order_id)
-    response = paypal_client.execute(request_obj)
+    try:
+        request_obj = OrdersCaptureRequest(req.order_id)
+        response = paypal_client.execute(request_obj)
+    except Exception as e:
+        # Handle common PayPal errors safely (like ORDER_NOT_APPROVED)
+        raise HTTPException(
+            status_code=400,
+            detail=f"CAPTURE_FAILED:{str(e)}"
+        )
+
     if response.result.status != "COMPLETED":
-        raise HTTPException(status_code=400, detail="Payment not completed")
+        raise HTTPException(status_code=400, detail="PAYMENT_NOT_COMPLETED")
 
     # 🔍 Extract actual paid amount from PayPal response
     try:
@@ -321,10 +329,11 @@ async def paypal_capture(req: PayPalCaptureRequest):
             .amount.value
         )
     except Exception:
-        raise HTTPException(status_code=400, detail="Unable to verify payment amount")
+        raise HTTPException(status_code=400, detail="UNABLE_TO_VERIFY_PAYMENT_AMOUNT")
 
     plan_key = (req.plan or "").upper()
     expected_price = PLAN_PRICES.get(plan_key)
+
     if not expected_price:
         raise HTTPException(status_code=400, detail="INVALID_PLAN")
 
@@ -333,8 +342,6 @@ async def paypal_capture(req: PayPalCaptureRequest):
             status_code=400,
             detail=f"PRICE_MISMATCH: paid {paid_amount}, expected {expected_price}"
         )
-
-    from cricknova_ai_backend.subscriptions_store import create_or_update_subscription, get_subscription
 
     capture_id = response.result.purchase_units[0].payments.captures[0].id
 
@@ -350,6 +357,7 @@ async def paypal_capture(req: PayPalCaptureRequest):
     expiry = sub.get("expiry")
     if hasattr(expiry, "isoformat"):
         expiry = expiry.isoformat()
+
     return {
         "status": "success",
         "premium": True,

@@ -584,7 +584,7 @@ class PremiumService {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
     final response = await http.post(
-      Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
+      Uri.parse("${ApiConfig.baseUrl}/paypal/capture"),
       headers: {
         "Content-Type": "application/json",
         "authorization": "Bearer $idToken",
@@ -628,7 +628,7 @@ class PremiumService {
     // Plan can be inferred later or passed via query if needed
     // For now backend already knows plan from order mapping
     final response = await http.post(
-      Uri.parse("${ApiConfig.baseUrl}/paypal/capture-order"),
+      Uri.parse("${ApiConfig.baseUrl}/paypal/capture"),
       headers: {
         "Content-Type": "application/json",
         "authorization": "Bearer $idToken",
@@ -652,5 +652,16 @@ class PremiumService {
     // 🔔 Notify UI immediately after PayPal return
     premiumNotifier.value = isPremium;
     premiumNotifier.notifyListeners();
+  }
+  // -----------------------------
+  // PAYPAL SUCCESS HANDLER (USED BY main.dart)
+  // -----------------------------
+  static Future<void> handlePayPalSuccess({
+    required String orderId,
+    String? userId,
+    String? plan,
+  }) async {
+    // userId kept for backward compatibility with main.dart
+    await capturePaypalOrderFromReturn(orderId);
   }
 }
