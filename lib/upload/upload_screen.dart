@@ -1,12 +1,17 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
+import 'package:hive/hive.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 
@@ -32,15 +37,176 @@ class UploadScreen extends StatefulWidget {
 }
 
 class _UploadScreenState extends State<UploadScreen> {
+  // 🔥 Button Animation Helpers
+  double _drsScale = 1.0;
+  double _coachScale = 1.0;
+  double _uploadScale = 1.0;
+  double _drsRotation = 0.0;
+  double _coachRotation = 0.0;
+  double _uploadRotation = 0.0;
+
+  // Safety: Only give XP once per upload
+  bool _uploadXpGiven = false;
+  // 🔥 Cost Optimization: Batch Firestore writes
+  int _pendingXp = 0;
+  int _pendingVideoCount = 0;
+
+  void _pressDown(Function setScale, Function setRotation) {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      setScale(0.92);
+      setRotation(0.02);
+    });
+  }
+
+  void _pressUp(Function setScale, Function setRotation) {
+    setState(() {
+      setScale(1.0);
+      setRotation(0.0);
+    });
+  }
   double? speedKmph;
   String speedType = "unavailable";
   String speedNote = "";
 
-  String swing = "NA";
-  String spin = "NA";
+  String swing = "";
+  String spin = "";
+  bool analysisLoading = false;
+
+  // 🧠 Rotating Cricket Facts
+  final List<String> _cricketFacts = [
+    "Did you know? Sachin Tendulkar's bat weighed around 3.2 lbs!",
+    "Fun Fact: The first-ever international cricket match was USA vs Canada in 1844.",
+    "Elite Tip: A stable head position is the secret to 90% of successful shots.",
+    "Fast Fact: Shoaib Akhtar bowled the fastest delivery ever recorded at 161.3 km/h.",
+    "Cricket Insight: Yorkers are most effective in the last 4 overs of a T20 match.",
+    "Did you know? Muttiah Muralitharan has 800 Test wickets.",
+    "Elite Tip: Watch the seam position to read swing early.",
+    "Fun Fact: MS Dhoni has the fastest stumping record at 0.08 seconds.",
+    "Cricket Insight: Wrist position defines swing direction.",
+    "Did you know? Don Bradman averaged 99.94 in Test cricket.",
+    "Elite Tip: Strong core muscles improve bowling speed.",
+    "Fun Fact: The longest Test match lasted 12 days in 1939.",
+    "Cricket Insight: Backlift height influences shot power.",
+    "Did you know? Lasith Malinga took 4 wickets in 4 balls twice.",
+    "Elite Tip: Landing foot alignment controls bowling direction.",
+    "Fun Fact: India won the 1983 World Cup as underdogs.",
+    "Cricket Insight: Reverse swing starts when the ball gets rough.",
+    "Did you know? AB de Villiers scored the fastest ODI 100 in 31 balls.",
+    "Elite Tip: Keep your elbow high during drives.",
+    "Fun Fact: Chris Gayle scored the first T20I century.",
+    "Cricket Insight: Consistency beats raw pace.",
+    "Did you know? Jacques Kallis scored 10,000+ runs and took 250+ wickets.",
+    "Elite Tip: Follow through fully to avoid injuries.",
+    "Fun Fact: The Ashes started in 1882.",
+    "Cricket Insight: Balance at release improves accuracy.",
+    "Did you know? Virat Kohli has 70+ international centuries.",
+    "Elite Tip: Soft hands help in defensive shots.",
+    "Fun Fact: An over once had 8 balls in some countries.",
+    "Cricket Insight: Length is more important than speed.",
+    "Did you know? Kumar Sangakkara scored four consecutive ODI hundreds in a World Cup.",
+    "Elite Tip: Focus on rhythm, not just power.",
+    "Fun Fact: Cricket was once played in the Olympics in 1900.",
+    "Cricket Insight: Bat speed generates boundary power.",
+    "Did you know? Wasim Akram took two hat-tricks in ODIs.",
+    "Elite Tip: Keep your eyes level while batting.",
+    "Fun Fact: The highest Test total is 952/6 declared.",
+    "Cricket Insight: Short run-up can improve control.",
+    "Did you know? Ben Stokes played one of the greatest innings in 2019 Ashes.",
+    "Elite Tip: Grip pressure affects spin turn.",
+    "Fun Fact: The pink ball is used in day-night Tests.",
+    "Cricket Insight: Field placement defines bowling strategy.",
+    "Did you know? Rohit Sharma has three ODI double centuries.",
+    "Elite Tip: Practice under pressure situations.",
+    "Fun Fact: The first Cricket World Cup was in 1975.",
+    "Cricket Insight: Seam upright means better swing.",
+    "Did you know? Glenn McGrath took 563 Test wickets.",
+    "Elite Tip: Mental strength wins close matches.",
+    "Fun Fact: Brendon McCullum scored 158 in the first IPL match.",
+    "Cricket Insight: Footwork is the foundation of batting.",
+    "Elite Tip: Recovery and sleep boost performance."
+  ];
+  int _currentFactIndex = 0;
+  Timer? _factTimer;
 
   String spinStrength = "NONE";
   double spinTurnDeg = 0.0;
+
+  Future<void> _incrementTotalVideos() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final plan = PremiumService.plan;
+
+    // 🔹 IN_1999 → instant Firestore write
+    if (plan == "IN_1999") {
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .set({
+        "totalVideos": FieldValue.increment(1),
+      }, SetOptions(merge: true));
+    }
+    // 🔹 IN_499 → batched Firestore write
+    else if (plan == "IN_499") {
+      _pendingVideoCount += 1;
+
+      if (_pendingVideoCount >= 5) {
+        await FirebaseFirestore.instance
+            .collection("users")
+            .doc(user.uid)
+            .set({
+          "totalVideos": FieldValue.increment(_pendingVideoCount),
+        }, SetOptions(merge: true));
+
+        _pendingVideoCount = 0;
+      }
+    }
+    // 🔹 Lower plans → Hive only
+    else {
+      final box = await Hive.openBox('localStats');
+      int current = box.get('totalVideos', defaultValue: 0);
+      await box.put('totalVideos', current + 1);
+    }
+  }
+
+  Future<void> _addXP(int amount) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final plan = PremiumService.plan;
+
+    // 🔹 IN_1999 → instant Firestore write
+    if (plan == "IN_1999") {
+      await FirebaseFirestore.instance
+          .collection("users")
+          .doc(user.uid)
+          .set({
+        "xp": FieldValue.increment(amount),
+      }, SetOptions(merge: true));
+    }
+    // 🔹 IN_499 → batched Firestore write
+    else if (plan == "IN_499") {
+      _pendingXp += amount;
+
+      if (_pendingXp >= 100) {
+        await FirebaseFirestore.instance
+            .collection("users")
+            .doc(user.uid)
+            .set({
+          "xp": FieldValue.increment(_pendingXp),
+        }, SetOptions(merge: true));
+
+        _pendingXp = 0;
+      }
+    }
+    // 🔹 Lower plans → Hive only
+    else {
+      final box = await Hive.openBox('localStats');
+      int current = box.get('xp', defaultValue: 0);
+      await box.put('xp', current + amount);
+    }
+  }
   @override
   void initState() {
     super.initState();
@@ -49,6 +215,13 @@ class _UploadScreenState extends State<UploadScreen> {
     debugPrint("UPLOAD_SCREEN user=${user?.uid}");
     PremiumService.premiumNotifier.addListener(() {
       if (mounted) setState(() {});
+    });
+    _factTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _currentFactIndex =
+            (_currentFactIndex + 1) % _cricketFacts.length;
+      });
     });
   }
   File? video;
@@ -154,9 +327,14 @@ class _UploadScreenState extends State<UploadScreen> {
     if (mounted) {
       setState(() {
         uploading = true;
+        analysisLoading = true;
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
+        swing = "";
+        spin = "";
+        // Reset XP guard at the start of upload
+        _uploadXpGiven = false;
       });
     }
 
@@ -190,6 +368,8 @@ class _UploadScreenState extends State<UploadScreen> {
       if (response.statusCode != 200) {
         throw Exception("UPLOAD_FAILED");
       }
+      // ✅ Increment total uploaded videos (only on successful analysis)
+      await _incrementTotalVideos();
 
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
@@ -211,6 +391,25 @@ class _UploadScreenState extends State<UploadScreen> {
         speedKmph = null;
         speedType = "unavailable";
         speedNote = speedNoteVal?.toString() ?? "";
+      }
+
+      // 🔥 Save speed to Hive for graph (flat list system)
+      if (speedKmph != null) {
+        final box = await Hive.openBox('speedBox');
+
+        final stored = box.get('allSpeeds') as List?;
+        List<double> allSpeeds = [];
+
+        if (stored != null) {
+          allSpeeds =
+              stored.map((e) => (e as num).toDouble()).toList();
+        }
+
+        allSpeeds.add(speedKmph!);
+
+        await box.put('allSpeeds', allSpeeds);
+
+        debugPrint("HIVE SPEED UPDATED => $allSpeeds");
       }
       if (!mounted) return;
 
@@ -247,6 +446,8 @@ class _UploadScreenState extends State<UploadScreen> {
 
         trajectory = const [];
         showTrajectory = false;
+
+        analysisLoading = false;
 
         controller?.play();
       });
@@ -566,19 +767,23 @@ class _UploadScreenState extends State<UploadScreen> {
       }
 
       if (response.statusCode == 200) {
-        // Normal successful coaching reply
+
+        // 🎯 Give 20 XP when AI Coach is successfully used
+        if (!_uploadXpGiven) {
+          await _addXP(20);
+          _uploadXpGiven = true;
+        }
+
         if (data["success"] == true && data["reply"] != null) {
           setState(() {
             coachReply = data["reply"];
           });
         }
-        // Vision / tracking failed but coach feedback exists
         else if (data["coach_feedback"] != null) {
           setState(() {
             coachReply = data["coach_feedback"];
           });
         }
-        // Fallback when no usable fields are present
         else {
           setState(() {
             coachReply =
@@ -600,6 +805,7 @@ class _UploadScreenState extends State<UploadScreen> {
 
   @override
   void dispose() {
+    _factTimer?.cancel();
     controller?.dispose();
     super.dispose();
   }
@@ -626,25 +832,92 @@ class _UploadScreenState extends State<UploadScreen> {
         ),
         body: controller == null
           ? Center(
-              child: GestureDetector(
-                onTap: _showVideoRulesThenPick,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 40, vertical: 22),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Colors.blueAccent, Colors.deepPurpleAccent],
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 🏏 Mode Selection Label
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.blueAccent.withOpacity(0.4)),
                     ),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    "Upload Training Video",
-                    style: TextStyle(
+                    child: const Text(
+                      "🏏 Batting Analysis Mode",
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
+
+                  const SizedBox(height: 18),
+
+                  // 💡 Instruction Tip Box
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 30),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: const Text(
+                      "Tip: Ensure your full body is visible from the side for better AI analysis.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // 🎥 Upload Button
+                  GestureDetector(
+                    onTapDown: (_) => _pressDown((v) => _uploadScale = v, (r) => _uploadRotation = r),
+                    onTapUp: (_) => _pressUp((v) => _uploadScale = v, (r) => _uploadRotation = r),
+                    onTapCancel: () => _pressUp((v) => _uploadScale = v, (r) => _uploadRotation = r),
+                    onTap: _showVideoRulesThenPick,
+                    child: AnimatedRotation(
+                      turns: _uploadRotation,
+                      duration: const Duration(milliseconds: 120),
+                      child: AnimatedScale(
+                        scale: _uploadScale,
+                        duration: const Duration(milliseconds: 120),
+                        curve: Curves.easeOutBack,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 22),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Colors.blueAccent, Colors.deepPurpleAccent],
+                            ),
+                            borderRadius: BorderRadius.circular(22),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.deepPurpleAccent.withOpacity(0.6),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            "Upload Training Video",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             )
           : Stack(
@@ -673,113 +946,203 @@ class _UploadScreenState extends State<UploadScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                      _metric(
-                        "Speed",
-                        speedKmph != null
-                            ? ((speedType == "very_slow_estimate" ||
-                                    speedType == "camera_normalized" ||
-                                    speedType == "video_derived" ||
-                                    speedType == "derived_physics")
-                                ? "${speedKmph!.toStringAsFixed(1)} km/h"
-                                : "${speedKmph!.toStringAsFixed(1)} km/h")
-                            : "----",
-                      ),
-                      if (speedKmph != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Text(
-                            speedType == "measured_release"
-                                ? "Measured speed"
-                                : speedType == "very_slow_estimate"
-                                    ? "Very slow delivery"
-                                    : speedType == "camera_normalized"
-                                        ? "Estimated from camera motion"
-                                        : speedType == "video_derived"
-                                            ? "Estimated from video motion"
-                                            : speedType == "derived_physics"
-                                                ? "Physics fallback estimate"
-                                                : "Speed unavailable",
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.3),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _metric(
+                            "Speed",
+                            analysisLoading
+                                ? "Analyzing..."
+                                : (speedKmph != null
+                                    ? "${speedKmph!.toStringAsFixed(1)} km/h"
+                                    : "----"),
+                          ),
+                        ),
+                        if (speedKmph != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              speedType == "measured_release"
+                                  ? "Measured speed"
+                                  : speedType == "very_slow_estimate"
+                                      ? "Very slow delivery"
+                                      : speedType == "camera_normalized"
+                                          ? "Estimated from camera motion"
+                                          : speedType == "video_derived"
+                                              ? "Estimated from video motion"
+                                              : speedType == "derived_physics"
+                                                  ? "Physics fallback estimate"
+                                                  : "Speed unavailable",
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
+                              ),
                             ),
+                          ),
+                        const SizedBox(height: 10),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.3),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _metric(
+                            "Swing",
+                            analysisLoading
+                                ? "Analyzing..."
+                                : (swing.isNotEmpty ? swing : "----"),
+                          ),
+                        ),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.3),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _metric(
+                            "Spin",
+                            analysisLoading
+                                ? "Analyzing..."
+                                : (spin.isNotEmpty
+                                    ? (spinStrength != "0%"
+                                        ? "$spin • $spinStrength"
+                                        : spin)
+                                    : "----"),
                           ),
                         ),
                         const SizedBox(height: 10),
-                        _metric("Swing", swing),
-                        _metric(
-                          "Spin",
-                          spinStrength != "0%"
-                              ? "$spin • $spinStrength"
-                              : spin,
-                        ),
-                        const SizedBox(height: 10),
                         GestureDetector(
+                          onTapDown: (_) => _pressDown((v) => _drsScale = v, (r) => _drsRotation = r),
+                          onTapUp: (_) => _pressUp((v) => _drsScale = v, (r) => _drsRotation = r),
+                          onTapCancel: () => _pressUp((v) => _drsScale = v, (r) => _drsRotation = r),
                           onTap: drsLoading ? null : runDRS,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: drsLoading ? Colors.grey : Colors.redAccent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Center(
-                              child: drsLoading
-                                  ? const SizedBox(
-                                      height: 18,
-                                      width: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      "DRS",
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16),
+                          child: AnimatedRotation(
+                            turns: _drsRotation,
+                            duration: const Duration(milliseconds: 120),
+                            child: AnimatedScale(
+                              scale: _drsScale,
+                              duration: const Duration(milliseconds: 120),
+                              curve: Curves.easeOutBack,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Colors.redAccent, Colors.deepOrange],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.redAccent.withOpacity(0.6),
+                                      blurRadius: 18,
+                                      spreadRadius: 1,
                                     ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: drsLoading
+                                      ? const SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                      : const Text(
+                                          "DRS",
+                                          style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16),
+                                        ),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 10),
                         GestureDetector(
+                          onTapDown: (_) => _pressDown((v) => _coachScale = v, (r) => _coachRotation = r),
+                          onTapUp: (_) => _pressUp((v) => _coachScale = v, (r) => _coachRotation = r),
+                          onTapCancel: () => _pressUp((v) => _coachScale = v, (r) => _coachRotation = r),
                           onTap: () async {
-                            // Step 1: show preparation message
                             setState(() {
                               showCoach = true;
                               coachReply =
                                   "This may take 1–2 minutes...\nPlease keep the app open ⏳";
                             });
 
-                            // Artificial delay so user understands processing time
                             await Future.delayed(const Duration(seconds: 6));
-
                             if (!mounted) return;
 
-                            // Step 2: show actual analyzing message
                             setState(() {
                               coachReply = "Analyzing your batting... 🏏";
                             });
 
-                            // Step 3: start backend coach analysis
                             await runCoach();
                           },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                "COACH",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16),
+                          child: AnimatedRotation(
+                            turns: _coachRotation,
+                            duration: const Duration(milliseconds: 120),
+                            child: AnimatedScale(
+                              scale: _coachScale,
+                              duration: const Duration(milliseconds: 120),
+                              curve: Curves.easeOutBack,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Colors.blueAccent, Colors.cyan],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.blueAccent.withOpacity(0.6),
+                                      blurRadius: 18,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    "COACH",
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -876,7 +1239,49 @@ class _UploadScreenState extends State<UploadScreen> {
                       ),
                     ),
                   ),
-
+                if (analysisLoading)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withOpacity(0.55),
+                      child: Center(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 28),
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 600),
+                            transitionBuilder: (child, animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0.0, 0.3),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              _cricketFacts[_currentFactIndex],
+                              key: ValueKey(_cricketFacts[_currentFactIndex]),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                height: 1.4,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (uploading)
                   Positioned(
                     top: 20,
@@ -897,11 +1302,44 @@ class _UploadScreenState extends State<UploadScreen> {
         children: [
           Text(label,
               style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: value == "Analyzing..."
+                ? TweenAnimationBuilder<double>(
+                    key: const ValueKey("analyzing_clean"),
+                    tween: Tween(begin: 0.8, end: 1.0),
+                    duration: const Duration(milliseconds: 900),
+                    curve: Curves.easeInOut,
+                    builder: (context, scale, child) {
+                      return Transform.scale(
+                        scale: scale,
+                        child: Opacity(
+                          opacity: scale,
+                          child: const Text(
+                            "Analyzing...",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    onEnd: () {
+                      if (mounted) setState(() {});
+                    },
+                  )
+                : Text(
+                    value,
+                    key: ValueKey(value),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+          ),
         ],
       ),
     );

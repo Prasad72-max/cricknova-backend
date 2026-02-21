@@ -155,7 +155,7 @@ class PremiumService {
           await _cache(firestorePremium, planId, 3000, 60, 50);
           break;
         case "IN_1999":
-          await _cache(firestorePremium, planId, 20000, 200, 200);
+          await _cache(firestorePremium, planId, 5000, 150, 150);
           break;
         default:
           await _cache(false, "FREE", 0, 0, 0);
@@ -169,6 +169,12 @@ class PremiumService {
 
   /// 🔁 Call this on every app launch (Splash / main)
   static Future<void> restoreOnLaunch() async {
+    // 🛑 Prevent duplicate Firestore reads on launch
+    if (isLoaded || _initialized) {
+      debugPrint("⏭️ Premium restore skipped (already loaded)");
+      return;
+    }
+    _initialized = true;
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
@@ -195,6 +201,7 @@ class PremiumService {
     } catch (e) {
       debugPrint("❌ restoreOnLaunch failed: $e");
     }
+    _initialized = false;
   }
 
   /// ✅ CALL THIS AFTER PAYMENT SUCCESS
@@ -652,16 +659,5 @@ class PremiumService {
     // 🔔 Notify UI immediately after PayPal return
     premiumNotifier.value = isPremium;
     premiumNotifier.notifyListeners();
-  }
-  // -----------------------------
-  // PAYPAL SUCCESS HANDLER (USED BY main.dart)
-  // -----------------------------
-  static Future<void> handlePayPalSuccess({
-    required String orderId,
-    String? userId,
-    String? plan,
-  }) async {
-    // userId kept for backward compatibility with main.dart
-    await capturePaypalOrderFromReturn(orderId);
   }
 }

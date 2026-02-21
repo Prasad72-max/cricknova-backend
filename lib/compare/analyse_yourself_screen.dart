@@ -1,13 +1,15 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   const AnalyseYourselfScreen({super.key});
@@ -29,6 +31,11 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   bool comparing = false;
   String? diffResult;
 
+  bool isSynced = false;
+  int _currentFactIndex = 0;
+  late List<String> cricketFacts;
+  Timer? _factTimer;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +44,14 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       await PremiumService.restoreOnLaunch();
       if (mounted) setState(() {});
     });
+    cricketFacts = [
+      "Did you know? The first international cricket match was USA vs Canada in 1844.",
+      "Elite Tip: A stable head position improves shot timing drastically.",
+      "Fun Fact: Sachin Tendulkar used one of the heaviest bats in cricket.",
+      "Did you know? The fastest recorded delivery is over 161 km/h.",
+      "Elite Tip: Balance at release defines bowling accuracy.",
+      // Add your full 50 facts list here
+    ];
   }
 
   Future<void> pickVideo({required bool isLeft}) async {
@@ -103,6 +118,14 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       comparing = true;
       diffResult = null;
     });
+    _factTimer?.cancel();
+    _factTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+      if (!mounted) return;
+      setState(() {
+        _currentFactIndex =
+            (_currentFactIndex + 1) % cricketFacts.length;
+      });
+    });
 
     final uri = Uri.parse("https://cricknova-backend.onrender.com/coach/diff");
     final request = http.MultipartRequest("POST", uri);
@@ -143,6 +166,24 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         setState(() {
           diffResult = data["difference"] ?? "No difference returned.";
         });
+        // 🎯 Tier-based XP update
+        final plan = PremiumService.plan;
+
+        // 🔹 High tier plans → Firestore
+        if (plan == "IN_499" || plan == "IN_1999") {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+            'xp': FieldValue.increment(30),
+          }, SetOptions(merge: true));
+        } 
+        // 🔹 Lower plans → Hive only
+        else {
+          final box = await Hive.openBox('localStats');
+          int currentXp = box.get('xp', defaultValue: 0);
+          await box.put('xp', currentXp + 30);
+        }
 
         await PremiumService.consumeCompare();
       } else if (response.statusCode == 401) {
@@ -174,7 +215,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       setState(() {
         diffResult = "Compare failed. Connection error: $e";
       });
+    // XP block must not be inside catch
     } finally {
+      _factTimer?.cancel();
       setState(() {
         comparing = false;
       });
@@ -199,12 +242,29 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   void dispose() {
     leftController?.dispose();
     rightController?.dispose();
+    _factTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final bool canCompare = leftVideo != null && rightVideo != null;
+
+    void toggleSync() {
+      if (leftController == null || rightController == null) return;
+      setState(() {
+        isSynced = !isSynced;
+      });
+      if (isSynced) {
+        leftController!.seekTo(Duration.zero);
+        rightController!.seekTo(Duration.zero);
+        leftController!.play();
+        rightController!.play();
+      } else {
+        leftController!.pause();
+        rightController!.pause();
+      }
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -219,11 +279,39 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Stack(
+                alignment: Alignment.center,
                 children: [
-                  Expanded(child: videoCard(isLeft: true)),
-                  const SizedBox(width: 16),
-                  Expanded(child: videoCard(isLeft: false)),
+                  Row(
+                    children: [
+                      Expanded(child: videoCard(isLeft: true)),
+                      const SizedBox(width: 16),
+                      Expanded(child: videoCard(isLeft: false)),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF38BDF8), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF38BDF8).withOpacity(0.6),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      "VS",
+                      style: TextStyle(
+                        color: Color(0xFF38BDF8),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 30),
@@ -236,7 +324,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: canCompare ? Colors.greenAccent : Colors.white24,
+                      color: canCompare ? const Color(0xFF38BDF8) : Colors.white24,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
@@ -254,20 +342,69 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
               ),
               const SizedBox(height: 20),
 
-              if (comparing)
-                Column(
-                  children: const [
-                    SizedBox(height: 12),
-                    LinearProgressIndicator(minHeight: 3),
-                    SizedBox(height: 8),
-                    Text(
-                      "Analyzing videos… this may take 1–2 minutes ⏳",
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
+              if (leftController != null && rightController != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Center(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isSynced
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFF1E293B),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      onPressed: toggleSync,
+                      child: Text(
+                        isSynced ? "SYNC ON" : "SYNC PLAY",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
+                ),
+
+              if (comparing)
+                Container(
+                  margin: const EdgeInsets.only(top: 20),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Column(
+                    children: [
+                      const LinearProgressIndicator(minHeight: 3),
+                      const SizedBox(height: 16),
+                      const Text(
+                        "AI is matching frames to find technique differences...",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 500),
+                        child: Text(
+                          cricketFacts[_currentFactIndex],
+                          key: ValueKey(_currentFactIndex),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            height: 1.4,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
 
               if (diffResult != null)
@@ -275,17 +412,37 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                   margin: const EdgeInsets.only(top: 20),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white24),
+                    color: const Color(0xFF0F172A).withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFF38BDF8), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF38BDF8).withOpacity(0.3),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    diffResult!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      height: 1.4,
-                    ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.smart_toy_outlined,
+                        color: Color(0xFF38BDF8),
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "Difference: ${diffResult!}",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
             ],
@@ -315,15 +472,45 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
             child: hasVideo
                 ? AspectRatio(
                     aspectRatio: controller!.value.aspectRatio,
-                    child: Container(
-                      color: Colors.black,
-                      child: safeVideo(controller),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              VideoPlayer(controller),
+                            ],
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                "READY",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : const Padding(
                     padding: EdgeInsets.symmetric(vertical: 40),
                     child: Icon(
-                      Icons.video_library,
+                      Icons.video_library_outlined,
                       color: Colors.white38,
                       size: 48,
                     ),
@@ -358,4 +545,5 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       ),
     );
   }
+
 }

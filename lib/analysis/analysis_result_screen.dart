@@ -206,13 +206,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(
-            "assets/pitch_bg.png",
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) {
-              return Container(color: Colors.black);
-            },
-          ),
+          Container(color: Colors.black),
           CustomPaint(
             painter: TrajectoryPainter(data),
           ),

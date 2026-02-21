@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<String> trainingVideos = [];
+  List<double> speedHistory = [];
 
   @override
   void didChangeDependencies() {
@@ -54,9 +56,23 @@ class _HomeScreenState extends State<HomeScreen> {
       await PremiumService.restoreOnLaunch();
     }
 
+    await loadSpeedHistory();
     await loadTrainingVideos();
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> loadSpeedHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList("speedHistory") ?? [];
+    final allSpeeds = raw.map((e) => double.tryParse(e) ?? 0).toList();
+
+    // Keep only last 6 balls for Current Session view
+    if (allSpeeds.length > 6) {
+      speedHistory = allSpeeds.sublist(allSpeeds.length - 6);
+    } else {
+      speedHistory = allSpeeds;
+    }
   }
 
   Future<void> loadTrainingVideos() async {
@@ -73,9 +89,16 @@ class _HomeScreenState extends State<HomeScreen> {
     debugPrint("HOME → isPremium=${PremiumService.isPremium}");
     return Container(
       color: const Color(0xFF020617),
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight + 24),
-        children: [
+      child: RefreshIndicator(
+        color: const Color(0xFF00FF88),
+        backgroundColor: const Color(0xFF0F172A),
+        onRefresh: () async {
+          await _bootstrapAuthAndData();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight + 24),
+          children: [
             // HEADER
             Container(
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 40),
@@ -124,21 +147,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Welcome back, ${widget.userName} 👋",
+                        "Welcome back, ${widget.userName} ",
                         style: GoogleFonts.poppins(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 34,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
-                          shadows: [],
                         ),
                       ),
                       const SizedBox(height: 10),
                       Text(
                         "Ready for today’s cricket analysis?",
                         style: GoogleFonts.poppins(
-                          fontSize: 16,
+                          fontSize: 13,
                           fontWeight: FontWeight.w400,
-                          color: Colors.white70,
+                          color: Colors.white.withOpacity(0.6),
                         ),
                       ),
                     ],
@@ -158,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _actionCard(
                     title: "Upload Training Video",
                     subtitle: "AI will analyze your batting or bowling",
-                    icon: Icons.upload_file_rounded,
+                    icon: Icons.upload_file_outlined,
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -171,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _actionCard(
                     title: "Analyse Yourself",
                     subtitle: "Compare two videos and see differences",
-                    icon: Icons.compare_rounded,
+                    icon: Icons.compare_arrows_outlined,
                     onTap: () {
                       if (!PremiumService.isLoaded) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -200,116 +222,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            const SizedBox(height: 30),
 
-            // VIDEO LIST
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "My Training Videos",
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  if (trainingVideos.isEmpty)
-                    const Text(
-                      "No training videos uploaded yet",
-                      style: TextStyle(color: Colors.white54),
-                    )
-                  else
-                    ...trainingVideos.map((v) => Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0F172A),
-                            borderRadius: BorderRadius.circular(14),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 8,
-                                spreadRadius: 1,
-                              )
-                            ],
-                          ),
-                          child: ListTile(
-                            title: Text(v,
-                                style:
-                                    GoogleFonts.poppins(fontSize: 15)),
-                            trailing: const Icon(Icons.play_circle_fill,
-                                color: Color(0xFF7C3AED), size: 30),
-                            onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                                ),
-                                builder: (_) {
-                                  return SafeArea(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ListTile(
-                                          leading: const Icon(Icons.play_circle_fill),
-                                          title: const Text("Play Video"),
-                                          onTap: () {
-                                            Navigator.pop(context);
-                                            // Future: video preview screen
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text("Video preview coming soon")),
-                                            );
-                                          },
-                                        ),
-                                        ListTile(
-                                          leading: const Icon(Icons.analytics),
-                                          title: const Text("Analyse Video"),
-                                          onTap: () {
-                                            Navigator.pop(context);
-
-                                            if (!PremiumService.canCompare()) {
-                                              PremiumService.showPaywall(context);
-                                              return;
-                                            }
-
-                                            Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (_) => const AnalyseYourselfScreen(),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                        ListTile(
-                                          leading: const Icon(Icons.delete, color: Colors.red),
-                                          title: const Text("Delete Video"),
-                                          onTap: () async {
-                                            Navigator.pop(context);
-                                            final prefs = await SharedPreferences.getInstance();
-                                            final videos =
-                                                prefs.getStringList("trainingVideos") ?? [];
-                                            videos.remove(v);
-                                            await prefs.setStringList("trainingVideos", videos);
-                                            await loadTrainingVideos();
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                          ),
-                        )),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 30),
+            const SizedBox(height: 50),
 
             // REMAINING FEATURES
             Padding(
@@ -321,28 +235,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     "Remaining Features",
                     style: GoogleFonts.poppins(
                       fontSize: 20,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0B1220),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Color(0xFF1F2937)),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 10,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
+                      color: Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.18),
+                        width: 1,
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // PLAN HEADER
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -394,8 +304,9 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 40),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
   Widget _actionCard({
     required String title,
@@ -410,13 +321,16 @@ class _HomeScreenState extends State<HomeScreen> {
           debugPrint('ACTION CARD TAPPED → $title');
           onTap();
         },
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFF111827),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Color(0xFF1F2937)),
+            color: Colors.white.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.15),
+              width: 1,
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x22000000),
@@ -428,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: Row(
             children: [
-              Icon(icon, size: 36, color: const Color(0xFF38BDF8)),
+              Icon(icon, size: 32, color: Colors.white70),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
@@ -456,7 +370,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const Icon(
                 Icons.arrow_forward_ios,
                 size: 20,
-                color: Colors.black38,
+                color: Colors.white54,
               ),
             ],
           ),
@@ -471,24 +385,50 @@ class _HomeScreenState extends State<HomeScreen> {
     required int total,
   }) {
     final displayTotal = total == 0 ? "-" : total.toString();
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(fontSize: 14, color: Colors.white70),
-        ),
-        Text(
-          "$used/$displayTotal",
-          style: GoogleFonts.poppins(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: total == 0
-                ? Colors.grey
-                : (used >= total ? Colors.red : Color(0xFF38BDF8)),
+
+    IconData iconData;
+
+    if (label.contains("Chat")) {
+      iconData = Icons.smart_toy_outlined; // AI Coach Robot
+    } else if (label.contains("Mistake")) {
+      iconData = Icons.track_changes_outlined; // Target icon
+    } else {
+      iconData = Icons.analytics_outlined;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(
+                iconData,
+                size: 18,
+                color: Colors.white70,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+          Text(
+            "$used/$displayTotal",
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFFFFD700), // Gold for Elite feel
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -504,7 +444,7 @@ class _HomeScreenState extends State<HomeScreen> {
           gradient: const LinearGradient(
             colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
           ),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(50),
           boxShadow: const [
             BoxShadow(
               color: Colors.black26,
@@ -516,15 +456,15 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(Icons.workspace_premium, color: Colors.black, size: 14),
-            SizedBox(width: 4),
+            Icon(Icons.star_rounded, color: Colors.black, size: 16),
+            SizedBox(width: 6),
             Text(
-              "PREMIUM USER",
+              "ELITE USER",
               style: TextStyle(
                 color: Colors.black,
                 fontWeight: FontWeight.w700,
                 fontSize: 14,
-                letterSpacing: 0.6,
+                letterSpacing: 0.8,
               ),
             ),
           ],

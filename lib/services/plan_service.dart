@@ -44,7 +44,6 @@ class PlanService {
 
   static Future<void> setPaymentSource(String source) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString("paymentSource", source); // paypal | play
   }
 
   static Future<String?> getPaymentSource() async {

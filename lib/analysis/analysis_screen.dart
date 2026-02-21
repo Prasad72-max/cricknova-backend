@@ -467,17 +467,6 @@ print("=========== BACKEND RESPONSE END ===========");
       child: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              "assets/pitch_bg.png",
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.black,
-                );
-              },
-            ),
-          ),
-          Positioned.fill(
             child: CustomPaint(
               painter: _TrajectoryPainter(trajectory!),
             ),

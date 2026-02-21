@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.application") version "8.11.1" apply false
+    id("com.android.application") version "8.2.2" apply false
     id("com.google.gms.google-services") version "4.4.4" apply false
 }
 
@@ -22,6 +22,20 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+}
+
+subprojects {
+    afterEvaluate {
+        plugins.withId("com.android.library") {
+            extensions.findByName("android")?.let { ext ->
+                if (ext is com.android.build.gradle.LibraryExtension) {
+                    if (ext.namespace == null || ext.namespace!!.isEmpty()) {
+                        ext.namespace = "com.cricknova.${project.name.replace("-", "_")}"
+                    }
+                }
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

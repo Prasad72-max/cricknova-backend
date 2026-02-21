@@ -11,6 +11,7 @@ import 'dart:async';
 
 import '../upload/upload_screen.dart';
 import '../compare/analyse_yourself_screen.dart';
+import '../insights/insights_screen.dart';
 
 class MainNavigation extends StatefulWidget {
   final String userName;
@@ -78,10 +79,11 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     final screens = [
-      HomeScreen(userName: userName),        // 0
-      const AICoachScreen(),                 // 1 (premium)
-      const PremiumScreen(entrySource: "tab"), // 2
-      const ProfileScreen(),                 // 3
+      HomeScreen(userName: userName),          // 0
+      const InsightsScreen(),                  // 1 (NEW)
+      const AICoachScreen(),                   // 2 (premium)
+      const PremiumScreen(entrySource: "tab"), // 3
+      const ProfileScreen(),                   // 4
     ];
 
     return Scaffold(
@@ -133,14 +135,16 @@ class _MainNavigationState extends State<MainNavigation> {
         currentIndex: _index,
         backgroundColor: Colors.black,
         selectedItemColor: Colors.amber,
-        unselectedItemColor: Colors.white70,
+        unselectedItemColor: Colors.white60,
+        selectedIconTheme: const IconThemeData(size: 22),
+        unselectedIconTheme: const IconThemeData(size: 20),
         type: BottomNavigationBarType.fixed,
 
         onTap: (i) async {
           debugPrint("BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}");
 
-          // AI Coach tab (index 1) is premium-only
-          if (i == 1 && !PremiumService.isPremiumActive) {
+          // AI Coach tab (index 2) is premium-only
+          if (i == 2 && !PremiumService.isPremiumActive) {
             if (!mounted) return;
             showDialog(
               context: context,
@@ -177,13 +181,57 @@ class _MainNavigationState extends State<MainNavigation> {
           setTab(i);
         },
 
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.auto_awesome), label: "AI Coach"),
-          BottomNavigationBarItem(icon: Icon(Icons.star), label: "Premium"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+        items: [
+          BottomNavigationBarItem(
+            label: "Home",
+            icon: _navIcon(Icons.home_outlined, 0),
+          ),
+          BottomNavigationBarItem(
+            label: "Insights",
+            icon: _navIcon(Icons.insights_outlined, 1),
+          ),
+          BottomNavigationBarItem(
+            label: "AI Coach",
+            icon: _navIcon(Icons.auto_awesome_outlined, 2),
+          ),
+          BottomNavigationBarItem(
+            label: "Premium",
+            icon: _navIcon(Icons.star_outline, 3),
+          ),
+          BottomNavigationBarItem(
+            label: "Profile",
+            icon: _navIcon(Icons.person_outline, 4),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _navIcon(IconData icon, int tabIndex) {
+    final bool isActive = _index == tabIndex;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isActive)
+          Container(
+            height: 3,
+            width: 24,
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              color: Colors.amber,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.amber,
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        Icon(icon),
+      ],
     );
   }
 }

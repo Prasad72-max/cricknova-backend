@@ -4,7 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
@@ -35,6 +37,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   int currentChatIndex = 0;
   List<Map<String, dynamic>> chats = [];
+  // 🔥 Cost Optimization: Batch XP writes
+  int _pendingXpWrites = 0;
 
   @override
   void initState() {
@@ -171,6 +175,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
       "text": userMessage,
     });
 
+
     loading = true;
     setState(() {});
 
@@ -270,6 +275,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
           "text": coachText,
         });
 
+
+
         saveChats();
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -329,6 +336,47 @@ class _AICoachScreenState extends State<AICoachScreen> {
       return;
     }
     finally {
+      // 🔥 Tier-based XP handling
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          final plan = PremiumService.plan;
+
+          // 🔹 IN_1999 → instant Firestore write
+          if (plan == "IN_1999") {
+            await FirebaseFirestore.instance
+                .collection("users")
+                .doc(user.uid)
+                .set({
+              "xp": FieldValue.increment(5),
+            }, SetOptions(merge: true));
+          }
+          // 🔹 IN_499 → batched Firestore write
+          else if (plan == "IN_499") {
+            _pendingXpWrites += 5;
+
+            if (_pendingXpWrites >= 25) {
+              await FirebaseFirestore.instance
+                  .collection("users")
+                  .doc(user.uid)
+                  .set({
+                "xp": FieldValue.increment(_pendingXpWrites),
+              }, SetOptions(merge: true));
+
+              debugPrint("XP BATCH UPDATED (+$_pendingXpWrites)");
+              _pendingXpWrites = 0;
+            }
+          }
+          // 🔹 Lower plans → Hive only
+          else {
+            final box = await Hive.openBox('localStats');
+            int currentXp = box.get('xp', defaultValue: 0);
+            await box.put('xp', currentXp + 5);
+          }
+        }
+      } catch (e) {
+        debugPrint("Tier-based XP update failed: $e");
+      }
       if (mounted) {
         loading = false;
         setState(() {});
@@ -373,15 +421,58 @@ class _AICoachScreenState extends State<AICoachScreen> {
         constraints: const BoxConstraints(maxWidth: 320),
         decoration: BoxDecoration(
           color: isUser
-              ? const Color(0xFF1E293B)  // dark slate (user)
-              : const Color(0xFF0F766E), // muted cyan (coach)
+              ? const Color(0xFF1E293B)
+              : const Color(0xFF111827),
           borderRadius: BorderRadius.circular(18),
+          border: isUser
+              ? null
+              : Border.all(
+                  color: const Color(0xFF38BDF8),
+                  width: 1.2,
+                ),
         ),
         child: Text(
           msg["text"] ?? "",
           style: const TextStyle(color: Colors.white),
         ),
       ),
+    );
+  }
+  // ---------------- USER NAME HELPER ----------------
+  String getUserName() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user?.displayName != null &&
+        user!.displayName!.trim().isNotEmpty) {
+      return user.displayName!.split(" ").first;
+    }
+    return "Player";
+  }
+
+  // ---------------- QUICK CHIP + SUGGESTION WIDGETS ----------------
+  Widget quickChip(String text) {
+    return ActionChip(
+      backgroundColor: const Color(0xFF0F172A),
+      label: Text(text,
+          style: const TextStyle(color: Colors.white)),
+      onPressed: () {
+        controller.text = text;
+        sendMessage();
+      },
+    );
+  }
+
+  Widget suggestionTile(String text) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        text,
+        style: const TextStyle(
+            color: Colors.white70, fontSize: 13),
+      ),
+      onTap: () {
+        controller.text = text;
+        sendMessage();
+      },
     );
   }
 
@@ -463,10 +554,69 @@ class _AICoachScreenState extends State<AICoachScreen> {
           Expanded(
             child: chats.isEmpty ||
                     chats[currentChatIndex]["messages"].isEmpty
-                ? const Center(
-                    child: Text(
-                      "Start your first AI coaching session",
-                      style: TextStyle(color: Colors.white54),
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 20),
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+
+                        // 👤 Coach Greeting
+                        Row(
+                          children: [
+                            const CircleAvatar(
+                              radius: 22,
+                              backgroundColor:
+                                  Color(0xFF0F172A),
+                              child: Icon(Icons.sports_cricket,
+                                  color: Color(0xFF38BDF8)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "Hello ${getUserName()}!\nI am your CrickNova AI. How can I help you improve your game today?",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            )
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // ⚡ Quick Action Chips
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            quickChip("🏏 Batting Tips"),
+                            quickChip("🥎 Bowling Tips"),
+                            quickChip("🧠 Match Mindset"),
+                            quickChip("📉 My Mistakes"),
+                          ],
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // 🏆 Suggested Questions
+                        const Text(
+                          "Suggested Questions",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        suggestionTile(
+                            "How to play a perfect cover drive?"),
+                        suggestionTile(
+                            "What is the ideal release point for an outswinger?"),
+                        suggestionTile(
+                            "Show me drills for better footwork."),
+                      ],
                     ),
                   )
                 : ListView.builder(
@@ -479,35 +629,42 @@ class _AICoachScreenState extends State<AICoachScreen> {
                         ),
                   ),
           ),
-          // Animated bottom loader (moved here, just above input)
+          // Clean AI analyzing indicator
           if (loading)
             Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const SizedBox(
-                    height: 9,
-                    child: LinearProgressIndicator(
-                      backgroundColor: Color(0xFF020617),
+                    height: 28,
+                    width: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
                       valueColor: AlwaysStoppedAnimation(Color(0xFF38BDF8)),
+                      backgroundColor: Color(0xFF0F172A),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  AnimatedTextKit(
-                    repeatForever: true,
-                    animatedTexts: [
-                      FadeAnimatedText(
-                        "CrickNova is analyzing your message…",
-                        textStyle: TextStyle(color: Colors.white70, fontSize: 13),
-                        duration: Duration(milliseconds: 1800),
-                      ),
-                      FadeAnimatedText(
-                        "This may take 1–2 minutes. Please wait…",
-                        textStyle: TextStyle(color: Colors.white54, fontSize: 12),
-                        duration: Duration(milliseconds: 1800),
-                      ),
-                    ],
+                  const SizedBox(height: 8),
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: 1),
+                    duration: const Duration(seconds: 2),
+                    builder: (context, value, child) {
+                      int dots = (value * 3).floor();
+                      return Text(
+                        "Analyzing${"." * dots}",
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      );
+                    },
+                    onEnd: () {
+                      if (mounted && loading) {
+                        setState(() {});
+                      }
+                    },
                   ),
                 ],
               ),
@@ -522,10 +679,23 @@ class _AICoachScreenState extends State<AICoachScreen> {
                     child: TextField(
                       controller: controller,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: "Ask CrickNova AI Coach...",
-                        hintStyle: TextStyle(color: Color(0xFF64748B)),
-                        border: InputBorder.none,
+                      decoration: InputDecoration(
+                        hintText:
+                            "Ask CrickNova AI Coach...",
+                        hintStyle: const TextStyle(
+                            color: Color(0xFF64748B)),
+                        filled: true,
+                        fillColor:
+                            const Color(0xFF0F172A),
+                        contentPadding:
+                            const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12),
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),

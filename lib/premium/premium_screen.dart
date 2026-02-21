@@ -197,7 +197,7 @@ class PayPalWebViewScreen extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) return;
 
     final res = await http.post(
@@ -228,7 +228,7 @@ class PayPalWebViewScreen extends StatelessWidget {
 
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
-  bool isIndia = true;
+  bool? isIndia; // null until IP detection completes
   static const bool isPayPalSandbox = true; // set false when going live
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
 
@@ -263,6 +263,44 @@ class _PremiumScreenState extends State<PremiumScreen>
       Razorpay.EVENT_EXTERNAL_WALLET,
       _handleExternalWallet,
     );
+    // 🌍 Detect IP on screen load
+    _detectIPAndSetPricing();
+  }
+
+  Future<void> _detectIPAndSetPricing() async {
+    try {
+      final res = await http
+          .get(Uri.parse("https://ipapi.co/json/"))
+          .timeout(const Duration(seconds: 10));
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        final countryCode = data["country_code"];
+        final ip = data["ip"];
+
+        debugPrint("🌍 PREMIUM IP DATA => $data");
+
+        final prefs = await SharedPreferences.getInstance();
+
+        if (countryCode == "IN") {
+          await prefs.setString("pricingMode", "INR");
+          debugPrint("🇮🇳 PRICING MODE SET => INR");
+        } else {
+          await prefs.setString("pricingMode", "USD");
+          debugPrint("🌎 PRICING MODE SET => USD");
+        }
+
+        if (!mounted) return;
+
+        setState(() {
+          isIndia = countryCode == "IN";
+        });
+
+        debugPrint("🧠 USER IP => $ip | COUNTRY => $countryCode");
+      }
+    } catch (e) {
+      debugPrint("❌ PREMIUM IP detection failed: $e");
+    }
   }
 
   Future<void> _prefetchRazorpayKey() async {
@@ -298,7 +336,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     }
 
     final user = FirebaseAuth.instance.currentUser!;
-    final String? idToken = await user.getIdToken(true);
+    final String? idToken = await user.getIdToken();
     if (idToken == null || idToken.isEmpty) {
       throw Exception("Firebase ID token missing");
     }
@@ -501,7 +539,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
       }
 
       // 1️⃣ Create PayPal order (backend) via POST
-      final String? idToken = await user.getIdToken(true);
+      final String? idToken = await user.getIdToken();
       if (idToken == null || idToken.isEmpty) {
         throw Exception("Firebase ID token missing");
       }
@@ -584,7 +622,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     if (user == null) return;
 
     try {
-      final String? idToken = await user.getIdToken(true);
+      final String? idToken = await user.getIdToken();
       if (idToken == null || idToken.isEmpty) {
         throw Exception("Firebase ID token missing");
       }
@@ -650,6 +688,14 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         }
       });
     }
+    if (isIndia == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF020A1F),
+        body: Center(
+          child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: const Color(0xFF020A1F),
 
@@ -678,43 +724,15 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         child: Column(
           children: [
 
-            // 🌍 COUNTRY SELECTOR (Neon Tabs)
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(30),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: neonTab(
-                      text: "India",
-                      selected: isIndia,
-                      onTap: () => setState(() => isIndia = true),
-                    ),
-                  ),
-                  Expanded(
-                    child: neonTab(
-                      text: "International",
-                      selected: !isIndia,
-                      onTap: () => setState(() => isIndia = false),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 20),
 
             // INDIA PLANS
-            if (isIndia)
+            if (isIndia == true)
               ...((sourceFromArgs ?? widget.entrySource) == "analyse"
                   ? indiaCompareOnlyPlans()
                   : indiaPlans()),
 
             // INTERNATIONAL PLANS
-            if (!isIndia)
+            if (isIndia == false)
               ...((sourceFromArgs ?? widget.entrySource) == "analyse"
                   ? internationalCompareOnlyPlans()
                   : internationalPlans()),
@@ -732,10 +750,21 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF38BDF8) : Colors.transparent,
+          gradient: selected
+              ? const LinearGradient(
+                  colors: [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
+                )
+              : const LinearGradient(
+                  colors: [Color(0xFF0B1220), Color(0xFF0F172A)],
+                ),
           borderRadius: BorderRadius.circular(26),
           boxShadow: selected
-              ? [const BoxShadow(color: Color(0xFF38BDF8), blurRadius: 12)]
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF38BDF8).withOpacity(0.35),
+                    blurRadius: 16,
+                  )
+                ]
               : [],
         ),
         child: Center(
@@ -803,9 +832,9 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         glowColor: Colors.redAccent,
         features: [
           "1 Year Access",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
-          "200 Video Compare",
+          "5,000 AI Chats",
+          "150 Mistake Detections",
+          "150 Video Compare",
           "All Premium Features",
           "Priority AI Processing",
         ],
@@ -835,9 +864,9 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         glowColor: Colors.redAccent,
         features: [
           "Unlimited Analyse",
-          "200 Video Compare",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
+          "150 Video Compare",
+          "5,000 AI Chats",
+          "150 Mistake Detections",
         ],
       ),
     ];
@@ -889,8 +918,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         glowColor: Colors.redAccent,
         features: [
           "1 Year Access",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
+          "5,000 AI Chats",
+          "150 Mistake Detections",
           "150 Video Compare",
           "All Features Unlocked",
           "Priority AI",
@@ -935,8 +964,8 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
         features: [
           "Unlimited Analyse",
           "150 Video Compare",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
+          "5,000 AI Chats",
+          "150 Mistake Detections",
           "All Features Unlocked",
           "Priority AI",
         ],
@@ -952,158 +981,260 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     required List<String> features,
     String? tag,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 22),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF334155)),
-        boxShadow: [
-          BoxShadow(color: glowColor.withOpacity(0.4), blurRadius: 24),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (tag != null)
-            Text(tag,
-                style: const TextStyle(
-                    color: Colors.amber,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15)),
-          const SizedBox(height: 6),
-
-          Text(title,
-              style: const TextStyle(color: Colors.white, fontSize: 24)),
-          Text(price,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-
-          const Text("Features Included:",
-              style: TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16)),
-          const SizedBox(height: 10),
-
-          for (String f in features)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text("• $f",
-                  style: const TextStyle(color: Colors.white70, fontSize: 14)),
-            ),
-
-          const SizedBox(height: 16),
-
-          GestureDetector(
-            onTap: () async {
-              if (_isPaying) return;
-
-              HapticFeedback.mediumImpact();
-
-              setState(() {
-                _animatingPlan = price;
-              });
-
-              await Future.delayed(const Duration(milliseconds: 180));
-
-              _lastPlanTitle = title;
-              _lastPlanPrice = price;
-
-              if (!mounted) return;
-
-              final numeric =
-                  double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
-
-              // SHOW payment option selector dialog
-              await _showPaymentOptionDialog(
-                price: price,
-                onCrickNova: () {
-                  if (isIndia) {
-                    debugPrint("🟢 CrickNova payment for ₹${numeric.toInt()}");
-                    _startRazorpayCheckout(numeric.toInt());
-                  } else {
-                    debugPrint("🌍 CrickNova PayPal payment for $price");
-                    _startPayPalCheckout(price);
-                  }
-                },
-                onGooglePlay: () async {
-                  if (isIndia) {
-                    // Google Play Billing not yet integrated for India
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Google Play payment coming soon"),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 18, bottom: 22),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: glowColor.withOpacity(0.35),
+                blurRadius: 28,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 6),
+              Text(title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                  )),
+              Text(price,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold)),
+              if (price == "\$159.99")
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    "Less than \$0.45 per day",
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              if (price == "₹1999")
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    "Less than ₹5 per day",
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              const Text("Features Included:",
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16)),
+              const SizedBox(height: 10),
+              for (String f in features)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        f.contains("AI")
+                            ? "💬"
+                            : f.contains("Mistake")
+                                ? "🎯"
+                                : f.contains("Compare")
+                                    ? "🎥"
+                                    : "✅",
+                        style: const TextStyle(fontSize: 16),
                       ),
-                    );
-                  } else {
-                    // 🌍 International users: fallback to CrickNova (PayPal)
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("Redirecting via secure checkout"),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          f,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
-                    );
-                    _startPayPalCheckout(price);
-                  }
-                },
-              );
-
-              setState(() {
-                _animatingPlan = null;
-              });
-            },
-            child: AnimatedScale(
-              scale: _animatingPlan == price ? 0.94 : 1.0,
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
-              child: AnimatedOpacity(
-                opacity: _animatingPlan == price ? 0.85 : 1.0,
-                duration: const Duration(milliseconds: 160),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      glowColor,
-                      glowColor.withOpacity(0.8),
-                    ]),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: glowColor.withOpacity(0.6),
-                        blurRadius: 18,
-                        spreadRadius: 1,
-                      )
                     ],
                   ),
-                  child: Center(
-                    child: (_payingPlan == price)
-                        ? const SizedBox(
-                            height: 22,
-                            width: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            "Buy Now",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                ),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () async {
+                  if (_isPaying) return;
+
+                  HapticFeedback.mediumImpact();
+
+                  setState(() {
+                    _animatingPlan = price;
+                  });
+
+                  await Future.delayed(const Duration(milliseconds: 180));
+
+                  _lastPlanTitle = title;
+                  _lastPlanPrice = price;
+
+                  if (!mounted) return;
+
+                  final numeric =
+                      double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+
+                  // SHOW payment option selector dialog
+                  await _showPaymentOptionDialog(
+                    price: price,
+                  onCrickNova: () {
+                    if (isIndia == true) {
+                      debugPrint("🟢 CrickNova payment for ₹${numeric.toInt()}");
+                      _startRazorpayCheckout(numeric.toInt());
+                    } else {
+                      debugPrint("🌍 CrickNova PayPal payment for $price");
+                      _startPayPalCheckout(price);
+                    }
+                  },
+                  onGooglePlay: () async {
+                    if (isIndia == true) {
+                      // Google Play Billing not yet integrated for India
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Google Play payment coming soon"),
+                        ),
+                      );
+                    } else {
+                      // 🌍 International users: fallback to CrickNova (PayPal)
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Redirecting via secure checkout"),
+                        ),
+                      );
+                      _startPayPalCheckout(price);
+                    }
+                  },
+                  );
+
+                  setState(() {
+                    _animatingPlan = null;
+                  });
+                },
+                child: AnimatedScale(
+                  scale: _animatingPlan == price ? 0.94 : 1.0,
+                  duration: const Duration(milliseconds: 160),
+                  curve: Curves.easeOut,
+                  child: AnimatedOpacity(
+                    opacity: _animatingPlan == price ? 0.85 : 1.0,
+                    duration: const Duration(milliseconds: 160),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(colors: [
+                          glowColor,
+                          glowColor.withOpacity(0.8),
+                        ]),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: glowColor.withOpacity(0.6),
+                            blurRadius: 18,
+                            spreadRadius: 1,
                           ),
+                          BoxShadow(
+                            color: glowColor.withOpacity(0.25),
+                            blurRadius: 35,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: (_payingPlan == price)
+                            ? const SizedBox(
+                                height: 22,
+                                width: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                "BUY NOW",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+        if (tag != null)
+          Positioned(
+            top: 0,
+            left: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: tag.contains("Elite")
+                    ? const LinearGradient(
+                        colors: [Color(0xFFFFD700), Color(0xFFE6A800)],
+                      )
+                    : tag.contains("Best")
+                        ? const LinearGradient(
+                            colors: [Color(0xFF2563EB), Color(0xFF38BDF8)],
+                          )
+                        : const LinearGradient(
+                            colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                          ),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: glowColor.withOpacity(0.5),
+                    blurRadius: 18,
+                  )
+                ],
+              ),
+              child: Row(
+                children: [
+                  if (tag.contains("Elite"))
+                    const Icon(Icons.workspace_premium,
+                        color: Color(0xFFFFD700), size: 18),
+                  if (tag.contains("Elite"))
+                    const SizedBox(width: 6),
+                  Text(
+                    tag,
+                    style: TextStyle(
+                      color: tag.contains("Elite")
+                          ? Colors.black
+                          : Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -1170,7 +1301,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
                       const Icon(Icons.sports_cricket,
                           color: Colors.greenAccent, size: 36),
                       const SizedBox(width: 16),
-                      Expanded(
+                      Flexible(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1239,7 +1370,7 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
                       const Icon(Icons.play_circle_fill,
                           color: Colors.blueAccent, size: 36),
                       const SizedBox(width: 16),
-                      Expanded(
+                      Flexible(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: const [

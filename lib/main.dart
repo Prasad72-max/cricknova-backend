@@ -8,13 +8,17 @@ import 'package:CrickNova_Ai/services/premium_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/services.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp();
   }
+
+  await Hive.initFlutter();
+  await Hive.openBox('speedBox');
 
   runApp(const MyApp());
 }
@@ -35,6 +39,7 @@ class _MyAppState extends State<MyApp> {
 
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
+  bool _premiumRestoreCalled = false;
 
   void setTheme(ThemeMode mode) {
     setState(() {
@@ -52,10 +57,17 @@ class _MyAppState extends State<MyApp> {
       }
 
       debugPrint("🔐 AUTH: stable user uid=${user.uid}");
-      await PremiumService.restoreOnLaunch();
+
+      if (!_premiumRestoreCalled) {
+        _premiumRestoreCalled = true;
+        await PremiumService.restoreOnLaunch();
+      } else {
+        debugPrint("🛑 Premium restore already executed. Skipping duplicate call.");
+      }
     });
     _initAppLinks();
   }
+
 
   Future<void> _initAppLinks() async {
     _appLinks = AppLinks();
@@ -77,27 +89,9 @@ class _MyAppState extends State<MyApp> {
 
     if (uri.scheme == 'cricknova' && uri.host == 'paypal-success') {
       debugPrint("✅ PayPal success detected");
-
       final user = FirebaseAuth.instance.currentUser;
-      final String? orderId = uri.queryParameters['token'];
-      final String? plan = uri.queryParameters['plan'];
-
-      if (user != null && orderId != null) {
-        debugPrint("🚀 Capturing PayPal order: $orderId");
-
-        try {
-          await PremiumService.handlePayPalSuccess(
-            orderId: orderId,
-            userId: user.uid,
-            plan: plan ?? "SIX_MONTH",
-          );
-
-          debugPrint("🎉 Premium activated successfully");
-        } catch (e) {
-          debugPrint("❌ PayPal capture failed: $e");
-        }
-      } else {
-        debugPrint("⚠️ Missing user or orderId in deep link");
+      if (user != null) {
+        await PremiumService.syncFromBackend(user.uid);
       }
     }
 
