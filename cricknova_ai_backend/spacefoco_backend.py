@@ -41,11 +41,24 @@ app = FastAPI(title="CrickNova AI Backend")
 
 security = HTTPBearer(auto_error=False)
 
+# --- PayPal SDK imports (optional, safe for Render) ---
+try:
+    from paypalcheckoutsdk.core import PayPalHttpClient, SandboxEnvironment, LiveEnvironment
+    from paypalcheckoutsdk.orders import OrdersCreateRequest, OrdersCaptureRequest
+    PAYPAL_AVAILABLE = True
+except ImportError:
+    PAYPAL_AVAILABLE = False
+    PayPalHttpClient = None
+    SandboxEnvironment = None
+    LiveEnvironment = None
+    OrdersCreateRequest = None
+    OrdersCaptureRequest = None
+
 @app.get("/__alive")
 def alive():
     return {
         "alive": True,
-        "paypal": True,
+        "paypal": PAYPAL_AVAILABLE,
         "file": "spacefoco_backend.py"
     }
 from fastapi import UploadFile, File, HTTPException, Request
@@ -95,9 +108,6 @@ def extract_bearer_token(auth_header: str | None):
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
 PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
 import razorpay
-# --- PayPal SDK imports ---
-from paypalcheckoutsdk.core import PayPalHttpClient, SandboxEnvironment, LiveEnvironment
-from paypalcheckoutsdk.orders import OrdersCreateRequest, OrdersCaptureRequest
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 razorpay_client = None
@@ -113,6 +123,8 @@ def razorpay_ready():
 
 # --- PayPal client lazy getter ---
 def get_paypal_client():
+    if not PAYPAL_AVAILABLE:
+        return None
     client_id = os.getenv("PAYPAL_CLIENT_ID")
     secret = os.getenv("PAYPAL_SECRET")
     mode = os.getenv("PAYPAL_MODE", "sandbox")
