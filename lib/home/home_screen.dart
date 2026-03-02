@@ -8,6 +8,7 @@ import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
 import '../upload/upload_screen.dart';
 import '../compare/analyse_yourself_screen.dart';
+import '../premium/premium_expired_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -37,6 +38,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+
+    // Listen for premium state changes
+    PremiumService.premiumNotifier.addListener(_checkExpiryPopup);
+
+    // Run once after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkExpiryPopup();
+    });
+
     _bootstrapAuthAndData();
   }
 
@@ -54,12 +64,31 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // ✅ Restore premium ONLY after auth is fully ready
       await PremiumService.restoreOnLaunch();
+      _checkExpiryPopup();
     }
 
     await loadSpeedHistory();
     await loadTrainingVideos();
     if (!mounted) return;
     setState(() {});
+  }
+  void _checkExpiryPopup() {
+    if (!mounted) return;
+
+    if (PremiumService.justExpired) {
+      PremiumService.justExpired = false;
+
+      debugPrint("🔥 Showing Expiry Popup");
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const PremiumExpiredScreen(),
+          ),
+        );
+      });
+    }
   }
 
   Future<void> loadSpeedHistory() async {
@@ -93,7 +122,14 @@ class _HomeScreenState extends State<HomeScreen> {
         color: const Color(0xFF00FF88),
         backgroundColor: const Color(0xFF0F172A),
         onRefresh: () async {
+          // 🔄 Force premium restore on manual refresh
+          await PremiumService.restoreOnLaunch();
+
           await _bootstrapAuthAndData();
+
+          if (mounted) {
+            setState(() {});
+          }
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -344,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Icon(icon, size: 32, color: Colors.white70),
               const SizedBox(width: 18),
-              Expanded(
+              Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -367,11 +403,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 20,
-                color: Colors.white54,
-              ),
             ],
           ),
         ),
@@ -385,6 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required int total,
   }) {
     final displayTotal = total == 0 ? "-" : total.toString();
+    final bool isLimitReached = total > 0 && used >= total;
 
     IconData iconData;
 
@@ -419,13 +451,28 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          Text(
-            "$used/$displayTotal",
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFFFFD700), // Gold for Elite feel
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "$used/$displayTotal",
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: isLimitReached
+                      ? Colors.redAccent
+                      : const Color(0xFFFFD700),
+                ),
+              ),
+              if (isLimitReached) ...[
+                const SizedBox(width: 6),
+                const Icon(
+                  Icons.lock_rounded,
+                  size: 16,
+                  color: Colors.redAccent,
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -475,6 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     PremiumService.premiumNotifier.removeListener(_onPremiumChanged);
+    PremiumService.premiumNotifier.removeListener(_checkExpiryPopup);
     super.dispose();
   }
 }

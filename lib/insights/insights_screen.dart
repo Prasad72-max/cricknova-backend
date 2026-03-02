@@ -64,17 +64,18 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
       if (_currentUid == newUid) return;
 
       _currentUid = newUid;
-      await _loadSpeedHistory();
+      if (Hive.isBoxOpen('speedBox')) {
+        await _loadSpeedHistory();
+      }
     });
-
-    // Initial load
-    final initialUser = FirebaseAuth.instance.currentUser;
-    _currentUid = initialUser?.uid ?? "guest";
-    // _loadSpeedHistory();  // REMOVED: will load after Hive box opens
   }
 
   Future<void> _initHive() async {
     _speedBox = await Hive.openBox('speedBox');
+
+    final user = FirebaseAuth.instance.currentUser;
+    _currentUid = user?.uid ?? "guest";
+
     await _loadSpeedHistory();
   }
 
@@ -85,7 +86,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
     speedHistory.clear();
     currentSessionIndex = 0;
 
-    final storedSpeeds = _speedBox.get('allSpeeds') as List?;
+    final storedSpeeds = _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
 
     if (storedSpeeds != null) {
       final List<double> flatSpeeds =
@@ -110,7 +111,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
   }
 
   Future<void> _clearAllSessions() async {
-    await _speedBox.delete('sessions');
+    await _speedBox.delete('allSpeeds_${_currentUid ?? "guest"}');
     sessions.clear();
     speedHistory.clear();
     currentSessionIndex = 0;
@@ -123,7 +124,9 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
 
     sessions.removeAt(currentSessionIndex);
 
-    await _speedBox.put('sessions', sessions);
+    // rebuild flat list after deletion
+    final List<double> rebuiltFlat = sessions.expand((e) => e).toList();
+    await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', rebuiltFlat);
 
     if (sessions.isNotEmpty) {
       if (currentSessionIndex >= sessions.length) {
@@ -141,7 +144,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
   Future<void> addNewSession(List<double> newSpeeds) async {
     if (newSpeeds.isEmpty) return;
 
-    final storedSpeeds = _speedBox.get('allSpeeds') as List?;
+    final storedSpeeds = _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
     List<double> flatSpeeds = [];
 
     if (storedSpeeds != null) {
@@ -151,7 +154,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
 
     flatSpeeds.addAll(newSpeeds);
 
-    await _speedBox.put('allSpeeds', flatSpeeds);
+    await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', flatSpeeds);
 
     // Rebuild sessions
     sessions.clear();
@@ -834,7 +837,7 @@ class SpeedChartPainter extends CustomPainter {
     }
 
 
-    final int ballsToShow = speeds.length >= 6 ? 6 : speeds.length;
+    final int ballsToShow = speeds.length;
     final double usableWidth = size.width - 40;
     final double stepX =
         ballsToShow > 1 ? usableWidth / (ballsToShow - 1) : 0;
@@ -866,11 +869,8 @@ class SpeedChartPainter extends CustomPainter {
       textPainter.paint(canvas, Offset(x - 15, size.height + 4));
     }
 
-    final List<double> visibleSpeeds =
-        speeds.length >= 6 ? speeds.sublist(0, 6) : speeds;
-
-    double peakSpeed = visibleSpeeds.reduce((a, b) => a > b ? a : b);
-    int peakIndex = visibleSpeeds.indexOf(peakSpeed);
+    double peakSpeed = speeds.reduce((a, b) => a > b ? a : b);
+    int peakIndex = speeds.indexOf(peakSpeed);
 
     final normalizedPeak =
         ((peakSpeed - minSpeed) / (maxSpeed - minSpeed)).clamp(0.0, 1.0);

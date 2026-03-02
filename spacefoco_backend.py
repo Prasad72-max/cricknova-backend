@@ -122,13 +122,6 @@ from cricknova_ai_backend.subscriptions_store import (
 
 
 # -----------------------------
-# TRAJECTORY NORMALIZATION
-# -----------------------------
-def build_trajectory(ball_positions, frame_width, frame_height):
-    return []
-
-
-# -----------------------------
 # PAYPAL ROUTER (REGISTER)
 # -----------------------------
 app.include_router(paypal_router)
@@ -454,122 +447,194 @@ async def verify_payment(req: VerifyPaymentRequest):
 
 
 # -----------------------------
-# SPEED CALIBRATION (REALISTIC)
+# PHYSICS CONSTANTS
 # -----------------------------
-# Physics-calibrated factor for mobile cricket videos (validated vs broadcast)
-SPEED_CALIBRATION_FACTOR = 1.08
-# -----------------------------
-# FIXED SWING (DEGREES)
-# -----------------------------
-def detect_swing_x(ball_positions):
-    if len(ball_positions) < 8:
-        return "straight"
+CRICKET_PITCH_METERS = 20.12  # 22 yards
+STUMP_WIDTH_METERS = 0.2286   # 22.86 cm
+SPEED_CALIBRATION_FACTOR = 1.0  # compatibility for legacy routes
 
-    ys = [p[1] for p in ball_positions]
-    pitch_idx = int(np.argmax(ys))
 
-    pitch_idx = max(3, min(pitch_idx, len(ball_positions) - 3))
+def _safe_unit(vec):
+    n = float(np.linalg.norm(vec))
+    if n <= 1e-9:
+        return np.array([0.0, 1.0], dtype=np.float32)
+    return vec / n
 
-    pre_x = np.mean([p[0] for p in ball_positions[pitch_idx-3:pitch_idx]])
-    post_x = np.mean([p[0] for p in ball_positions[pitch_idx+1:pitch_idx+4]])
 
-    delta_x = post_x - pre_x
+def _extract_track(track_output):
+    if isinstance(track_output, tuple) and len(track_output) >= 2:
+        return list(track_output[0]), float(track_output[1])
+    return list(track_output), 30.0
 
-    if abs(delta_x) < 2:
-        return "straight"
-    elif delta_x > 0:
-        return "outswing"
+
+def _trajectory_axes(ball_positions):
+    pts = np.asarray(ball_positions, dtype=np.float32)
+    if len(pts) < 2:
+        return pts, np.array([0.0, 1.0], dtype=np.float32), np.array([1.0, 0.0], dtype=np.float32)
+    fwd = _safe_unit(pts[-1] - pts[0])
+    lat = np.array([-fwd[1], fwd[0]], dtype=np.float32)
+    return pts, fwd, lat
+
+
+def _progress_and_lateral(pts, origin, fwd, lat):
+    rel = pts - origin
+    progress = rel @ fwd
+    lateral = rel @ lat
+    return progress, lateral
+
+
+def _release_index(progress):
+    if len(progress) < 4:
+        return 0
+    diffs = np.diff(progress)
+    noise = np.median(np.abs(diffs)) if len(diffs) else 0.0
+    threshold = max(0.5, float(noise) * 0.5)
+    for i in range(len(diffs) - 2):
+        if diffs[i] > threshold and diffs[i + 1] > threshold and diffs[i + 2] > threshold:
+            return i
+    return 0
+
+
+def _pitch_index(lateral):
+    if len(lateral) < 6:
+        return max(0, len(lateral) // 2)
+    curv = []
+    for i in range(1, len(lateral) - 1):
+        curv.append(abs(lateral[i + 1] - 2 * lateral[i] + lateral[i - 1]))
+    if not curv:
+        return max(0, len(lateral) // 2)
+    return int(np.argmax(curv)) + 1
+
+
+def build_trajectory(ball_positions, frame_width, frame_height):
+    if frame_width <= 0:
+        frame_width = 640
+    if frame_height <= 0:
+        frame_height = 360
+    trajectory = []
+    for i, (x, y) in enumerate(ball_positions):
+        trajectory.append({
+            "x": float(x) / float(frame_width),
+            "y": float(y) / float(frame_height),
+            "frame": int(i),
+        })
+    return trajectory
+
+
+def calculate_physics_metrics(ball_positions, fps):
+    metrics = {
+        "speed_kmph": None,
+        "speed_type": "unavailable",
+        "speed_note": "insufficient_track",
+        "swing_label": "straight",
+        "swing_cm_pitch": 0.0,
+        "swing_cm_impact": 0.0,
+        "swing_deg": 0.0,
+        "spin_label": "none",
+        "spin_rpm": None,
+        "spin_strength": 0.0,
+        "spin_method": "trajectory",
+        "release_index": 0,
+        "pitch_index": 0,
+        "impact_index": 0,
+        "meters_per_px": None,
+    }
+
+    if not ball_positions or len(ball_positions) < 5:
+        return metrics
+
+    fps = float(fps) if fps and fps > 1 else 30.0
+    pts, fwd, lat = _trajectory_axes(ball_positions)
+    progress, lateral = _progress_and_lateral(pts, pts[0], fwd, lat)
+
+    release_idx = _release_index(progress)
+    impact_idx = len(pts) - 1
+    if impact_idx <= release_idx:
+        return metrics
+
+    flight_px = float(progress[impact_idx] - progress[release_idx])
+    if flight_px <= 1e-6:
+        return metrics
+
+    meters_per_px = CRICKET_PITCH_METERS / flight_px
+    dt = (impact_idx - release_idx) / fps
+    if dt > 1e-6:
+        speed_kmph = (CRICKET_PITCH_METERS / dt) * 3.6
+        metrics["speed_kmph"] = round(float(speed_kmph), 1)
+        metrics["speed_type"] = "measured_22_yard_release_to_impact"
+        metrics["speed_note"] = "distance=20.12m,time=(impact-release)/fps"
+
+    pitch_idx = _pitch_index(lateral)
+    pitch_idx = max(release_idx + 1, min(pitch_idx, impact_idx - 1))
+
+    expected_lateral = np.linspace(float(lateral[release_idx]), float(lateral[impact_idx]), len(lateral))
+    dev_pitch_px = float(lateral[pitch_idx] - expected_lateral[pitch_idx])
+    dev_impact_px = float(lateral[impact_idx] - expected_lateral[impact_idx])
+    dev_pitch_cm = dev_pitch_px * meters_per_px * 100.0
+    dev_impact_cm = dev_impact_px * meters_per_px * 100.0
+    swing_deg = math.degrees(math.atan2(abs(dev_impact_px), max(flight_px, 1e-6)))
+
+    if abs(dev_impact_cm) < 1.0:
+        swing_label = "straight"
+    elif dev_impact_cm > 0:
+        swing_label = "outswing"
     else:
-        return "inswing"
+        swing_label = "inswing"
+
+    pre = pts[max(release_idx, pitch_idx - 4):pitch_idx + 1]
+    post = pts[pitch_idx:min(len(pts), pitch_idx + 5)]
+    spin_label = "none"
+    spin_rpm = None
+    spin_strength = 0.0
+    if len(pre) >= 3 and len(post) >= 3:
+        pre_vec = pre[-1] - pre[0]
+        post_vec = post[-1] - post[0]
+        pre_angle = math.atan2(float(pre_vec[1]), float(pre_vec[0]))
+        post_angle = math.atan2(float(post_vec[1]), float(post_vec[0]))
+        turn_rad = abs(post_angle - pre_angle)
+        if turn_rad > math.pi:
+            turn_rad = (2 * math.pi) - turn_rad
+
+        post_dt = (len(post) - 1) / fps
+        if post_dt > 1e-6:
+            spin_rpm = (turn_rad / (2 * math.pi)) / post_dt * 60.0
+            spin_strength = abs(float(post_vec @ lat)) / max(float(np.linalg.norm(post_vec)), 1e-6)
+            if abs(float(post_vec @ lat)) > 1e-3:
+                spin_label = "leg spin" if float(post_vec @ lat) > 0 else "off spin"
+            if spin_rpm < 10.0:
+                spin_label = "none"
+                spin_strength = 0.0
+
+    metrics.update({
+        "swing_label": swing_label,
+        "swing_cm_pitch": round(dev_pitch_cm, 2),
+        "swing_cm_impact": round(dev_impact_cm, 2),
+        "swing_deg": round(float(swing_deg), 2),
+        "spin_label": spin_label,
+        "spin_rpm": None if spin_rpm is None else round(float(spin_rpm), 1),
+        "spin_strength": round(float(spin_strength), 3),
+        "release_index": int(release_idx),
+        "pitch_index": int(pitch_idx),
+        "impact_index": int(impact_idx),
+        "meters_per_px": float(meters_per_px),
+    })
+    return metrics
 
 
-# -----------------------------
-# NEARBY REALISTIC SPIN (NON-SCRIPTED)
-# -----------------------------
+def detect_swing_x(ball_positions):
+    positions, fps = _extract_track(ball_positions)
+    return calculate_physics_metrics(positions, fps).get("swing_label", "straight")
+
+
 def calculate_spin_real(ball_positions):
-    """
-    Nearby spin estimation from real ball trajectory.
-    - No scripted values
-    - Camera-aware
-    - Returns NONE when spin is not reliably detectable
-    """
-
-    if len(ball_positions) < 8:
-        return "none", 0.0
-
-    ys = [p[1] for p in ball_positions]
-    pitch_idx = int(np.argmax(ys))
-
-    # Ensure enough frames before and after pitch
-    if pitch_idx < 3 or pitch_idx > len(ball_positions) - 4:
-        return "none", 0.0
-
-    # -------- Smoothed pre-pitch lateral velocity --------
-    vx_pre = np.mean([
-        ball_positions[pitch_idx - 1][0] - ball_positions[pitch_idx - 4][0],
-        ball_positions[pitch_idx - 2][0] - ball_positions[pitch_idx - 5][0]
-    ])
-
-    vy_pre = np.mean([
-        ball_positions[pitch_idx - 1][1] - ball_positions[pitch_idx - 4][1],
-        ball_positions[pitch_idx - 2][1] - ball_positions[pitch_idx - 5][1]
-    ])
-
-    # -------- Smoothed post-pitch lateral velocity --------
-    post_indices = [pitch_idx + 1, pitch_idx + 2, pitch_idx + 4, pitch_idx + 5]
-    if max(post_indices) >= len(ball_positions):
-        return "none", 0.0
-
-    vx_post = np.mean([
-        ball_positions[pitch_idx + 4][0] - ball_positions[pitch_idx + 1][0],
-        ball_positions[pitch_idx + 5][0] - ball_positions[pitch_idx + 2][0]
-    ])
-
-    vy_post = np.mean([
-        ball_positions[pitch_idx + 4][1] - ball_positions[pitch_idx + 1][1],
-        ball_positions[pitch_idx + 5][1] - ball_positions[pitch_idx + 2][1]
-    ])
-
-    delta_vx = (vx_post - vx_pre) * 0.9
-    forward_v = abs(vy_pre)
-
-    if forward_v < 1e-3:
-        return "none", 0.0
-
-    # ---- Angle computation (stable & camera-safe) ----
-    turn_rad = math.atan2(abs(delta_vx), forward_v)
-    raw_turn_deg = math.degrees(turn_rad)
-
-    # ---- Hard clamp to cricket reality (2D camera limit) ----
-    # Any value above 12° is projection noise
-    turn_deg = min(raw_turn_deg, 12.0)
-
-    # ---- Noise floor (aggressive to avoid fake spin) ----
-    if turn_deg < 0.6:
-        return "none", 0.0
-
-    # -------- Camera-aware spin direction (displacement-based) --------
-    pre_x_mean = np.mean([p[0] for p in ball_positions[pitch_idx-3:pitch_idx]])
-    post_x_mean = np.mean([p[0] for p in ball_positions[pitch_idx+1:pitch_idx+4]])
-
-    lateral_shift = post_x_mean - pre_x_mean
-
-    # Camera-agnostic correction:
-    # Decide spin direction ONLY by post-bounce lateral movement
-    # Do NOT depend on pre-bounce camera travel direction
-
-    corrected_shift = lateral_shift
-
-    if abs(corrected_shift) < 0.8:
-        return "none", 0.0
-
-    # Cricket convention:
-    # Right-hander camera from behind bowler:
-    # Ball moving RIGHT after pitch = leg-spin
-    # Ball moving LEFT after pitch = off-spin
-    spin_name = "leg-spin" if corrected_shift > 0 else "off-spin"
-
-    return spin_name, float(turn_deg)
+    positions, fps = _extract_track(ball_positions)
+    metrics = calculate_physics_metrics(positions, fps)
+    spin_label = metrics.get("spin_label", "none")
+    if spin_label == "leg spin":
+        return "leg-spin", metrics.get("spin_rpm") or 0.0
+    if spin_label == "off spin":
+        return "off-spin", metrics.get("spin_rpm") or 0.0
+    return "none", 0.0
 
 
 # -----------------------------
@@ -596,7 +661,8 @@ async def analyze_training_video(request: Request, file: UploadFile = File(...))
         user_id = request.headers.get("X-USER-ID")
 
     try:
-        ball_positions = track_ball_positions(video_path)
+        tracked = track_ball_positions(video_path)
+        ball_positions, video_fps = _extract_track(tracked)
 
         # Use ONLY the first ball delivery (no best-ball logic)
         if len(ball_positions) > 30:
@@ -611,167 +677,34 @@ async def analyze_training_video(request: Request, file: UploadFile = File(...))
                 "spin": "none",
                 "trajectory": []
             }
-
-
         cap = cv2.VideoCapture(video_path)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
-
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
 
-        pixel_positions = [(x, y) for (x, y) in ball_positions]
-
-        def calculate_speed_kmph(ball_positions, fps):
-            # ============================
-            # MULTI-WINDOW + DYNAMIC SCALE
-            # ============================
-
-            # ---- FPS safety ----
-            if fps is None or fps <= 1:
-                fps = 30.0
-            fps = min(max(fps, 24.0), 60.0)
-
-            total_frames = len(ball_positions)
-            if total_frames < 3:
-                return 45.0
-
-            ys = [p[1] for p in ball_positions]
-
-            # ---- Identify pitch (if visible) ----
-            pitch_idx = int(np.argmax(ys)) if total_frames >= 8 else total_frames - 1
-            pitch_idx = max(2, min(pitch_idx, total_frames - 1))
-
-            # ---- Define 3 tracking windows ----
-            windows = []
-
-            # Early (release)
-            windows.append(ball_positions[:min(6, total_frames)])
-
-            # Mid-flight
-            if total_frames >= 10:
-                mid_start = max(0, pitch_idx - 6)
-                mid_end = max(mid_start + 3, pitch_idx - 1)
-                windows.append(ball_positions[mid_start:mid_end])
-
-            # Long window (overall)
-            windows.append(ball_positions[:pitch_idx])
-
-            speed_candidates = []
-
-            for segment in windows:
-                if len(segment) < 3:
-                    continue
-
-                # ---- Per-frame pixel motion ----
-                distances = []
-                for i in range(1, len(segment)):
-                    x1, y1 = segment[i - 1]
-                    x2, y2 = segment[i]
-                    d = math.hypot(x2 - x1, y2 - y1)
-                    if d > 0.08:
-                        distances.append(d)
-
-                if len(distances) < 2:
-                    continue
-
-                distances.sort()
-                median_px = float(np.median(distances))
-
-                # ---- Dynamic pitch scaling ----
-                seg_ys = [p[1] for p in segment]
-                pitch_px = max(150.0, np.percentile(seg_ys, 85) - np.percentile(seg_ys, 15))
-                meters_per_pixel = 20.12 / pitch_px
-
-                speed_mps = median_px * meters_per_pixel * fps
-                speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
-
-                # ---- Physics sanity filter ----
-                if 30.0 <= speed_kmph <= 170.0:
-                    speed_candidates.append(speed_kmph)
-
-            # ---- Fallback: force minimal detectable speed ----
-            if not speed_candidates:
-                total_dx = ball_positions[-1][0] - ball_positions[0][0]
-                total_dy = ball_positions[-1][1] - ball_positions[0][1]
-                total_px = math.hypot(total_dx, total_dy)
-
-                if total_px < 1.0:
-                    return 50.0
-
-                pitch_px = max(200.0, abs(total_dy))
-                meters_per_pixel = 20.12 / pitch_px
-                speed_mps = (total_px * meters_per_pixel * fps) / max(len(ball_positions), 1)
-                speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
-                return round(max(speed_kmph, 45.0), 1)
-
-            # ---- Weighted median (robust) ----
-            speed_candidates.sort()
-            mid = len(speed_candidates) // 2
-            final_speed = speed_candidates[mid]
-
-            # ---- Soft correction (camera bias) ----
-            if final_speed < 70:
-                final_speed *= 0.92
-            elif final_speed > 145:
-                final_speed *= 0.96
-
-            # ---- Short-video safety floor ----
-            if total_frames < 8:
-                final_speed = max(final_speed, 60.0)
-            elif total_frames < 14:
-                final_speed = max(final_speed, 55.0)
-            else:
-                final_speed = max(final_speed, 48.0)
-
-            print(
-                f"[SPEED MW DEBUG] frames={total_frames}, fps={fps}, "
-                f"windows={len(speed_candidates)}, speed={final_speed:.1f}"
-            )
-
-            final_speed = max(final_speed, 55.0)
-            return round(final_speed, 1)
-
-        # Extract reference frame for pitch detection
-        reference_frame = None
-        cap = cv2.VideoCapture(video_path)
-        video_fps = 30.0
-        if cap.isOpened():
-            video_fps = cap.get(cv2.CAP_PROP_FPS)
-            if video_fps is None or video_fps <= 1:
-                video_fps = 30.0
-            ret, frame = cap.read()
-            if ret:
-                reference_frame = frame
-            cap.release()
-
-        raw_speed = calculate_speed_kmph(ball_positions, video_fps)
-
-        # 7) Always round, do not return None
-        speed_kmph = round(raw_speed, 1)
-        # ---- Hard reliability floor: never return zero / null speed ----
-        if speed_kmph < 45.0:
-            speed_kmph = 45.0
-
-        swing = detect_swing_x(ball_positions)
-        spin_name, spin_turn = calculate_spin_real(ball_positions)
-        trajectory = []
-
-        # Normalize spin output for app (leg spin / off spin / none)
-        if spin_name == "leg-spin":
-            spin_label = "leg spin"
-        elif spin_name == "off-spin":
-            spin_label = "off spin"
-        else:
-            spin_label = "none"
+        metrics = calculate_physics_metrics(ball_positions, video_fps)
+        trajectory = build_trajectory(ball_positions, frame_width, frame_height)
 
         return {
             "status": "success",
-            "speed_kmph": speed_kmph,
-            "swing": swing,
-            "spin": spin_label,
-            "trajectory": []
+            "speed_kmph": metrics.get("speed_kmph"),
+            "speed_type": metrics.get("speed_type"),
+            "speed_note": metrics.get("speed_note"),
+            "swing": metrics.get("swing_label", "straight"),
+            "swing_cm_pitch": metrics.get("swing_cm_pitch"),
+            "swing_cm_impact": metrics.get("swing_cm_impact"),
+            "swing_deg": metrics.get("swing_deg"),
+            "spin": metrics.get("spin_label", "none"),
+            "spin_rpm": metrics.get("spin_rpm"),
+            "spin_strength": metrics.get("spin_strength", 0.0),
+            "spin_method": metrics.get("spin_method"),
+            "release_frame": metrics.get("release_index"),
+            "pitch_frame": metrics.get("pitch_index"),
+            "impact_frame": metrics.get("impact_index"),
+            "fps": round(float(video_fps), 2),
+            "trajectory": trajectory
         }
 
     finally:
@@ -829,7 +762,8 @@ async def ai_coach_analyze(
         video_path = tmp.name
 
     try:
-        ball_positions = track_ball_positions(video_path)
+        tracked = track_ball_positions(video_path)
+        ball_positions, _ = _extract_track(tracked)
 
         if not ball_positions or len(ball_positions) < 6:
             return {
@@ -1106,7 +1040,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        ball_positions = track_ball_positions(video_path)
+        tracked = track_ball_positions(video_path)
+        ball_positions, tracked_fps = _extract_track(tracked)
 
         if len(ball_positions) > 30:
             ball_positions = ball_positions[:30]
@@ -1123,7 +1058,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         cap = cv2.VideoCapture(video_path)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        fps = cap.get(cv2.CAP_PROP_FPS) or tracked_fps or 30.0
         cap.release()
 
         if frame_width <= 0 or frame_height <= 0:
@@ -1184,25 +1119,47 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    ICC-style conservative stump-hit detection.
-    Returns (hit: bool, confidence: float)
+    Project trajectory to the stump plane using a trajectory model.
+    Returns:
+      (hits_stumps: bool, confidence: float, projected_lateral_m: float|None)
     """
 
-    if not ball_positions:
-        return False, 0.0
+    if not ball_positions or len(ball_positions) < 6:
+        return False, 0.0, None
 
-    stump_x_min = frame_width * 0.47
-    stump_x_max = frame_width * 0.53
-    stump_y_min = frame_height * 0.64
-    stump_y_max = frame_height * 0.90
+    pts, fwd, lat = _trajectory_axes(ball_positions)
+    progress, lateral = _progress_and_lateral(pts, pts[0], fwd, lat)
+    release_idx = _release_index(progress)
+    impact_idx = len(pts) - 1
+    if impact_idx <= release_idx + 2:
+        return False, 0.0, None
 
-    hits = 0
-    for (x, y) in ball_positions[-8:]:
-        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            hits += 1
+    flight_px = float(progress[impact_idx] - progress[release_idx])
+    if flight_px <= 1e-6:
+        return False, 0.0, None
+    meters_per_px = CRICKET_PITCH_METERS / flight_px
 
-    confidence = min(hits / 3.0, 1.0)
-    return hits >= 2, round(confidence, 2)
+    s_m = (progress - progress[release_idx]) * meters_per_px
+    l_m = lateral * meters_per_px
+
+    fit_end = max(release_idx + 4, min(impact_idx, len(pts) - 1))
+    s_fit = s_m[release_idx:fit_end + 1]
+    l_fit = l_m[release_idx:fit_end + 1]
+    if len(s_fit) < 4:
+        return False, 0.0, None
+
+    coeff = np.polyfit(s_fit, l_fit, deg=2)
+    stump_s = CRICKET_PITCH_METERS
+    projected_lateral = float(np.polyval(coeff, stump_s))
+
+    half_width = STUMP_WIDTH_METERS / 2.0
+    hits_stumps = abs(projected_lateral) <= half_width
+
+    residual = np.sqrt(np.mean((np.polyval(coeff, s_fit) - l_fit) ** 2))
+    quality = max(0.0, 1.0 - min(residual / 0.20, 1.0))
+    margin = max(0.0, 1.0 - min(abs(projected_lateral) / max(half_width, 1e-6), 1.0))
+    confidence = round((0.6 * margin + 0.4 * quality), 2)
+    return hits_stumps, confidence, projected_lateral
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1238,7 +1195,8 @@ async def drs_review(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        ball_positions = track_ball_positions(video_path)
+        tracked = track_ball_positions(video_path)
+        ball_positions, _ = _extract_track(tracked)
 
         if not ball_positions or len(ball_positions) < 6:
             return {
@@ -1291,7 +1249,7 @@ async def drs_review(file: UploadFile = File(...)):
         # BALL TRACKING (STUMP HIT)
         # -----------------------------
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+        hits_stumps, stump_confidence, projected_lateral = detect_stump_hit_from_positions(
             ball_positions,
             frame_width,
             frame_height
@@ -1316,6 +1274,7 @@ async def drs_review(file: UploadFile = File(...)):
                 "ultraedge": ultraedge,
                 "ball_tracking": hits_stumps,
                 "stump_confidence": stump_confidence,
+                "projected_lateral_m": projected_lateral,
                 "decision": decision,
                 "reason": reason
             }

@@ -727,15 +727,19 @@ void _handlePaymentSuccess(PaymentSuccessResponse response) async {
 
             // INDIA PLANS
             if (isIndia == true)
-              ...((sourceFromArgs ?? widget.entrySource) == "analyse"
+              ...((sourceFromArgs ?? widget.entrySource) == "compare_limit"
                   ? indiaCompareOnlyPlans()
-                  : indiaPlans()),
+                  : (sourceFromArgs ?? widget.entrySource) == "analyse"
+                      ? indiaCompareOnlyPlans()
+                      : indiaPlans()),
 
             // INTERNATIONAL PLANS
             if (isIndia == false)
-              ...((sourceFromArgs ?? widget.entrySource) == "analyse"
+              ...((sourceFromArgs ?? widget.entrySource) == "compare_limit"
                   ? internationalCompareOnlyPlans()
-                  : internationalPlans()),
+                  : (sourceFromArgs ?? widget.entrySource) == "analyse"
+                      ? internationalCompareOnlyPlans()
+                      : internationalPlans()),
           ],
         ),
       ),

@@ -47,6 +47,8 @@ dependencies:
   share_plus: ^12.0.1
   path_provider: ^2.1.5
   confetti: ^0.7.0
+  lottie: ^3.3.2
+  flutter_animate: ^4.5.0
 
 dev_dependencies:
   flutter_test:
@@ -57,3 +59,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/lottie/cricket_intro.json
+    

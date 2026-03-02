@@ -45,8 +45,6 @@ class _UploadScreenState extends State<UploadScreen> {
   double _coachRotation = 0.0;
   double _uploadRotation = 0.0;
 
-  // Safety: Only give XP once per upload
-  bool _uploadXpGiven = false;
   // 🔥 Cost Optimization: Batch Firestore writes
   int _pendingXp = 0;
   int _pendingVideoCount = 0;
@@ -171,41 +169,15 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Future<void> _addXP(int amount) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
+    final box = await Hive.openBox("local_stats_$uid");
 
-    final plan = PremiumService.plan;
+    int currentXp = box.get('xp', defaultValue: 0);
+    int updatedXp = currentXp + amount;
 
-    // 🔹 IN_1999 → instant Firestore write
-    if (plan == "IN_1999") {
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .set({
-        "xp": FieldValue.increment(amount),
-      }, SetOptions(merge: true));
-    }
-    // 🔹 IN_499 → batched Firestore write
-    else if (plan == "IN_499") {
-      _pendingXp += amount;
+    await box.put('xp', updatedXp);
 
-      if (_pendingXp >= 100) {
-        await FirebaseFirestore.instance
-            .collection("users")
-            .doc(user.uid)
-            .set({
-          "xp": FieldValue.increment(_pendingXp),
-        }, SetOptions(merge: true));
-
-        _pendingXp = 0;
-      }
-    }
-    // 🔹 Lower plans → Hive only
-    else {
-      final box = await Hive.openBox('localStats');
-      int current = box.get('xp', defaultValue: 0);
-      await box.put('xp', current + amount);
-    }
+    debugPrint("XP UPDATED (HIVE) => +$amount | TOTAL => $updatedXp");
   }
   @override
   void initState() {
@@ -333,8 +305,6 @@ class _UploadScreenState extends State<UploadScreen> {
         drsResult = null;
         swing = "";
         spin = "";
-        // Reset XP guard at the start of upload
-        _uploadXpGiven = false;
       });
     }
 
@@ -371,6 +341,29 @@ class _UploadScreenState extends State<UploadScreen> {
       // ✅ Increment total uploaded videos (only on successful analysis)
       await _incrementTotalVideos();
 
+      // 🔥 Also update & show total videos from Hive (for instant UI feedback)
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
+      final statsBox = await Hive.openBox("local_stats_$uid");
+
+      int currentVideos =
+          (statsBox.get('totalVideos', defaultValue: 0) as num).toInt();
+
+      currentVideos += 1;
+      await statsBox.put('totalVideos', currentVideos);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.deepPurpleAccent,
+            content: Text(
+              "🎥 Video added! Total videos: $currentVideos",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
@@ -393,11 +386,15 @@ class _UploadScreenState extends State<UploadScreen> {
         speedNote = speedNoteVal?.toString() ?? "";
       }
 
-      // 🔥 Save speed to Hive for graph (flat list system)
+      // 🔥 Save speed to Hive for graph (user-specific key)
       if (speedKmph != null) {
         final box = await Hive.openBox('speedBox');
 
-        final stored = box.get('allSpeeds') as List?;
+        final user = FirebaseAuth.instance.currentUser;
+        final uid = user?.uid ?? "guest";
+        final key = 'allSpeeds_$uid';
+
+        final stored = box.get(key) as List?;
         List<double> allSpeeds = [];
 
         if (stored != null) {
@@ -407,7 +404,16 @@ class _UploadScreenState extends State<UploadScreen> {
 
         allSpeeds.add(speedKmph!);
 
-        await box.put('allSpeeds', allSpeeds);
+        await box.put(key, allSpeeds);
+
+        // 🔥 Save MAX SPEED to Hive (user-specific for profile screen)
+        final statsBox = await Hive.openBox("local_stats_$uid");
+        double currentMax = (statsBox.get('maxSpeed', defaultValue: 0) as num).toDouble();
+
+        if (speedKmph! > currentMax) {
+          await statsBox.put('maxSpeed', speedKmph);
+          debugPrint("NEW MAX SPEED SAVED (HIVE) => ${speedKmph}");
+        }
 
         debugPrint("HIVE SPEED UPDATED => $allSpeeds");
       }
@@ -511,6 +517,8 @@ class _UploadScreenState extends State<UploadScreen> {
           await request.send().timeout(const Duration(seconds: 40));
 
       final respStr = await response.stream.bytesToString();
+      // 🎯 Give 20 XP for DRS usage (stored in Hive)
+      await _addXP(20);
 
       if (response.statusCode != 200) {
         setState(() {
@@ -627,6 +635,8 @@ class _UploadScreenState extends State<UploadScreen> {
 
       final respStr = await response.stream.bytesToString();
       print("COACH RAW RESPONSE => $respStr");
+
+
 
       final data = jsonDecode(respStr);
 
@@ -766,20 +776,17 @@ class _UploadScreenState extends State<UploadScreen> {
         return;
       }
 
+      // (XP block removed here)
+
       if (response.statusCode == 200) {
-
-        // 🎯 Give 20 XP when AI Coach is successfully used
-        if (!_uploadXpGiven) {
-          await _addXP(20);
-          _uploadXpGiven = true;
-        }
-
         if (data["success"] == true && data["reply"] != null) {
+          await _addXP(20);
           setState(() {
             coachReply = data["reply"];
           });
         }
         else if (data["coach_feedback"] != null) {
+          await _addXP(20);
           setState(() {
             coachReply = data["coach_feedback"];
           });

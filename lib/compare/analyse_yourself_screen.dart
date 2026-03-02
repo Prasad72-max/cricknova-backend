@@ -101,14 +101,66 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
     final remaining = await PremiumService.getCompareLimit();
     if (remaining <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Your Analyse Yourself limit is over."),
-            backgroundColor: Colors.black87,
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF020617),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-        );
-      }
+          title: const Text(
+            "🚀 Analyse Limit Reached",
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text(
+            "You've used all your Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
+            style: TextStyle(
+              color: Colors.white70,
+              height: 1.5,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                "Later",
+                style: TextStyle(color: Colors.white54),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF38BDF8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const PremiumScreen(entrySource: "compare_limit"),
+                  ),
+                );
+              },
+              child: const Text(
+                "Upgrade Now",
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
       return;
     }
 
@@ -166,24 +218,16 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         setState(() {
           diffResult = data["difference"] ?? "No difference returned.";
         });
-        // 🎯 Tier-based XP update
-        final plan = PremiumService.plan;
+        // 🎯 XP update → Always stored locally in Hive
+        final uid = user.uid;
+        final box = await Hive.openBox("local_stats_$uid");
 
-        // 🔹 High tier plans → Firestore
-        if (plan == "IN_499" || plan == "IN_1999") {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .set({
-            'xp': FieldValue.increment(30),
-          }, SetOptions(merge: true));
-        } 
-        // 🔹 Lower plans → Hive only
-        else {
-          final box = await Hive.openBox('localStats');
-          int currentXp = box.get('xp', defaultValue: 0);
-          await box.put('xp', currentXp + 30);
-        }
+        int currentXp = box.get('xp', defaultValue: 0);
+        int newXp = currentXp + 30; // Compare XP reward
+
+        await box.put('xp', newXp);
+
+        debugPrint("🔥 HIVE XP UPDATED (COMPARE) → $newXp");
 
         await PremiumService.consumeCompare();
       } else if (response.statusCode == 401) {
@@ -193,16 +237,49 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       } else if (response.statusCode == 403) {
         try {
           final data = jsonDecode(body);
-          if (data["detail"] == "COMPARE_LIMIT_REACHED") {
+          final detail = data["detail"]?.toString() ?? "";
+
+          if (detail == "COMPARE_LIMIT_REACHED" || detail == "PREMIUM_EXPIRED") {
+            if (!mounted) return;
+
+            await showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => AlertDialog(
+                backgroundColor: const Color(0xFF020617),
+                title: const Text(
+                  "Analyse Limit Reached",
+                  style: TextStyle(color: Colors.white),
+                ),
+                content: const Text(
+                  "Your Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text(
+                      "Upgrade",
+                      style: TextStyle(color: Color(0xFF38BDF8)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            if (!mounted) return;
+
             await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PremiumScreen()),
+              MaterialPageRoute(
+                builder: (_) => const PremiumScreen(entrySource: "compare_limit"),
+              ),
             );
             return;
           }
         } catch (_) {}
 
         setState(() {
-          diffResult = "Compare limit reached.";
+          diffResult = "Access denied.";
         });
       } else {
         final data = jsonDecode(body);
@@ -284,9 +361,15 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                 children: [
                   Row(
                     children: [
-                      Expanded(child: videoCard(isLeft: true)),
+                      Flexible(
+                        fit: FlexFit.tight,
+                        child: videoCard(isLeft: true),
+                      ),
                       const SizedBox(width: 16),
-                      Expanded(child: videoCard(isLeft: false)),
+                      Flexible(
+                        fit: FlexFit.tight,
+                        child: videoCard(isLeft: false),
+                      ),
                     ],
                   ),
                   Container(

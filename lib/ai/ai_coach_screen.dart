@@ -336,46 +336,22 @@ class _AICoachScreenState extends State<AICoachScreen> {
       return;
     }
     finally {
-      // 🔥 Tier-based XP handling
+      // 🔥 Universal XP reward (AI attempt — success or fail)
       try {
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          final plan = PremiumService.plan;
+          final uid = user.uid;
+          final box = await Hive.openBox("local_stats_$uid");
 
-          // 🔹 IN_1999 → instant Firestore write
-          if (plan == "IN_1999") {
-            await FirebaseFirestore.instance
-                .collection("users")
-                .doc(user.uid)
-                .set({
-              "xp": FieldValue.increment(5),
-            }, SetOptions(merge: true));
-          }
-          // 🔹 IN_499 → batched Firestore write
-          else if (plan == "IN_499") {
-            _pendingXpWrites += 5;
+          int currentXp = box.get('xp', defaultValue: 0);
+          int newXp = currentXp + 500000; // 🔥 5 Lakh XP Boost
 
-            if (_pendingXpWrites >= 25) {
-              await FirebaseFirestore.instance
-                  .collection("users")
-                  .doc(user.uid)
-                  .set({
-                "xp": FieldValue.increment(_pendingXpWrites),
-              }, SetOptions(merge: true));
+          await box.put('xp', newXp);
 
-              debugPrint("XP BATCH UPDATED (+$_pendingXpWrites)");
-              _pendingXpWrites = 0;
-            }
-          }
-          // 🔹 Lower plans → Hive only
-          else {
-            final box = await Hive.openBox('localStats');
-            int currentXp = box.get('xp', defaultValue: 0);
-            await box.put('xp', currentXp + 5);
-          }
+          debugPrint("🔥 +5 LAKH XP ADDED → TOTAL: $newXp");
         }
       } catch (e) {
-        debugPrint("Tier-based XP update failed: $e");
+        debugPrint("XP update failed: $e");
       }
       if (mounted) {
         loading = false;
@@ -551,7 +527,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
       ),
       body: Column(
         children: [
-          Expanded(
+          Flexible(
+            fit: FlexFit.tight,
             child: chats.isEmpty ||
                     chats[currentChatIndex]["messages"].isEmpty
                 ? SingleChildScrollView(

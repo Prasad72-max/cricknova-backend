@@ -18,6 +18,10 @@ class PremiumService {
   // Single source of truth for UI
   static bool isPremium = false;
   static final ValueNotifier<bool> premiumNotifier = ValueNotifier<bool>(false);
+  // 🔔 Expiry tracking
+  static bool justExpired = false;
+  static DateTime? expiryDate;
+  static DateTime? startedDate;
   /// 🔐 Premium validity = premium flag only
   /// Limits are enforced strictly by backend
   static bool get isPremiumActive {
@@ -111,18 +115,47 @@ class PremiumService {
           data["isPremium"] == true || data["premium"] == true;
       debugPrint("🔥 Premium flag from Firestore = $firestorePremium | raw keys: ${data.keys}");
 
-      DateTime? expiry;
       final rawExpiry = data["expiry"] ?? data["expiryDate"];
+      final rawStarted = data["started_at"] ?? data["startedAt"];
+
       if (rawExpiry is Timestamp) {
-        expiry = rawExpiry.toDate();
+        expiryDate = rawExpiry.toDate();
       } else if (rawExpiry is String) {
-        expiry = DateTime.tryParse(rawExpiry);
+        expiryDate = DateTime.tryParse(rawExpiry);
       }
-      if (expiry != null && DateTime.now().isAfter(expiry)) {
-        if (!isLoaded) {
+
+      if (rawStarted is Timestamp) {
+        startedDate = rawStarted.toDate();
+      } else if (rawStarted is String) {
+        startedDate = DateTime.tryParse(rawStarted);
+      }
+
+      if (expiryDate != null) {
+        final nowUtc = DateTime.now().toUtc();
+        final expiryUtc = expiryDate!.toUtc();
+
+        debugPrint("🕒 NOW(UTC): $nowUtc");
+        debugPrint("🕒 EXPIRY(UTC): $expiryUtc");
+
+        if (nowUtc.isAfter(expiryUtc)) {
+          debugPrint("🚨 PLAN EXPIRED DETECTED");
+
+          final prefs = await SharedPreferences.getInstance();
+          final expiryKey = "expiry_handled_${expiryUtc.toIso8601String()}";
+          final alreadyHandled = prefs.getBool(expiryKey) ?? false;
+
+          if (!alreadyHandled) {
+            justExpired = true;
+            await prefs.setBool(expiryKey, true);
+          }
+
           await _cache(false, "FREE", 0, 0, 0);
+
+          premiumNotifier.value = false;
+          premiumNotifier.notifyListeners();
+
+          return;
         }
-        return;
       }
 
       final planId = data["plan"] ?? "FREE";
@@ -169,12 +202,36 @@ class PremiumService {
 
   /// 🔁 Call this on every app launch (Splash / main)
   static Future<void> restoreOnLaunch() async {
-    // 🛑 Prevent duplicate Firestore reads on launch
-    if (isLoaded || _initialized) {
-      debugPrint("⏭️ Premium restore skipped (already loaded)");
+    // 🔁 Always check expiry on app open
+    if (_initialized) {
+      debugPrint("⏭️ Premium restore skipped (already running)");
       return;
     }
     _initialized = true;
+    // 🔥 STEP 1: Restore from local cache FIRST (no Firestore read)
+    final prefs = await SharedPreferences.getInstance();
+
+    final cachedPremium = prefs.getBool(_premiumKey);
+    final cachedPlan = prefs.getString(_planKey);
+    final cachedChatLimit = prefs.getInt(_chatLimitKey);
+    final cachedMistakeLimit = prefs.getInt(_mistakeLimitKey);
+    final cachedCompareLimit = prefs.getInt(_compareLimitKey);
+
+    if (cachedPremium != null) {
+      isPremium = cachedPremium;
+      premiumNotifier.value = cachedPremium;
+    }
+
+    if (cachedPlan != null) {
+      plan = cachedPlan;
+    }
+
+    if (cachedChatLimit != null) chatLimit = cachedChatLimit;
+    if (cachedMistakeLimit != null) mistakeLimit = cachedMistakeLimit;
+    if (cachedCompareLimit != null) compareLimit = cachedCompareLimit;
+
+    debugPrint("💾 Premium restored from cache: $isPremium ($plan)");
+
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
