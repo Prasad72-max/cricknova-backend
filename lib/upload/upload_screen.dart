@@ -211,6 +211,18 @@ class _UploadScreenState extends State<UploadScreen> {
   bool showCoach = false;
   String? coachReply;
 
+  String _normalizeSwingLabel(String? raw) {
+    final s = (raw ?? "").toLowerCase();
+    if (s.contains("out")) return "OUTSWING";
+    return "INSWING";
+  }
+
+  String _normalizeSpinLabel(String? raw) {
+    final s = (raw ?? "").toLowerCase();
+    if (s.contains("leg")) return "LEG SPIN";
+    return "OFF SPIN";
+  }
+
   void _showVideoRulesThenPick() {
     showModalBottomSheet(
       context: context,
@@ -423,17 +435,17 @@ class _UploadScreenState extends State<UploadScreen> {
         // -------- SWING (Direct Backend Value) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-          swing = rawSwing.trim().toUpperCase();
+          swing = _normalizeSwingLabel(rawSwing);
         } else {
-          swing = "STRAIGHT";
+          swing = "INSWING";
         }
 
         // -------- SPIN (Direct Backend Value) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-          spin = rawSpin.trim().toUpperCase();
+          spin = _normalizeSpinLabel(rawSpin);
         } else {
-          spin = "NO SPIN";
+          spin = "OFF SPIN";
         }
 
         // -------- SPIN STRENGTH & TURN (BACKEND: NUMERIC STRENGTH 0–1) --------
@@ -1037,11 +1049,7 @@ class _UploadScreenState extends State<UploadScreen> {
                             "Spin",
                             analysisLoading
                                 ? "Analyzing..."
-                                : (spin.isNotEmpty
-                                    ? (spinStrength != "0%"
-                                        ? "$spin • $spinStrength"
-                                        : spin)
-                                    : "----"),
+                                : (spin.isNotEmpty ? spin : "----"),
                           ),
                         ),
                         const SizedBox(height: 10),

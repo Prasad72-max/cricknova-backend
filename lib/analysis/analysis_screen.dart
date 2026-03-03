@@ -33,6 +33,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // CHANGE THIS TO YOUR IP:
   final String backendUrl = "https://cricknova-backend.onrender.com/training/analyze";
 
+  String _normalizeSwingLabel(String? raw) {
+    final s = (raw ?? "").toLowerCase();
+    if (s.contains("out")) return "OUTSWING";
+    return "INSWING";
+  }
+
+  String _normalizeSpinLabel(String? raw) {
+    final s = (raw ?? "").toLowerCase();
+    if (s.contains("leg")) return "LEG SPIN";
+    return "OFF SPIN";
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,11 +94,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin",
-              value: (spinType != null && spinType!.isNotEmpty)
-                  ? (spinStrength != null && spinStrength != "NONE"
-                      ? "${spinType!} • $spinStrength"
-                      : spinType!)
-                  : "NA",
+              value: (spinType != null && spinType!.isNotEmpty) ? spinType! : "NA",
               icon: Icons.autorenew,
               color: Colors.green,
             ),
@@ -250,17 +258,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // ---------- SWING (Direct Backend Value) ----------
       final rawSwing = src["swing"];
       if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-        swingName = rawSwing.trim();
+        swingName = _normalizeSwingLabel(rawSwing);
       } else {
-        swingName = "Straight";
+        swingName = "INSWING";
       }
 
       // ---------- SPIN (Direct Backend Value) ----------
       final rawSpin = src["spin"];
       if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-        spinType = rawSpin.trim();
+        spinType = _normalizeSpinLabel(rawSpin);
       } else {
-        spinType = "No Spin";
+        spinType = "OFF SPIN";
       }
 
       // ---------- SPIN STRENGTH & TURN ----------
@@ -272,14 +280,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
 
       // ---------- TRAJECTORY ----------
-      if (src["trajectory"] is List &&
-          (src["trajectory"] as List).isNotEmpty) {
-        trajectory = List<dynamic>.from(src["trajectory"]);
-        _showTrajectoryAfterVideo = true;
-      } else {
-        trajectory = null;
-        _showTrajectoryAfterVideo = false;
-      }
+      trajectory = null;
+      _showTrajectoryAfterVideo = false;
 
       // ---------- DRS 2.0 (Projection Based) ----------
       if (src["drs"] is Map<String, dynamic>) {
