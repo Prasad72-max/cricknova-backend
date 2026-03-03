@@ -211,16 +211,18 @@ class _UploadScreenState extends State<UploadScreen> {
   bool showCoach = false;
   String? coachReply;
 
-  String _normalizeSwingLabel(String? raw) {
+  String? _normalizeSwingLabel(String? raw) {
     final s = (raw ?? "").toLowerCase();
     if (s.contains("out")) return "OUTSWING";
-    return "INSWING";
+    if (s.contains("in")) return "INSWING";
+    return null;
   }
 
-  String _normalizeSpinLabel(String? raw) {
+  String? _normalizeSpinLabel(String? raw) {
     final s = (raw ?? "").toLowerCase();
     if (s.contains("leg")) return "LEG SPIN";
-    return "OFF SPIN";
+    if (s.contains("off")) return "OFF SPIN";
+    return null;
   }
 
   void _showVideoRulesThenPick() {
@@ -435,17 +437,17 @@ class _UploadScreenState extends State<UploadScreen> {
         // -------- SWING (Direct Backend Value) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-          swing = _normalizeSwingLabel(rawSwing);
+          swing = _normalizeSwingLabel(rawSwing) ?? "";
         } else {
-          swing = "INSWING";
+          swing = "";
         }
 
         // -------- SPIN (Direct Backend Value) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-          spin = _normalizeSpinLabel(rawSpin);
+          spin = _normalizeSpinLabel(rawSpin) ?? "";
         } else {
-          spin = "OFF SPIN";
+          spin = "";
         }
 
         // -------- SPIN STRENGTH & TURN (BACKEND: NUMERIC STRENGTH 0–1) --------

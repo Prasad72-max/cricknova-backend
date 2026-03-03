@@ -33,16 +33,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // CHANGE THIS TO YOUR IP:
   final String backendUrl = "https://cricknova-backend.onrender.com/training/analyze";
 
-  String _normalizeSwingLabel(String? raw) {
+  String? _normalizeSwingLabel(String? raw) {
     final s = (raw ?? "").toLowerCase();
     if (s.contains("out")) return "OUTSWING";
-    return "INSWING";
+    if (s.contains("in")) return "INSWING";
+    return null;
   }
 
-  String _normalizeSpinLabel(String? raw) {
+  String? _normalizeSpinLabel(String? raw) {
     final s = (raw ?? "").toLowerCase();
     if (s.contains("leg")) return "LEG SPIN";
-    return "OFF SPIN";
+    if (s.contains("off")) return "OFF SPIN";
+    return null;
   }
 
   @override
@@ -260,7 +262,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (rawSwing is String && rawSwing.trim().isNotEmpty) {
         swingName = _normalizeSwingLabel(rawSwing);
       } else {
-        swingName = "INSWING";
+        swingName = null;
       }
 
       // ---------- SPIN (Direct Backend Value) ----------
@@ -268,7 +270,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (rawSpin is String && rawSpin.trim().isNotEmpty) {
         spinType = _normalizeSpinLabel(rawSpin);
       } else {
-        spinType = "OFF SPIN";
+        spinType = null;
       }
 
       // ---------- SPIN STRENGTH & TURN ----------

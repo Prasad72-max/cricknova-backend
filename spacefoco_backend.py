@@ -526,11 +526,11 @@ def calculate_physics_metrics(ball_positions, fps):
         "speed_kmph": None,
         "speed_type": "unavailable",
         "speed_note": "insufficient_track",
-        "swing_label": "inswing",
+        "swing_label": None,
         "swing_cm_pitch": 0.0,
         "swing_cm_impact": 0.0,
         "swing_deg": 0.0,
-        "spin_label": "off spin",
+        "spin_label": None,
         "spin_rpm": None,
         "spin_strength": 0.0,
         "spin_method": "trajectory",
@@ -574,14 +574,16 @@ def calculate_physics_metrics(ball_positions, fps):
     dev_impact_cm = dev_impact_px * meters_per_px * 100.0
     swing_deg = math.degrees(math.atan2(abs(dev_impact_px), max(flight_px, 1e-6)))
 
-    if dev_impact_cm >= 0:
+    if abs(dev_impact_cm) < 1.0:
+        swing_label = None
+    elif dev_impact_cm >= 0:
         swing_label = "outswing"
     else:
         swing_label = "inswing"
 
     pre = pts[max(release_idx, pitch_idx - 4):pitch_idx + 1]
     post = pts[pitch_idx:min(len(pts), pitch_idx + 5)]
-    spin_label = "off spin"
+    spin_label = None
     spin_rpm = None
     spin_strength = 0.0
     if len(pre) >= 3 and len(post) >= 3:
@@ -598,11 +600,8 @@ def calculate_physics_metrics(ball_positions, fps):
             spin_rpm = (turn_rad / (2 * math.pi)) / post_dt * 60.0
             spin_strength = abs(float(post_vec @ lat)) / max(float(np.linalg.norm(post_vec)), 1e-6)
             lat_post = float(post_vec @ lat)
-            if abs(lat_post) > 1e-3:
+            if abs(lat_post) > 1e-3 and (spin_rpm is None or spin_rpm >= 10.0):
                 spin_label = "leg spin" if lat_post > 0 else "off spin"
-            else:
-                # Keep deterministic directional class from measured post segment.
-                spin_label = "off spin"
 
     metrics.update({
         "swing_label": swing_label,
@@ -622,16 +621,18 @@ def calculate_physics_metrics(ball_positions, fps):
 
 def detect_swing_x(ball_positions):
     positions, fps = _extract_track(ball_positions)
-    return calculate_physics_metrics(positions, fps).get("swing_label", "inswing")
+    return calculate_physics_metrics(positions, fps).get("swing_label")
 
 
 def calculate_spin_real(ball_positions):
     positions, fps = _extract_track(ball_positions)
     metrics = calculate_physics_metrics(positions, fps)
-    spin_label = metrics.get("spin_label", "off spin")
+    spin_label = metrics.get("spin_label")
     if spin_label == "leg spin":
         return "leg-spin", metrics.get("spin_rpm") or 0.0
-    return "off-spin", metrics.get("spin_rpm") or 0.0
+    if spin_label == "off spin":
+        return "off-spin", metrics.get("spin_rpm") or 0.0
+    return None, 0.0
 
 
 # -----------------------------
@@ -671,7 +672,7 @@ async def analyze_training_video(request: Request, file: UploadFile = File(...))
                 "reason": "Ball not detected clearly",
                 "speed_kmph": None,
                 "swing": "unknown",
-                "spin": "off spin",
+                "spin": None,
                 "trajectory": []
             }
         cap = cv2.VideoCapture(video_path)
@@ -689,11 +690,11 @@ async def analyze_training_video(request: Request, file: UploadFile = File(...))
             "speed_kmph": metrics.get("speed_kmph"),
             "speed_type": metrics.get("speed_type"),
             "speed_note": metrics.get("speed_note"),
-            "swing": metrics.get("swing_label", "inswing"),
+            "swing": metrics.get("swing_label"),
             "swing_cm_pitch": metrics.get("swing_cm_pitch"),
             "swing_cm_impact": metrics.get("swing_cm_impact"),
             "swing_deg": metrics.get("swing_deg"),
-            "spin": metrics.get("spin_label", "off spin"),
+            "spin": metrics.get("spin_label"),
             "spin_rpm": metrics.get("spin_rpm"),
             "spin_strength": metrics.get("spin_strength", 0.0),
             "spin_method": metrics.get("spin_method"),
