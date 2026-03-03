@@ -186,39 +186,58 @@ def smooth_positions(positions, window=3):
     return smoothed
 
 
+def _segment_dx(pts, start, end):
+    if end - start < 2:
+        return 0.0
+    return float(pts[end - 1][0] - pts[start][0])
+
+
 def _infer_direction_from_positions(ball_positions):
     """
-    Always produce directional labels from tracked motion.
-    Uses only measured x/y movement; no random/scripted values.
+    Infer swing/spin from measured trajectory only.
+    Strategy:
+    - Swing: lateral drift in early-to-mid flight.
+    - Spin: change in lateral drift after bounce/pivot.
     """
     if not ball_positions or len(ball_positions) < 2:
         return "inswing", "off spin"
 
-    dx_total = float(ball_positions[-1][0] - ball_positions[0][0])
-    swing_fallback = "outswing" if dx_total >= 0 else "inswing"
+    pts = ball_positions
+    n = len(pts)
 
-    if len(ball_positions) < 4:
+    dx_total = float(pts[-1][0] - pts[0][0])
+    dy_total = float(pts[-1][1] - pts[0][1])
+    lateral_scale = max(abs(dx_total), abs(dy_total) * 0.25, 1.0)
+    eps = 0.03 * lateral_scale
+
+    # ---- Swing estimate (first 60% of tracked flight) ----
+    early_end = max(2, int(0.6 * n))
+    swing_dx = _segment_dx(pts, 0, early_end)
+    if abs(swing_dx) < eps:
+        swing_dx = dx_total
+    swing_fallback = "outswing" if swing_dx >= 0 else "inswing"
+
+    # ---- Spin estimate from turn across pivot ----
+    if n < 4:
         spin_fallback = "leg spin" if dx_total >= 0 else "off spin"
         return swing_fallback, spin_fallback
 
-    # Approximate bounce/pivot as max y (towards batsman side in most captures).
-    pivot_idx = 0
-    pivot_y = ball_positions[0][1]
-    for i, (_, y) in enumerate(ball_positions):
-        if y > pivot_y:
-            pivot_y = y
-            pivot_idx = i
+    # Approximate bounce/pivot as frame with max y.
+    pivot_idx = max(range(n), key=lambda i: pts[i][1])
+    if pivot_idx < 1 or pivot_idx > n - 2:
+        pivot_idx = n // 2
 
-    if 0 < pivot_idx < len(ball_positions) - 1:
-        pre_dx = ball_positions[pivot_idx][0] - ball_positions[0][0]
-        post_dx = ball_positions[-1][0] - ball_positions[pivot_idx][0]
-        turn_dx = post_dx - pre_dx
-    else:
-        mid = len(ball_positions) // 2
-        pre_mean = sum(p[0] for p in ball_positions[:mid]) / max(mid, 1)
-        post_count = len(ball_positions) - mid
-        post_mean = sum(p[0] for p in ball_positions[mid:]) / max(post_count, 1)
-        turn_dx = post_mean - pre_mean
+    pre_dx = _segment_dx(pts, 0, pivot_idx + 1)
+    post_dx = _segment_dx(pts, pivot_idx, n)
+
+    # Turn from slope change. Positive => leg spin tendency.
+    pre_len = max(pivot_idx, 1)
+    post_len = max(n - pivot_idx, 1)
+    turn_dx = (post_dx / post_len) - (pre_dx / pre_len)
+
+    if abs(turn_dx) < eps * 0.25:
+        # If curvature is weak, use late drift direction.
+        turn_dx = post_dx if abs(post_dx) >= abs(pre_dx) else dx_total
 
     spin_fallback = "leg spin" if turn_dx >= 0 else "off spin"
     return swing_fallback, spin_fallback

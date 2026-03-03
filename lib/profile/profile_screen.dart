@@ -1310,6 +1310,12 @@ class _RewardsScreenState extends State<RewardsScreen> {
     final cityStateController = TextEditingController();
     String selectedCountryCode = "+91";
     String selectedSize = "M";
+    String selectedGlovesSize = "M";
+    String selectedPadsSize = "Adult";
+    String selectedHelmetSize = "M";
+    String selectedBatCompany = "SS";
+    String selectedBatWeight = "1180g";
+    String selectedBatSize = "SH";
     final formKey = GlobalKey<FormState>();
 
     showModalBottomSheet(
@@ -1468,40 +1474,142 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           label: "City / State",
                           icon: Icons.location_city,
                         ),
-                        const SizedBox(height: 20),
 
-                        const Text(
-                          "Select Jersey Size",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600,
+                        // Jersey Size ONLY for 50K
+                        if (threshold == 50000) ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Select Jersey Size",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            children: ["S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL"].map((size) {
+                              final bool isSelected = selectedSize == size;
+                              return ChoiceChip(
+                                label: Text(size),
+                                selected: isSelected,
+                                selectedColor: const Color(0xFF1E90FF),
+                                backgroundColor: const Color(0xFF1E293B),
+                                labelStyle: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                onSelected: (_) {
+                                  setState(() {
+                                    selectedSize = size;
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
 
-                        Wrap(
-                          spacing: 10,
-                          children: ["S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL"].map((size) {
-                            final bool isSelected = selectedSize == size;
-                            return ChoiceChip(
-                              label: Text(size),
-                              selected: isSelected,
-                              selectedColor: const Color(0xFF1E90FF),
-                              backgroundColor: const Color(0xFF1E293B),
-                              labelStyle: TextStyle(
-                                color: isSelected
-                                    ? Colors.white
-                                    : Colors.white70,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              onSelected: (_) {
-                                setState(() {
-                                  selectedSize = size;
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
+                        // Gloves Size for 5 Lakh
+                        if (threshold == 500000) ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Select Gloves Size",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            children: ["S", "M", "L", "XL", "XXL"].map((size) {
+                              final bool isSelected = selectedGlovesSize == size;
+                              return ChoiceChip(
+                                label: Text(size),
+                                selected: isSelected,
+                                selectedColor: const Color(0xFF1E90FF),
+                                backgroundColor: const Color(0xFF1E293B),
+                                labelStyle: TextStyle(
+                                  color: isSelected ? Colors.white : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                onSelected: (_) {
+                                  setState(() {
+                                    selectedGlovesSize = size;
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+
+                        // Kit Equipment Sizes for 10 Lakh
+                        if (threshold == 1000000) ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Cricket Kit Sizes",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _kitDropdown(
+                            label: "Batting Pads Size",
+                            value: selectedPadsSize,
+                            options: ["Youth", "Adult", "Large Adult"],
+                            onChanged: (val) => setState(() => selectedPadsSize = val),
+                          ),
+                          const SizedBox(height: 12),
+                          _kitDropdown(
+                            label: "Batting Gloves Size",
+                            value: selectedGlovesSize,
+                            options: ["S", "M", "L", "XL", "XXL"],
+                            onChanged: (val) => setState(() => selectedGlovesSize = val),
+                          ),
+                          const SizedBox(height: 12),
+                          _kitDropdown(
+                            label: "Helmet Size",
+                            value: selectedHelmetSize,
+                            options: ["S", "M", "L"],
+                            onChanged: (val) => setState(() => selectedHelmetSize = val),
+                          ),
+                        ],
+
+                        // Bat Options for 20 Lakh
+                        if (threshold == 2000000) ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            "Bat Preferences",
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _kitDropdown(
+                            label: "Bat Company",
+                            value: selectedBatCompany,
+                            options: ["SS", "SG", "MRF", "GM", "Kookaburra"],
+                            onChanged: (val) => setState(() => selectedBatCompany = val),
+                          ),
+                          const SizedBox(height: 12),
+                          _kitDropdown(
+                            label: "Bat Weight",
+                            value: selectedBatWeight,
+                            options: ["1160g", "1180g", "1200g", "1220g"],
+                            onChanged: (val) => setState(() => selectedBatWeight = val),
+                          ),
+                          const SizedBox(height: 12),
+                          _kitDropdown(
+                            label: "Bat Size",
+                            value: selectedBatSize,
+                            options: ["SH", "LH"],
+                            onChanged: (val) => setState(() => selectedBatSize = val),
+                          ),
+                        ],
 
                         const SizedBox(height: 30),
 
@@ -1519,7 +1627,11 @@ class _RewardsScreenState extends State<RewardsScreen> {
                             onPressed: () async {
                               if (formKey.currentState!.validate()) {
                                 final orderSummary = '''
-CRICKNOVA JERSEY ORDER SUMMARY
+Reward: $rewardTitle
+${threshold == 50000 ? "Jersey Size: $selectedSize" : ""}
+${threshold == 500000 ? "Gloves Size: $selectedGlovesSize" : ""}
+${threshold == 1000000 ? "Pads: $selectedPadsSize\nGloves: $selectedGlovesSize\nHelmet: $selectedHelmetSize" : ""}
+${threshold == 2000000 ? "Bat Company: $selectedBatCompany\nBat Weight: $selectedBatWeight\nBat Size: $selectedBatSize" : ""}
 
 Full Name: ${nameController.text}
 Phone: $selectedCountryCode ${phoneController.text}
@@ -1531,7 +1643,6 @@ Road/Area: ${roadController.text}
 Landmark: ${landmarkController.text}
 City/State: ${cityStateController.text}
 
-Jersey Size: $selectedSize
 Total XP: $totalXP
 ''';
 
@@ -1567,7 +1678,6 @@ Total XP: $totalXP
                                 await box.put("claimDateMillis", now.millisecondsSinceEpoch);
                                 await box.put("claimed_$threshold", true);
                                 await box.flush();
-
 
                                 // Keep totalXP unchanged (milestones are cumulative)
                                 setState(() {
@@ -1657,3 +1767,41 @@ Total XP: $totalXP
     );
   }
 }
+  Widget _kitDropdown({
+    required String label,
+    required String value,
+    required List<String> options,
+    required Function(String) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70)),
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              dropdownColor: const Color(0xFF1E293B),
+              style: const TextStyle(color: Colors.white),
+              isExpanded: true,
+              items: options
+                  .map((e) => DropdownMenuItem(
+                        value: e,
+                        child: Text(e),
+                      ))
+                  .toList(),
+              onChanged: (val) {
+                if (val != null) onChanged(val);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
