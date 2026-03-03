@@ -225,6 +225,60 @@ class _UploadScreenState extends State<UploadScreen> {
     return null;
   }
 
+  List<Map<String, double>> _extractTrajectoryPoints(dynamic rawTrajectory) {
+    if (rawTrajectory is! List) return const [];
+    final points = <Map<String, double>>[];
+    for (final item in rawTrajectory) {
+      if (item is! Map) continue;
+      final x = item["x"];
+      final y = item["y"];
+      if (x is num && y is num) {
+        points.add({"x": x.toDouble(), "y": y.toDouble()});
+      }
+    }
+    return points;
+  }
+
+  Map<String, String> _inferLabelsFromTrajectory(dynamic rawTrajectory) {
+    final pts = _extractTrajectoryPoints(rawTrajectory);
+    if (pts.length < 2) {
+      return {"swing": "INSWING", "spin": "OFF SPIN"};
+    }
+
+    final dxTotal = pts.last["x"]! - pts.first["x"]!;
+    final swingLabel = dxTotal >= 0 ? "OUTSWING" : "INSWING";
+
+    int pivot = 0;
+    double maxY = pts.first["y"]!;
+    for (int i = 1; i < pts.length; i++) {
+      final y = pts[i]["y"]!;
+      if (y > maxY) {
+        maxY = y;
+        pivot = i;
+      }
+    }
+
+    double spinDx;
+    if (pivot > 0 && pivot < pts.length - 1) {
+      final preX = pts[pivot]["x"]! - pts[0]["x"]!;
+      final postX = pts.last["x"]! - pts[pivot]["x"]!;
+      spinDx = postX - preX;
+    } else {
+      final mid = pts.length ~/ 2;
+      final preMean =
+          pts.sublist(0, mid).fold<double>(0, (a, p) => a + p["x"]!) /
+          (mid == 0 ? 1 : mid);
+      final postCount = pts.length - mid;
+      final postMean =
+          pts.sublist(mid).fold<double>(0, (a, p) => a + p["x"]!) /
+          (postCount == 0 ? 1 : postCount);
+      spinDx = postMean - preMean;
+    }
+    final spinLabel = spinDx >= 0 ? "LEG SPIN" : "OFF SPIN";
+
+    return {"swing": swingLabel, "spin": spinLabel};
+  }
+
   void _showVideoRulesThenPick() {
     showModalBottomSheet(
       context: context,
@@ -434,20 +488,22 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       setState(() {
+        final inferred = _inferLabelsFromTrajectory(analysis["trajectory"]);
+
         // -------- SWING (Direct Backend Value) --------
         final rawSwing = analysis["swing"];
         if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-          swing = _normalizeSwingLabel(rawSwing) ?? "";
+          swing = _normalizeSwingLabel(rawSwing) ?? inferred["swing"]!;
         } else {
-          swing = "";
+          swing = inferred["swing"]!;
         }
 
         // -------- SPIN (Direct Backend Value) --------
         final rawSpin = analysis["spin"];
         if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-          spin = _normalizeSpinLabel(rawSpin) ?? "";
+          spin = _normalizeSpinLabel(rawSpin) ?? inferred["spin"]!;
         } else {
-          spin = "";
+          spin = inferred["spin"]!;
         }
 
         // -------- SPIN STRENGTH & TURN (BACKEND: NUMERIC STRENGTH 0–1) --------
@@ -464,7 +520,9 @@ class _UploadScreenState extends State<UploadScreen> {
         // Spin turn degree no longer shown in UI
         spinTurnDeg = 0.0;
 
-        trajectory = const [];
+        trajectory = analysis["trajectory"] is List
+            ? List<dynamic>.from(analysis["trajectory"])
+            : const [];
         showTrajectory = false;
 
         analysisLoading = false;

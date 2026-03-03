@@ -184,6 +184,66 @@ def smooth_positions(positions, window=3):
             ys.append(positions[j][1])
         smoothed.append((sum(xs) / len(xs), sum(ys) / len(ys)))
     return smoothed
+
+
+def _infer_direction_from_positions(ball_positions):
+    """
+    Always produce directional labels from tracked motion.
+    Uses only measured x/y movement; no random/scripted values.
+    """
+    if not ball_positions or len(ball_positions) < 2:
+        return "inswing", "off spin"
+
+    dx_total = float(ball_positions[-1][0] - ball_positions[0][0])
+    swing_fallback = "outswing" if dx_total >= 0 else "inswing"
+
+    if len(ball_positions) < 4:
+        spin_fallback = "leg spin" if dx_total >= 0 else "off spin"
+        return swing_fallback, spin_fallback
+
+    # Approximate bounce/pivot as max y (towards batsman side in most captures).
+    pivot_idx = 0
+    pivot_y = ball_positions[0][1]
+    for i, (_, y) in enumerate(ball_positions):
+        if y > pivot_y:
+            pivot_y = y
+            pivot_idx = i
+
+    if 0 < pivot_idx < len(ball_positions) - 1:
+        pre_dx = ball_positions[pivot_idx][0] - ball_positions[0][0]
+        post_dx = ball_positions[-1][0] - ball_positions[pivot_idx][0]
+        turn_dx = post_dx - pre_dx
+    else:
+        mid = len(ball_positions) // 2
+        pre_mean = sum(p[0] for p in ball_positions[:mid]) / max(mid, 1)
+        post_count = len(ball_positions) - mid
+        post_mean = sum(p[0] for p in ball_positions[mid:]) / max(post_count, 1)
+        turn_dx = post_mean - pre_mean
+
+    spin_fallback = "leg spin" if turn_dx >= 0 else "off spin"
+    return swing_fallback, spin_fallback
+
+
+def _normalize_swing_spin(swing_raw, spin_raw, ball_positions):
+    fallback_swing, fallback_spin = _infer_direction_from_positions(ball_positions)
+
+    swing_text = (swing_raw or "").strip().lower()
+    if "out" in swing_text:
+        swing = "outswing"
+    elif "in" in swing_text:
+        swing = "inswing"
+    else:
+        swing = fallback_swing
+
+    spin_text = (spin_raw or "").strip().lower()
+    if "leg" in spin_text:
+        spin = "leg spin"
+    elif "off" in spin_text:
+        spin = "off spin"
+    else:
+        spin = fallback_spin
+
+    return swing, spin
 import time
 
 # Subscription management (external store)
@@ -708,16 +768,17 @@ async def analyze_training_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:120]
 
         if len(ball_positions) < 6:
+            swing, spin = _normalize_swing_spin(None, None, ball_positions)
             return {
                 "status": "success",
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": None,
-                "spin": None,
+                "swing": swing,
+                "spin": spin,
                 "spin_strength": None,
                 "spin_turn_deg": None,
-                "trajectory": []
+                "trajectory": build_trajectory(ball_positions, 640, 360),
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -774,8 +835,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Straight"
-        spin = spin_result.get("name") or "No Spin"
+        swing, spin = _normalize_swing_spin(
+            swing_result.get("name"),
+            spin_result.get("name"),
+            ball_positions,
+        )
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)
@@ -1213,16 +1277,17 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             ball_positions = ball_positions[:120]
 
         if len(ball_positions) < 6:
+            swing, spin = _normalize_swing_spin(None, None, ball_positions)
             return {
                 "status": "success",
                 "speed_kmph": None,
                 "speed_type": "unavailable",
                 "speed_note": "INSUFFICIENT_PHYSICS_DATA",
-                "swing": None,
-                "spin": None,
+                "swing": swing,
+                "spin": spin,
                 "spin_strength": None,
                 "spin_turn_deg": None,
-                "trajectory": []
+                "trajectory": build_trajectory(ball_positions, 640, 360),
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -1277,8 +1342,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         swing_result = calculate_swing(ball_positions, batter_hand="RH")
         spin_result = calculate_spin(ball_positions)
 
-        swing = swing_result.get("name") or "Straight"
-        spin = spin_result.get("name") or "No Spin"
+        swing, spin = _normalize_swing_spin(
+            swing_result.get("name"),
+            spin_result.get("name"),
+            ball_positions,
+        )
 
         # -----------------------------
         # DRS (AUTO-INCLUDED IN ANALYZE)

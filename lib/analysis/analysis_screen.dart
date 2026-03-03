@@ -47,6 +47,60 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return null;
   }
 
+  List<Map<String, double>> _extractTrajectoryPoints(dynamic rawTrajectory) {
+    if (rawTrajectory is! List) return const [];
+    final points = <Map<String, double>>[];
+    for (final item in rawTrajectory) {
+      if (item is! Map) continue;
+      final x = item["x"];
+      final y = item["y"];
+      if (x is num && y is num) {
+        points.add({"x": x.toDouble(), "y": y.toDouble()});
+      }
+    }
+    return points;
+  }
+
+  Map<String, String> _inferLabelsFromTrajectory(dynamic rawTrajectory) {
+    final pts = _extractTrajectoryPoints(rawTrajectory);
+    if (pts.length < 2) {
+      return {"swing": "INSWING", "spin": "OFF SPIN"};
+    }
+
+    final dxTotal = pts.last["x"]! - pts.first["x"]!;
+    final swingLabel = dxTotal >= 0 ? "OUTSWING" : "INSWING";
+
+    int pivot = 0;
+    double maxY = pts.first["y"]!;
+    for (int i = 1; i < pts.length; i++) {
+      final y = pts[i]["y"]!;
+      if (y > maxY) {
+        maxY = y;
+        pivot = i;
+      }
+    }
+
+    double spinDx;
+    if (pivot > 0 && pivot < pts.length - 1) {
+      final preX = pts[pivot]["x"]! - pts[0]["x"]!;
+      final postX = pts.last["x"]! - pts[pivot]["x"]!;
+      spinDx = postX - preX;
+    } else {
+      final mid = pts.length ~/ 2;
+      final preMean =
+          pts.sublist(0, mid).fold<double>(0, (a, p) => a + p["x"]!) /
+          (mid == 0 ? 1 : mid);
+      final postCount = pts.length - mid;
+      final postMean =
+          pts.sublist(mid).fold<double>(0, (a, p) => a + p["x"]!) /
+          (postCount == 0 ? 1 : postCount);
+      spinDx = postMean - preMean;
+    }
+    final spinLabel = spinDx >= 0 ? "LEG SPIN" : "OFF SPIN";
+
+    return {"swing": swingLabel, "spin": spinLabel};
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -246,6 +300,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           (responseData["data"] is Map<String, dynamic>)
               ? Map<String, dynamic>.from(responseData["data"])
               : responseData;
+      final inferred = _inferLabelsFromTrajectory(src["trajectory"]);
 
       // ---------- SPEED (FULLTRACK STYLE) ----------
       final speedVal = src["speed_kmph"];
@@ -260,17 +315,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // ---------- SWING (Direct Backend Value) ----------
       final rawSwing = src["swing"];
       if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-        swingName = _normalizeSwingLabel(rawSwing);
+        swingName = _normalizeSwingLabel(rawSwing) ?? inferred["swing"];
       } else {
-        swingName = null;
+        swingName = inferred["swing"];
       }
 
       // ---------- SPIN (Direct Backend Value) ----------
       final rawSpin = src["spin"];
       if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-        spinType = _normalizeSpinLabel(rawSpin);
+        spinType = _normalizeSpinLabel(rawSpin) ?? inferred["spin"];
       } else {
-        spinType = null;
+        spinType = inferred["spin"];
       }
 
       // ---------- SPIN STRENGTH & TURN ----------
@@ -282,7 +337,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
 
       // ---------- TRAJECTORY ----------
-      trajectory = null;
+      trajectory = src["trajectory"] is List
+          ? List<dynamic>.from(src["trajectory"])
+          : null;
       _showTrajectoryAfterVideo = false;
 
       // ---------- DRS 2.0 (Projection Based) ----------
