@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
-import '../services/premium_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -50,24 +48,11 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _startFlow() async {
-    await Future.delayed(const Duration(seconds: 3));
+    // Keep a short branded splash only; do not block startup for several seconds.
+    await Future.delayed(const Duration(milliseconds: 900));
 
     final user = FirebaseAuth.instance.currentUser;
     final userName = user?.displayName ?? "Player";
-
-    // 🔐 Stabilize Firebase ID token (do NOT force refresh)
-    if (user != null) {
-      await user.getIdToken();
-    }
-
-    // 🔄 Restore premium on every app launch (MUST await)
-    if (user != null) {
-      try {
-        await PremiumService.restoreOnLaunch();
-      } catch (e) {
-        debugPrint("⚠️ Premium restore failed: $e");
-      }
-    }
 
     if (!mounted) return;
 

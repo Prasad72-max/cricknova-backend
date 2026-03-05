@@ -85,7 +85,56 @@ from subscriptions_store import (
 # TRAJECTORY NORMALIZATION
 # -----------------------------
 def build_trajectory(ball_positions, frame_width, frame_height):
-    return []
+    if not ball_positions or frame_width <= 0 or frame_height <= 0:
+        return []
+    out = []
+    prev = None
+    for i, (x, y) in enumerate(ball_positions):
+        nx = float(x) / float(frame_width)
+        ny = float(y) / float(frame_height)
+        nx = max(0.0, min(1.0, nx))
+        ny = max(0.0, min(1.0, ny))
+        if prev is not None and abs(prev[0] - nx) < 1e-4 and abs(prev[1] - ny) < 1e-4:
+            continue
+        out.append({"x": nx, "y": ny, "frame": i})
+        prev = (nx, ny)
+    return out
+
+
+def estimate_speed_fallback(ball_positions, fps, frame_height):
+    """
+    Real (non-scripted) fallback speed from tracked pixel motion.
+    Used only when strict pre-pitch speed extraction fails.
+    """
+    if not ball_positions or len(ball_positions) < 3 or fps is None or fps <= 1:
+        return None
+
+    fps = float(max(20.0, min(60.0, fps)))
+
+    diffs = []
+    for i in range(1, len(ball_positions)):
+        x1, y1 = ball_positions[i - 1]
+        x2, y2 = ball_positions[i]
+        d = math.hypot(x2 - x1, y2 - y1)
+        if 1.0 < d < 220.0:
+            diffs.append(d)
+    if len(diffs) < 2:
+        return None
+
+    med_px = float(np.median(diffs))
+    ys = [p[1] for p in ball_positions]
+    y_span = float(max(ys) - min(ys))
+    if y_span < 24.0:
+        y_span = 24.0
+
+    # Map observed vertical travel span to ~18m effective flight distance.
+    meters_per_px = 18.0 / y_span
+    kmph = med_px * fps * meters_per_px * 3.6 * SPEED_CALIBRATION_FACTOR
+
+    if kmph <= 0 or math.isnan(kmph) or math.isinf(kmph):
+        return None
+
+    return round(float(max(45.0, min(170.0, kmph))), 1)
 
 
 # -----------------------------
@@ -525,11 +574,13 @@ async def analyze_training_video(file: UploadFile = File(...)):
         if len(ball_positions) > 30:
             ball_positions = ball_positions[:30]
 
-        if len(ball_positions) < 5:
+        if len(ball_positions) < 3:
             return {
                 "status": "failed",
                 "reason": "Ball not detected clearly",
-                "speed_kmph": 0,
+                "speed_kmph": None,
+                "speed_type": "unavailable",
+                "speed_note": "INSUFFICIENT_TRACK_POINTS",
                 "swing": "unknown",
                 "spin": "unknown",
                 "trajectory": []
@@ -611,6 +662,13 @@ async def analyze_training_video(file: UploadFile = File(...)):
             cap.release()
 
         raw_speed = calculate_speed_kmph(ball_positions, video_fps)
+        speed_type = "pre-pitch"
+        speed_note = "Pre-pitch release speed, broadcast-calibrated for realistic international comparison"
+        if raw_speed is None:
+            raw_speed = estimate_speed_fallback(ball_positions, video_fps, frame_height)
+            if raw_speed is not None:
+                speed_type = "trajectory_fallback"
+                speed_note = "Fallback from real tracked trajectory (non-scripted)"
 
         # IMPORTANT:
         # Do NOT force 0.0 when speed is not detected.
@@ -619,7 +677,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
-        trajectory = []
+        trajectory = build_trajectory(ball_positions, frame_width, frame_height)
 
         # Normalize spin output for app (leg spin / off spin / none)
         if spin_name == "leg-spin":
@@ -632,11 +690,11 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": "pre-pitch",
-            "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
+            "speed_type": speed_type,
+            "speed_note": speed_note,
             "swing": swing,
             "spin": spin_label,
-            "trajectory": []
+            "trajectory": trajectory
         }
 
     finally:
@@ -965,10 +1023,17 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             return round(speed_kmph, 1)
 
         raw_speed = calculate_speed_kmph(ball_positions, fps)
+        speed_type = "broadcast-adjusted"
+        speed_note = "Broadcast-style speed calibrated to match international match readings"
+        if raw_speed is None:
+            raw_speed = estimate_speed_fallback(ball_positions, fps, frame_height)
+            if raw_speed is not None:
+                speed_type = "trajectory_fallback"
+                speed_note = "Fallback from real tracked trajectory (non-scripted)"
         speed_kmph = raw_speed if raw_speed is not None else None
         swing = detect_swing_x(ball_positions)
         spin_name, _ = calculate_spin_real(ball_positions)
-        trajectory = []
+        trajectory = build_trajectory(ball_positions, frame_width, frame_height)
 
         if spin_name == "leg-spin":
             spin_label = "leg spin"
@@ -980,11 +1045,11 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": "broadcast-adjusted",
-            "speed_note": "Broadcast-style speed calibrated to match international match readings",
+            "speed_type": speed_type,
+            "speed_note": speed_note,
             "swing": swing,
             "spin": spin_label,
-            "trajectory": []
+            "trajectory": trajectory
         }
 
     finally:
