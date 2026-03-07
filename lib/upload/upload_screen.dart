@@ -17,6 +17,7 @@ import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
+
 enum _DrsViewMode { keeper, umpire, striker }
 
 List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
@@ -31,7 +32,8 @@ List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
     final py = y.toDouble().clamp(0.0, 1.0);
     if (pts.isNotEmpty) {
       final prev = pts.last;
-      if ((prev["x"]! - px).abs() < 0.0005 && (prev["y"]! - py).abs() < 0.0005) {
+      if ((prev["x"]! - px).abs() < 0.0005 &&
+          (prev["y"]! - py).abs() < 0.0005) {
         continue;
       }
     }
@@ -40,13 +42,17 @@ List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
   return pts;
 }
 
-List<Map<String, double>> _smoothVideoTrajectory(List<Map<String, double>> points) {
+List<Map<String, double>> _smoothVideoTrajectory(
+  List<Map<String, double>> points, {
+  int window = 1,
+  double emaBlend = 0.16,
+}) {
   if (points.length < 3) return points;
   final out = List<Map<String, double>>.generate(
     points.length,
     (_) => {"x": 0, "y": 0},
   );
-  const w = 2;
+  final w = window.clamp(0, 3);
   for (int i = 0; i < points.length; i++) {
     double sumX = 0;
     double sumY = 0;
@@ -61,9 +67,10 @@ List<Map<String, double>> _smoothVideoTrajectory(List<Map<String, double>> point
     out[i]["y"] = sumY / count;
   }
 
+  final alpha = emaBlend.clamp(0.0, 0.30);
   for (int i = 1; i < out.length; i++) {
-    out[i]["x"] = (0.65 * out[i - 1]["x"]!) + (0.35 * out[i]["x"]!);
-    out[i]["y"] = (0.65 * out[i - 1]["y"]!) + (0.35 * out[i]["y"]!);
+    out[i]["x"] = ((1 - alpha) * out[i]["x"]!) + (alpha * out[i - 1]["x"]!);
+    out[i]["y"] = ((1 - alpha) * out[i]["y"]!) + (alpha * out[i - 1]["y"]!);
   }
   return out;
 }
@@ -100,7 +107,9 @@ int _detectBounceIndex(List<Map<String, double>> points) {
 
 Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
   final pointsRaw = (input["points"] as List<dynamic>? ?? const []);
-  final points = _smoothVideoTrajectory(_sanitizeVideoTrajectory(pointsRaw));
+  final points = _sanitizeVideoTrajectory(pointsRaw);
+  final bounceInput = input["bounceIndex"];
+  final preferredBounceIdx = bounceInput is num ? bounceInput.toInt() : null;
   final decisionText = (input["decision"] as String? ?? "NOT OUT")
       .toUpperCase();
   final confidence = (input["confidence"] as num?)?.toDouble() ?? 0.0;
@@ -120,7 +129,10 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
     };
   }
 
-  final bounceIdx = _detectBounceIndex(points).clamp(0, points.length - 2);
+  final autoBounceIdx = _detectBounceIndex(points);
+  final bounceIdx = (preferredBounceIdx ?? autoBounceIdx)
+      .clamp(0, points.length - 2)
+      .toInt();
   final impactIdx = points.length - 1;
 
   final deliveryStart = {"x": points.first["x"]!, "y": points.first["y"]!};
@@ -133,11 +145,9 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
     "y": points[impactIdx]["y"]!,
   };
   final projectedDx = (impactPoint["x"]! - pitchPoint["x"]!) * 1.15;
-  // Dynamic stump centerline from last tracked points (more robust than fixed X).
-  final tailCount = math.min(4, points.length);
-  final tail = points.sublist(points.length - tailCount);
-  final stumpCenterX =
-      tail.fold<double>(0.0, (a, p) => a + p["x"]!) / tailCount;
+  // Use a stable stump centerline so off/leg labels don't flip when the
+  // trajectory deviates late toward one side.
+  const stumpCenterX = 0.50;
   final offStumpX = stumpCenterX + 0.030;
   final legStumpX = stumpCenterX - 0.030;
   const stumpRadius = 0.030;
@@ -150,16 +160,24 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
 
   String pitchingText;
   final pitchDelta = pitchPoint["x"]! - stumpCenterX;
-  if (pitchDelta < -0.075) {
+  if (pitchDelta < -0.11) {
     pitchingText = "Outside Leg";
-  } else if (pitchDelta > 0.075) {
+  } else if (pitchDelta > 0.11) {
     pitchingText = "Outside Off";
   } else {
     pitchingText = "In Line";
   }
 
-  final impactText =
-      (impactPoint["x"]! - stumpCenterX).abs() > 0.090 ? "Outside" : "In Line";
+  final impactText = (impactPoint["x"]! - stumpCenterX).abs() > 0.11
+      ? "Outside"
+      : "In Line";
+  // Keep pitching based on bounce location; late deviation at impact should
+  // not flip a near-middle pitching point to outside.
+  if (impactText == "Outside" &&
+      pitchingText != "In Line" &&
+      pitchDelta.abs() <= 0.16) {
+    pitchingText = "In Line";
+  }
 
   final dOff = (projectedAtStumpsX - offStumpX).abs();
   final dMid = (projectedAtStumpsX - stumpCenterX).abs();
@@ -456,17 +474,16 @@ class _DrsTrajectoryPainter extends CustomPainter {
     final uImpact = geometry.impactPoint.dx.clamp(0.20, 0.82);
 
     // Full-pitch stretch from far release to near stumps.
-    Offset wDelivery = worldToScreen(uRelease, vFromZ(0.0) - 0.02).translate(0, -86);
+    Offset wDelivery = worldToScreen(
+      uRelease,
+      vFromZ(0.0) - 0.02,
+    ).translate(0, -86);
     Offset wPitch = worldToScreen(uPitch, vFromZ(pitchZ));
     // Keep both stump sets on one center line every time.
     final wStumps = worldToScreen(0.5, vFromZ(pitchLengthM) + 0.01);
     // Keep impact at pad height so path does not appear to bounce twice.
     final wImpact = worldToScreen(uImpact, vFromZ(15.80)).translate(0, -34);
-    // Outcome after bounce: either stump hit or miss beside stumps.
-    final missSide = (uImpact - uPitch) >= 0 ? 1.0 : -1.0;
-    final wOutcome = geometry.wicketsHitting
-        ? wStumps
-        : wStumps.translate(22 * missSide, -5);
+    // Keep trajectory visualization limited to release -> pitching -> impact only.
 
     // Intentionally skip drawing synthetic pitch/outfield/stumps/grid.
 
@@ -597,16 +614,30 @@ class _DrsTrajectoryPainter extends CustomPainter {
     if (useRawPath) {
       // Render directly from video trajectory and mark release/pitch/impact.
       final n = rawPath.length;
-      final minY = rawPath
-          .map((p) => p.dy)
-          .reduce((a, b) => a < b ? a : b);
-      final maxY = rawPath
-          .map((p) => p.dy)
-          .reduce((a, b) => a > b ? a : b);
+      final minY = rawPath.map((p) => p.dy).reduce((a, b) => a < b ? a : b);
+      final maxY = rawPath.map((p) => p.dy).reduce((a, b) => a > b ? a : b);
       final ySpan = (maxY - minY).abs() < 0.0001 ? 1.0 : (maxY - minY);
 
       int? pitchIdx;
-      if (n >= 5) {
+      if (n >= 3) {
+        // Prefer backend/worker bounce point first: nearest tracked index.
+        double bestD = 1e9;
+        int bestI = 1;
+        for (int i = 1; i <= n - 2; i++) {
+          final dx = rawPath[i].dx - geometry.pitchPoint.dx;
+          final dy = rawPath[i].dy - geometry.pitchPoint.dy;
+          final d = (dx * dx) + (dy * dy);
+          if (d < bestD) {
+            bestD = d;
+            bestI = i;
+          }
+        }
+        if (bestD < 0.08) {
+          pitchIdx = bestI;
+        }
+      }
+
+      if (n >= 5 && pitchIdx == null) {
         // Detect a real bounce as an interior local maximum in Y
         // with enough prominence and recovery after contact.
         final ys = List<double>.generate(n, (i) {
@@ -685,7 +716,6 @@ class _DrsTrajectoryPainter extends CustomPainter {
           }
           pitchIdx = bestInterior;
         }
-
       }
       // Short-track fallback: ensure a pitching point exists for n=3/4 too.
       if (pitchIdx == null && n >= 3) {
@@ -700,7 +730,7 @@ class _DrsTrajectoryPainter extends CustomPainter {
         pitchIdx = bestInterior;
       }
       final impactIdx = n - 1;
-      const forceOppositeDirection = true;
+      const forceOppositeDirection = false;
 
       // Detect actual bowling end from tracked motion.
       final startsFromFarEnd = rawPath.first.dy < rawPath.last.dy;
@@ -713,7 +743,7 @@ class _DrsTrajectoryPainter extends CustomPainter {
         return worldToScreen(p.dx.clamp(0.05, 0.95), v.clamp(0.0, 1.0));
       }
 
-      // Use real tracked release point, lifted upward to hand level.
+      // Use real tracked release/pitch/impact points (video-derived).
       final releaseIdx = forceOppositeDirection ? impactIdx : 0;
       final mappedPitchIdx = pitchIdx == null
           ? null
@@ -722,8 +752,8 @@ class _DrsTrajectoryPainter extends CustomPainter {
       releaseMarker = mapPoint(releaseIdx);
       pitchMarker = mappedPitchIdx == null ? null : mapPoint(mappedPitchIdx);
       impactMarker = mapPoint(impactMappedIdx);
-      // Slight lift so release appears from hand, not from ground.
-      releaseMarker = releaseMarker.translate(0, -56);
+      // Small hand-height lift only; avoid synthetic jumps.
+      releaseMarker = releaseMarker.translate(0, -12);
       // Keep impact near pad height.
       impactMarker = impactMarker.translate(0, -14);
       final Offset rel = releaseMarker!;
@@ -733,22 +763,17 @@ class _DrsTrajectoryPainter extends CustomPainter {
       if (simpleGraphOnly) {
         final mapped = List<Offset>.generate(
           n,
-          (i) => mapPoint(forceOppositeDirection ? (n - 1 - i) : i),
+          (i) => mapPoint(i),
           growable: true,
         );
         if (mapped.length < 2) return;
 
-        final bounceLocalRaw = pitchIdx == null
-            ? null
-            : (forceOppositeDirection ? (n - 1 - pitchIdx) : pitchIdx);
+        final bounceLocalRaw = pitchIdx == null ? null : pitchIdx;
         final bounceLocal = bounceLocalRaw == null
             ? (mapped.length * 0.56).round()
             : bounceLocalRaw.clamp(1, mapped.length - 2);
 
-        final rel = Offset(
-          mapped.first.dx,
-          (wStumps.dy - 250).clamp(size.height * 0.30, size.height * 0.80),
-        ); // release at requested reference height
+        final rel = mapped.first.translate(0, -12);
         final pit = mapped[bounceLocal];
         final end = mapped.last.translate(0, -14);
 
@@ -756,29 +781,15 @@ class _DrsTrajectoryPainter extends CustomPainter {
         pitchMarker = pit;
         impactMarker = end;
 
-        final preCtrl = lerpPoint(rel, pit, 0.42).translate(0, -70);
-        final postCtrl = lerpPoint(pit, end, 0.34).translate(0, -18);
-        final full = <Offset>[];
-        for (int i = 0; i <= 28; i++) {
-          full.add(quadBezier(rel, preCtrl, pit, i / 28));
-        }
-        for (int i = 1; i <= 26; i++) {
-          full.add(quadBezier(pit, postCtrl, end, i / 26));
-        }
+        final full = <Offset>[...mapped];
+        full[0] = rel;
+        full[full.length - 1] = end;
 
-        final visible = <Offset>[];
-        final scaled = trackProgress * (full.length - 1);
-        final lastFull = scaled.floor().clamp(0, full.length - 1);
-        for (int i = 0; i <= lastFull; i++) {
-          visible.add(full[i]);
-        }
-        if (lastFull < full.length - 1) {
-          final frac = (scaled - lastFull).clamp(0.0, 1.0);
-          visible.add(lerpPoint(full[lastFull], full[lastFull + 1], frac));
-        }
-        if (visible.length >= 2) {
-          drawSimpleGraph(visible, width: 6.5);
-          ballAt = visible.last;
+        if (full.length >= 2) {
+          drawSimpleGraph(full, width: 6.5);
+          final scaled = trackProgress * (full.length - 1);
+          final idx = scaled.round().clamp(0, full.length - 1);
+          ballAt = full[idx];
         }
         return;
       }
@@ -788,6 +799,7 @@ class _DrsTrajectoryPainter extends CustomPainter {
         final ctrl = lerpPoint(rel, p, 0.45).translate(0, -34);
         return quadBezier(rel, ctrl, p, t);
       }
+
       Offset rawPostBezier(double t) {
         final p = pit ?? lerpPoint(rel, imp, 0.52);
         final ctrl = lerpPoint(p, imp, 0.45).translate(0, -18);
@@ -857,7 +869,6 @@ class _DrsTrajectoryPainter extends CustomPainter {
       }
       final preCtrl = lerpPoint(wDelivery, wPitch, 0.48) + const Offset(0, -46);
       final postCtrl = lerpPoint(wPitch, wImpact, 0.52) + const Offset(0, -18);
-      final predCtrl = lerpPoint(wImpact, wOutcome, 0.45) + const Offset(0, -34);
 
       if (trackProgress > 0.0) {
         final p1 = (trackProgress / 0.33).clamp(0.0, 1.0);
@@ -889,10 +900,15 @@ class _DrsTrajectoryPainter extends CustomPainter {
           nearW: 3.0,
           farW: 12.0,
         );
+        ballAt = quadBezier(wPitch, postCtrl, wImpact, p2);
         final bouncePulse = ((trackProgress - 0.33) / 0.22).clamp(0.0, 1.0);
         final rippleAlpha = (1.0 - bouncePulse).clamp(0.0, 1.0);
         final r = 10 + (20 * bouncePulse);
-        canvas.drawCircle(wPitch, 9, Paint()..color = Colors.white.withOpacity(0.86));
+        canvas.drawCircle(
+          wPitch,
+          9,
+          Paint()..color = Colors.white.withOpacity(0.86),
+        );
         canvas.drawCircle(
           wPitch,
           r,
@@ -903,24 +919,7 @@ class _DrsTrajectoryPainter extends CustomPainter {
         );
       }
 
-      if (trackProgress > 0.65) {
-        final p3 = ((trackProgress - 0.65) / 0.35).clamp(0.0, 1.0);
-        final projPts = <Offset>[];
-        for (int i = 0; i <= 26; i++) {
-          final t = (i / 26) * p3;
-          projPts.add(quadBezier(wImpact, predCtrl, wOutcome, t));
-        }
-        drawTubeFromPoints(
-          projPts,
-          color: const Color(0xFFFF0000),
-          nearW: 3.0,
-          farW: 12.0,
-          dotted: false,
-        );
-        ballAt = quadBezier(wImpact, predCtrl, wOutcome, p3);
-        final liftCurve = math.sin(math.pi * p3);
-        ballLift = 14 * liftCurve;
-      }
+      // No post-impact projection path. Stop visualization at impact.
     }
 
     void drawSharpRing(Offset center, Color color, {double r = 11}) {
@@ -973,26 +972,14 @@ class _DrsTrajectoryPainter extends CustomPainter {
         );
       }
       if (impactMarker != null) {
-        drawSharpRing(
-          impactMarker!,
-          Colors.orangeAccent,
-          r: 9,
-        );
+        drawSharpRing(impactMarker!, Colors.orangeAccent, r: 9);
       }
     }
     if (!useRawPath && ballAt != null) {
-      draw3DBall(
-        ballAt.translate(0, -ballLift),
-        radius: 5.2,
-        lift: ballLift,
-      );
+      draw3DBall(ballAt.translate(0, -ballLift), radius: 5.2, lift: ballLift);
     }
     if (useRawPath && ballAt != null) {
-      draw3DBall(
-        ballAt.translate(0, -ballLift),
-        radius: 4.8,
-        lift: ballLift,
-      );
+      draw3DBall(ballAt.translate(0, -ballLift), radius: 4.8, lift: ballLift);
     }
 
     // Stumps are part of pitch.png background.
@@ -1217,8 +1204,11 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             // Horizontal swipe => Y-axis orbit (left/right).
                             _orbitYaw += details.delta.dx * 0.0040;
                             // Vertical swipe => slight X-axis tilt (up/down).
-                            _orbitPitch = (_orbitPitch - details.delta.dy * 0.0022)
-                                .clamp(-0.55, 0.55);
+                            _orbitPitch =
+                                (_orbitPitch - details.delta.dy * 0.0022).clamp(
+                                  -0.55,
+                                  0.55,
+                                );
                           });
                         },
                         child: Transform.scale(
@@ -1483,6 +1473,7 @@ class _UploadScreenState extends State<UploadScreen>
   bool showTrajectory = false;
 
   List<dynamic>? trajectory = const [];
+  int? _trajectoryBounceIndex;
 
   bool showDRS = false;
   String? drsResult;
@@ -1562,7 +1553,9 @@ class _UploadScreenState extends State<UploadScreen>
     }
 
     final bounce = _detectBounceIndex(pts);
-    final pivot = bounce <= 0 ? (pts.length ~/ 2) : bounce.clamp(1, pts.length - 2);
+    final pivot = bounce <= 0
+        ? (pts.length ~/ 2)
+        : bounce.clamp(1, pts.length - 2);
     final preDx = pts[pivot]["x"]! - pts.first["x"]!;
     final postDx = pts.last["x"]! - pts[pivot]["x"]!;
     final curveDx = postDx - preDx;
@@ -1577,6 +1570,7 @@ class _UploadScreenState extends State<UploadScreen>
   _DrsTrackingGeometry _buildDrsGeometry({
     required String decisionText,
     required double confidence,
+    int? bounceIndex,
   }) {
     final points = _extractTrajectoryPoints(trajectory);
     if (points.length < 3) {
@@ -1598,7 +1592,10 @@ class _UploadScreenState extends State<UploadScreen>
       );
     }
 
-    final bounceIdx = _detectBounceIndex(points).clamp(0, points.length - 2);
+    final autoBounceIdx = _detectBounceIndex(points);
+    final bounceIdx = (bounceIndex ?? autoBounceIdx)
+        .clamp(0, points.length - 2)
+        .toInt();
     final impactIdx = points.length - 1;
 
     final deliveryStart = Offset(points.first["x"]!, points.first["y"]!);
@@ -1608,10 +1605,9 @@ class _UploadScreenState extends State<UploadScreen>
       points[impactIdx]["y"]!,
     );
     final projectedDx = (impactPoint.dx - pitchPoint.dx) * 1.15;
-    final tailCount = math.min(4, points.length);
-    final tail = points.sublist(points.length - tailCount);
-    final stumpCenterX =
-        tail.fold<double>(0.0, (a, p) => a + p["x"]!) / tailCount;
+    // Use a stable stump centerline so off/leg labels don't flip when the
+    // trajectory deviates late toward one side.
+    const stumpCenterX = 0.50;
     final offStumpX = stumpCenterX + 0.030;
     final legStumpX = stumpCenterX - 0.030;
     const stumpRadius = 0.030;
@@ -1621,19 +1617,26 @@ class _UploadScreenState extends State<UploadScreen>
 
     String pitchingText;
     final pitchDelta = pitchPoint.dx - stumpCenterX;
-    if (pitchDelta < -0.075) {
+    if (pitchDelta < -0.11) {
       pitchingText = "Outside Leg";
-    } else if (pitchDelta > 0.075) {
+    } else if (pitchDelta > 0.11) {
       pitchingText = "Outside Off";
     } else {
       pitchingText = "In Line";
     }
 
     String impactText;
-    if ((impactPoint.dx - stumpCenterX).abs() > 0.090) {
+    if ((impactPoint.dx - stumpCenterX).abs() > 0.11) {
       impactText = "Outside";
     } else {
       impactText = "In Line";
+    }
+    // Keep pitching based on bounce location; late deviation at impact should
+    // not flip a near-middle pitching point to outside.
+    if (impactText == "Outside" &&
+        pitchingText != "In Line" &&
+        pitchDelta.abs() <= 0.16) {
+      pitchingText = "In Line";
     }
 
     final dOff = (projectedAtStumpsX - offStumpX).abs();
@@ -1693,14 +1696,17 @@ class _UploadScreenState extends State<UploadScreen>
       pathPoints: (() {
         final raw = result["pathPoints"];
         if (raw is List) {
-          return raw.whereType<Map>().map((p) {
-            final x = p["x"];
-            final y = p["y"];
-            if (x is num && y is num) {
-              return Offset(x.toDouble(), y.toDouble());
-            }
-            return const Offset(0.5, 0.5);
-          }).toList(growable: false);
+          return raw
+              .whereType<Map>()
+              .map((p) {
+                final x = p["x"];
+                final y = p["y"];
+                if (x is num && y is num) {
+                  return Offset(x.toDouble(), y.toDouble());
+                }
+                return const Offset(0.5, 0.5);
+              })
+              .toList(growable: false);
         }
         return const <Offset>[];
       })(),
@@ -1743,6 +1749,7 @@ class _UploadScreenState extends State<UploadScreen>
       "points": _extractTrajectoryPoints(trajectory),
       "decision": decisionText,
       "confidence": confidence,
+      "bounceIndex": _trajectoryBounceIndex,
     };
 
     try {
@@ -1752,6 +1759,7 @@ class _UploadScreenState extends State<UploadScreen>
       _drsGeometry = _buildDrsGeometry(
         decisionText: decisionText,
         confidence: confidence,
+        bounceIndex: _trajectoryBounceIndex,
       );
     }
     _drsPitching = _drsGeometry.pitchingText;
@@ -2357,6 +2365,13 @@ class _UploadScreenState extends State<UploadScreen>
         trajectory = analysis["trajectory"] is List
             ? List<dynamic>.from(analysis["trajectory"])
             : const [];
+        final trajectoryMeta = analysis["trajectory_meta"];
+        if (trajectoryMeta is Map) {
+          final bounceRaw = trajectoryMeta["bounce_index"];
+          _trajectoryBounceIndex = bounceRaw is num ? bounceRaw.toInt() : null;
+        } else {
+          _trajectoryBounceIndex = null;
+        }
         showTrajectory = false;
 
         analysisLoading = false;
@@ -2444,7 +2459,17 @@ class _UploadScreenState extends State<UploadScreen>
         });
         return;
       }
-      await _configureDrsCinematic(Map<String, dynamic>.from(drs));
+      final drsMap = Map<String, dynamic>.from(drs);
+      final drsTrajectory = drsMap["trajectory"];
+      if (drsTrajectory is List && drsTrajectory.isNotEmpty) {
+        trajectory = List<dynamic>.from(drsTrajectory);
+      }
+      final drsMeta = drsMap["trajectory_meta"];
+      if (drsMeta is Map) {
+        final bounceRaw = drsMeta["bounce_index"];
+        _trajectoryBounceIndex = bounceRaw is num ? bounceRaw.toInt() : null;
+      }
+      await _configureDrsCinematic(drsMap);
       if (!mounted) return;
       setState(() {
         drsLoading = false;

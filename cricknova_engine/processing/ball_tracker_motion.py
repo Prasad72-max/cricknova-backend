@@ -4,7 +4,7 @@ import math
 
 MAX_EFFECTIVE_DISTANCE_METERS = 23.0  # max real ball travel (release → bat)
 
-def track_ball_positions(video_path, max_frames=120):
+def track_ball_positions(video_path, max_frames=180):
     cap = cv2.VideoCapture(video_path)
 
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -20,6 +20,8 @@ def track_ball_positions(video_path, max_frames=120):
     miss_count = 0
 
     TARGET_WIDTH = 640
+
+    target_points = 60
 
     while cap.isOpened() and frame_count < max_frames:
         ret, frame = cap.read()
@@ -77,7 +79,7 @@ def track_ball_positions(video_path, max_frames=120):
 
         prev_gray = gray
 
-        if len(positions) >= 12:
+        if len(positions) >= target_points:
             break
 
     cap.release()

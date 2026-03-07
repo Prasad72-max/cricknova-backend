@@ -301,6 +301,73 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return trajectory
 
 
+def _detect_bounce_index_from_positions(ball_positions):
+    """
+    Detect likely first pitch contact frame from tracked positions.
+    Uses an interior local max in y (screen-space down is positive).
+    """
+    if not ball_positions or len(ball_positions) < 3:
+        return None
+
+    ys = [float(p[1]) for p in ball_positions]
+    n = len(ys)
+    y_span = max(ys) - min(ys)
+    min_prom = max(2.0, y_span * 0.04)
+
+    best_idx = -1
+    best_prom = 0.0
+    for i in range(1, n - 1):
+        if ys[i] < ys[i - 1] or ys[i] < ys[i + 1]:
+            continue
+        prom = ys[i] - ((ys[i - 1] + ys[i + 1]) * 0.5)
+        if prom >= min_prom and prom > best_prom:
+            best_prom = prom
+            best_idx = i
+
+    if best_idx != -1:
+        return int(best_idx)
+
+    # Fallback: strongest interior y (avoid edges).
+    lo = max(1, int(n * 0.20))
+    hi = min(n - 2, int(n * 0.85))
+    if lo <= hi:
+        interior = range(lo, hi + 1)
+        return int(max(interior, key=lambda i: ys[i]))
+    return None
+
+
+def build_trajectory_meta(ball_positions, frame_width, frame_height):
+    """
+    Metadata for frontend so it can render real frame-tracked path
+    without inventing synthetic points.
+    """
+    if not ball_positions:
+        return {
+            "source": "video_detection",
+            "points_count": 0,
+            "frame_width": int(frame_width) if frame_width else 0,
+            "frame_height": int(frame_height) if frame_height else 0,
+            "release_index": None,
+            "bounce_index": None,
+            "impact_index": None,
+            "direction": None,
+        }
+
+    bounce_idx = _detect_bounce_index_from_positions(ball_positions)
+    direction = "top_to_bottom" if ball_positions[0][1] <= ball_positions[-1][1] else "bottom_to_top"
+
+    return {
+        "source": "video_detection",
+        "points_count": int(len(ball_positions)),
+        "frame_width": int(frame_width),
+        "frame_height": int(frame_height),
+        "release_index": 0,
+        "bounce_index": int(bounce_idx) if bounce_idx is not None else None,
+        "impact_index": int(len(ball_positions) - 1),
+        "direction": direction,
+    }
+
+
 # -----------------------------
 # PAYPAL MODELS (MUST LOAD BEFORE ROUTES)
 # -----------------------------
@@ -788,6 +855,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         if len(ball_positions) < 6:
             swing, spin = _normalize_swing_spin(None, None, ball_positions)
+            trajectory = build_trajectory(ball_positions, 640, 360)
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -797,7 +865,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "spin": spin,
                 "spin_strength": None,
                 "spin_turn_deg": None,
-                "trajectory": build_trajectory(ball_positions, 640, 360),
+                "trajectory": trajectory,
+                "trajectory_meta": build_trajectory_meta(ball_positions, 640, 360),
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -807,24 +876,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
-
-        # -----------------------------
-        # AUTO CENTER CROP (50% WIDTH)
-        # -----------------------------
-        crop_x_start = int(frame_width * 0.25)
-        crop_x_end = int(frame_width * 0.75)
-        cropped_width = crop_x_end - crop_x_start
-
-        # Adjust ball positions to cropped coordinate system
-        cropped_positions = []
-        for (x, y) in ball_positions:
-            if crop_x_start <= x <= crop_x_end:
-                cropped_positions.append((x - crop_x_start, y))
-
-        # Only replace if we still have enough tracking points
-        if len(cropped_positions) >= 6:
-            ball_positions = cropped_positions
-            frame_width = cropped_width
 
         pixel_positions = [(x, y) for (x, y) in ball_positions]
 
@@ -878,6 +929,9 @@ async def analyze_training_video(file: UploadFile = File(...)):
             decision = "NOT OUT"
             reason = "Ball missing stumps"
 
+        trajectory = build_trajectory(ball_positions, frame_width, frame_height)
+        trajectory_meta = build_trajectory_meta(ball_positions, frame_width, frame_height)
+
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
@@ -887,7 +941,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
+            "trajectory": trajectory,
+            "trajectory_meta": trajectory_meta,
             "drs": {
                 "ultraedge": ultraedge,
                 "ball_tracking": hits_stumps,
@@ -1297,6 +1352,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         if len(ball_positions) < 6:
             swing, spin = _normalize_swing_spin(None, None, ball_positions)
+            trajectory = build_trajectory(ball_positions, 640, 360)
             return {
                 "status": "success",
                 "speed_kmph": None,
@@ -1306,7 +1362,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
                 "spin": spin,
                 "spin_strength": None,
                 "spin_turn_deg": None,
-                "trajectory": build_trajectory(ball_positions, 640, 360),
+                "trajectory": trajectory,
+                "trajectory_meta": build_trajectory_meta(ball_positions, 640, 360),
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -1316,24 +1373,6 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
-
-        # -----------------------------
-        # AUTO CENTER CROP (50% WIDTH)
-        # -----------------------------
-        crop_x_start = int(frame_width * 0.25)
-        crop_x_end = int(frame_width * 0.75)
-        cropped_width = crop_x_end - crop_x_start
-
-        # Adjust ball positions to cropped coordinate system
-        cropped_positions = []
-        for (x, y) in ball_positions:
-            if crop_x_start <= x <= crop_x_end:
-                cropped_positions.append((x - crop_x_start, y))
-
-        # Only replace if we still have enough tracking points
-        if len(cropped_positions) >= 6:
-            ball_positions = cropped_positions
-            frame_width = cropped_width
 
         speed_result = calculate_ball_speed_kmph(ball_positions, fps)
 
@@ -1385,6 +1424,9 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             decision = "NOT OUT"
             reason = "Ball missing stumps"
 
+        trajectory = build_trajectory(ball_positions, frame_width, frame_height)
+        trajectory_meta = build_trajectory_meta(ball_positions, frame_width, frame_height)
+
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
@@ -1394,7 +1436,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
+            "trajectory": trajectory,
+            "trajectory_meta": trajectory_meta,
             "drs": {
                 "ultraedge": ultraedge,
                 "ball_tracking": hits_stumps,
@@ -1510,7 +1553,9 @@ async def drs_review(file: UploadFile = File(...)):
                     "ball_tracking": False,
                     "stump_confidence": 0.0,
                     "decision": "NOT OUT",
-                    "reason": "Insufficient tracking data"
+                    "reason": "Insufficient tracking data",
+                    "trajectory": [],
+                    "trajectory_meta": build_trajectory_meta([], 640, 360),
                 }
             }
 
@@ -1526,24 +1571,6 @@ async def drs_review(file: UploadFile = File(...)):
 
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
-
-        # -----------------------------
-        # AUTO CENTER CROP (50% WIDTH)
-        # -----------------------------
-        crop_x_start = int(frame_width * 0.25)
-        crop_x_end = int(frame_width * 0.75)
-        cropped_width = crop_x_end - crop_x_start
-
-        # Adjust ball positions to cropped coordinate system
-        cropped_positions = []
-        for (x, y) in ball_positions:
-            if crop_x_start <= x <= crop_x_end:
-                cropped_positions.append((x - crop_x_start, y))
-
-        # Only replace if we still have enough tracking points
-        if len(cropped_positions) >= 6:
-            ball_positions = cropped_positions
-            frame_width = cropped_width
 
         # -----------------------------
         # ULTRAEDGE (STRICT PHYSICS)
@@ -1592,6 +1619,9 @@ async def drs_review(file: UploadFile = File(...)):
             decision = "NOT OUT"
             reason = "Ball missing stumps"
 
+        trajectory = build_trajectory(ball_positions, frame_width, frame_height)
+        trajectory_meta = build_trajectory_meta(ball_positions, frame_width, frame_height)
+
         return {
             "status": "success",
             "drs": {
@@ -1599,7 +1629,9 @@ async def drs_review(file: UploadFile = File(...)):
                 "ball_tracking": hits_stumps,
                 "stump_confidence": stump_confidence,
                 "decision": decision,
-                "reason": reason
+                "reason": reason,
+                "trajectory": trajectory,
+                "trajectory_meta": trajectory_meta,
             }
         }
 
