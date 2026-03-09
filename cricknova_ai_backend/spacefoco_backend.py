@@ -1413,55 +1413,69 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
-    Improved physics-based stump-hit detection.
-    Uses adaptive stump zone + stronger forward projection.
+    Prioritize direct stump-box entry over curve prediction.
+    If the tracked or projected ball enters the stump box, it is OUT.
     Returns (hit: bool, confidence: float)
     """
 
-    if not ball_positions or len(ball_positions) < 6:
+    if not ball_positions or len(ball_positions) < 3:
         return False, 0.0
 
     recent = ball_positions[-25:] if len(ball_positions) >= 25 else ball_positions
 
-    # --- Realistic stump zone (middle 18% width, realistic height band) ---
+    # Virtual 3D stump box projected into image space.
     stump_center_x = frame_width * 0.50
-    stump_half_width = frame_width * 0.09  # tighter and realistic
-
+    stump_half_width = frame_width * 0.035
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
 
-    stump_y_min = frame_height * 0.30   # allow hitting above pad height
-    stump_y_max = frame_height * 0.75   # realistic stump top height
+    # Below-bails region in image space means the ball is low enough to hit.
+    bail_line_y = frame_height * 0.58
+    stump_plane_y = frame_height * 0.78
+    stump_y_max = frame_height * 0.92
 
-    # --- Direct frame intersection check ---
-    hits = 0
-    for (x, y) in recent:
-        if stump_x_min <= x <= stump_x_max and stump_y_min <= y <= stump_y_max:
-            hits += 1
+    def inside_stump_box(x, y):
+        return stump_x_min <= x <= stump_x_max and bail_line_y <= y <= stump_y_max
 
-    if hits >= 2:
-        confidence = min(hits / 5.0, 1.0)
+    # 1) Hard override: if any tracked point enters the stump box, it is OUT.
+    box_hits = sum(1 for (x, y) in recent if inside_stump_box(x, y))
+    if box_hits > 0:
+        confidence = min(0.99, 0.82 + (0.05 * box_hits))
         return True, round(confidence, 2)
 
-    # --- Stronger forward projection (Hawk‑Eye style) ---
-    if len(recent) >= 4:
-        x1, y1 = recent[-4]
-        x2, y2 = recent[-3]
-        x3, y3 = recent[-2]
-        x4, y4 = recent[-1]
+    # 2) Final ball position has priority over a softer trajectory prediction.
+    last_x, last_y = recent[-1]
+    if inside_stump_box(last_x, last_y):
+        return True, 0.98
 
-        dx = (x4 - x2) / 2.0
-        dy = (y4 - y2) / 2.0
+    # 3) Reliability layer: project using last known velocity toward stump plane.
+    tail = recent[-4:] if len(recent) >= 4 else recent
+    if len(tail) >= 2:
+        dxs = []
+        dys = []
+        for i in range(1, len(tail)):
+            dxs.append(tail[i][0] - tail[i - 1][0])
+            dys.append(tail[i][1] - tail[i - 1][1])
+        dx = sum(dxs) / len(dxs)
+        dy = sum(dys) / len(dys)
 
-        proj_x = x4
-        proj_y = y4
+        if abs(dy) > 1e-6:
+            t = (stump_plane_y - last_y) / dy
+            if t >= 0:
+                proj_x = last_x + (dx * t)
+                proj_y = last_y + (dy * t)
+                if inside_stump_box(proj_x, proj_y):
+                    # Lower confidence than a direct box entry, but still OUT.
+                    return True, 0.88 if len(recent) >= 6 else 0.74
 
-        for _ in range(25):  # deeper continuation
+        # 4) Low-confidence fallback: continue forward frame-by-frame.
+        proj_x = last_x
+        proj_y = last_y
+        for _ in range(20):
             proj_x += dx
             proj_y += dy
-
-            if stump_x_min <= proj_x <= stump_x_max and stump_y_min <= proj_y <= stump_y_max:
-                return True, 0.85
+            if inside_stump_box(proj_x, proj_y):
+                return True, 0.72 if len(recent) >= 6 else 0.62
 
     return False, 0.0
 

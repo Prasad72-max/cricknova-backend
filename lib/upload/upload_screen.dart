@@ -115,6 +115,8 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
       "pitchPoint": {"x": 0.47, "y": 0.58},
       "impactPoint": {"x": 0.66, "y": 0.72},
       "stumpsPoint": {"x": 0.79, "y": 0.82},
+      "stumpLeft": {"x": 0.463, "y": 0.82},
+      "stumpRight": {"x": 0.537, "y": 0.82},
       "pathPoints": points,
       "pitchingText": confidence >= 0.35 ? "In Line" : "Outside Off",
       "impactText": confidence >= 0.55 ? "In Line" : "Outside",
@@ -151,6 +153,8 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
     0.92,
   );
   final stumpsPoint = {"x": stumpCenterX, "y": stumpY};
+  final stumpLeft = {"x": legStumpX, "y": stumpY};
+  final stumpRight = {"x": offStumpX, "y": stumpY};
 
   String pitchingText;
   final pitchDelta = pitchPoint["x"]! - stumpCenterX;
@@ -190,6 +194,8 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
     "pitchPoint": pitchPoint,
     "impactPoint": impactPoint,
     "stumpsPoint": stumpsPoint,
+    "stumpLeft": stumpLeft,
+    "stumpRight": stumpRight,
     "pathPoints": points,
     "pitchingText": pitchingText,
     "impactText": impactText,
@@ -204,6 +210,8 @@ class _DrsTrackingGeometry {
   final Offset pitchPoint;
   final Offset impactPoint;
   final Offset stumpsPoint;
+  final Offset stumpLeft;
+  final Offset stumpRight;
   final List<Offset> pathPoints;
   final String pitchingText;
   final String impactText;
@@ -216,6 +224,8 @@ class _DrsTrackingGeometry {
     required this.pitchPoint,
     required this.impactPoint,
     required this.stumpsPoint,
+    required this.stumpLeft,
+    required this.stumpRight,
     required this.pathPoints,
     required this.pitchingText,
     required this.impactText,
@@ -229,6 +239,8 @@ class _DrsTrackingGeometry {
       pitchPoint = const Offset(0.47, 0.58),
       impactPoint = const Offset(0.66, 0.72),
       stumpsPoint = const Offset(0.80, 0.80),
+      stumpLeft = const Offset(0.463, 0.82),
+      stumpRight = const Offset(0.537, 0.82),
       pathPoints = const [],
       pitchingText = "In Line",
       impactText = "In Line",
@@ -1245,50 +1257,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     );
   }
 
-  Widget _buildMiniTracker() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: 140,
-          height: 110,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.30),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.18)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "BALL TRACKER",
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.74),
-                  fontSize: 10,
-                  letterSpacing: 1.0,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: CustomPaint(
-                  painter: _DrsTrajectoryPainter(
-                    geometry: widget.geometry,
-                    progress: 1.0,
-                    viewMode: _DrsViewMode.keeper,
-                  ),
-                  child: const SizedBox.expand(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildScannerBeam({
     required double top,
     required double height,
@@ -1341,29 +1309,81 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
 
   Widget _buildImpactLine({
     required double lineY,
-    required double stumpCenterX,
-    required double maxWidth,
+    required double stumpLeftX,
+    required double stumpRightX,
     required bool visible,
   }) {
-    final lineWidth = maxWidth * 0.16;
-    final left = (stumpCenterX - (lineWidth / 2)).clamp(12.0, maxWidth - lineWidth - 12.0);
+    final left = math.min(stumpLeftX, stumpRightX);
+    final width = (stumpRightX - stumpLeftX).abs().clamp(18.0, 140.0);
     return Positioned(
       left: left,
-      top: lineY,
+      top: lineY - 6,
       child: IgnorePointer(
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 180),
           opacity: visible ? 1.0 : 0.0,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: width,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: const Color(0x4DFF2A2A),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              Positioned(
+                top: 4,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF1E1E),
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0xFFFF4D4D),
+                        blurRadius: 16,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroundStumpLine({
+    required double lineY,
+    required double stumpLeftX,
+    required double stumpRightX,
+    required bool visible,
+  }) {
+    final left = math.min(stumpLeftX, stumpRightX);
+    final width = (stumpRightX - stumpLeftX).abs().clamp(18.0, 140.0);
+    return Positioned(
+      left: left,
+      top: lineY - 2,
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 220),
+          opacity: visible ? 1.0 : 0.0,
           child: Container(
-            width: lineWidth,
-            height: 3.2,
+            width: width,
+            height: 4,
             decoration: BoxDecoration(
-              color: const Color(0xFFFF3B30),
+              color: const Color(0xFF2EBBFF),
               borderRadius: BorderRadius.circular(999),
               boxShadow: const [
                 BoxShadow(
-                  color: Color(0xFFFF5F57),
-                  blurRadius: 18,
+                  color: Color(0xFF63D8FF),
+                  blurRadius: 14,
                   spreadRadius: 2,
                 ),
               ],
@@ -1485,6 +1505,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                     _phase == _DrsCinematicPhase.decision ||
                     progress >= milestones.wicket;
                 final impactLineVisible = progress >= milestones.impact;
+                final groundLineVisible = _ready;
                 return Stack(
                   children: [
                     Positioned.fill(
@@ -1524,14 +1545,21 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       builder: (context, constraints) {
                         final width = constraints.maxWidth;
                         final height = constraints.maxHeight;
-                        final stumpCenterX =
-                            widget.geometry.stumpsPoint.dx.clamp(0.18, 0.82) *
+                        final stumpLeftX =
+                            widget.geometry.stumpLeft.dx.clamp(0.10, 0.90) *
                             width;
-                        final impactLineY =
-                            widget.geometry.impactPoint.dy.clamp(0.22, 0.88) *
-                            height;
-                        final scannerTop = (height * 0.34).clamp(120.0, height - 240.0);
-                        final scannerHeight = (height * 0.28).clamp(120.0, 220.0);
+                        final stumpRightX =
+                            widget.geometry.stumpRight.dx.clamp(0.10, 0.90) *
+                            width;
+                        final stumpCenterX = (stumpLeftX + stumpRightX) / 2.0;
+                        final scannerTop = (height * 0.34).clamp(
+                          120.0,
+                          height - 240.0,
+                        );
+                        final scannerHeight = (height * 0.28).clamp(
+                          120.0,
+                          220.0,
+                        );
                         return Stack(
                           children: [
                             _buildScannerBeam(
@@ -1542,12 +1570,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                                 width - (width * 0.15) - 12.0,
                               ),
                               width: width * 0.15,
-                            ),
-                            _buildImpactLine(
-                              lineY: impactLineY,
-                              stumpCenterX: stumpCenterX,
-                              maxWidth: width,
-                              visible: impactLineVisible,
                             ),
                           ],
                         );
@@ -1670,11 +1692,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       ),
                     ),
                     Positioned(
-                      right: 14,
-                      bottom: 24,
-                      child: _buildMiniTracker(),
-                    ),
-                    Positioned(
                       left: 14,
                       bottom: 18,
                       child: Text(
@@ -1687,6 +1704,39 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                           letterSpacing: 0.4,
                         ),
                       ),
+                    ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final height = constraints.maxHeight;
+                        final stumpLeftX =
+                            widget.geometry.stumpLeft.dx.clamp(0.10, 0.90) *
+                            width;
+                        final stumpRightX =
+                            widget.geometry.stumpRight.dx.clamp(0.10, 0.90) *
+                            width;
+                        final stumpBaseY =
+                            widget.geometry.stumpsPoint.dy.clamp(0.72, 0.96) *
+                            height;
+                        final groundLineY =
+                            math.max(stumpBaseY, height * 0.88) - 4;
+                        return Stack(
+                          children: [
+                            _buildGroundStumpLine(
+                              lineY: groundLineY,
+                              stumpLeftX: stumpLeftX,
+                              stumpRightX: stumpRightX,
+                              visible: groundLineVisible,
+                            ),
+                            _buildImpactLine(
+                              lineY: groundLineY,
+                              stumpLeftX: stumpLeftX,
+                              stumpRightX: stumpRightX,
+                              visible: impactLineVisible,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 );
@@ -1956,6 +2006,8 @@ class _UploadScreenState extends State<UploadScreen>
         pitchPoint: const Offset(0.47, 0.58),
         impactPoint: const Offset(0.66, 0.72),
         stumpsPoint: const Offset(0.80, 0.80),
+        stumpLeft: const Offset(0.463, 0.82),
+        stumpRight: const Offset(0.537, 0.82),
         pathPoints: points
             .map((p) => Offset(p["x"]!, p["y"]!))
             .toList(growable: false),
@@ -1989,6 +2041,8 @@ class _UploadScreenState extends State<UploadScreen>
     const stumpY = 0.82;
     final projectedAtStumpsX = (impactPoint.dx + projectedDx).clamp(0.10, 0.92);
     final stumpsPoint = Offset(stumpCenterX, stumpY);
+    final stumpLeft = Offset(legStumpX, stumpY);
+    final stumpRight = Offset(offStumpX, stumpY);
 
     String pitchingText;
     final pitchDelta = pitchPoint.dx - stumpCenterX;
@@ -2032,6 +2086,8 @@ class _UploadScreenState extends State<UploadScreen>
       pitchPoint: pitchPoint,
       impactPoint: impactPoint,
       stumpsPoint: stumpsPoint,
+      stumpLeft: stumpLeft,
+      stumpRight: stumpRight,
       pathPoints: points
           .map((p) => Offset(p["x"]!, p["y"]!))
           .toList(growable: false),
@@ -2061,6 +2117,8 @@ class _UploadScreenState extends State<UploadScreen>
       pitchPoint: _off("pitchPoint", const Offset(0.47, 0.58)),
       impactPoint: _off("impactPoint", const Offset(0.66, 0.72)),
       stumpsPoint: _off("stumpsPoint", const Offset(0.79, 0.82)),
+      stumpLeft: _off("stumpLeft", const Offset(0.463, 0.82)),
+      stumpRight: _off("stumpRight", const Offset(0.537, 0.82)),
       pathPoints: (() {
         final raw = result["pathPoints"];
         if (raw is List) {
@@ -2145,7 +2203,14 @@ class _UploadScreenState extends State<UploadScreen>
     _drsWickets = (drs["wickets_text"] as String?) ?? _drsGeometry.wicketsText;
     _drsWicketTarget =
         (drs["wicket_target"] as String?) ?? _drsGeometry.wicketTarget;
-    _drsOut = decisionText == "OUT";
+    final backendHitStumps =
+        drs["ball_tracking"] == true ||
+        _drsWickets.toLowerCase().contains("hitting") ||
+        _drsGeometry.wicketsHitting;
+    if (backendHitStumps) {
+      _drsWickets = "Hitting";
+    }
+    _drsOut = decisionText == "OUT" || backendHitStumps;
     _drsOriginalDecision = decisionText == "OUT" ? "OUT" : "NOT OUT";
     _drsSwingDeg =
         ((_drsGeometry.pitchPoint.dx - _drsGeometry.deliveryStart.dx).abs() *
