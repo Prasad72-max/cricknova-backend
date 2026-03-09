@@ -2058,25 +2058,38 @@ class _UploadScreenState extends State<UploadScreen>
     _drsUltraedgeReason = ultraedgeReasonRaw?.toString().trim() ?? "";
 
     _drsHasSpike = ultraedge;
-    final workerInput = <String, dynamic>{
-      "points": _extractTrajectoryPoints(trajectory),
-      "decision": decisionText,
-      "confidence": confidence,
-    };
-
-    try {
-      final result = await compute(_drsGeometryWorker, workerInput);
-      _drsGeometry = _geometryFromWorkerResult(result);
-    } catch (_) {
-      _drsGeometry = _buildDrsGeometry(
-        decisionText: decisionText,
-        confidence: confidence,
-      );
+    final drsTrajectory = drs["trajectory"];
+    if (drsTrajectory is List && drsTrajectory.isNotEmpty) {
+      trajectory = drsTrajectory;
     }
-    _drsPitching = _drsGeometry.pitchingText;
-    _drsImpact = _drsGeometry.impactText;
-    _drsWickets = _drsGeometry.wicketsText;
-    _drsWicketTarget = _drsGeometry.wicketTarget;
+    final geometryRaw = drs["geometry"];
+    if (geometryRaw is Map) {
+      _drsGeometry = _geometryFromWorkerResult(
+        Map<String, dynamic>.from(geometryRaw),
+      );
+    } else {
+      final workerInput = <String, dynamic>{
+        "points": _extractTrajectoryPoints(trajectory),
+        "decision": decisionText,
+        "confidence": confidence,
+      };
+
+      try {
+        final result = await compute(_drsGeometryWorker, workerInput);
+        _drsGeometry = _geometryFromWorkerResult(result);
+      } catch (_) {
+        _drsGeometry = _buildDrsGeometry(
+          decisionText: decisionText,
+          confidence: confidence,
+        );
+      }
+    }
+    _drsPitching =
+        (drs["pitching_text"] as String?) ?? _drsGeometry.pitchingText;
+    _drsImpact = (drs["impact_text"] as String?) ?? _drsGeometry.impactText;
+    _drsWickets = (drs["wickets_text"] as String?) ?? _drsGeometry.wicketsText;
+    _drsWicketTarget =
+        (drs["wicket_target"] as String?) ?? _drsGeometry.wicketTarget;
     _drsOut = decisionText == "OUT";
     _drsOriginalDecision = decisionText == "OUT" ? "OUT" : "NOT OUT";
     _drsSwingDeg =

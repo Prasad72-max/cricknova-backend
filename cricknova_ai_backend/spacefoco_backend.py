@@ -301,6 +301,260 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return trajectory
 
 
+DRS_PITCH_WIDTH_M = 3.05
+DRS_STUMP_SPAN_M = 0.228
+DRS_PITCH_LENGTH_M = 20.12
+DRS_STUMP_CENTER_X_M = DRS_PITCH_WIDTH_M / 2.0
+DRS_STUMP_X_MIN_M = DRS_STUMP_CENTER_X_M - (DRS_STUMP_SPAN_M / 2.0)
+DRS_STUMP_X_MAX_M = DRS_STUMP_CENTER_X_M + (DRS_STUMP_SPAN_M / 2.0)
+DRS_BAIL_HEIGHT_M = 0.71
+DRS_RELEASE_HEIGHT_M = 2.10
+DRS_PAD_HEIGHT_M = 0.62
+
+
+def _clamp01(value):
+    return max(0.0, min(1.0, float(value)))
+
+
+def _detect_bounce_index(ball_positions):
+    if not ball_positions or len(ball_positions) < 3:
+        return None
+
+    best_idx = None
+    best_y = float("-inf")
+    for i in range(1, len(ball_positions) - 1):
+        prev_y = ball_positions[i - 1][1]
+        curr_y = ball_positions[i][1]
+        next_y = ball_positions[i + 1][1]
+        if curr_y >= prev_y and curr_y >= next_y and curr_y > best_y:
+            best_idx = i
+            best_y = curr_y
+
+    if best_idx is not None:
+        return best_idx
+
+    start = max(1, int(len(ball_positions) * 0.2))
+    end = min(len(ball_positions) - 2, max(start, int(len(ball_positions) * 0.85)))
+    if start > end:
+        return len(ball_positions) // 2
+
+    best_idx = start
+    best_y = ball_positions[start][1]
+    for i in range(start + 1, end + 1):
+        if ball_positions[i][1] > best_y:
+            best_y = ball_positions[i][1]
+            best_idx = i
+    return best_idx
+
+
+def _world_x_from_pixel(x_px, frame_width):
+    if frame_width <= 0:
+        return DRS_STUMP_CENTER_X_M
+    return _clamp01(float(x_px) / float(frame_width)) * DRS_PITCH_WIDTH_M
+
+
+def _side_label(world_x):
+    if world_x < DRS_STUMP_X_MIN_M:
+        return "Outside Leg"
+    if world_x > DRS_STUMP_X_MAX_M:
+        return "Outside Off"
+    return "In Line"
+
+
+def _build_world_track(ball_positions, frame_width, frame_height):
+    if not ball_positions:
+        return []
+
+    count = len(ball_positions)
+    denom = max(count - 1, 1)
+    world_points = []
+
+    for i, (x_px, y_px) in enumerate(ball_positions):
+        progress = i / denom
+        world_x = _world_x_from_pixel(x_px, frame_width)
+        world_y = progress * DRS_PITCH_LENGTH_M
+        if frame_height > 0:
+            height_ratio = 1.0 - _clamp01(float(y_px) / float(frame_height))
+        else:
+            height_ratio = 0.5
+        world_z = max(0.0, min(2.5, height_ratio * 2.4))
+        world_points.append(
+            {
+                "x": round(world_x, 4),
+                "y": round(world_y, 4),
+                "z": round(world_z, 4),
+                "screen_x": round(float(x_px), 2),
+                "screen_y": round(float(y_px), 2),
+            }
+        )
+
+    return world_points
+
+
+def _fit_axis_at_stumps(world_points, axis_key):
+    if not world_points:
+        return None, True, None
+
+    fit_points = world_points[-6:] if len(world_points) >= 6 else world_points
+    ys = np.array([p["y"] for p in fit_points], dtype=float)
+    vals = np.array([p[axis_key] for p in fit_points], dtype=float)
+
+    if len(fit_points) < 3 or len(np.unique(np.round(ys, 3))) < 3:
+        if len(fit_points) < 2:
+            return float(vals[-1]), True, None
+        dy = ys[-1] - ys[-2]
+        slope = 0.0 if abs(dy) < 1e-6 else (vals[-1] - vals[-2]) / dy
+        predicted = vals[-1] + (DRS_PITCH_LENGTH_M - ys[-1]) * slope
+        return float(predicted), True, slope
+
+    degree = 2 if len(fit_points) >= 4 else 1
+    coeffs = np.polyfit(ys, vals, degree)
+    poly = np.poly1d(coeffs)
+    predicted = float(poly(DRS_PITCH_LENGTH_M))
+    residual = float(np.mean(np.abs(poly(ys) - vals)))
+    weak = residual > (0.055 if axis_key == "x" else 0.18)
+    return predicted, weak, residual
+
+
+def analyze_drs_world(ball_positions, frame_width, frame_height):
+    trajectory = build_trajectory(ball_positions, frame_width, frame_height)
+    world_points = _build_world_track(ball_positions, frame_width, frame_height)
+
+    if len(world_points) < 2:
+        return {
+            "trajectory": trajectory,
+            "world_points": world_points,
+            "pitching_text": "Outside Off",
+            "impact_text": "Outside Off",
+            "wickets_text": "Missing",
+            "wicket_target": "Middle",
+            "wickets_hitting": False,
+            "stump_confidence": 0.0,
+            "predicted_x_at_stumps_m": round(DRS_STUMP_CENTER_X_M, 4),
+            "predicted_z_at_stumps_m": 0.99,
+            "tracking_quality": "weak",
+            "geometry": {
+                "deliveryStart": {"x": 0.16, "y": 0.20},
+                "pitchPoint": {"x": 0.47, "y": 0.58},
+                "impactPoint": {"x": 0.66, "y": 0.72},
+                "stumpsPoint": {"x": 0.50, "y": 0.82},
+                "pathPoints": trajectory,
+                "pitchingText": "Outside Off",
+                "impactText": "Outside Off",
+                "wicketsText": "Missing",
+                "wicketTarget": "Middle",
+                "wicketsHitting": False,
+            },
+        }
+
+    bounce_idx = _detect_bounce_index(ball_positions)
+    if bounce_idx is None:
+        bounce_idx = max(1, len(world_points) // 2)
+    bounce_idx = max(1, min(bounce_idx, len(world_points) - 1))
+    impact_idx = len(world_points) - 1
+
+    bounce_world = world_points[bounce_idx]
+    impact_world = world_points[impact_idx]
+    post_bounce_world = world_points[bounce_idx:]
+
+    predicted_x, weak_x, x_quality = _fit_axis_at_stumps(post_bounce_world, "x")
+    predicted_z, weak_z, z_quality = _fit_axis_at_stumps(post_bounce_world, "z")
+
+    if predicted_x is None:
+        predicted_x = impact_world["x"]
+        weak_x = True
+    if predicted_z is None:
+        predicted_z = impact_world["z"]
+        weak_z = True
+
+    predicted_x = max(0.0, min(DRS_PITCH_WIDTH_M, float(predicted_x)))
+    predicted_z = max(0.0, float(predicted_z))
+
+    tracking_is_weak = (
+        len(world_points) < 6
+        or len(post_bounce_world) < 3
+        or weak_x
+        or weak_z
+    )
+    tracking_quality = "weak" if tracking_is_weak else "strong"
+
+    pitching_text = "In Line" if DRS_STUMP_X_MIN_M <= bounce_world["x"] <= DRS_STUMP_X_MAX_M else _side_label(bounce_world["x"])
+    impact_text = "In Line" if DRS_STUMP_X_MIN_M <= impact_world["x"] <= DRS_STUMP_X_MAX_M else _side_label(impact_world["x"])
+
+    wickets_hitting = (
+        DRS_STUMP_X_MIN_M <= predicted_x <= DRS_STUMP_X_MAX_M
+        and predicted_z < DRS_BAIL_HEIGHT_M
+    )
+    wickets_text = "Hitting" if wickets_hitting else "Missing"
+
+    dist_off = abs(predicted_x - DRS_STUMP_X_MAX_M)
+    dist_leg = abs(predicted_x - DRS_STUMP_X_MIN_M)
+    dist_mid = abs(predicted_x - DRS_STUMP_CENTER_X_M)
+    if dist_mid <= dist_off and dist_mid <= dist_leg:
+        wicket_target = "Middle"
+    elif dist_off <= dist_leg:
+        wicket_target = "Off"
+    else:
+        wicket_target = "Leg"
+
+    x_center_score = max(
+        0.0,
+        1.0 - (abs(predicted_x - DRS_STUMP_CENTER_X_M) / ((DRS_STUMP_SPAN_M / 2.0) + 0.12)),
+    )
+    z_score = max(0.0, 1.0 - (max(0.0, predicted_z - DRS_BAIL_HEIGHT_M) / 0.80))
+    quality_score = 0.45 if tracking_is_weak else 0.82
+    if wickets_hitting:
+        stump_confidence = min(0.98, 0.35 + (0.25 * x_center_score) + (0.20 * z_score) + (0.20 * quality_score))
+    else:
+        near_edge = min(abs(predicted_x - DRS_STUMP_X_MIN_M), abs(predicted_x - DRS_STUMP_X_MAX_M))
+        miss_penalty = min(1.0, near_edge / 0.20)
+        stump_confidence = max(0.05, 0.45 - (0.25 * miss_penalty) - (0.10 * (1.0 - quality_score)))
+
+    delivery_world = world_points[0]
+    geometry = {
+        "deliveryStart": {
+            "x": round(_clamp01(delivery_world["x"] / DRS_PITCH_WIDTH_M), 4),
+            "y": round(_clamp01(0.10 + (1.0 - _clamp01(delivery_world["z"] / DRS_RELEASE_HEIGHT_M)) * 0.18), 4),
+        },
+        "pitchPoint": {
+            "x": round(_clamp01(bounce_world["x"] / DRS_PITCH_WIDTH_M), 4),
+            "y": round(_clamp01(0.52 + (bounce_world["y"] / DRS_PITCH_LENGTH_M) * 0.16), 4),
+        },
+        "impactPoint": {
+            "x": round(_clamp01(impact_world["x"] / DRS_PITCH_WIDTH_M), 4),
+            "y": round(_clamp01(0.66 + (impact_world["z"] / max(DRS_PAD_HEIGHT_M, 0.01)) * 0.08), 4),
+        },
+        "stumpsPoint": {"x": 0.50, "y": 0.82},
+        "pathPoints": trajectory,
+        "pitchingText": pitching_text,
+        "impactText": impact_text,
+        "wicketsText": wickets_text,
+        "wicketTarget": wicket_target,
+        "wicketsHitting": wickets_hitting,
+    }
+
+    return {
+        "trajectory": trajectory,
+        "world_points": world_points,
+        "bounce_index": bounce_idx,
+        "impact_index": impact_idx,
+        "bounce_x_m": round(bounce_world["x"], 4),
+        "impact_x_m": round(impact_world["x"], 4),
+        "predicted_x_at_stumps_m": round(predicted_x, 4),
+        "predicted_z_at_stumps_m": round(predicted_z, 4),
+        "pitching_text": pitching_text,
+        "impact_text": impact_text,
+        "wickets_text": wickets_text,
+        "wicket_target": wicket_target,
+        "wickets_hitting": wickets_hitting,
+        "stump_confidence": round(float(stump_confidence), 2),
+        "tracking_quality": tracking_quality,
+        "fit_residual_x": None if x_quality is None else round(float(x_quality), 4),
+        "fit_residual_z": None if z_quality is None else round(float(z_quality), 4),
+        "geometry": geometry,
+    }
+
+
 # -----------------------------
 # PAYPAL MODELS (MUST LOAD BEFORE ROUTES)
 # -----------------------------
@@ -865,11 +1119,13 @@ async def analyze_training_video(file: UploadFile = File(...)):
         # -----------------------------
         ultraedge = False  # Disabled for stability (no scripted edge detection)
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+        drs_analysis = analyze_drs_world(
             ball_positions,
             frame_width,
-            frame_height
+            frame_height,
         )
+        hits_stumps = drs_analysis["wickets_hitting"]
+        stump_confidence = drs_analysis["stump_confidence"]
 
         if hits_stumps:
             decision = "OUT"
@@ -887,13 +1143,24 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
+            "trajectory": drs_analysis["trajectory"],
             "drs": {
                 "ultraedge": ultraedge,
-                "ball_tracking": hits_stumps,
+                "ball_tracking": True,
                 "stump_confidence": stump_confidence,
                 "decision": decision,
-                "reason": reason
+                "reason": reason,
+                "pitching_text": drs_analysis["pitching_text"],
+                "impact_text": drs_analysis["impact_text"],
+                "wickets_text": drs_analysis["wickets_text"],
+                "wicket_target": drs_analysis["wicket_target"],
+                "predicted_x_at_stumps_m": drs_analysis["predicted_x_at_stumps_m"],
+                "predicted_z_at_stumps_m": drs_analysis["predicted_z_at_stumps_m"],
+                "bounce_x_m": drs_analysis["bounce_x_m"],
+                "impact_x_m": drs_analysis["impact_x_m"],
+                "tracking_quality": drs_analysis["tracking_quality"],
+                "world_points": drs_analysis["world_points"],
+                "geometry": drs_analysis["geometry"],
             }
         }
 
@@ -1372,11 +1639,13 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         # -----------------------------
         ultraedge = False  # Disabled for stability (no scripted edge detection)
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+        drs_analysis = analyze_drs_world(
             ball_positions,
             frame_width,
-            frame_height
+            frame_height,
         )
+        hits_stumps = drs_analysis["wickets_hitting"]
+        stump_confidence = drs_analysis["stump_confidence"]
 
         if hits_stumps:
             decision = "OUT"
@@ -1394,13 +1663,24 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
             "spin": spin,
             "spin_strength": spin_result.get("strength"),
             "spin_turn_deg": spin_result.get("turn_deg"),
-            "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
+            "trajectory": drs_analysis["trajectory"],
             "drs": {
                 "ultraedge": ultraedge,
-                "ball_tracking": hits_stumps,
+                "ball_tracking": True,
                 "stump_confidence": stump_confidence,
                 "decision": decision,
-                "reason": reason
+                "reason": reason,
+                "pitching_text": drs_analysis["pitching_text"],
+                "impact_text": drs_analysis["impact_text"],
+                "wickets_text": drs_analysis["wickets_text"],
+                "wicket_target": drs_analysis["wicket_target"],
+                "predicted_x_at_stumps_m": drs_analysis["predicted_x_at_stumps_m"],
+                "predicted_z_at_stumps_m": drs_analysis["predicted_z_at_stumps_m"],
+                "bounce_x_m": drs_analysis["bounce_x_m"],
+                "impact_x_m": drs_analysis["impact_x_m"],
+                "tracking_quality": drs_analysis["tracking_quality"],
+                "world_points": drs_analysis["world_points"],
+                "geometry": drs_analysis["geometry"],
             }
         }
 
@@ -1502,7 +1782,7 @@ async def drs_review(file: UploadFile = File(...)):
         raw_positions, _ = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
 
-        if not ball_positions or len(ball_positions) < 6:
+        if not ball_positions or len(ball_positions) < 3:
             return {
                 "status": "success",
                 "drs": {
@@ -1510,7 +1790,24 @@ async def drs_review(file: UploadFile = File(...)):
                     "ball_tracking": False,
                     "stump_confidence": 0.0,
                     "decision": "NOT OUT",
-                    "reason": "Insufficient tracking data"
+                    "reason": "Insufficient tracking data",
+                    "pitching_text": "Outside Off",
+                    "impact_text": "Outside Off",
+                    "wickets_text": "Missing",
+                    "wicket_target": "Middle",
+                    "tracking_quality": "weak",
+                    "geometry": {
+                        "deliveryStart": {"x": 0.16, "y": 0.20},
+                        "pitchPoint": {"x": 0.47, "y": 0.58},
+                        "impactPoint": {"x": 0.66, "y": 0.72},
+                        "stumpsPoint": {"x": 0.50, "y": 0.82},
+                        "pathPoints": [],
+                        "pitchingText": "Outside Off",
+                        "impactText": "Outside Off",
+                        "wicketsText": "Missing",
+                        "wicketTarget": "Middle",
+                        "wicketsHitting": False,
+                    },
                 }
             }
 
@@ -1573,11 +1870,13 @@ async def drs_review(file: UploadFile = File(...)):
         # BALL TRACKING (STUMP HIT)
         # -----------------------------
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+        drs_analysis = analyze_drs_world(
             ball_positions,
             frame_width,
-            frame_height
+            frame_height,
         )
+        hits_stumps = drs_analysis["wickets_hitting"]
+        stump_confidence = drs_analysis["stump_confidence"]
 
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)
@@ -1596,10 +1895,22 @@ async def drs_review(file: UploadFile = File(...)):
             "status": "success",
             "drs": {
                 "ultraedge": ultraedge,
-                "ball_tracking": hits_stumps,
+                "ball_tracking": True,
                 "stump_confidence": stump_confidence,
                 "decision": decision,
-                "reason": reason
+                "reason": reason,
+                "trajectory": drs_analysis["trajectory"],
+                "pitching_text": drs_analysis["pitching_text"],
+                "impact_text": drs_analysis["impact_text"],
+                "wickets_text": drs_analysis["wickets_text"],
+                "wicket_target": drs_analysis["wicket_target"],
+                "bounce_x_m": drs_analysis["bounce_x_m"],
+                "impact_x_m": drs_analysis["impact_x_m"],
+                "predicted_x_at_stumps_m": drs_analysis["predicted_x_at_stumps_m"],
+                "predicted_z_at_stumps_m": drs_analysis["predicted_z_at_stumps_m"],
+                "tracking_quality": drs_analysis["tracking_quality"],
+                "world_points": drs_analysis["world_points"],
+                "geometry": drs_analysis["geometry"],
             }
         }
 
