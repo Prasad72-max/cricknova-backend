@@ -1047,6 +1047,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   bool _orbitMode = true;
   double _orbitYaw = 0;
   double _orbitPitch = 0;
+  double _videoProgress = 0.0;
 
   @override
   void initState() {
@@ -1062,38 +1063,42 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
 
   Future<void> _initAndRun() async {
     await _videoController.initialize();
+    await _videoController.setLooping(false);
+    _videoController.addListener(_handleVideoTick);
     if (!mounted) return;
-    setState(() => _ready = true);
-    // Show a clean pitch view before tracking starts.
-    if (!await _runPhase(_DrsCinematicPhase.idle, const Duration(seconds: 1))) {
-      return;
-    }
-
-    if (!await _runPhase(
-      _DrsCinematicPhase.tracking,
-      const Duration(seconds: 5),
-    )) {
-      return;
-    }
-    if (!mounted) return;
-    setState(() => _phase = _DrsCinematicPhase.decision);
-    _phaseController.stop();
-  }
-
-  Future<bool> _runPhase(_DrsCinematicPhase phase, Duration duration) async {
-    if (!mounted) return false;
-    setState(() => _phase = phase);
-    _phaseController.duration = duration;
-    _phaseController.forward(from: 0);
-    await Future.delayed(duration);
-    return mounted;
+    await _videoController.setPlaybackSpeed(0.25);
+    _phaseController.duration = const Duration(milliseconds: 1800);
+    _phaseController.repeat(reverse: true);
+    setState(() {
+      _ready = true;
+      _phase = _DrsCinematicPhase.tracking;
+    });
+    await _videoController.play();
   }
 
   @override
   void dispose() {
+    _videoController.removeListener(_handleVideoTick);
     _phaseController.dispose();
     _videoController.dispose();
     super.dispose();
+  }
+
+  void _handleVideoTick() {
+    if (!mounted || !_videoController.value.isInitialized) return;
+    final durationMs = _videoController.value.duration.inMilliseconds;
+    final positionMs = _videoController.value.position.inMilliseconds;
+    final progress = durationMs <= 0
+        ? 0.0
+        : (positionMs / durationMs).clamp(0.0, 1.0);
+    if ((progress - _videoProgress).abs() > 0.004) {
+      setState(() {
+        _videoProgress = progress;
+        _phase = progress >= 0.985
+            ? _DrsCinematicPhase.decision
+            : _DrsCinematicPhase.tracking;
+      });
+    }
   }
 
   int? _detectBounceIndex(List<Offset> points) {
@@ -1284,6 +1289,91 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     );
   }
 
+  Widget _buildScannerBeam({
+    required double top,
+    required double height,
+    required double left,
+    required double width,
+  }) {
+    return Positioned(
+      left: left,
+      top: top,
+      child: IgnorePointer(
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                Color(0x6636CFFF),
+                Color(0xAA7BE7FF),
+                Color(0x6636CFFF),
+                Colors.transparent,
+              ],
+            ),
+          ),
+          child: Align(
+            alignment: Alignment(0, (_phaseController.value * 2) - 1),
+            child: Container(
+              height: 2.5,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF9DEBFF),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0xFF72DEFF),
+                    blurRadius: 14,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImpactLine({
+    required double lineY,
+    required double stumpCenterX,
+    required double maxWidth,
+    required bool visible,
+  }) {
+    final lineWidth = maxWidth * 0.16;
+    final left = (stumpCenterX - (lineWidth / 2)).clamp(12.0, maxWidth - lineWidth - 12.0);
+    return Positioned(
+      left: left,
+      top: lineY,
+      child: IgnorePointer(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 180),
+          opacity: visible ? 1.0 : 0.0,
+          child: Container(
+            width: lineWidth,
+            height: 3.2,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF3B30),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0xFFFF5F57),
+                  blurRadius: 18,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _tag(String title, String value, bool visible) {
     final v = value.toLowerCase();
     final ok =
@@ -1385,76 +1475,32 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
       backgroundColor: Colors.black,
       body: _ready
           ? AnimatedBuilder(
-              animation: _phaseController,
+              animation: Listenable.merge([_phaseController, _videoController]),
               builder: (context, _) {
-                final progress = _phase == _DrsCinematicPhase.tracking
-                    ? _phaseController.value
-                    : (_phase == _DrsCinematicPhase.decision ? 1.0 : 0.0);
+                final progress = _videoProgress;
                 final milestones = _timelineMilestones();
                 final showPitch = progress >= milestones.pitch;
                 final showImpact = progress >= milestones.impact;
                 final showWicket =
                     _phase == _DrsCinematicPhase.decision ||
                     progress >= milestones.wicket;
-                final zoom = _phase == _DrsCinematicPhase.tracking
-                    ? (1.0 + (0.08 * Curves.easeInOut.transform(progress)))
-                    : (_phase == _DrsCinematicPhase.decision ? 1.08 : 1.0);
+                final impactLineVisible = progress >= milestones.impact;
                 return Stack(
                   children: [
                     Positioned.fill(
-                      child: GestureDetector(
-                        onPanUpdate: (details) {
-                          setState(() {
-                            // Horizontal swipe => Y-axis orbit (left/right).
-                            _orbitYaw += details.delta.dx * 0.0040;
-                            // Vertical swipe => slight X-axis tilt (up/down).
-                            _orbitPitch =
-                                (_orbitPitch - details.delta.dy * 0.0022).clamp(
-                                  -0.55,
-                                  0.55,
-                                );
-                          });
-                        },
-                        child: Transform.scale(
-                          scale: zoom,
-                          alignment: const Alignment(0.0, 0.12),
-                          child: Transform(
-                            alignment: Alignment.center,
-                            transform: Matrix4.identity()
-                              ..setEntry(3, 2, 0.001)
-                              ..rotateX(_orbitPitch)
-                              ..rotateY(_orbitYaw),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Image.asset(
-                                  'assets/pitch.png',
-                                  fit: BoxFit.cover,
-                                  alignment: Alignment.center,
-                                  errorBuilder: (_, __, ___) {
-                                    return Container(
-                                      color: const Color(0xFF1E3A1F),
-                                    );
-                                  },
-                                ),
-                                CustomPaint(
-                                  painter: _DrsTrajectoryPainter(
-                                    geometry: widget.geometry,
-                                    progress: progress,
-                                    viewMode: _DrsViewMode.umpire,
-                                  ),
-                                  child: const SizedBox.expand(),
-                                ),
-                              ],
-                            ),
-                          ),
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: _videoController.value.size.width,
+                          height: _videoController.value.size.height,
+                          child: VideoPlayer(_videoController),
                         ),
                       ),
                     ),
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.34),
+                          color: Colors.black.withOpacity(0.22),
                         ),
                       ),
                     ),
@@ -1466,13 +1512,46 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             end: Alignment.bottomCenter,
                             colors: [
                               const Color(0xFF8FD1FF).withOpacity(0.08),
-                              const Color(0xFFFFFFFF).withOpacity(0.02),
+                              const Color(0xFF001018).withOpacity(0.06),
                               Colors.transparent,
                             ],
                             stops: const [0.00, 0.20, 0.42],
                           ),
                         ),
                       ),
+                    ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final width = constraints.maxWidth;
+                        final height = constraints.maxHeight;
+                        final stumpCenterX =
+                            widget.geometry.stumpsPoint.dx.clamp(0.18, 0.82) *
+                            width;
+                        final impactLineY =
+                            widget.geometry.impactPoint.dy.clamp(0.22, 0.88) *
+                            height;
+                        final scannerTop = (height * 0.34).clamp(120.0, height - 240.0);
+                        final scannerHeight = (height * 0.28).clamp(120.0, 220.0);
+                        return Stack(
+                          children: [
+                            _buildScannerBeam(
+                              top: scannerTop,
+                              height: scannerHeight,
+                              left: (stumpCenterX - (width * 0.075)).clamp(
+                                12.0,
+                                width - (width * 0.15) - 12.0,
+                              ),
+                              width: width * 0.15,
+                            ),
+                            _buildImpactLine(
+                              lineY: impactLineY,
+                              stumpCenterX: stumpCenterX,
+                              maxWidth: width,
+                              visible: impactLineVisible,
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 6,
@@ -1485,30 +1564,27 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 10,
                       left: 14,
-                      right: 72,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.26),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.14),
                           ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.26),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.14),
-                            ),
-                          ),
-                          child: const Text(
-                            "DRS TECHNOLOGY: POWERED BY CRICKNOVA AI",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontFamily: "Montserrat",
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12,
-                              letterSpacing: 1.1,
-                            ),
+                        ),
+                        child: const Text(
+                          "CRICKNOVA REPLAY",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: "Montserrat",
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                            letterSpacing: 1.2,
                           ),
                         ),
                       ),
@@ -1559,56 +1635,35 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       ),
                     ),
                     Positioned(
-                      top: MediaQuery.of(context).padding.top + 68,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 260),
-                          opacity: _phase == _DrsCinematicPhase.decision
-                              ? 1
-                              : 0.94,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 28,
-                              vertical: 12,
+                      top: MediaQuery.of(context).padding.top + 18,
+                      right: 64,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 220),
+                        opacity: showWicket ? 1.0 : 0.0,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.28),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _finalOut
+                                  ? const Color(0xFFFF5252)
+                                  : const Color(0xFF2EED79),
                             ),
-                            decoration: BoxDecoration(
-                              color:
-                                  (_finalOut
-                                          ? const Color(0xFFD32F2F)
-                                          : const Color(0xFF2EED79))
-                                      .withOpacity(0.16),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: _finalOut
-                                    ? const Color(0xFFD32F2F)
-                                    : const Color(0xFF2EED79),
-                                width: 1.6,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color:
-                                      (_finalOut
-                                              ? const Color(0xFFD32F2F)
-                                              : const Color(0xFF2EED79))
-                                          .withOpacity(0.30),
-                                  blurRadius: 18,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              _finalOut ? "OUT" : "NOT OUT",
-                              style: TextStyle(
-                                color: _finalOut
-                                    ? const Color(0xFFFF6E6E)
-                                    : const Color(0xFF7DFFB1),
-                                fontFamily: "Montserrat",
-                                fontWeight: FontWeight.w900,
-                                fontSize: 28,
-                                letterSpacing: 1.0,
-                              ),
+                          ),
+                          child: Text(
+                            _finalOut ? "OUT" : "NOT OUT",
+                            style: TextStyle(
+                              color: _finalOut
+                                  ? const Color(0xFFFF6E6E)
+                                  : const Color(0xFF7DFFB1),
+                              fontFamily: "Montserrat",
+                              fontWeight: FontWeight.w900,
+                              fontSize: 18,
+                              letterSpacing: 1.0,
                             ),
                           ),
                         ),
@@ -1623,7 +1678,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       left: 14,
                       bottom: 18,
                       child: Text(
-                        "Filmed on CRICKNOVA AI",
+                        "LIVE MOTION ANALYSIS - 120 FPS INTERPOLATED",
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.95),
                           fontFamily: "Montserrat",
@@ -3235,7 +3290,7 @@ class _UploadScreenState extends State<UploadScreen>
                                   ? "Analyzing..."
                                   : (speedKmph != null
                                         ? "${speedKmph!.toStringAsFixed(1)} km/h"
-                                        : "----"),
+                                        : ""),
                             ),
                           ),
                           if (speedKmph != null)
@@ -3252,7 +3307,7 @@ class _UploadScreenState extends State<UploadScreen>
                                     ? "Estimated from video motion"
                                     : speedType == "derived_physics"
                                     ? "Physics fallback estimate"
-                                    : "Speed unavailable",
+                                    : "",
                                 style: const TextStyle(
                                   color: Colors.white54,
                                   fontSize: 12,
