@@ -17,6 +17,7 @@ import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
+
 enum _DrsViewMode { keeper, umpire, striker }
 
 List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
@@ -31,7 +32,8 @@ List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
     final py = y.toDouble().clamp(0.0, 1.0);
     if (pts.isNotEmpty) {
       final prev = pts.last;
-      if ((prev["x"]! - px).abs() < 0.0005 && (prev["y"]! - py).abs() < 0.0005) {
+      if ((prev["x"]! - px).abs() < 0.0005 &&
+          (prev["y"]! - py).abs() < 0.0005) {
         continue;
       }
     }
@@ -40,7 +42,9 @@ List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
   return pts;
 }
 
-List<Map<String, double>> _smoothVideoTrajectory(List<Map<String, double>> points) {
+List<Map<String, double>> _smoothVideoTrajectory(
+  List<Map<String, double>> points,
+) {
   if (points.length < 3) return points;
   final out = List<Map<String, double>>.generate(
     points.length,
@@ -158,8 +162,9 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
     pitchingText = "In Line";
   }
 
-  final impactText =
-      (impactPoint["x"]! - stumpCenterX).abs() > 0.090 ? "Outside" : "In Line";
+  final impactText = (impactPoint["x"]! - stumpCenterX).abs() > 0.090
+      ? "Outside"
+      : "In Line";
 
   final dOff = (projectedAtStumpsX - offStumpX).abs();
   final dMid = (projectedAtStumpsX - stumpCenterX).abs();
@@ -456,7 +461,10 @@ class _DrsTrajectoryPainter extends CustomPainter {
     final uImpact = geometry.impactPoint.dx.clamp(0.20, 0.82);
 
     // Full-pitch stretch from far release to near stumps.
-    Offset wDelivery = worldToScreen(uRelease, vFromZ(0.0) - 0.02).translate(0, -86);
+    Offset wDelivery = worldToScreen(
+      uRelease,
+      vFromZ(0.0) - 0.02,
+    ).translate(0, -86);
     Offset wPitch = worldToScreen(uPitch, vFromZ(pitchZ));
     // Keep both stump sets on one center line every time.
     final wStumps = worldToScreen(0.5, vFromZ(pitchLengthM) + 0.01);
@@ -597,12 +605,8 @@ class _DrsTrajectoryPainter extends CustomPainter {
     if (useRawPath) {
       // Render directly from video trajectory and mark release/pitch/impact.
       final n = rawPath.length;
-      final minY = rawPath
-          .map((p) => p.dy)
-          .reduce((a, b) => a < b ? a : b);
-      final maxY = rawPath
-          .map((p) => p.dy)
-          .reduce((a, b) => a > b ? a : b);
+      final minY = rawPath.map((p) => p.dy).reduce((a, b) => a < b ? a : b);
+      final maxY = rawPath.map((p) => p.dy).reduce((a, b) => a > b ? a : b);
       final ySpan = (maxY - minY).abs() < 0.0001 ? 1.0 : (maxY - minY);
 
       int? pitchIdx;
@@ -685,7 +689,6 @@ class _DrsTrajectoryPainter extends CustomPainter {
           }
           pitchIdx = bestInterior;
         }
-
       }
       // Short-track fallback: ensure a pitching point exists for n=3/4 too.
       if (pitchIdx == null && n >= 3) {
@@ -788,6 +791,7 @@ class _DrsTrajectoryPainter extends CustomPainter {
         final ctrl = lerpPoint(rel, p, 0.45).translate(0, -34);
         return quadBezier(rel, ctrl, p, t);
       }
+
       Offset rawPostBezier(double t) {
         final p = pit ?? lerpPoint(rel, imp, 0.52);
         final ctrl = lerpPoint(p, imp, 0.45).translate(0, -18);
@@ -857,7 +861,8 @@ class _DrsTrajectoryPainter extends CustomPainter {
       }
       final preCtrl = lerpPoint(wDelivery, wPitch, 0.48) + const Offset(0, -46);
       final postCtrl = lerpPoint(wPitch, wImpact, 0.52) + const Offset(0, -18);
-      final predCtrl = lerpPoint(wImpact, wOutcome, 0.45) + const Offset(0, -34);
+      final predCtrl =
+          lerpPoint(wImpact, wOutcome, 0.45) + const Offset(0, -34);
 
       if (trackProgress > 0.0) {
         final p1 = (trackProgress / 0.33).clamp(0.0, 1.0);
@@ -892,7 +897,11 @@ class _DrsTrajectoryPainter extends CustomPainter {
         final bouncePulse = ((trackProgress - 0.33) / 0.22).clamp(0.0, 1.0);
         final rippleAlpha = (1.0 - bouncePulse).clamp(0.0, 1.0);
         final r = 10 + (20 * bouncePulse);
-        canvas.drawCircle(wPitch, 9, Paint()..color = Colors.white.withOpacity(0.86));
+        canvas.drawCircle(
+          wPitch,
+          9,
+          Paint()..color = Colors.white.withOpacity(0.86),
+        );
         canvas.drawCircle(
           wPitch,
           r,
@@ -973,26 +982,14 @@ class _DrsTrajectoryPainter extends CustomPainter {
         );
       }
       if (impactMarker != null) {
-        drawSharpRing(
-          impactMarker!,
-          Colors.orangeAccent,
-          r: 9,
-        );
+        drawSharpRing(impactMarker!, Colors.orangeAccent, r: 9);
       }
     }
     if (!useRawPath && ballAt != null) {
-      draw3DBall(
-        ballAt.translate(0, -ballLift),
-        radius: 5.2,
-        lift: ballLift,
-      );
+      draw3DBall(ballAt.translate(0, -ballLift), radius: 5.2, lift: ballLift);
     }
     if (useRawPath && ballAt != null) {
-      draw3DBall(
-        ballAt.translate(0, -ballLift),
-        radius: 4.8,
-        lift: ballLift,
-      );
+      draw3DBall(ballAt.translate(0, -ballLift), radius: 4.8, lift: ballLift);
     }
 
     // Stumps are part of pitch.png background.
@@ -1097,6 +1094,194 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     _phaseController.dispose();
     _videoController.dispose();
     super.dispose();
+  }
+
+  int? _detectBounceIndex(List<Offset> points) {
+    if (points.length < 3) return null;
+    int bestIdx = -1;
+    double bestY = -1e9;
+    for (int i = 1; i < points.length - 1; i++) {
+      final current = points[i].dy;
+      if (current >= points[i - 1].dy &&
+          current >= points[i + 1].dy &&
+          current > bestY) {
+        bestY = current;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx == -1) return null;
+    return bestIdx;
+  }
+
+  ({double pitch, double impact, double wicket}) _timelineMilestones() {
+    final points = widget.geometry.pathPoints;
+    if (points.length < 3) {
+      return (pitch: 0.50, impact: 0.88, wicket: 0.97);
+    }
+    final bounceIdx =
+        _detectBounceIndex(points) ?? (points.length * 0.52).round();
+    final pitch = (bounceIdx / (points.length - 1)).clamp(0.18, 0.78);
+    final impact = ((points.length - 2) / (points.length - 1)).clamp(
+      pitch + 0.08,
+      0.94,
+    );
+    final wicket = (impact + 0.04).clamp(impact, 0.985);
+    return (pitch: pitch, impact: impact, wicket: wicket);
+  }
+
+  Color _statusAccent(String title, String value) {
+    final lower = value.toLowerCase();
+    if (title == "IMPACT") {
+      return lower.contains("in line")
+          ? const Color(0xFF29B6F6)
+          : const Color(0xFF42A5F5);
+    }
+    if (title == "WICKET") {
+      return lower.contains("hitting")
+          ? const Color(0xFF00E676)
+          : const Color(0xFFFF5252);
+    }
+    return const Color(0xFF00E676);
+  }
+
+  Widget _statusIndicator(String title, String value) {
+    final accent = _statusAccent(title, value);
+    final lower = value.toLowerCase();
+    final isWicket = title == "WICKET";
+    final positive = lower.contains("in line") || lower.contains("hitting");
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: isWicket ? Colors.transparent : accent.withOpacity(0.18),
+        border: Border.all(color: accent.withOpacity(0.95), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withOpacity(0.55),
+            blurRadius: 14,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Center(
+        child: isWicket
+            ? Icon(
+                positive ? Icons.check_rounded : Icons.close_rounded,
+                size: 18,
+                color: accent,
+              )
+            : Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: accent,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _sidebarRow({
+    required String title,
+    required String value,
+    required bool visible,
+  }) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 220),
+      opacity: visible ? 1 : 0.22,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 220),
+        offset: visible ? Offset.zero : const Offset(-0.08, 0),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.26),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.14)),
+          ),
+          child: Row(
+            children: [
+              _statusIndicator(title, value),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.72),
+                        fontSize: 10.5,
+                        letterSpacing: 1.0,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      value.toUpperCase(),
+                      style: TextStyle(
+                        color: _statusAccent(title, value),
+                        fontSize: 14,
+                        letterSpacing: 0.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniTracker() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 140,
+          height: 110,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.30),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withOpacity(0.18)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "BALL TRACKER",
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.74),
+                  fontSize: 10,
+                  letterSpacing: 1.0,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: CustomPaint(
+                  painter: _DrsTrajectoryPainter(
+                    geometry: widget.geometry,
+                    progress: 1.0,
+                    viewMode: _DrsViewMode.keeper,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _tag(String title, String value, bool visible) {
@@ -1205,6 +1390,12 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                 final progress = _phase == _DrsCinematicPhase.tracking
                     ? _phaseController.value
                     : (_phase == _DrsCinematicPhase.decision ? 1.0 : 0.0);
+                final milestones = _timelineMilestones();
+                final showPitch = progress >= milestones.pitch;
+                final showImpact = progress >= milestones.impact;
+                final showWicket =
+                    _phase == _DrsCinematicPhase.decision ||
+                    progress >= milestones.wicket;
                 final zoom = _phase == _DrsCinematicPhase.tracking
                     ? (1.0 + (0.08 * Curves.easeInOut.transform(progress)))
                     : (_phase == _DrsCinematicPhase.decision ? 1.08 : 1.0);
@@ -1217,8 +1408,11 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             // Horizontal swipe => Y-axis orbit (left/right).
                             _orbitYaw += details.delta.dx * 0.0040;
                             // Vertical swipe => slight X-axis tilt (up/down).
-                            _orbitPitch = (_orbitPitch - details.delta.dy * 0.0022)
-                                .clamp(-0.55, 0.55);
+                            _orbitPitch =
+                                (_orbitPitch - details.delta.dy * 0.0022).clamp(
+                                  -0.55,
+                                  0.55,
+                                );
                           });
                         },
                         child: Transform.scale(
@@ -1260,6 +1454,13 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.34),
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
@@ -1282,7 +1483,144 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       ),
                     ),
                     Positioned(
-                      left: 12,
+                      top: MediaQuery.of(context).padding.top + 10,
+                      left: 14,
+                      right: 72,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.26),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.14),
+                            ),
+                          ),
+                          child: const Text(
+                            "DRS TECHNOLOGY: POWERED BY CRICKNOVA AI",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: "Montserrat",
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: MediaQuery.of(context).padding.top + 60,
+                      left: 14,
+                      child: SizedBox(
+                        width: 220,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(14, 16, 14, 6),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.24),
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.16),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _sidebarRow(
+                                    title: "PITCHING",
+                                    value: widget.pitching,
+                                    visible: showPitch,
+                                  ),
+                                  _sidebarRow(
+                                    title: "IMPACT",
+                                    value: widget.impact,
+                                    visible: showImpact,
+                                  ),
+                                  _sidebarRow(
+                                    title: "WICKET",
+                                    value: widget.wickets == "Hitting"
+                                        ? "HITTING"
+                                        : "MISSING",
+                                    visible: showWicket,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: MediaQuery.of(context).padding.top + 68,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 260),
+                          opacity: _phase == _DrsCinematicPhase.decision
+                              ? 1
+                              : 0.94,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 28,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  (_finalOut
+                                          ? const Color(0xFFD32F2F)
+                                          : const Color(0xFF2EED79))
+                                      .withOpacity(0.16),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: _finalOut
+                                    ? const Color(0xFFD32F2F)
+                                    : const Color(0xFF2EED79),
+                                width: 1.6,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      (_finalOut
+                                              ? const Color(0xFFD32F2F)
+                                              : const Color(0xFF2EED79))
+                                          .withOpacity(0.30),
+                                  blurRadius: 18,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              _finalOut ? "OUT" : "NOT OUT",
+                              style: TextStyle(
+                                color: _finalOut
+                                    ? const Color(0xFFFF6E6E)
+                                    : const Color(0xFF7DFFB1),
+                                fontFamily: "Montserrat",
+                                fontWeight: FontWeight.w900,
+                                fontSize: 28,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 14,
+                      bottom: 24,
+                      child: _buildMiniTracker(),
+                    ),
+                    Positioned(
+                      left: 14,
                       bottom: 18,
                       child: Text(
                         "Filmed on CRICKNOVA AI",
@@ -1292,30 +1630,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                           fontWeight: FontWeight.w800,
                           fontSize: 12,
                           letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 22,
-                      left: 0,
-                      right: 0,
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 300),
-                        opacity: _phase == _DrsCinematicPhase.decision ? 1 : 0,
-                        child: Center(
-                          child: Text(
-                            _finalOut ? "OUT" : "NOT OUT",
-                            textDirection: TextDirection.ltr,
-                            style: TextStyle(
-                              color: _finalOut
-                                  ? const Color(0xFFD32F2F)
-                                  : const Color(0xFF2EED79),
-                              fontFamily: "Montserrat",
-                              fontWeight: FontWeight.w900,
-                              fontSize: 58,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
                         ),
                       ),
                     ),
@@ -1562,7 +1876,9 @@ class _UploadScreenState extends State<UploadScreen>
     }
 
     final bounce = _detectBounceIndex(pts);
-    final pivot = bounce <= 0 ? (pts.length ~/ 2) : bounce.clamp(1, pts.length - 2);
+    final pivot = bounce <= 0
+        ? (pts.length ~/ 2)
+        : bounce.clamp(1, pts.length - 2);
     final preDx = pts[pivot]["x"]! - pts.first["x"]!;
     final postDx = pts.last["x"]! - pts[pivot]["x"]!;
     final curveDx = postDx - preDx;
@@ -1693,14 +2009,17 @@ class _UploadScreenState extends State<UploadScreen>
       pathPoints: (() {
         final raw = result["pathPoints"];
         if (raw is List) {
-          return raw.whereType<Map>().map((p) {
-            final x = p["x"];
-            final y = p["y"];
-            if (x is num && y is num) {
-              return Offset(x.toDouble(), y.toDouble());
-            }
-            return const Offset(0.5, 0.5);
-          }).toList(growable: false);
+          return raw
+              .whereType<Map>()
+              .map((p) {
+                final x = p["x"];
+                final y = p["y"];
+                if (x is num && y is num) {
+                  return Offset(x.toDouble(), y.toDouble());
+                }
+                return const Offset(0.5, 0.5);
+              })
+              .toList(growable: false);
         }
         return const <Offset>[];
       })(),
