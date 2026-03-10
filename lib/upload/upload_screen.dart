@@ -1061,6 +1061,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   double _orbitPitch = 0;
   double _videoProgress = 0.0;
   DateTime? _reviewStartedAt;
+  bool _showWicketFlash = false;
 
   @override
   void initState() {
@@ -1086,6 +1087,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
       _ready = true;
       _phase = _DrsCinematicPhase.tracking;
       _reviewStartedAt = DateTime.now();
+      _showWicketFlash = false;
     });
     await _videoController.play();
   }
@@ -1113,6 +1115,16 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
             : _DrsCinematicPhase.tracking;
       });
     }
+  }
+
+  void _triggerWicketFlash() {
+    if (_showWicketFlash || !_finalOut || !mounted) return;
+    setState(() => _showWicketFlash = true);
+    Future.delayed(const Duration(milliseconds: 420), () {
+      if (mounted) {
+        setState(() => _showWicketFlash = false);
+      }
+    });
   }
 
   int? _detectBounceIndex(List<Offset> points) {
@@ -1376,6 +1388,11 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                 final showWicket =
                     revealProgress >= 0.85 ||
                     _phase == _DrsCinematicPhase.decision;
+                if (showWicket && _finalOut && !_showWicketFlash) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _triggerWicketFlash();
+                  });
+                }
                 return Stack(
                   children: [
                     Positioned.fill(
@@ -1528,6 +1545,50 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                         ),
                       ),
                     ),
+                    if (_showWicketFlash)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 120),
+                            opacity: _showWicketFlash ? 1.0 : 0.0,
+                            child: Container(
+                              color: const Color(0x44FF1E1E),
+                              alignment: Alignment.center,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 28,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.38),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: const Color(0xFFFF5252),
+                                    width: 1.6,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Color(0xAAFF4D4D),
+                                      blurRadius: 22,
+                                      spreadRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                                child: const Text(
+                                  "WICKET!",
+                                  style: TextStyle(
+                                    color: Color(0xFFFF6E6E),
+                                    fontFamily: "Montserrat",
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 34,
+                                    letterSpacing: 1.6,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     Positioned(
                       left: 14,
                       bottom: 18,

@@ -1411,6 +1411,26 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 # -----------------------------
 # PHYSICS-ONLY STUMP HIT DETECTOR
 # -----------------------------
+def is_hitting_stumps(
+    ball_x,
+    ball_y,
+    stump_x_min,
+    stump_x_max,
+    bail_line_y,
+    stump_y_max,
+    ball_radius,
+    stump_radius,
+):
+    """
+    True only when the tracked ball pixels physically touch the stump zone.
+    """
+    if ball_y < bail_line_y or ball_y > stump_y_max:
+        return False
+    closest_x = min(max(ball_x, stump_x_min), stump_x_max)
+    edge_gap = abs(ball_x - closest_x)
+    return edge_gap <= (ball_radius + stump_radius)
+
+
 def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     """
     Prioritize direct stump-box entry over curve prediction.
@@ -1445,27 +1465,43 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     def inside_buffer_box(x, y):
         return stump_x_min_buffer <= x <= stump_x_max_buffer and bail_line_y <= y <= stump_y_max
 
-    def collision_hit(x, y):
-        if y < bail_line_y or y > stump_y_max:
-            return False
-        closest_x = min(max(x, stump_x_min), stump_x_max)
-        edge_gap = abs(x - closest_x)
-        return edge_gap <= (ball_radius + stump_radius)
-
     # 1) Collision trigger: entering or touching the stump box is immediately OUT.
-    direct_hits = sum(1 for (x, y) in recent if inside_stump_box(x, y) or collision_hit(x, y))
+    direct_hits = sum(
+        1
+        for (x, y) in recent
+        if inside_stump_box(x, y)
+        or is_hitting_stumps(
+            x,
+            y,
+            stump_x_min,
+            stump_x_max,
+            bail_line_y,
+            stump_y_max,
+            ball_radius,
+            stump_radius,
+        )
+    )
     if direct_hits > 0:
         confidence = min(0.99, 0.86 + (0.04 * direct_hits))
         return True, round(confidence, 2)
 
-    # 2) Umpire's-call edge case: touching 2cm buffer is still treated as hitting.
+    # 2) Umpire's-call edge case: touching 2cm buffer is still treated conservatively.
     buffered_hits = sum(1 for (x, y) in recent if inside_buffer_box(x, y))
     if buffered_hits > 0:
         confidence = 0.55 if buffered_hits == 1 else 0.66
         return True, round(confidence, 2)
 
     last_x, last_y = recent[-1]
-    if inside_stump_box(last_x, last_y) or collision_hit(last_x, last_y):
+    if inside_stump_box(last_x, last_y) or is_hitting_stumps(
+        last_x,
+        last_y,
+        stump_x_min,
+        stump_x_max,
+        bail_line_y,
+        stump_y_max,
+        ball_radius,
+        stump_radius,
+    ):
         return True, 0.98
 
     tail = recent[-4:] if len(recent) >= 4 else recent
@@ -1501,7 +1537,16 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
             if t >= 0:
                 proj_x = last_x + (dx * t)
                 proj_y = last_y + (dy * t)
-                if inside_stump_box(proj_x, proj_y) or collision_hit(proj_x, proj_y):
+                if inside_stump_box(proj_x, proj_y) or is_hitting_stumps(
+                    proj_x,
+                    proj_y,
+                    stump_x_min,
+                    stump_x_max,
+                    bail_line_y,
+                    stump_y_max,
+                    ball_radius,
+                    stump_radius,
+                ):
                     return True, 0.88 if len(recent) >= 6 else 0.74
                 if inside_buffer_box(proj_x, proj_y):
                     return True, 0.58
@@ -1511,10 +1556,29 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
         for _ in range(20):
             proj_x += dx
             proj_y += dy
-            if inside_stump_box(proj_x, proj_y) or collision_hit(proj_x, proj_y):
+            if inside_stump_box(proj_x, proj_y) or is_hitting_stumps(
+                proj_x,
+                proj_y,
+                stump_x_min,
+                stump_x_max,
+                bail_line_y,
+                stump_y_max,
+                ball_radius,
+                stump_radius,
+            ):
                 return True, 0.72 if len(recent) >= 6 else 0.62
             if inside_buffer_box(proj_x, proj_y):
                 return True, 0.56
+
+    # 5) Lock NOT OUT: only allow missing if ball is clearly outside by ~1 inch.
+    one_inch_buffer = max(1.0, frame_width * 0.0032)
+    clearly_outside = all(
+        (x < (stump_x_min_buffer - one_inch_buffer)) or
+        (x > (stump_x_max_buffer + one_inch_buffer))
+        for (x, _) in recent[-6:]
+    )
+    if not clearly_outside:
+        return True, 0.51
 
     return False, 0.0
 
