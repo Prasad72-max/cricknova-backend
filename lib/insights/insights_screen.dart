@@ -1,8 +1,6 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive/hive.dart';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
@@ -10,10 +8,10 @@ import 'package:share_plus/share_plus.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
 import 'package:confetti/confetti.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'session_heatmap_screen.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -22,10 +20,12 @@ class InsightsScreen extends StatefulWidget {
   State<InsightsScreen> createState() => _InsightsScreenState();
 }
 
-class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObserver {
+class _InsightsScreenState extends State<InsightsScreen>
+    with WidgetsBindingObserver {
   List<double> speedHistory = [];
   int currentSessionIndex = 0;
   List<List<double>> sessions = [];
+  List<Map<String, dynamic>> heatmapSessions = [];
   List<String> sessionDocIds = [];
   String userName = "Player";
   String? _currentUid;
@@ -54,6 +54,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
         _currentUid = null;
         speedHistory.clear();
         sessions.clear();
+        heatmapSessions.clear();
         currentSessionIndex = 0;
         if (mounted) setState(() {});
         return;
@@ -79,25 +80,50 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
     await _loadSpeedHistory();
   }
 
-
   Future<void> _loadSpeedHistory() async {
     if (!Hive.isBoxOpen('speedBox')) return;
     sessions.clear();
+    heatmapSessions.clear();
     speedHistory.clear();
     currentSessionIndex = 0;
 
-    final storedSpeeds = _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
+    final rawHeatmapSessions = _speedBox.get(
+      'sessionHeatmaps_${_currentUid ?? "guest"}',
+    );
+
+    if (rawHeatmapSessions is List && rawHeatmapSessions.isNotEmpty) {
+      for (final session in rawHeatmapSessions) {
+        if (session is! Map) continue;
+        heatmapSessions.add(Map<String, dynamic>.from(session));
+      }
+
+      sessions = heatmapSessions
+          .map((session) => _sessionSpeedsFromPoints(_sessionPoints(session)))
+          .toList(growable: false);
+
+      if (heatmapSessions.isNotEmpty) {
+        currentSessionIndex = heatmapSessions.length - 1;
+        speedHistory = currentSessionIndex < sessions.length
+            ? sessions[currentSessionIndex]
+            : <double>[];
+      }
+
+      if (mounted) setState(() {});
+      return;
+    }
+
+    final storedSpeeds =
+        _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
 
     if (storedSpeeds != null) {
-      final List<double> flatSpeeds =
-          storedSpeeds.map((e) => (e as num).toDouble()).toList();
+      final List<double> flatSpeeds = storedSpeeds
+          .map((e) => (e as num).toDouble())
+          .toList();
 
       sessions.clear();
 
       for (int i = 0; i < flatSpeeds.length; i += 6) {
-        final end = (i + 6 <= flatSpeeds.length)
-            ? i + 6
-            : flatSpeeds.length;
+        final end = (i + 6 <= flatSpeeds.length) ? i + 6 : flatSpeeds.length;
         sessions.add(flatSpeeds.sublist(i, end));
       }
 
@@ -112,7 +138,9 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
 
   Future<void> _clearAllSessions() async {
     await _speedBox.delete('allSpeeds_${_currentUid ?? "guest"}');
+    await _speedBox.delete('sessionHeatmaps_${_currentUid ?? "guest"}');
     sessions.clear();
+    heatmapSessions.clear();
     speedHistory.clear();
     currentSessionIndex = 0;
 
@@ -120,7 +148,39 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
   }
 
   Future<void> _deleteCurrentSession() async {
-    if (sessions.isEmpty) return;
+    if (_sessionCount == 0) return;
+
+    if (heatmapSessions.isNotEmpty) {
+      if (currentSessionIndex >= heatmapSessions.length) return;
+
+      heatmapSessions.removeAt(currentSessionIndex);
+      await _speedBox.put(
+        'sessionHeatmaps_${_currentUid ?? "guest"}',
+        heatmapSessions,
+      );
+
+      sessions = heatmapSessions
+          .map((session) => _sessionSpeedsFromPoints(_sessionPoints(session)))
+          .toList(growable: false);
+
+      final rebuiltFlat = sessions.expand((e) => e).toList();
+      await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', rebuiltFlat);
+
+      if (_sessionCount > 0) {
+        if (currentSessionIndex >= _sessionCount) {
+          currentSessionIndex = _sessionCount - 1;
+        }
+        speedHistory = currentSessionIndex < sessions.length
+            ? sessions[currentSessionIndex]
+            : <double>[];
+      } else {
+        currentSessionIndex = 0;
+        speedHistory.clear();
+      }
+
+      if (mounted) setState(() {});
+      return;
+    }
 
     sessions.removeAt(currentSessionIndex);
 
@@ -144,12 +204,12 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
   Future<void> addNewSession(List<double> newSpeeds) async {
     if (newSpeeds.isEmpty) return;
 
-    final storedSpeeds = _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
+    final storedSpeeds =
+        _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
     List<double> flatSpeeds = [];
 
     if (storedSpeeds != null) {
-      flatSpeeds =
-          storedSpeeds.map((e) => (e as num).toDouble()).toList();
+      flatSpeeds = storedSpeeds.map((e) => (e as num).toDouble()).toList();
     }
 
     flatSpeeds.addAll(newSpeeds);
@@ -160,9 +220,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
     sessions.clear();
 
     for (int i = 0; i < flatSpeeds.length; i += 6) {
-      final end = (i + 6 <= flatSpeeds.length)
-          ? i + 6
-          : flatSpeeds.length;
+      final end = (i + 6 <= flatSpeeds.length) ? i + 6 : flatSpeeds.length;
       sessions.add(flatSpeeds.sublist(i, end));
     }
 
@@ -172,6 +230,39 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
     if (mounted) setState(() {});
   }
 
+  int get _sessionCount =>
+      heatmapSessions.isNotEmpty ? heatmapSessions.length : sessions.length;
+
+  List<Map<String, dynamic>> get _currentHeatmapPoints {
+    if (currentSessionIndex < 0 ||
+        currentSessionIndex >= heatmapSessions.length) {
+      return const [];
+    }
+    return _sessionPoints(heatmapSessions[currentSessionIndex]);
+  }
+
+  List<Map<String, dynamic>> _sessionPoints(Map<String, dynamic> session) {
+    final points = <Map<String, dynamic>>[];
+    final rawPoints = session["points"];
+    if (rawPoints is List) {
+      for (final point in rawPoints) {
+        if (point is! Map) continue;
+        points.add(Map<String, dynamic>.from(point));
+      }
+    }
+    return points;
+  }
+
+  List<double> _sessionSpeedsFromPoints(List<Map<String, dynamic>> points) {
+    final speeds = <double>[];
+    for (final point in points) {
+      final speedRaw = point["speed"];
+      if (speedRaw is! num) continue;
+      final speed = speedRaw.toDouble();
+      if (speed > 0) speeds.add(speed);
+    }
+    return speeds;
+  }
 
   @override
   void dispose() {
@@ -201,7 +292,8 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
 
   @override
   Widget build(BuildContext context) {
-
+    final sessionCount = _sessionCount;
+    final currentHeatmapPoints = _currentHeatmapPoints;
 
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
@@ -234,21 +326,27 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                     "🔥 Top Speed",
                     speedHistory.isEmpty
                         ? 0.0
-                        : speedHistory.reduce((a, b) => a > b ? a : b).toDouble(),
+                        : speedHistory
+                              .reduce((a, b) => a > b ? a : b)
+                              .toDouble(),
                     const Color(0xFF00FF88),
                   ),
                   _buildStat(
                     "Average",
                     speedHistory.isEmpty
                         ? 0.0
-                        : (speedHistory.reduce((a, b) => a + b) / speedHistory.length).toDouble(),
+                        : (speedHistory.reduce((a, b) => a + b) /
+                                  speedHistory.length)
+                              .toDouble(),
                     const Color(0xFF38BDF8),
                   ),
                   _buildStat(
                     "Lowest",
                     speedHistory.isEmpty
                         ? 0.0
-                        : speedHistory.reduce((a, b) => a < b ? a : b).toDouble(),
+                        : speedHistory
+                              .reduce((a, b) => a < b ? a : b)
+                              .toDouble(),
                     const Color(0xFFFF4D4D),
                   ),
                 ],
@@ -256,12 +354,11 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
 
               const SizedBox(height: 14),
 
-
               const SizedBox(height: 25),
 
               const SizedBox(height: 15),
 
-              if (sessions.length > 1)
+              if (sessionCount > 1)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -270,22 +367,28 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                           ? () {
                               setState(() {
                                 currentSessionIndex--;
-                                speedHistory = sessions[currentSessionIndex];
+                                speedHistory =
+                                    currentSessionIndex < sessions.length
+                                    ? sessions[currentSessionIndex]
+                                    : <double>[];
                               });
                             }
                           : null,
                       child: const Text("Previous"),
                     ),
                     Text(
-                      "Session ${currentSessionIndex + 1}/${sessions.length}",
+                      "Session ${currentSessionIndex + 1}/$sessionCount",
                       style: const TextStyle(color: Colors.white70),
                     ),
                     TextButton(
-                      onPressed: currentSessionIndex < sessions.length - 1
+                      onPressed: currentSessionIndex < sessionCount - 1
                           ? () {
                               setState(() {
                                 currentSessionIndex++;
-                                speedHistory = sessions[currentSessionIndex];
+                                speedHistory =
+                                    currentSessionIndex < sessions.length
+                                    ? sessions[currentSessionIndex]
+                                    : <double>[];
                               });
                             }
                           : null,
@@ -296,7 +399,7 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
 
               const SizedBox(height: 10),
 
-              if (sessions.isNotEmpty)
+              if (sessionCount > 0)
                 Center(
                   child: TextButton.icon(
                     icon: const Icon(Icons.delete, color: Colors.redAccent),
@@ -319,7 +422,8 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                           ),
                           actions: [
                             TextButton(
-                              onPressed: () => Navigator.pop(context, "specific"),
+                              onPressed: () =>
+                                  Navigator.pop(context, "specific"),
                               child: const Text(
                                 "This Session",
                                 style: TextStyle(color: Colors.orangeAccent),
@@ -439,6 +543,76 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
               const SizedBox(height: 20),
 
               ElevatedButton.icon(
+                onPressed: currentHeatmapPoints.isEmpty
+                    ? null
+                    : () {
+                        Navigator.of(context).push(
+                          PageRouteBuilder(
+                            transitionDuration: const Duration(
+                              milliseconds: 420,
+                            ),
+                            reverseTransitionDuration: const Duration(
+                              milliseconds: 280,
+                            ),
+                            pageBuilder:
+                                (context, animation, secondaryAnimation) {
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: SessionHeatmapScreen(
+                                      sessionId: currentSessionIndex + 1,
+                                      points: currentHeatmapPoints,
+                                    ),
+                                  );
+                                },
+                            transitionsBuilder:
+                                (
+                                  context,
+                                  animation,
+                                  secondaryAnimation,
+                                  child,
+                                ) {
+                                  final curved = CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  );
+                                  return SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0.0, 0.06),
+                                      end: Offset.zero,
+                                    ).animate(curved),
+                                    child: FadeTransition(
+                                      opacity: curved,
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                          ),
+                        );
+                      },
+                icon: const Text("🎯", style: TextStyle(fontSize: 18)),
+                label: const Text("VIEW SESSION HEATMAP"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0EA5E9),
+                  foregroundColor: const Color(0xFF020617),
+                  disabledBackgroundColor: const Color(0xFF1E293B),
+                  disabledForegroundColor: Colors.white38,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+
+              if (currentHeatmapPoints.isEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  "Heatmap appears automatically once bounce points are detected for this session.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white54,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+
+              ElevatedButton.icon(
                 onPressed: speedHistory.isEmpty
                     ? null
                     : () async {
@@ -480,15 +654,19 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                         final currentSpeeds = List<double>.from(speedHistory);
                         final double top = currentSpeeds.isEmpty
                             ? 0.0
-                            : currentSpeeds.reduce((a, b) => a > b ? a : b).toDouble();
+                            : currentSpeeds
+                                  .reduce((a, b) => a > b ? a : b)
+                                  .toDouble();
                         final double lowest = currentSpeeds.isEmpty
                             ? 0.0
-                            : currentSpeeds.reduce((a, b) => a < b ? a : b).toDouble();
+                            : currentSpeeds
+                                  .reduce((a, b) => a < b ? a : b)
+                                  .toDouble();
                         final double avg = currentSpeeds.isEmpty
                             ? 0.0
-                            : (currentSpeeds.reduce((a, b) => a + b) / currentSpeeds.length)
-                                .toDouble();
-
+                            : (currentSpeeds.reduce((a, b) => a + b) /
+                                      currentSpeeds.length)
+                                  .toDouble();
 
                         // Show actual certificate dialog (existing UI continues below unchanged)
                         showDialog(
@@ -513,8 +691,8 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                                     color: top >= 100
                                         ? const Color(0xFFFFD700) // Gold
                                         : top >= 80
-                                            ? const Color(0xFFC0C0C0) // Silver
-                                            : const Color(0xFF00FF88),
+                                        ? const Color(0xFFC0C0C0) // Silver
+                                        : const Color(0xFF00FF88),
                                     width: 3,
                                   ),
                                 ),
@@ -524,7 +702,8 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                                       alignment: Alignment.topCenter,
                                       child: ConfettiWidget(
                                         confettiController: _confettiController,
-                                        blastDirectionality: BlastDirectionality.explosive,
+                                        blastDirectionality:
+                                            BlastDirectionality.explosive,
                                         shouldLoop: false,
                                         numberOfParticles: 40,
                                         maxBlastForce: 25,
@@ -634,17 +813,20 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                                           alignment: Alignment.centerRight,
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
                                             children: [
                                               Column(
-                                                crossAxisAlignment: CrossAxisAlignment.end,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
                                                 children: [
                                                   Text(
                                                     "Prasad D. Dukare",
                                                     style: GoogleFonts.poppins(
                                                       color: Colors.white,
                                                       fontSize: 16,
-                                                      fontWeight: FontWeight.w600,
+                                                      fontWeight:
+                                                          FontWeight.w600,
                                                     ),
                                                   ),
                                                   const SizedBox(height: 2),
@@ -685,29 +867,45 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                                         // --- Begin Slogan & Link Block ---
                                         // --- End Slogan & Link Block ---
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             ElevatedButton(
                                               onPressed: () async {
                                                 try {
-                                                  RenderRepaintBoundary boundary =
-                                                      _certificateKey.currentContext!.findRenderObject()
+                                                  RenderRepaintBoundary
+                                                  boundary =
+                                                      _certificateKey
+                                                              .currentContext!
+                                                              .findRenderObject()
                                                           as RenderRepaintBoundary;
 
-                                                  ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+                                                  ui.Image image =
+                                                      await boundary.toImage(
+                                                        pixelRatio: 3.0,
+                                                      );
                                                   ByteData? byteData =
-                                                      await image.toByteData(format: ui.ImageByteFormat.png);
+                                                      await image.toByteData(
+                                                        format: ui
+                                                            .ImageByteFormat
+                                                            .png,
+                                                      );
 
                                                   if (byteData == null) return;
 
-                                                  Uint8List pngBytes = byteData.buffer.asUint8List();
+                                                  Uint8List pngBytes = byteData
+                                                      .buffer
+                                                      .asUint8List();
 
-                                                  final tempDir = await getTemporaryDirectory();
+                                                  final tempDir =
+                                                      await getTemporaryDirectory();
                                                   final file = await File(
                                                     '${tempDir.path}/cricknova_certificate.png',
                                                   ).create();
 
-                                                  await file.writeAsBytes(pngBytes);
+                                                  await file.writeAsBytes(
+                                                    pngBytes,
+                                                  );
 
                                                   await Share.shareXFiles(
                                                     [XFile(file.path)],
@@ -716,18 +914,32 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                                                   );
 
                                                   // Open website externally after share
-                                                  final Uri url = Uri.parse("https://cricknova-5f94f.web.app");
+                                                  final Uri url = Uri.parse(
+                                                    "https://cricknova-5f94f.web.app",
+                                                  );
                                                   if (await canLaunchUrl(url)) {
-                                                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                                                    await launchUrl(
+                                                      url,
+                                                      mode: LaunchMode
+                                                          .externalApplication,
+                                                    );
                                                   }
                                                 } catch (e) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    const SnackBar(content: Text("Failed to share certificate")),
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        "Failed to share certificate",
+                                                      ),
+                                                    ),
                                                   );
                                                 }
                                               },
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFFFFA500), // Neon Orange for stronger share urge
+                                                backgroundColor: const Color(
+                                                  0xFFFFA500,
+                                                ), // Neon Orange for stronger share urge
                                                 foregroundColor: Colors.black,
                                               ),
                                               child: const Text("Share"),
@@ -737,13 +949,15 @@ class _InsightsScreenState extends State<InsightsScreen> with WidgetsBindingObse
                                                 Navigator.pop(context);
                                               },
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(0xFF1F2937),
+                                                backgroundColor: const Color(
+                                                  0xFF1F2937,
+                                                ),
                                                 foregroundColor: Colors.white,
                                               ),
                                               child: const Text("Close"),
                                             ),
                                           ],
-                                        )
+                                        ),
                                       ],
                                     ),
                                   ],
@@ -822,8 +1036,10 @@ class SpeedChartPainter extends CustomPainter {
     );
 
     for (int value = 40; value <= 160; value += 20) {
-      final normalized =
-          ((value - minSpeed) / (maxSpeed - minSpeed)).clamp(0.0, 1.0);
+      final normalized = ((value - minSpeed) / (maxSpeed - minSpeed)).clamp(
+        0.0,
+        1.0,
+      );
       final double y = size.height - (normalized * size.height);
 
       canvas.drawLine(Offset(40, y), Offset(size.width, y), axisPaint);
@@ -836,17 +1052,17 @@ class SpeedChartPainter extends CustomPainter {
       textPainter.paint(canvas, Offset(0, y - 6));
     }
 
-
     final int ballsToShow = speeds.length;
     final double usableWidth = size.width - 40;
-    final double stepX =
-        ballsToShow > 1 ? usableWidth / (ballsToShow - 1) : 0;
+    final double stepX = ballsToShow > 1 ? usableWidth / (ballsToShow - 1) : 0;
 
     final Path path = Path();
 
     for (int i = 0; i < ballsToShow; i++) {
-      final normalized =
-          ((speeds[i] - minSpeed) / (maxSpeed - minSpeed)).clamp(0.0, 1.0);
+      final normalized = ((speeds[i] - minSpeed) / (maxSpeed - minSpeed)).clamp(
+        0.0,
+        1.0,
+      );
 
       final double x = 40 + (stepX * i);
       final double y = size.height - (normalized * size.height);
@@ -872,8 +1088,8 @@ class SpeedChartPainter extends CustomPainter {
     double peakSpeed = speeds.reduce((a, b) => a > b ? a : b);
     int peakIndex = speeds.indexOf(peakSpeed);
 
-    final normalizedPeak =
-        ((peakSpeed - minSpeed) / (maxSpeed - minSpeed)).clamp(0.0, 1.0);
+    final normalizedPeak = ((peakSpeed - minSpeed) / (maxSpeed - minSpeed))
+        .clamp(0.0, 1.0);
 
     final double peakX = 40 + (stepX * peakIndex);
     final double peakY = size.height - (normalizedPeak * size.height);
