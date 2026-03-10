@@ -1060,6 +1060,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   double _orbitYaw = 0;
   double _orbitPitch = 0;
   double _videoProgress = 0.0;
+  DateTime? _reviewStartedAt;
 
   @override
   void initState() {
@@ -1084,6 +1085,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     setState(() {
       _ready = true;
       _phase = _DrsCinematicPhase.tracking;
+      _reviewStartedAt = DateTime.now();
     });
     await _videoController.play();
   }
@@ -1257,143 +1259,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     );
   }
 
-  Widget _buildScannerBeam({
-    required double top,
-    required double height,
-    required double left,
-    required double width,
-  }) {
-    return Positioned(
-      left: left,
-      top: top,
-      child: IgnorePointer(
-        child: Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.transparent,
-                Color(0x6636CFFF),
-                Color(0xAA7BE7FF),
-                Color(0x6636CFFF),
-                Colors.transparent,
-              ],
-            ),
-          ),
-          child: Align(
-            alignment: Alignment(0, (_phaseController.value * 2) - 1),
-            child: Container(
-              height: 2.5,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFF9DEBFF),
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0xFF72DEFF),
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildImpactLine({
-    required double lineY,
-    required double stumpLeftX,
-    required double stumpRightX,
-    required bool visible,
-  }) {
-    final left = math.min(stumpLeftX, stumpRightX);
-    final width = (stumpRightX - stumpLeftX).abs().clamp(18.0, 140.0);
-    return Positioned(
-      left: left,
-      top: lineY - 6,
-      child: IgnorePointer(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 180),
-          opacity: visible ? 1.0 : 0.0,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Container(
-                width: width,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: const Color(0x4DFF2A2A),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-              Positioned(
-                top: 4,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF1E1E),
-                    borderRadius: BorderRadius.circular(999),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xFFFF4D4D),
-                        blurRadius: 16,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGroundStumpLine({
-    required double lineY,
-    required double stumpLeftX,
-    required double stumpRightX,
-    required bool visible,
-  }) {
-    final left = math.min(stumpLeftX, stumpRightX);
-    final width = (stumpRightX - stumpLeftX).abs().clamp(18.0, 140.0);
-    return Positioned(
-      left: left,
-      top: lineY - 2,
-      child: IgnorePointer(
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 220),
-          opacity: visible ? 1.0 : 0.0,
-          child: Container(
-            width: width,
-            height: 4,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2EBBFF),
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0xFF63D8FF),
-                  blurRadius: 14,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _tag(String title, String value, bool visible) {
     final v = value.toLowerCase();
     final ok =
@@ -1499,13 +1364,18 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
               builder: (context, _) {
                 final progress = _videoProgress;
                 final milestones = _timelineMilestones();
-                final showPitch = progress >= milestones.pitch;
-                final showImpact = progress >= milestones.impact;
+                final revealProgress = _reviewStartedAt == null
+                    ? 0.0
+                    : ((DateTime.now()
+                                  .difference(_reviewStartedAt!)
+                                  .inMilliseconds) /
+                              2000.0)
+                          .clamp(0.0, 1.0);
+                final showPitch = revealProgress >= 0.25;
+                final showImpact = revealProgress >= 0.55;
                 final showWicket =
-                    _phase == _DrsCinematicPhase.decision ||
-                    progress >= milestones.wicket;
-                final impactLineVisible = progress >= milestones.impact;
-                final groundLineVisible = _ready;
+                    revealProgress >= 0.85 ||
+                    _phase == _DrsCinematicPhase.decision;
                 return Stack(
                   children: [
                     Positioned.fill(
@@ -1541,40 +1411,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                         ),
                       ),
                     ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final width = constraints.maxWidth;
-                        final height = constraints.maxHeight;
-                        final stumpLeftX =
-                            widget.geometry.stumpLeft.dx.clamp(0.10, 0.90) *
-                            width;
-                        final stumpRightX =
-                            widget.geometry.stumpRight.dx.clamp(0.10, 0.90) *
-                            width;
-                        final stumpCenterX = (stumpLeftX + stumpRightX) / 2.0;
-                        final scannerTop = (height * 0.34).clamp(
-                          120.0,
-                          height - 240.0,
-                        );
-                        final scannerHeight = (height * 0.28).clamp(
-                          120.0,
-                          220.0,
-                        );
-                        return Stack(
-                          children: [
-                            _buildScannerBeam(
-                              top: scannerTop,
-                              height: scannerHeight,
-                              left: (stumpCenterX - (width * 0.075)).clamp(
-                                12.0,
-                                width - (width * 0.15) - 12.0,
-                              ),
-                              width: width * 0.15,
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                    const SizedBox.shrink(),
                     Positioned(
                       top: MediaQuery.of(context).padding.top + 6,
                       right: 8,
@@ -1704,39 +1541,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                           letterSpacing: 0.4,
                         ),
                       ),
-                    ),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final width = constraints.maxWidth;
-                        final height = constraints.maxHeight;
-                        final stumpLeftX =
-                            widget.geometry.stumpLeft.dx.clamp(0.10, 0.90) *
-                            width;
-                        final stumpRightX =
-                            widget.geometry.stumpRight.dx.clamp(0.10, 0.90) *
-                            width;
-                        final stumpBaseY =
-                            widget.geometry.stumpsPoint.dy.clamp(0.72, 0.96) *
-                            height;
-                        final groundLineY =
-                            math.max(stumpBaseY, height * 0.88) - 4;
-                        return Stack(
-                          children: [
-                            _buildGroundStumpLine(
-                              lineY: groundLineY,
-                              stumpLeftX: stumpLeftX,
-                              stumpRightX: stumpRightX,
-                              visible: groundLineVisible,
-                            ),
-                            _buildImpactLine(
-                              lineY: groundLineY,
-                              stumpLeftX: stumpLeftX,
-                              stumpRightX: stumpRightX,
-                              visible: impactLineVisible,
-                            ),
-                          ],
-                        );
-                      },
                     ),
                   ],
                 );

@@ -1423,59 +1423,98 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
 
     recent = ball_positions[-25:] if len(ball_positions) >= 25 else ball_positions
 
-    # Virtual 3D stump box projected into image space.
     stump_center_x = frame_width * 0.50
     stump_half_width = frame_width * 0.035
+    # 2 cm world buffer approximated in image space.
+    stump_buffer = max(2.0, frame_width * 0.0065)
+    ball_radius = max(3.0, frame_width * 0.009)
+
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
+    stump_x_min_buffer = stump_x_min - stump_buffer
+    stump_x_max_buffer = stump_x_max + stump_buffer
 
-    # Below-bails region in image space means the ball is low enough to hit.
     bail_line_y = frame_height * 0.58
     stump_plane_y = frame_height * 0.78
     stump_y_max = frame_height * 0.92
+    stump_radius = max(2.0, frame_width * 0.006)
 
     def inside_stump_box(x, y):
         return stump_x_min <= x <= stump_x_max and bail_line_y <= y <= stump_y_max
 
-    # 1) Hard override: if any tracked point enters the stump box, it is OUT.
-    box_hits = sum(1 for (x, y) in recent if inside_stump_box(x, y))
-    if box_hits > 0:
-        confidence = min(0.99, 0.82 + (0.05 * box_hits))
+    def inside_buffer_box(x, y):
+        return stump_x_min_buffer <= x <= stump_x_max_buffer and bail_line_y <= y <= stump_y_max
+
+    def collision_hit(x, y):
+        if y < bail_line_y or y > stump_y_max:
+            return False
+        closest_x = min(max(x, stump_x_min), stump_x_max)
+        edge_gap = abs(x - closest_x)
+        return edge_gap <= (ball_radius + stump_radius)
+
+    # 1) Collision trigger: entering or touching the stump box is immediately OUT.
+    direct_hits = sum(1 for (x, y) in recent if inside_stump_box(x, y) or collision_hit(x, y))
+    if direct_hits > 0:
+        confidence = min(0.99, 0.86 + (0.04 * direct_hits))
         return True, round(confidence, 2)
 
-    # 2) Final ball position has priority over a softer trajectory prediction.
+    # 2) Umpire's-call edge case: touching 2cm buffer is still treated as hitting.
+    buffered_hits = sum(1 for (x, y) in recent if inside_buffer_box(x, y))
+    if buffered_hits > 0:
+        confidence = 0.55 if buffered_hits == 1 else 0.66
+        return True, round(confidence, 2)
+
     last_x, last_y = recent[-1]
-    if inside_stump_box(last_x, last_y):
+    if inside_stump_box(last_x, last_y) or collision_hit(last_x, last_y):
         return True, 0.98
 
-    # 3) Reliability layer: project using last known velocity toward stump plane.
     tail = recent[-4:] if len(recent) >= 4 else recent
+    dx = 0.0
+    dy = 0.0
     if len(tail) >= 2:
         dxs = []
         dys = []
+        speeds = []
         for i in range(1, len(tail)):
-            dxs.append(tail[i][0] - tail[i - 1][0])
-            dys.append(tail[i][1] - tail[i - 1][1])
+            step_dx = tail[i][0] - tail[i - 1][0]
+            step_dy = tail[i][1] - tail[i - 1][1]
+            dxs.append(step_dx)
+            dys.append(step_dy)
+            speeds.append(math.sqrt((step_dx * step_dx) + (step_dy * step_dy)))
         dx = sum(dxs) / len(dxs)
         dy = sum(dys) / len(dys)
 
+        # 3) Sudden stop at stump line: if speed collapses near stumps, count it as OUT.
+        prev_speed = speeds[-2] if len(speeds) >= 2 else speeds[-1]
+        last_speed = speeds[-1]
+        near_stump_line = (
+            stump_x_min_buffer <= last_x <= stump_x_max_buffer and
+            (stump_plane_y - (frame_height * 0.08)) <= last_y <= stump_y_max
+        )
+        sudden_stop = last_speed <= max(1.5, prev_speed * 0.28)
+        if near_stump_line and sudden_stop:
+            return True, 0.84
+
+        # 4) Reliability layer: project by last known velocity to stump plane.
         if abs(dy) > 1e-6:
             t = (stump_plane_y - last_y) / dy
             if t >= 0:
                 proj_x = last_x + (dx * t)
                 proj_y = last_y + (dy * t)
-                if inside_stump_box(proj_x, proj_y):
-                    # Lower confidence than a direct box entry, but still OUT.
+                if inside_stump_box(proj_x, proj_y) or collision_hit(proj_x, proj_y):
                     return True, 0.88 if len(recent) >= 6 else 0.74
+                if inside_buffer_box(proj_x, proj_y):
+                    return True, 0.58
 
-        # 4) Low-confidence fallback: continue forward frame-by-frame.
         proj_x = last_x
         proj_y = last_y
         for _ in range(20):
             proj_x += dx
             proj_y += dy
-            if inside_stump_box(proj_x, proj_y):
+            if inside_stump_box(proj_x, proj_y) or collision_hit(proj_x, proj_y):
                 return True, 0.72 if len(recent) >= 6 else 0.62
+            if inside_buffer_box(proj_x, proj_y):
+                return True, 0.56
 
     return False, 0.0
 
