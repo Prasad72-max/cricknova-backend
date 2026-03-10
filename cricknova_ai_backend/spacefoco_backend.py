@@ -865,18 +865,16 @@ async def analyze_training_video(file: UploadFile = File(...)):
         # -----------------------------
         ultraedge = False  # Disabled for stability (no scripted edge detection)
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+        drs_verdict = analyze_drs_from_positions(
             ball_positions,
             frame_width,
-            frame_height
+            frame_height,
+            fps=fps,
+            speed_kmph=speed_kmph,
         )
 
-        if hits_stumps:
-            decision = "OUT"
-            reason = "Ball hitting stumps"
-        else:
-            decision = "NOT OUT"
-            reason = "Ball missing stumps"
+        decision = drs_verdict["decision"]
+        reason = drs_verdict["reason"]
 
         return {
             "status": "success",
@@ -890,10 +888,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "trajectory": build_trajectory(ball_positions, frame_width, frame_height),
             "drs": {
                 "ultraedge": ultraedge,
-                "ball_tracking": hits_stumps,
-                "stump_confidence": stump_confidence,
-                "decision": decision,
-                "reason": reason
+                **drs_verdict,
             }
         }
 
@@ -958,7 +953,7 @@ async def ai_coach_analyze(
         video_path = tmp.name
 
     try:
-        raw_positions, _ = track_ball_positions(video_path)
+        raw_positions, fps = track_ball_positions(video_path)
         ball_positions = normalize_ball_positions(raw_positions)
         ball_positions = stabilize_ball_positions(ball_positions)
         ball_positions = smooth_positions(ball_positions, window=3)
@@ -1372,10 +1367,20 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         # -----------------------------
         ultraedge = False  # Disabled for stability (no scripted edge detection)
 
-        hits_stumps, stump_confidence = detect_stump_hit_from_positions(
+        speed_result = calculate_ball_speed_kmph(ball_positions, fps)
+        speed_kmph = speed_result.get("speed_kmph")
+        if speed_kmph is None:
+            fallback = fallback_speed_camera_normalized(ball_positions, fps)
+            if fallback is not None and fallback >= 40.0:
+                speed_kmph = round(float(fallback), 1)
+
+        drs_verdict = analyze_drs_from_positions(
             ball_positions,
             frame_width,
-            frame_height
+            frame_height,
+            fps=fps,
+            speed_kmph=speed_kmph,
+            direct_video_only=True,
         )
 
         if hits_stumps:
@@ -1431,28 +1436,69 @@ def is_hitting_stumps(
     return edge_gap <= (ball_radius + stump_radius)
 
 
-def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
+def _x_label(ball_x, stump_x_min, stump_x_max):
+    if ball_x < stump_x_min:
+        return "OUTSIDE LEG"
+    if ball_x > stump_x_max:
+        return "OUTSIDE OFF"
+    return "IN LINE"
+
+
+def _pixel_to_world_x(ball_x, frame_width):
+    if frame_width <= 0:
+        return 1.525
+    return (float(ball_x) / float(frame_width)) * 3.05
+
+
+def _pixel_to_world_z(ball_y, bail_line_y, stump_y_max):
+    pixel_span = max(float(stump_y_max - bail_line_y), 1.0)
+    normalized = (float(stump_y_max) - float(ball_y)) / pixel_span
+    return max(0.0, normalized * 0.711)
+
+
+def analyze_drs_from_positions(
+    ball_positions,
+    frame_width,
+    frame_height,
+    fps=None,
+    speed_kmph=None,
+    direct_video_only=False,
+):
     """
-    Prioritize direct stump-box entry over curve prediction.
-    If the tracked or projected ball enters the stump box, it is OUT.
-    Returns (hit: bool, confidence: float)
+    Speed-aware DRS verdict.
+    - Uses tracked stump-box contact first.
+    - Uses speed/fps to derive time-to-stumps and stump-plane height with
+      z = z0 + vz*t - 0.5*g*t^2.
+    - Higher speed flattens the lateral projection; lower speed allows more drift.
     """
 
     if not ball_positions or len(ball_positions) < 3:
-        return False, 0.0
+        return {
+            "ball_tracking": False,
+            "stump_confidence": 0.0,
+            "decision": "NOT OUT",
+            "reason": "Insufficient tracking data",
+            "pitching_text": "UNKNOWN",
+            "impact_text": "UNKNOWN",
+            "wickets_text": "MISSING",
+            "wicket_state": "MISSING",
+            "wicket_target": "UNKNOWN",
+        }
 
     recent = ball_positions[-25:] if len(ball_positions) >= 25 else ball_positions
+    tracked_points = ball_positions
 
     stump_center_x = frame_width * 0.50
     stump_half_width = frame_width * 0.035
-    # 2 cm world buffer approximated in image space.
+    # ~5% stump-width expansion for clipping / umpire's call.
+    stump_half_width_clip = stump_half_width * 1.05
     stump_buffer = max(2.0, frame_width * 0.0065)
     ball_radius = max(3.0, frame_width * 0.009)
 
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
-    stump_x_min_buffer = stump_x_min - stump_buffer
-    stump_x_max_buffer = stump_x_max + stump_buffer
+    stump_x_min_buffer = stump_center_x - stump_half_width_clip - stump_buffer
+    stump_x_max_buffer = stump_center_x + stump_half_width_clip + stump_buffer
 
     bail_line_y = frame_height * 0.58
     stump_plane_y = frame_height * 0.78
@@ -1465,10 +1511,29 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
     def inside_buffer_box(x, y):
         return stump_x_min_buffer <= x <= stump_x_max_buffer and bail_line_y <= y <= stump_y_max
 
-    # 1) Collision trigger: entering or touching the stump box is immediately OUT.
+    bounce_idx = max(range(len(ball_positions)), key=lambda i: ball_positions[i][1])
+    bounce_x, _ = ball_positions[bounce_idx]
+    impact_x, impact_y = recent[-1]
+    pitching_text = _x_label(bounce_x, stump_x_min, stump_x_max)
+    impact_text = _x_label(impact_x, stump_x_min, stump_x_max)
+
+    d_off = abs(impact_x - stump_x_max)
+    d_mid = abs(impact_x - stump_center_x)
+    d_leg = abs(impact_x - stump_x_min)
+    if d_off <= d_mid and d_off <= d_leg:
+        wicket_target = "OFF"
+    elif d_leg <= d_off and d_leg <= d_mid:
+        wicket_target = "LEG"
+    else:
+        wicket_target = "MIDDLE"
+
+    hit_kind = None
+    hit_confidence = 0.0
+
+    # 1) Collision trigger: any tracked entry into the stump rectangle is OUT.
     direct_hits = sum(
         1
-        for (x, y) in recent
+        for (x, y) in tracked_points
         if inside_stump_box(x, y)
         or is_hitting_stumps(
             x,
@@ -1482,14 +1547,13 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
         )
     )
     if direct_hits > 0:
-        confidence = min(0.99, 0.86 + (0.04 * direct_hits))
-        return True, round(confidence, 2)
+        hit_kind = "HITTING"
+        hit_confidence = min(0.99, 0.86 + (0.04 * direct_hits))
 
-    # 2) Umpire's-call edge case: touching 2cm buffer is still treated conservatively.
-    buffered_hits = sum(1 for (x, y) in recent if inside_buffer_box(x, y))
-    if buffered_hits > 0:
-        confidence = 0.55 if buffered_hits == 1 else 0.66
-        return True, round(confidence, 2)
+    buffered_hits = sum(1 for (x, y) in tracked_points if inside_buffer_box(x, y))
+    if hit_kind is None and buffered_hits > 0:
+        hit_kind = "UMPIRE'S CALL"
+        hit_confidence = 0.60 if buffered_hits == 1 else 0.72
 
     last_x, last_y = recent[-1]
     if inside_stump_box(last_x, last_y) or is_hitting_stumps(
@@ -1502,21 +1566,28 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
         ball_radius,
         stump_radius,
     ):
-        return True, 0.98
+        hit_kind = "HITTING"
+        hit_confidence = max(hit_confidence, 0.98)
 
     tail = recent[-4:] if len(recent) >= 4 else recent
     dx = 0.0
     dy = 0.0
+    predicted_x = float(last_x)
+    predicted_z_m = _pixel_to_world_z(last_y, bail_line_y, stump_y_max)
     if len(tail) >= 2:
         dxs = []
         dys = []
         speeds = []
+        z_vals = []
         for i in range(1, len(tail)):
             step_dx = tail[i][0] - tail[i - 1][0]
             step_dy = tail[i][1] - tail[i - 1][1]
             dxs.append(step_dx)
             dys.append(step_dy)
             speeds.append(math.sqrt((step_dx * step_dx) + (step_dy * step_dy)))
+            z_now = _pixel_to_world_z(tail[i][1], bail_line_y, stump_y_max)
+            z_prev = _pixel_to_world_z(tail[i - 1][1], bail_line_y, stump_y_max)
+            z_vals.append(z_now - z_prev)
         dx = sum(dxs) / len(dxs)
         dy = sum(dys) / len(dys)
 
@@ -1528,59 +1599,103 @@ def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height):
             (stump_plane_y - (frame_height * 0.08)) <= last_y <= stump_y_max
         )
         sudden_stop = last_speed <= max(1.5, prev_speed * 0.28)
-        if near_stump_line and sudden_stop:
-            return True, 0.84
+        if hit_kind is None and near_stump_line and sudden_stop:
+            hit_kind = "HITTING"
+            hit_confidence = max(hit_confidence, 0.84)
 
-        # 4) Reliability layer: project by last known velocity to stump plane.
+        # 4) Speed-driven stump-plane estimate.
+        effective_fps = float(fps) if fps and fps > 0 else 30.0
+        speed_mps = max(0.0, float(speed_kmph) / 3.6) if speed_kmph else None
+        frames_to_stump = 0.0
         if abs(dy) > 1e-6:
-            t = (stump_plane_y - last_y) / dy
-            if t >= 0:
-                proj_x = last_x + (dx * t)
-                proj_y = last_y + (dy * t)
-                if inside_stump_box(proj_x, proj_y) or is_hitting_stumps(
-                    proj_x,
-                    proj_y,
-                    stump_x_min,
-                    stump_x_max,
-                    bail_line_y,
-                    stump_y_max,
-                    ball_radius,
-                    stump_radius,
-                ):
-                    return True, 0.88 if len(recent) >= 6 else 0.74
-                if inside_buffer_box(proj_x, proj_y):
-                    return True, 0.58
+            frames_to_stump = max(0.0, (stump_plane_y - last_y) / dy)
+        time_to_stump = frames_to_stump / effective_fps if effective_fps > 0 else 0.0
 
-        proj_x = last_x
-        proj_y = last_y
-        for _ in range(20):
-            proj_x += dx
-            proj_y += dy
-            if inside_stump_box(proj_x, proj_y) or is_hitting_stumps(
-                proj_x,
-                proj_y,
-                stump_x_min,
-                stump_x_max,
-                bail_line_y,
-                stump_y_max,
-                ball_radius,
-                stump_radius,
-            ):
-                return True, 0.72 if len(recent) >= 6 else 0.62
-            if inside_buffer_box(proj_x, proj_y):
-                return True, 0.56
+        if not direct_video_only and time_to_stump > 0:
+            speed_factor = 1.0
+            if speed_kmph is not None:
+                if speed_kmph > 120.0:
+                    speed_factor = 0.55
+                elif speed_kmph < 90.0:
+                    speed_factor = 1.20
+            predicted_x = float(last_x + (dx * frames_to_stump * speed_factor))
 
-    # 5) Lock NOT OUT: only allow missing if ball is clearly outside by ~1 inch.
-    one_inch_buffer = max(1.0, frame_width * 0.0032)
-    clearly_outside = all(
-        (x < (stump_x_min_buffer - one_inch_buffer)) or
-        (x > (stump_x_max_buffer + one_inch_buffer))
-        for (x, _) in recent[-6:]
+            z0 = _pixel_to_world_z(last_y, bail_line_y, stump_y_max)
+            vz = ((sum(z_vals) / len(z_vals)) * effective_fps) if z_vals else 0.0
+            if speed_mps is not None:
+                # Faster balls stay flatter, slower ones dip more.
+                if speed_kmph > 120.0:
+                    vz *= 0.65
+                elif speed_kmph < 90.0:
+                    vz *= 1.20
+            predicted_z_m = max(0.0, z0 + (vz * time_to_stump) - (0.5 * 9.81 * (time_to_stump ** 2)))
+
+            # Knee-height pad impact bias: if it is low and heading in, do not
+            # suddenly turn it into a miss.
+            impact_z_m = _pixel_to_world_z(impact_y, bail_line_y, stump_y_max)
+            heading_in = (stump_x_min_buffer <= predicted_x <= stump_x_max_buffer)
+            if impact_z_m < 0.5 and heading_in:
+                predicted_z_m = min(predicted_z_m, 0.52)
+
+    inside_exact_width = stump_x_min <= predicted_x <= stump_x_max
+    inside_buffer_width = stump_x_min_buffer <= predicted_x <= stump_x_max_buffer
+
+    if inside_exact_width and predicted_z_m <= 0.711:
+        hit_kind = "HITTING"
+        hit_confidence = max(hit_confidence, 0.90)
+    elif hit_kind is None and inside_buffer_width and predicted_z_m <= 0.711:
+        hit_kind = "UMPIRE'S CALL"
+        hit_confidence = max(hit_confidence, 0.62)
+
+    if hit_kind == "HITTING":
+        decision = "OUT"
+        reason = "Speed-synced path hitting stumps"
+        wickets_text = "HITTING"
+    elif hit_kind == "UMPIRE'S CALL":
+        decision = "OUT"
+        reason = "Ball clipping stump width buffer"
+        wickets_text = "UMPIRE'S CALL (HITTING)"
+    else:
+        decision = "NOT OUT"
+        if predicted_z_m > 0.711:
+            reason = "Ball missing over the stumps"
+        elif predicted_x < stump_x_min:
+            reason = "Ball missing outside leg stump"
+        elif predicted_x > stump_x_max:
+            reason = "Ball missing outside off stump"
+        else:
+            reason = "Ball missing stumps"
+        wickets_text = "MISSING"
+
+    return {
+        "ball_tracking": hit_kind == "HITTING",
+        "stump_confidence": round(float(hit_confidence), 2),
+        "decision": decision,
+        "reason": reason,
+        "pitching_text": pitching_text,
+        "impact_text": impact_text,
+        "wickets_text": wickets_text,
+        "wicket_state": hit_kind or "MISSING",
+        "wicket_target": wicket_target,
+        "stump_prediction": {
+            "x_px": round(float(predicted_x), 2),
+            "z_m": round(float(predicted_z_m), 3),
+            "inside_width": inside_exact_width,
+            "inside_buffer": inside_buffer_width,
+        },
+    }
+
+
+def detect_stump_hit_from_positions(ball_positions, frame_width, frame_height, fps=None, speed_kmph=None):
+    verdict = analyze_drs_from_positions(
+        ball_positions,
+        frame_width,
+        frame_height,
+        fps=fps,
+        speed_kmph=speed_kmph,
+        direct_video_only=False,
     )
-    if not clearly_outside:
-        return True, 0.51
-
-    return False, 0.0
+    return verdict["ball_tracking"], verdict["stump_confidence"]
 
 # -----------------------------
 # PHYSICS-ONLY BAT PROXIMITY DETECTOR
@@ -1699,22 +1814,18 @@ async def drs_review(file: UploadFile = File(...)):
         # -----------------------------
         # FINAL DECISION (ICC LOGIC)
         # -----------------------------
-        if hits_stumps:
-            decision = "OUT"
-            reason = "Ball hitting stumps"
-        elif ultraedge:
+        if ultraedge:
             decision = "NOT OUT"
             reason = "Bat involved (UltraEdge detected)"
         else:
-            decision = "NOT OUT"
-            reason = "Ball missing stumps"
+            decision = drs_verdict["decision"]
+            reason = drs_verdict["reason"]
 
         return {
             "status": "success",
             "drs": {
                 "ultraedge": ultraedge,
-                "ball_tracking": hits_stumps,
-                "stump_confidence": stump_confidence,
+                **drs_verdict,
                 "decision": decision,
                 "reason": reason
             }

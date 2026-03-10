@@ -1014,7 +1014,7 @@ class _DrsTrajectoryPainter extends CustomPainter {
 }
 
 class _DrsCinematicScreen extends StatefulWidget {
-  final String videoPath;
+  final VideoPlayerController videoController;
   final _DrsTrackingGeometry geometry;
   final bool hasSpike;
   final String ultraedgeReason;
@@ -1029,7 +1029,7 @@ class _DrsCinematicScreen extends StatefulWidget {
   final double spinDeg;
 
   const _DrsCinematicScreen({
-    required this.videoPath,
+    required this.videoController,
     required this.geometry,
     required this.hasSpike,
     required this.ultraedgeReason,
@@ -1067,7 +1067,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   void initState() {
     super.initState();
     _finalOut = widget.isOut;
-    _videoController = VideoPlayerController.file(File(widget.videoPath));
+    _videoController = widget.videoController;
     _phaseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -1076,7 +1076,10 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   }
 
   Future<void> _initAndRun() async {
-    await _videoController.initialize();
+    if (!_videoController.value.isInitialized) {
+      await _videoController.initialize();
+    }
+    await _videoController.seekTo(Duration.zero);
     await _videoController.setLooping(false);
     _videoController.addListener(_handleVideoTick);
     if (!mounted) return;
@@ -1096,7 +1099,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   void dispose() {
     _videoController.removeListener(_handleVideoTick);
     _phaseController.dispose();
-    _videoController.dispose();
     super.dispose();
   }
 
@@ -1368,14 +1370,12 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: _ready
+    return Material(
+      color: Colors.transparent,
+      child: _ready
           ? AnimatedBuilder(
               animation: Listenable.merge([_phaseController, _videoController]),
               builder: (context, _) {
-                final progress = _videoProgress;
-                final milestones = _timelineMilestones();
                 final revealProgress = _reviewStartedAt == null
                     ? 0.0
                     : ((DateTime.now()
@@ -1395,16 +1395,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                 }
                 return Stack(
                   children: [
-                    Positioned.fill(
-                      child: FittedBox(
-                        fit: BoxFit.cover,
-                        child: SizedBox(
-                          width: _videoController.value.size.width,
-                          height: _videoController.value.size.height,
-                          child: VideoPlayer(_videoController),
-                        ),
-                      ),
-                    ),
                     Positioned.fill(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -2764,36 +2754,72 @@ class _UploadScreenState extends State<UploadScreen>
       await _configureDrsCinematic(Map<String, dynamic>.from(drs));
       if (!mounted) return;
       setState(() {
+        showDRS = true;
         drsLoading = false;
       });
       if (controller != null && controller!.value.isInitialized) {
         await controller!.pause();
       }
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => _DrsCinematicScreen(
-            videoPath: video!.path,
-            geometry: _drsGeometry,
-            hasSpike: _drsHasSpike,
-            ultraedgeReason: _drsUltraedgeReason,
-            pitching: _drsPitching,
-            impact: _drsImpact,
-            wickets: _drsWickets,
-            wicketTarget: _drsWicketTarget,
-            originalDecision: _drsOriginalDecision,
-            isOut: _drsOut,
-            speedKmph: speedKmph ?? 95.0,
-            swingDeg: _drsSwingDeg,
-            spinDeg: _drsSpinDeg,
-          ),
+      if (!mounted || controller == null) return;
+      await Navigator.of(context).push(
+        PageRouteBuilder(
+          opaque: false,
+          barrierColor: Colors.transparent,
+          transitionDuration: const Duration(milliseconds: 320),
+          reverseTransitionDuration: const Duration(milliseconds: 220),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return _DrsCinematicScreen(
+              videoController: controller!,
+              geometry: _drsGeometry,
+              hasSpike: _drsHasSpike,
+              ultraedgeReason: _drsUltraedgeReason,
+              pitching: _drsPitching,
+              impact: _drsImpact,
+              wickets: _drsWickets,
+              wicketTarget: _drsWicketTarget,
+              originalDecision: _drsOriginalDecision,
+              isOut: _drsOut,
+              speedKmph: speedKmph ?? 95.0,
+              swingDeg: _drsSwingDeg,
+              spinDeg: _drsSpinDeg,
+            );
+          },
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final fade = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+              reverseCurve: Curves.easeInCubic,
+            );
+            final slide = Tween<Offset>(
+              begin: const Offset(0.0, 0.035),
+              end: Offset.zero,
+            ).animate(fade);
+            final scale = Tween<double>(begin: 0.985, end: 1.0).animate(fade);
+
+            return ColoredBox(
+              color: Colors.black.withOpacity(0.18 * fade.value),
+              child: FadeTransition(
+                opacity: fade,
+                child: SlideTransition(
+                  position: slide,
+                  child: ScaleTransition(scale: scale, child: child),
+                ),
+              ),
+            );
+          },
         ),
       );
-      if (mounted && controller != null && controller!.value.isInitialized) {
+      if (!mounted) return;
+      setState(() {
+        showDRS = false;
+      });
+      if (controller != null && controller!.value.isInitialized) {
+        await controller!.setPlaybackSpeed(1.0);
         await controller!.play();
       }
     } catch (e) {
       setState(() {
+        showDRS = false;
         drsResult = "DRS FAILED\nConnection error";
         drsLoading = false;
       });
@@ -3184,254 +3210,260 @@ class _UploadScreenState extends State<UploadScreen>
                   ),
 
                   // LEFT SIDEBAR
-                  Positioned(
-                    left: 0,
-                    top: 100,
-                    child: Container(
-                      width: 150,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.55),
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 500),
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0, 0.3),
-                                    end: Offset.zero,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: _metric(
-                              "Speed",
-                              analysisLoading
-                                  ? "Analyzing..."
-                                  : (speedKmph != null
-                                        ? "${speedKmph!.toStringAsFixed(1)} km/h"
-                                        : ""),
-                            ),
+                  if (!showDRS)
+                    Positioned(
+                      left: 0,
+                      top: 100,
+                      child: Container(
+                        width: 150,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(16),
+                            bottomRight: Radius.circular(16),
                           ),
-                          if (speedKmph != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: Text(
-                                speedType == "measured_release"
-                                    ? "Measured speed"
-                                    : speedType == "very_slow_estimate"
-                                    ? "Very slow delivery"
-                                    : speedType == "camera_normalized"
-                                    ? "Estimated from camera motion"
-                                    : speedType == "video_derived"
-                                    ? "Estimated from video motion"
-                                    : speedType == "derived_physics"
-                                    ? "Physics fallback estimate"
-                                    : "",
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
-                                ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 500),
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.3),
+                                      end: Offset.zero,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _metric(
+                                "Speed",
+                                analysisLoading
+                                    ? "Analyzing..."
+                                    : (speedKmph != null
+                                          ? "${speedKmph!.toStringAsFixed(1)} km/h"
+                                          : ""),
                               ),
                             ),
-                          const SizedBox(height: 10),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 500),
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0, 0.3),
-                                    end: Offset.zero,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: _metric(
-                              "Swing",
-                              analysisLoading
-                                  ? "Analyzing..."
-                                  : (swing.isNotEmpty ? swing : "----"),
-                            ),
-                          ),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 500),
-                            transitionBuilder: (child, animation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: SlideTransition(
-                                  position: Tween<Offset>(
-                                    begin: const Offset(0, 0.3),
-                                    end: Offset.zero,
-                                  ).animate(animation),
-                                  child: child,
-                                ),
-                              );
-                            },
-                            child: _metric(
-                              "Spin",
-                              analysisLoading
-                                  ? "Analyzing..."
-                                  : (spin.isNotEmpty ? spin : "----"),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          GestureDetector(
-                            onTapDown: (_) => _pressDown(
-                              (v) => _drsScale = v,
-                              (r) => _drsRotation = r,
-                            ),
-                            onTapUp: (_) => _pressUp(
-                              (v) => _drsScale = v,
-                              (r) => _drsRotation = r,
-                            ),
-                            onTapCancel: () => _pressUp(
-                              (v) => _drsScale = v,
-                              (r) => _drsRotation = r,
-                            ),
-                            onTap: drsLoading ? null : runDRS,
-                            child: AnimatedRotation(
-                              turns: _drsRotation,
-                              duration: const Duration(milliseconds: 120),
-                              child: AnimatedScale(
-                                scale: _drsScale,
-                                duration: const Duration(milliseconds: 120),
-                                curve: Curves.easeOutBack,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
+                            if (speedKmph != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Text(
+                                  speedType == "measured_release"
+                                      ? "Measured speed"
+                                      : speedType == "very_slow_estimate"
+                                      ? "Very slow delivery"
+                                      : speedType == "camera_normalized"
+                                      ? "Estimated from camera motion"
+                                      : speedType == "video_derived"
+                                      ? "Estimated from video motion"
+                                      : speedType == "derived_physics"
+                                      ? "Physics fallback estimate"
+                                      : "",
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
                                   ),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Colors.redAccent,
-                                        Colors.deepOrange,
+                                ),
+                              ),
+                            const SizedBox(height: 10),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 500),
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.3),
+                                      end: Offset.zero,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _metric(
+                                "Swing",
+                                analysisLoading
+                                    ? "Analyzing..."
+                                    : (swing.isNotEmpty ? swing : "----"),
+                              ),
+                            ),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 500),
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: Tween<Offset>(
+                                      begin: const Offset(0, 0.3),
+                                      end: Offset.zero,
+                                    ).animate(animation),
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _metric(
+                                "Spin",
+                                analysisLoading
+                                    ? "Analyzing..."
+                                    : (spin.isNotEmpty ? spin : "----"),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              onTapDown: (_) => _pressDown(
+                                (v) => _drsScale = v,
+                                (r) => _drsRotation = r,
+                              ),
+                              onTapUp: (_) => _pressUp(
+                                (v) => _drsScale = v,
+                                (r) => _drsRotation = r,
+                              ),
+                              onTapCancel: () => _pressUp(
+                                (v) => _drsScale = v,
+                                (r) => _drsRotation = r,
+                              ),
+                              onTap: drsLoading ? null : runDRS,
+                              child: AnimatedRotation(
+                                turns: _drsRotation,
+                                duration: const Duration(milliseconds: 120),
+                                child: AnimatedScale(
+                                  scale: _drsScale,
+                                  duration: const Duration(milliseconds: 120),
+                                  curve: Curves.easeOutBack,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Colors.redAccent,
+                                          Colors.deepOrange,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.redAccent.withOpacity(
+                                            0.6,
+                                          ),
+                                          blurRadius: 18,
+                                          spreadRadius: 1,
+                                        ),
                                       ],
                                     ),
-                                    borderRadius: BorderRadius.circular(14),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.redAccent.withOpacity(
-                                          0.6,
-                                        ),
-                                        blurRadius: 18,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                  child: Center(
-                                    child: drsLoading
-                                        ? const SizedBox(
-                                            height: 18,
-                                            width: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
+                                    child: Center(
+                                      child: drsLoading
+                                          ? const SizedBox(
+                                              height: 18,
+                                              width: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Text(
+                                              "DRS",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
                                             ),
-                                          )
-                                        : const Text(
-                                            "DRS",
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
-                                          ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          GestureDetector(
-                            onTapDown: (_) => _pressDown(
-                              (v) => _coachScale = v,
-                              (r) => _coachRotation = r,
-                            ),
-                            onTapUp: (_) => _pressUp(
-                              (v) => _coachScale = v,
-                              (r) => _coachRotation = r,
-                            ),
-                            onTapCancel: () => _pressUp(
-                              (v) => _coachScale = v,
-                              (r) => _coachRotation = r,
-                            ),
-                            onTap: () async {
-                              setState(() {
-                                showCoach = true;
-                                coachReply =
-                                    "This may take 1–2 minutes...\nPlease keep the app open ⏳";
-                              });
+                            const SizedBox(height: 10),
+                            GestureDetector(
+                              onTapDown: (_) => _pressDown(
+                                (v) => _coachScale = v,
+                                (r) => _coachRotation = r,
+                              ),
+                              onTapUp: (_) => _pressUp(
+                                (v) => _coachScale = v,
+                                (r) => _coachRotation = r,
+                              ),
+                              onTapCancel: () => _pressUp(
+                                (v) => _coachScale = v,
+                                (r) => _coachRotation = r,
+                              ),
+                              onTap: () async {
+                                setState(() {
+                                  showCoach = true;
+                                  coachReply =
+                                      "This may take 1–2 minutes...\nPlease keep the app open ⏳";
+                                });
 
-                              await Future.delayed(const Duration(seconds: 6));
-                              if (!mounted) return;
+                                await Future.delayed(
+                                  const Duration(seconds: 6),
+                                );
+                                if (!mounted) return;
 
-                              setState(() {
-                                coachReply = "Analyzing your batting... 🏏";
-                              });
+                                setState(() {
+                                  coachReply = "Analyzing your batting... 🏏";
+                                });
 
-                              await runCoach();
-                            },
-                            child: AnimatedRotation(
-                              turns: _coachRotation,
-                              duration: const Duration(milliseconds: 120),
-                              child: AnimatedScale(
-                                scale: _coachScale,
+                                await runCoach();
+                              },
+                              child: AnimatedRotation(
+                                turns: _coachRotation,
                                 duration: const Duration(milliseconds: 120),
-                                curve: Curves.easeOutBack,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [Colors.blueAccent, Colors.cyan],
+                                child: AnimatedScale(
+                                  scale: _coachScale,
+                                  duration: const Duration(milliseconds: 120),
+                                  curve: Curves.easeOutBack,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
                                     ),
-                                    borderRadius: BorderRadius.circular(14),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.blueAccent.withOpacity(
-                                          0.6,
-                                        ),
-                                        blurRadius: 18,
-                                        spreadRadius: 1,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Colors.blueAccent,
+                                          Colors.cyan,
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  child: const Center(
-                                    child: Text(
-                                      "COACH",
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.blueAccent.withOpacity(
+                                            0.6,
+                                          ),
+                                          blurRadius: 18,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        "COACH",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
 
                   if (showCoach)
                     Positioned.fill(
