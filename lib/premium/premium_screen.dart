@@ -1298,9 +1298,9 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.redAccent,
         features: [
           "1 Year Access",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
-          "200 Video Compare",
+          "5,000 AI Chats",
+          "150 Mistake Detections",
+          "150 Video Compare",
           "All Premium Features",
           "Priority AI Processing",
         ],
@@ -1330,9 +1330,9 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.redAccent,
         features: [
           "Unlimited Analyse",
-          "200 Video Compare",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
+          "150 Video Compare",
+          "5,000 AI Chats",
+          "150 Mistake Detections",
         ],
       ),
     ];
@@ -1384,8 +1384,8 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.redAccent,
         features: [
           "1 Year Access",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
+          "7,000 AI Chats",
+          "150 Mistake Detections",
           "150 Video Compare",
           "All Features Unlocked",
           "Priority AI",
@@ -1430,8 +1430,8 @@ class _PremiumScreenState extends State<PremiumScreen>
         features: [
           "Unlimited Analyse",
           "150 Video Compare",
-          "20,000 AI Chats",
-          "200 Mistake Detections",
+          "7,000 AI Chats",
+          "150 Mistake Detections",
           "All Features Unlocked",
           "Priority AI",
         ],

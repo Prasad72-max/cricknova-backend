@@ -26,7 +26,7 @@ PLAN_LIMITS = {
         "duration_days": 365,
     },
     "IN_1999": {
-        "compare_limit": 200,
+        "compare_limit": 150,
         "duration_days": 365,
     },
 }

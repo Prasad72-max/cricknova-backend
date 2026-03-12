@@ -33,13 +33,13 @@ PLAN_LIMITS = {
     "INT_MONTHLY": {"chat": 200, "mistake": 20, "compare": 0},
     "INT_6_MONTHS": {"chat": 1200, "mistake": 30, "compare": 5},
     "INT_YEARLY": {"chat": 1800, "mistake": 50, "compare": 10},
-    "INT_ULTRA": {"chat": 5000, "mistake": 150, "compare": 150},
+    "INT_ULTRA": {"chat": 7000, "mistake": 150, "compare": 150},
 
     # ---- NEW BACKEND PLAN KEYS (USD ALIASES) ----
     "MONTHLY": {"chat": 200, "mistake": 20, "compare": 0},
     "SIX_MONTH": {"chat": 1200, "mistake": 30, "compare": 5},
     "YEARLY": {"chat": 1800, "mistake": 50, "compare": 10},
-    "ULTRA": {"chat": 5000, "mistake": 150, "compare": 150},
+    "ULTRA": {"chat": 7000, "mistake": 150, "compare": 150},
 }
 
 FREE_PLAN = {

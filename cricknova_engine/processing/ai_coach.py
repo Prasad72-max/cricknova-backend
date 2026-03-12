@@ -149,12 +149,14 @@ def check_limit(user_id: str, feature: str):
         "IN_99": {"chat": 200, "mistake": 15},
         "IN_299": {"chat": 1200, "mistake": 30},
         "IN_499": {"chat": 3000, "mistake": 60},
-        "IN_1999": {"chat": 20000, "mistake": 200},
+        "IN_1999": {"chat": 5000, "mistake": 150},
         "MONTHLY": {"chat": 200, "mistake": 15},
         "6 MONTHS": {"chat": 1200, "mistake": 30},
         "YEARLY": {"chat": 3000, "mistake": 60},
-        "ULTRA": {"chat": 20000, "mistake": 200},
-        "ULTRA PRO": {"chat": 20000, "mistake": 200},
+        "ULTRA": {"chat": 7000, "mistake": 150},
+        "ULTRA PRO": {"chat": 7000, "mistake": 150},
+        "INT_ULTRA": {"chat": 7000, "mistake": 150},
+        "INTL_ULTRA": {"chat": 7000, "mistake": 150},
     }
 
     limits = PLAN_LIMITS.get(raw_plan)

@@ -59,6 +59,12 @@ PLANS = {
         "compare_limit": 150,
         "duration_days": 365,
     },
+    "INT_ULTRA": {
+        "chat_limit": 7000,
+        "mistake_limit": 150,
+        "compare_limit": 150,
+        "duration_days": 365,
+    },
 }
 
 PLAN_ALIASES = {
@@ -69,7 +75,8 @@ PLAN_ALIASES = {
     "INTL_MONTHLY": "IN_99",
     "INTL_6M": "IN_299",
     "INTL_YEARLY": "IN_499",
-    "INTL_ULTRA": "IN_1999",
+    "INTL_ULTRA": "INT_ULTRA",
+    "INT_ULTRA": "INT_ULTRA",
 }
 
 # -----------------------------

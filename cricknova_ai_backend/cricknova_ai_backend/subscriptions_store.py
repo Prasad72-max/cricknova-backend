@@ -23,7 +23,7 @@ PLANS = {
     },
     "ultra_pro": {
         "duration_days": 365,
-        "limits": {"chat": 20000, "mistake": 200, "compare": 200}
+        "limits": {"chat": 7000, "mistake": 150, "compare": 150}
     }
 }
 

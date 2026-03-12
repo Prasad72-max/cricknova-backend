@@ -197,6 +197,11 @@ class PremiumService {
         case "IN_1999":
           await _cache(firestorePremium, planId, 5000, 150, 150);
           break;
+        case "INT_ULTRA":
+        case "INTL_ULTRA":
+        case "ULTRA":
+          await _cache(firestorePremium, planId, 7000, 150, 150);
+          break;
         default:
           await _cache(false, "FREE", 0, 0, 0);
       }
