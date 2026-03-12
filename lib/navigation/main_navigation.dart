@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive/hive.dart';
 
 import '../home/home_screen.dart';
 import '../ai/ai_coach_screen.dart';
@@ -29,6 +30,7 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _index = 0;
   String userName = "Player";
+  late List<Widget> _screens;
 
   void goHome() {
     if (_index != 0) {
@@ -48,6 +50,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    _screens = _buildScreens();
     _bootstrapSession();
   }
 
@@ -70,22 +73,37 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   Future<void> loadUser() async {
-    final prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid ?? "guest";
+    String? name;
+    try {
+      final box = await Hive.openBox("local_stats_$uid");
+      name = box.get("profileName") as String?;
+    } catch (_) {}
+    if (name == null || name.trim().isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      name = prefs.getString("profileName");
+    }
     setState(() {
-      userName = prefs.getString("profileName") ?? widget.userName;
+      userName = (name != null && name!.trim().isNotEmpty)
+          ? name!.trim()
+          : widget.userName;
+      _screens = _buildScreens();
     });
+  }
+
+  List<Widget> _buildScreens() {
+    return [
+      HomeScreen(key: const ValueKey("home"), userName: userName), // 0
+      const InsightsScreen(key: ValueKey("insights")), // 1
+      const AICoachScreen(key: ValueKey("coach")), // 2 (premium)
+      const PremiumScreen(entrySource: "tab", key: ValueKey("premium")), // 3
+      const ProfileScreen(key: ValueKey("profile")), // 4
+    ];
   }
 
   @override
   Widget build(BuildContext context) {
-    final screens = [
-      HomeScreen(userName: userName),          // 0
-      const InsightsScreen(),                  // 1 (NEW)
-      const AICoachScreen(),                   // 2 (premium)
-      const PremiumScreen(entrySource: "tab"), // 3
-      const ProfileScreen(),                   // 4
-    ];
-
     return Scaffold(
       appBar: _index == 0
           ? null
@@ -126,10 +144,7 @@ class _MainNavigationState extends State<MainNavigation> {
               ),
               centerTitle: true,
             ),
-      body: IndexedStack(
-        index: _index,
-        children: screens,
-      ),
+      body: IndexedStack(index: _index, children: _screens),
 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
@@ -141,7 +156,10 @@ class _MainNavigationState extends State<MainNavigation> {
         type: BottomNavigationBarType.fixed,
 
         onTap: (i) async {
-          debugPrint("BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}");
+          if (i == _index) return;
+          debugPrint(
+            "BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}",
+          );
 
           // AI Coach tab (index 2) is premium-only
           if (i == 2 && !PremiumService.isPremiumActive) {
@@ -222,11 +240,7 @@ class _MainNavigationState extends State<MainNavigation> {
               color: Colors.amber,
               borderRadius: BorderRadius.circular(4),
               boxShadow: const [
-                BoxShadow(
-                  color: Colors.amber,
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
+                BoxShadow(color: Colors.amber, blurRadius: 8, spreadRadius: 1),
               ],
             ),
           ),

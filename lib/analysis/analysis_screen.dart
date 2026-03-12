@@ -31,7 +31,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double? stumpConfidence;
 
   // CHANGE THIS TO YOUR IP:
-  final String backendUrl = "https://cricknova-backend.onrender.com/training/analyze";
+  final String backendUrl =
+      "https://cricknova-backend.onrender.com/training/analyze";
 
   String? _normalizeSwingLabel(String? raw) {
     final s = (raw ?? "").toLowerCase();
@@ -108,10 +109,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       appBar: AppBar(
         title: Text(
           "Analysis",
-          style: GoogleFonts.poppins(
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
+          style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600),
         ),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
@@ -129,11 +127,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               title: "Speed",
               value: speedKmph != null
                   ? ((speedType == "very_slow_estimate" ||
-                          speedType == "camera_normalized" ||
-                          speedType == "video_derived" ||
-                          speedType == "derived_physics")
-                      ? "~${speedKmph!.toStringAsFixed(1)} km/h"
-                      : "${speedKmph!.toStringAsFixed(1)} km/h")
+                            speedType == "camera_normalized" ||
+                            speedType == "video_derived" ||
+                            speedType == "derived_physics")
+                        ? "~${speedKmph!.toStringAsFixed(1)} km/h"
+                        : "${speedKmph!.toStringAsFixed(1)} km/h")
                   : "Unavailable",
               icon: Icons.speed,
               color: speedKmph != null ? Colors.blueAccent : Colors.grey,
@@ -150,7 +148,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
             _metricBox(
               title: "Spin",
-              value: (spinType != null && spinType!.isNotEmpty) ? spinType! : "NA",
+              value: (spinType != null && spinType!.isNotEmpty)
+                  ? spinType!
+                  : "NA",
               icon: Icons.autorenew,
               color: Colors.green,
             ),
@@ -160,27 +160,30 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               title: "DRS Decision",
               value: drsDecision != null
                   ? (stumpConfidence != null
-                      ? "$drsDecision (${(stumpConfidence! * 100).toStringAsFixed(0)}%)"
-                      : drsDecision!)
+                        ? "$drsDecision (${(stumpConfidence! * 100).toStringAsFixed(0)}%)"
+                        : drsDecision!)
                   : "NA",
               icon: Icons.gavel,
               color: drsDecision == "OUT"
                   ? Colors.red
-                  : (drsDecision == "NOT OUT"
-                      ? Colors.green
-                      : Colors.grey),
+                  : (drsDecision == "NOT OUT" ? Colors.green : Colors.grey),
             ),
             const SizedBox(height: 15),
 
             ElevatedButton(
-              onPressed: (speedKmph == null && swingName == null && spinType == null && spinStrength == null)
+              onPressed:
+                  (speedKmph == null &&
+                      swingName == null &&
+                      spinType == null &&
+                      spinStrength == null)
                   ? null
                   : () async {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => AICoachScreen(
-                            initialQuestion: "Analyze my batting mistake on this delivery",
+                            initialQuestion:
+                                "Analyze my batting mistake on this delivery",
                             context: {
                               "speed_kmph": speedKmph,
                               "swing": swingName,
@@ -207,7 +210,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ),
             ),
             const SizedBox(height: 25),
-            (!_showTrajectoryAfterVideo || trajectory == null || trajectory!.isEmpty)
+            (!_showTrajectoryAfterVideo ||
+                    trajectory == null ||
+                    trajectory!.isEmpty)
                 ? _chartPlaceholder("Ball Trajectory")
                 : _trajectoryView(),
             const SizedBox(height: 25),
@@ -245,7 +250,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -275,9 +280,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
 
       if (e.toString().contains("TRAINING_LIMIT_REACHED")) {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PremiumScreen()),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PremiumScreen()));
         return;
       }
 
@@ -298,8 +303,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // ---------- NORMALIZE SOURCE ----------
       final Map<String, dynamic> src =
           (responseData["data"] is Map<String, dynamic>)
-              ? Map<String, dynamic>.from(responseData["data"])
-              : responseData;
+          ? Map<String, dynamic>.from(responseData["data"])
+          : responseData;
       final inferred = _inferLabelsFromTrajectory(src["trajectory"]);
 
       // ---------- SPEED (FULLTRACK STYLE) ----------
@@ -350,11 +355,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         final confidenceRaw = drsMap["stump_confidence"];
 
         if (decisionRaw != null) {
-          final normalized =
-              decisionRaw.toString().toLowerCase().trim();
+          final normalized = decisionRaw.toString().toLowerCase().trim();
 
-          if (normalized.contains("not") &&
-              normalized.contains("out")) {
+          if (normalized.contains("not") && normalized.contains("out")) {
             drsDecision = "NOT OUT";
           } else if (normalized.contains("out")) {
             drsDecision = "OUT";
@@ -375,15 +378,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         stumpConfidence = 0.0;
       }
     });
+    // Review prompt removed (manual rating only).
   }
 
   // --------------- SEND TO FASTAPI -------------------
   Future<Map<String, dynamic>?> _sendToBackend(File file) async {
     try {
-      final request = http.MultipartRequest(
-        "POST",
-        Uri.parse(backendUrl),
-      );
+      final request = http.MultipartRequest("POST", Uri.parse(backendUrl));
 
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
@@ -398,16 +399,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // Canonical Authorization header
       request.headers["Authorization"] = "Bearer $token";
 
-      request.files.add(
-        await http.MultipartFile.fromPath("file", file.path),
-      );
+      request.files.add(await http.MultipartFile.fromPath("file", file.path));
 
       final streamed = await request.send();
       final responseString = await streamed.stream.bytesToString();
 
-     print("=========== BACKEND RESPONSE START ===========");
-print(responseString);
-print("=========== BACKEND RESPONSE END ===========");
+      print("=========== BACKEND RESPONSE START ===========");
+      print(responseString);
+      print("=========== BACKEND RESPONSE END ===========");
       debugPrint("RAW LENGTH => ${responseString.length}");
 
       if (streamed.statusCode == 200) {
@@ -437,7 +436,7 @@ print("=========== BACKEND RESPONSE END ===========");
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("OK"),
-          )
+          ),
         ],
       ),
     );
@@ -456,11 +455,7 @@ print("=========== BACKEND RESPONSE END ===========");
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
         ],
       ),
       child: Row(
@@ -499,20 +494,13 @@ print("=========== BACKEND RESPONSE END ===========");
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 4)),
         ],
       ),
       child: Center(
         child: Text(
           title,
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            color: Colors.black54,
-          ),
+          style: GoogleFonts.poppins(fontSize: 18, color: Colors.black54),
         ),
       ),
     );
@@ -528,9 +516,7 @@ print("=========== BACKEND RESPONSE END ===========");
       child: Stack(
         children: [
           Positioned.fill(
-            child: CustomPaint(
-              painter: _TrajectoryPainter(trajectory!),
-            ),
+            child: CustomPaint(painter: _TrajectoryPainter(trajectory!)),
           ),
         ],
       ),

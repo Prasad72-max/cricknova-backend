@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../navigation/main_navigation.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
+import 'post_login_welcome_screen.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
   Future<void> signInWithGoogle(BuildContext context) async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
       // Show blocking loader
       showDialog(
@@ -19,7 +24,7 @@ class LoginScreen extends StatelessWidget {
 
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        Navigator.pop(context);
+        navigator.pop();
         return;
       }
 
@@ -30,12 +35,13 @@ class LoginScreen extends StatelessWidget {
         idToken: googleAuth.idToken,
       );
 
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
 
       final user = userCredential.user;
       if (user == null) {
-        Navigator.pop(context);
+        navigator.pop();
         return;
       }
 
@@ -60,27 +66,45 @@ class LoginScreen extends StatelessWidget {
       await PremiumService.syncFromFirestore(user.uid);
 
       // 🔁 Force token refresh AFTER premium sync (critical for backend auth)
-      final refreshedToken = await FirebaseAuth.instance.currentUser?.getIdToken(true);
+      final refreshedToken = await FirebaseAuth.instance.currentUser
+          ?.getIdToken(true);
       if (refreshedToken == null || refreshedToken.isEmpty) {
-        throw Exception("Failed to refresh Firebase ID token after premium sync");
+        throw Exception(
+          "Failed to refresh Firebase ID token after premium sync",
+        );
       }
       await prefs.setString("firebase_id_token", refreshedToken);
 
+      final userName = user.displayName ?? "Player";
+      final showWelcomeEntrance = await PostLoginWelcomeScreen.shouldShowFor(
+        prefs: prefs,
+        user: user,
+        explicitIsNewUser: userCredential.additionalUserInfo?.isNewUser,
+      );
+      if (showWelcomeEntrance) {
+        await PostLoginWelcomeScreen.markSeen(prefs, user.uid);
+      }
+
       // Close loader
-      Navigator.pop(context);
+      if (!context.mounted) return;
+      navigator.pop();
 
       // Navigate only AFTER premium sync
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              MainNavigation(userName: user.displayName ?? "Player"),
+          builder: (_) => showWelcomeEntrance
+              ? PostLoginWelcomeScreen(userName: userName)
+              : MainNavigation(userName: userName),
         ),
         (route) => false,
       );
     } catch (e) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+      if (!context.mounted) return;
+      messenger.showSnackBar(
         const SnackBar(
           backgroundColor: Colors.redAccent,
           content: Text("Google login failed"),
@@ -103,8 +127,15 @@ class LoginScreen extends StatelessWidget {
               // LOGO + TITLE
               Column(
                 children: const [
-                  Icon(Icons.sports_cricket,
-                      size: 64, color: Colors.blueAccent),
+                  Icon(
+                    Icons.sports_cricket,
+                    size: 64,
+                    color: Color(0xFF7CFF6B),
+                    shadows: [
+                      Shadow(color: Color(0xFF7CFF6B), blurRadius: 14),
+                      Shadow(color: Color(0xAA7CFF6B), blurRadius: 24),
+                    ],
+                  ),
                   SizedBox(height: 16),
                   Text(
                     "CrickNova AI",
@@ -118,10 +149,7 @@ class LoginScreen extends StatelessWidget {
                   Text(
                     "Where cricket meets intelligence",
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white60,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                 ],
               ),
@@ -174,9 +202,9 @@ class LoginScreen extends StatelessWidget {
           boxShadow: color != Colors.transparent
               ? [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 12,
-                  )
+                  ),
                 ]
               : [],
         ),

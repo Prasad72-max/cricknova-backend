@@ -1,16 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive/hive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
-
+import 'chat_sessions_provider.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? payloadContext;
@@ -26,6 +24,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
   bool _redirectedToPremium = false;
 
   late Uri uri;
+  late final ChatSessionsProvider _chatProvider;
 
   final TextEditingController controller = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
@@ -33,22 +32,15 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   bool loading = false;
   bool isListening = false;
-  bool _chatsLoadedOnce = false;
-
-  int currentChatIndex = 0;
-  List<Map<String, dynamic>> chats = [];
-  // 🔥 Cost Optimization: Batch XP writes
-  int _pendingXpWrites = 0;
 
   @override
   void initState() {
     super.initState();
 
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
+    _chatProvider = ChatSessionsProvider()..init();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await loadChats();
-
       if (widget.initialQuestion != null &&
           widget.initialQuestion!.isNotEmpty) {
         controller.text = widget.initialQuestion!;
@@ -64,6 +56,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   @override
   void dispose() {
+    _chatProvider.dispose();
     controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -110,46 +103,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
     );
   }
 
-  /* ---------------- STORAGE ---------------- */
-
-  Future<void> saveChats() async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString("cricknova_chats", jsonEncode(chats));
-  }
-
-  Future<void> loadChats() async {
-    if (_chatsLoadedOnce) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final data = prefs.getString("cricknova_chats");
-
-    if (data != null) {
-      chats = List<Map<String, dynamic>>.from(jsonDecode(data));
-    }
-
-    if (chats.isEmpty) {
-      createNewChat();
-    }
-
-    currentChatIndex = 0;
-    _chatsLoadedOnce = true;
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void createNewChat() {
-    chats.insert(0, {
-      "title": "New Chat",
-      "messages": [],
-    });
-    currentChatIndex = 0;
-    saveChats();
-    setState(() {});
-  }
-
-
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
@@ -163,19 +116,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
       return;
     }
 
-    if (chats[currentChatIndex]["messages"].isEmpty) {
-      chats[currentChatIndex]["title"] =
-          userMessage.length > 25
-              ? "${userMessage.substring(0, 25)}…"
-              : userMessage;
-    }
-
-    chats[currentChatIndex]["messages"].add({
-      "role": "user",
-      "text": userMessage,
-    });
-
-
+    await _chatProvider.addUserMessage(userMessage);
     loading = true;
     setState(() {});
 
@@ -208,19 +149,21 @@ class _AICoachScreenState extends State<AICoachScreen> {
         return;
       }
 
-      debugPrint("🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken.substring(0, 30)}");
+      debugPrint(
+        "🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken.substring(0, 30)}",
+      );
 
-      http.Response response = await http.post(
-        uri,
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "authorization": "Bearer ${idToken.trim()}",
-        },
-        body: jsonEncode({
-          "message": userMessage,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      http.Response response = await http
+          .post(
+            uri,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "authorization": "Bearer ${idToken.trim()}",
+            },
+            body: jsonEncode({"message": userMessage}),
+          )
+          .timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 401) {
         loading = false;
@@ -233,8 +176,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
           );
         }
         return;
-      }
-      else if (response.statusCode == 403) {
+      } else if (response.statusCode == 403) {
         loading = false;
         setState(() {});
 
@@ -247,21 +189,17 @@ class _AICoachScreenState extends State<AICoachScreen> {
         } catch (_) {}
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Usage limit reached."),
-            ),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("Usage limit reached.")));
         }
         return;
-      }
-      else if (response.statusCode == 200) {
+      } else if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         debugPrint("AI COACH RESPONSE => $decoded");
 
         // ❌ Any other unexpected failure
-        if (decoded["success"] != true &&
-            decoded["status"] != "success") {
+        if (decoded["success"] != true && decoded["status"] != "success") {
           throw Exception("AI failed");
         }
 
@@ -270,14 +208,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
             decoded["coach_feedback"]?.toString() ??
             "No reply received from AI.";
 
-        chats[currentChatIndex]["messages"].add({
-          "role": "coach",
-          "text": coachText,
-        });
-
-
-
-        saveChats();
+        await _chatProvider.addCoachMessage(coachText);
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
@@ -295,14 +226,11 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Server error. Please try again."),
-            ),
+            const SnackBar(content: Text("Server error. Please try again.")),
           );
         }
         return;
       }
-
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
@@ -316,9 +244,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Network error. Please try again."),
-          ),
+          const SnackBar(content: Text("Network error. Please try again.")),
         );
       }
 
@@ -332,10 +258,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
         }
       });
 
-      saveChats();
       return;
-    }
-    finally {
+    } finally {
       // 🔥 Universal XP reward (AI attempt — success or fail)
       try {
         final user = FirebaseAuth.instance.currentUser;
@@ -388,37 +312,30 @@ class _AICoachScreenState extends State<AICoachScreen> {
     bool isUser = msg["role"] == "user";
 
     return Align(
-      alignment:
-          isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin:
-            const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
         padding: const EdgeInsets.all(14),
         constraints: const BoxConstraints(maxWidth: 320),
         decoration: BoxDecoration(
-          color: isUser
-              ? const Color(0xFF1E293B)
-              : const Color(0xFF111827),
+          color: isUser ? const Color(0xFF1E293B) : const Color(0xFF111827),
           borderRadius: BorderRadius.circular(18),
           border: isUser
               ? null
-              : Border.all(
-                  color: const Color(0xFF38BDF8),
-                  width: 1.2,
-                ),
+              : Border.all(color: const Color(0xFF38BDF8), width: 1.2),
         ),
         child: Text(
-          msg["text"] ?? "",
+          msg["content"] ?? msg["text"] ?? "",
           style: const TextStyle(color: Colors.white),
         ),
       ),
     );
   }
+
   // ---------------- USER NAME HELPER ----------------
   String getUserName() {
     final user = FirebaseAuth.instance.currentUser;
-    if (user?.displayName != null &&
-        user!.displayName!.trim().isNotEmpty) {
+    if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
       return user.displayName!.split(" ").first;
     }
     return "Player";
@@ -428,8 +345,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
   Widget quickChip(String text) {
     return ActionChip(
       backgroundColor: const Color(0xFF0F172A),
-      label: Text(text,
-          style: const TextStyle(color: Colors.white)),
+      label: Text(text, style: const TextStyle(color: Colors.white)),
       onPressed: () {
         controller.text = text;
         sendMessage();
@@ -442,8 +358,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
       contentPadding: EdgeInsets.zero,
       title: Text(
         text,
-        style: const TextStyle(
-            color: Colors.white70, fontSize: 13),
+        style: const TextStyle(color: Colors.white70, fontSize: 13),
       ),
       onTap: () {
         controller.text = text;
@@ -454,248 +369,280 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   /* ---------------- HISTORY DRAWER ---------------- */
 
-  Widget buildHistoryDrawer() {
+  Widget buildHistoryDrawer(ChatSessionsProvider provider) {
     return Drawer(
       backgroundColor: const Color(0xFF020617),
-      child: Column(
-        children: [
-          const SizedBox(height: 40),
-          const Text(
-            "CrickNova History",
-            style: TextStyle(color: Colors.white, fontSize: 18),
-          ),
-          const Divider(color: Colors.white24),
-          Expanded(
-            child: ListView.builder(
-              itemCount: chats.length,
-              itemBuilder: (context, i) {
-                return ListTile(
-                  title: Text(
-                    chats[i]["title"],
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+              child: Row(
+                children: [
+                  const Text(
+                    "Chat History",
+                    style: TextStyle(color: Colors.white, fontSize: 18),
                   ),
-                  selected: i == currentChatIndex,
-                  onTap: () {
-                    currentChatIndex = i;
-                    Navigator.pop(context);
-                    setState(() {});
-                  },
-                );
-              },
+                  const Spacer(),
+                  IconButton(
+                    tooltip: "New Chat",
+                    icon: const Icon(Icons.add_circle, color: Colors.white),
+                    onPressed: () async {
+                      await provider.startNewChat();
+                      if (mounted) Navigator.pop(context);
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-          ListTile(
-            leading:
-                const Icon(Icons.add, color: Colors.white),
-            title: const Text(
-              "New Chat",
-              style: TextStyle(color: Colors.white),
+            const Divider(color: Colors.white24, height: 1),
+            Expanded(
+              child: provider.loadingList
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF38BDF8),
+                      ),
+                    )
+                  : provider.sessions.isEmpty
+                  ? const Center(
+                      child: Text(
+                        "No previous chats",
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: provider.sessions.length,
+                      itemBuilder: (context, i) {
+                        final session = provider.sessions[i];
+                        final selected = session.id == provider.currentChatId;
+                        return ListTile(
+                          title: Text(
+                            session.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          selected: selected,
+                          trailing: IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.white54,
+                            ),
+                            onPressed: () async {
+                              await provider.deleteChat(session.id);
+                            },
+                          ),
+                          onTap: () async {
+                            await provider.openChat(session.id);
+                            if (mounted) Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
             ),
-            onTap: () {
-              createNewChat();
-              Navigator.pop(context);
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-
-
-    return Scaffold(
-      drawer: buildHistoryDrawer(),
-      backgroundColor: const Color(0xFF020617),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF020617),
-        elevation: 0,
-        title: const Text(
-          "CrickNova AI Coach",
-          style: TextStyle(
-            color: Color(0xFFE5E7EB),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          Flexible(
-            fit: FlexFit.tight,
-            child: chats.isEmpty ||
-                    chats[currentChatIndex]["messages"].isEmpty
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 20),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-
-                        // 👤 Coach Greeting
-                        Row(
-                          children: [
-                            const CircleAvatar(
-                              radius: 22,
-                              backgroundColor:
-                                  Color(0xFF0F172A),
-                              child: Icon(Icons.sports_cricket,
-                                  color: Color(0xFF38BDF8)),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                "Hello ${getUserName()}!\nI am your CrickNova AI. How can I help you improve your game today?",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            )
-                          ],
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // ⚡ Quick Action Chips
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            quickChip("🏏 Batting Tips"),
-                            quickChip("🥎 Bowling Tips"),
-                            quickChip("🧠 Match Mindset"),
-                            quickChip("📉 My Mistakes"),
-                          ],
-                        ),
-
-                        const SizedBox(height: 28),
-
-                        // 🏆 Suggested Questions
-                        const Text(
-                          "Suggested Questions",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        suggestionTile(
-                            "How to play a perfect cover drive?"),
-                        suggestionTile(
-                            "What is the ideal release point for an outswinger?"),
-                        suggestionTile(
-                            "Show me drills for better footwork."),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount:
-                        chats[currentChatIndex]["messages"].length,
-                    itemBuilder: (_, i) =>
-                        buildMessage(
-                          chats[currentChatIndex]["messages"][i],
-                        ),
-                  ),
-          ),
-          // Clean AI analyzing indicator
-          if (loading)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    height: 28,
-                    width: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(Color(0xFF38BDF8)),
-                      backgroundColor: Color(0xFF0F172A),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: 1),
-                    duration: const Duration(seconds: 2),
-                    builder: (context, value, child) {
-                      int dots = (value * 3).floor();
-                      return Text(
-                        "Analyzing${"." * dots}",
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      );
-                    },
-                    onEnd: () {
-                      if (mounted && loading) {
-                        setState(() {});
-                      }
-                    },
-                  ),
-                ],
+    return ChangeNotifierProvider.value(
+      value: _chatProvider,
+      child: Consumer<ChatSessionsProvider>(
+        builder: (context, provider, _) {
+          final hasMessages = provider.messages.isNotEmpty;
+          return Scaffold(
+            drawer: buildHistoryDrawer(provider),
+            backgroundColor: const Color(0xFF020617),
+            appBar: AppBar(
+              backgroundColor: const Color(0xFF020617),
+              elevation: 0,
+              title: const Text(
+                "CrickNova AI Coach",
+                style: TextStyle(
+                  color: Color(0xFFE5E7EB),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          Container(
-            padding: const EdgeInsets.all(10),
-            child: Row(
+            body: Column(
               children: [
-                Expanded(
-                  child: AbsorbPointer(
-                    absorbing: false,
-                    child: TextField(
-                      controller: controller,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText:
-                            "Ask CrickNova AI Coach...",
-                        hintStyle: const TextStyle(
-                            color: Color(0xFF64748B)),
-                        filled: true,
-                        fillColor:
-                            const Color(0xFF0F172A),
-                        contentPadding:
-                            const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12),
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
+                Flexible(
+                  fit: FlexFit.tight,
+                  child: !hasMessages
+                      ? SingleChildScrollView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 20,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 👤 Coach Greeting
+                              Row(
+                                children: [
+                                  const CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: Color(0xFF0F172A),
+                                    child: Icon(
+                                      Icons.sports_cricket,
+                                      color: Color(0xFF38BDF8),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      "Hello ${getUserName()}!\nI am your CrickNova AI. How can I help you improve your game today?",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const SizedBox(height: 24),
+
+                              // ⚡ Quick Action Chips
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  quickChip("🏏 Batting Tips"),
+                                  quickChip("🥎 Bowling Tips"),
+                                  quickChip("🧠 Match Mindset"),
+                                  quickChip("📉 My Mistakes"),
+                                ],
+                              ),
+
+                              const SizedBox(height: 28),
+
+                              // 🏆 Suggested Questions
+                              const Text(
+                                "Suggested Questions",
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              suggestionTile(
+                                "How to play a perfect cover drive?",
+                              ),
+                              suggestionTile(
+                                "What is the ideal release point for an outswinger?",
+                              ),
+                              suggestionTile(
+                                "Show me drills for better footwork.",
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          itemCount: provider.messages.length,
+                          itemBuilder: (_, i) =>
+                              buildMessage(provider.messages[i]),
                         ),
-                      ),
+                ),
+                // Clean AI analyzing indicator
+                if (loading)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          height: 28,
+                          width: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation(
+                              Color(0xFF38BDF8),
+                            ),
+                            backgroundColor: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0, end: 1),
+                          duration: const Duration(seconds: 2),
+                          builder: (context, value, child) {
+                            int dots = (value * 3).floor();
+                            return Text(
+                              "Analyzing${"." * dots}",
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            );
+                          },
+                          onEnd: () {
+                            if (mounted && loading) {
+                              setState(() {});
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    isListening
-                        ? Icons.mic
-                        : Icons.mic_none,
-                    color: isListening
-                        ? Colors.red
-                        : Colors.white,
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: AbsorbPointer(
+                          absorbing: false,
+                          child: TextField(
+                            controller: controller,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              hintText: "Ask CrickNova AI Coach...",
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF64748B),
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFF0F172A),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          isListening ? Icons.mic : Icons.mic_none,
+                          color: isListening ? Colors.red : Colors.white,
+                        ),
+                        onPressed: toggleMic,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.send, color: Colors.white),
+                        onPressed: sendMessage,
+                      ),
+                    ],
                   ),
-                  onPressed: toggleMic,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.white),
-                  onPressed: sendMessage,
                 ),
               ],
             ),
-          )
-        ],
+          );
+        },
       ),
     );
   }

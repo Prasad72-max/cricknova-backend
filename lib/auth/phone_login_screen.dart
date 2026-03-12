@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'post_login_welcome_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
 
@@ -25,13 +27,16 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     await FirebaseAuth.instance.verifyPhoneNumber(
       phoneNumber: phoneController.text.trim(),
       verificationCompleted: (PhoneAuthCredential credential) async {
-        await FirebaseAuth.instance.signInWithCredential(credential);
-        await _onLoginSuccess();
+        final userCredential = await FirebaseAuth.instance.signInWithCredential(
+          credential,
+        );
+        await _onLoginSuccess(userCredential);
       },
       verificationFailed: (FirebaseAuthException e) {
         setState(() => loading = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message ?? "OTP Failed")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message ?? "OTP Failed")));
       },
       codeSent: (String verId, int? resendToken) {
         setState(() {
@@ -58,34 +63,54 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
       smsCode: otpController.text.trim(),
     );
 
-    await FirebaseAuth.instance.signInWithCredential(credential);
-    await _onLoginSuccess();
+    final userCredential = await FirebaseAuth.instance.signInWithCredential(
+      credential,
+    );
+    await _onLoginSuccess(userCredential);
 
     setState(() => loading = false);
   }
 
-  Future<void> _onLoginSuccess() async {
-    final user = FirebaseAuth.instance.currentUser;
+  Future<void> _onLoginSuccess(UserCredential userCredential) async {
+    final user = userCredential.user ?? FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool("isLoggedIn", true);
     await prefs.setString("userId", user.uid);
     await prefs.setString("loginType", "phone");
+    await prefs.setString("userName", user.displayName ?? "Player");
 
     // 🔐 Store Firebase ID token for backend auth
     final idToken = await user.getIdToken(true);
+    if (idToken == null || idToken.isEmpty) {
+      throw Exception("Failed to fetch Firebase ID token");
+    }
     await prefs.setString("firebase_id_token", idToken);
 
     // 🔁 Restore premium from Firestore after login
     await PremiumService.syncFromFirestore(user.uid);
+
+    final userName = user.displayName?.trim().isNotEmpty == true
+        ? user.displayName!.trim()
+        : "Player";
+    final showWelcomeEntrance = await PostLoginWelcomeScreen.shouldShowFor(
+      prefs: prefs,
+      user: user,
+      explicitIsNewUser: userCredential.additionalUserInfo?.isNewUser,
+    );
+    if (showWelcomeEntrance) {
+      await PostLoginWelcomeScreen.markSeen(prefs, user.uid);
+    }
 
     if (!mounted) return;
 
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => MainNavigation(userName: "Player"),
+        builder: (_) => showWelcomeEntrance
+            ? PostLoginWelcomeScreen(userName: userName)
+            : MainNavigation(userName: userName),
       ),
       (_) => false,
     );
@@ -118,8 +143,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                 decoration: const InputDecoration(
                   hintText: "+CountryCodePhoneNumber",
                   hintStyle: TextStyle(color: Colors.white54),
-                  enabledBorder:
-                      UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
                 ),
               ),
 
@@ -131,8 +157,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                 decoration: const InputDecoration(
                   hintText: "Enter OTP",
                   hintStyle: TextStyle(color: Colors.white54),
-                  enabledBorder:
-                      UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
                 ),
               ),
 
@@ -142,8 +169,8 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
               onPressed: loading
                   ? null
                   : otpSent
-                      ? verifyOtp
-                      : sendOtp,
+                  ? verifyOtp
+                  : sendOtp,
               child: Text(otpSent ? "Verify OTP" : "Send OTP"),
             ),
           ],

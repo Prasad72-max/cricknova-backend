@@ -13,10 +13,16 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive/hive.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:confetti/confetti.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
+
+enum _DrsReplayMode { ultraEdge, lbw }
+
+enum _DrsUmpireCall { out, notOut, umpire }
 
 enum _DrsViewMode { keeper, umpire, striker }
 
@@ -340,6 +346,115 @@ class _SnickoWavePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SnickoWavePainter oldDelegate) {
     return oldDelegate.progress != progress || oldDelegate.hasSpike != hasSpike;
+  }
+}
+
+class _UltraEdgeAudioResult {
+  const _UltraEdgeAudioResult({
+    required this.spikeDetected,
+    required this.waveform,
+    required this.reason,
+    this.spikeMs,
+    this.spikeT,
+  });
+
+  final bool spikeDetected;
+  final List<double> waveform;
+  final String reason;
+  final double? spikeMs;
+  final double? spikeT;
+
+  factory _UltraEdgeAudioResult.noSpike(String reason) {
+    return _UltraEdgeAudioResult(
+      spikeDetected: false,
+      waveform: const [],
+      reason: reason,
+    );
+  }
+}
+
+class _UltraEdgeWaveformPainter extends CustomPainter {
+  final List<double> waveform;
+  final double progress;
+  final double? spikeT;
+  final bool highlightSpike;
+
+  _UltraEdgeWaveformPainter({
+    required this.waveform,
+    required this.progress,
+    required this.spikeT,
+    required this.highlightSpike,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final midY = size.height * 0.5;
+    final baseLine = Paint()
+      ..color = Colors.white12
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, midY), Offset(size.width, midY), baseLine);
+
+    if (waveform.isEmpty) {
+      final flat = Paint()
+        ..color = const Color(0xFF7FE9FF)
+        ..strokeWidth = 2;
+      canvas.drawLine(Offset(0, midY), Offset(size.width, midY), flat);
+      return;
+    }
+
+    final n = waveform.length;
+    final shift = (progress * n).floor();
+    final path = Path();
+    for (int i = 0; i <= size.width.toInt(); i++) {
+      final t = i / size.width;
+      final idx = (shift + (t * n)).floor() % n;
+      final amp = waveform[idx].clamp(0.0, 1.0);
+      final y = midY - (amp * midY * 0.85);
+      if (i == 0) {
+        path.moveTo(0, y);
+      } else {
+        path.lineTo(i.toDouble(), y);
+      }
+    }
+
+    final glow = Paint()
+      ..color = const Color(0xFF6FE7FF).withOpacity(0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawPath(path, glow);
+
+    final line = Paint()
+      ..color = const Color(0xFF2DE7FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    canvas.drawPath(path, line);
+
+    if (highlightSpike && spikeT != null) {
+      final x = (spikeT!.clamp(0.0, 1.0) * size.width);
+      final spikeTop = midY - (size.height * 0.45);
+      final spikeBottom = midY + (size.height * 0.45);
+      final spikePaint = Paint()
+        ..color = Colors.white
+        ..strokeWidth = 2.4
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      canvas.drawLine(Offset(x, spikeBottom), Offset(x, spikeTop), spikePaint);
+      canvas.drawLine(
+        Offset(x, spikeBottom),
+        Offset(x, spikeTop),
+        Paint()
+          ..color = const Color(0xFF6FE7FF)
+          ..strokeWidth = 1.2,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _UltraEdgeWaveformPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.spikeT != spikeT ||
+        oldDelegate.highlightSpike != highlightSpike ||
+        oldDelegate.waveform != waveform;
   }
 }
 
@@ -1131,30 +1246,6 @@ class _DrsBroadcastPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final projection = _project(size);
 
-    final scannerY = lerpDouble(
-      projection.stumpTopY + 6,
-      projection.stumpBaseY - 8,
-      scannerProgress,
-    )!;
-
-    final scannerGlow = Paint()
-      ..color = const Color(0xAA7FE8FF)
-      ..strokeWidth = 10
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    final scannerLine = Paint()
-      ..color = const Color(0xFF86E7FF)
-      ..strokeWidth = 2.2;
-    canvas.drawLine(
-      Offset(projection.stumpLeft.dx - 16, scannerY),
-      Offset(projection.stumpRight.dx + 16, scannerY),
-      scannerGlow,
-    );
-    canvas.drawLine(
-      Offset(projection.stumpLeft.dx - 16, scannerY),
-      Offset(projection.stumpRight.dx + 16, scannerY),
-      scannerLine,
-    );
-
     if (showImpactRipple) {
       final rippleT = (math.sin(scannerProgress * math.pi * 2) + 1) * 0.5;
       final rippleRadius = 10 + (18 * rippleT);
@@ -1222,26 +1313,7 @@ class _DrsBroadcastPainter extends CustomPainter {
           metric.length * clampedProgress,
         );
         if (tangent != null) {
-          final center = tangent.position;
-          canvas.drawCircle(
-            center,
-            9,
-            Paint()
-              ..shader = const RadialGradient(
-                colors: [
-                  Color(0xFFFFCDD2),
-                  Color(0xFFE53935),
-                  Color(0xFF8E0000),
-                ],
-              ).createShader(Rect.fromCircle(center: center, radius: 9)),
-          );
-          canvas.drawCircle(
-            center,
-            13,
-            Paint()
-              ..color = const Color(0x55FF5252)
-              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-          );
+          // Removed moving red ball glow per request.
         }
       }
     }
@@ -1339,35 +1411,123 @@ class _DrsBroadcastPainter extends CustomPainter {
   }
 }
 
+class _DrsEdgeDebugPainter extends CustomPainter {
+  final List<Offset> points;
+  final double progress;
+
+  const _DrsEdgeDebugPainter({required this.points, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty) return;
+    const batXMin = 0.44;
+    const batXMax = 0.58;
+    const batYMin = 0.22;
+    const batYMax = 0.50;
+    final batRect = Rect.fromLTRB(
+      batXMin * size.width,
+      batYMin * size.height,
+      batXMax * size.width,
+      batYMax * size.height,
+    );
+    final expanded = batRect.inflate(5);
+
+    final batPaint = Paint()
+      ..color = Colors.amberAccent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final padPaint = Paint()
+      ..color = Colors.lightBlueAccent.withOpacity(0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    canvas.drawRect(expanded, padPaint);
+    canvas.drawRect(batRect, batPaint);
+
+    if (points.isNotEmpty) {
+      final t = progress.clamp(0.0, 1.0);
+      final idxFloat = t * (points.length - 1);
+      final idx = idxFloat.floor();
+      final next = math.min(idx + 1, points.length - 1);
+      final frac = idxFloat - idx;
+      final p0 = points[idx];
+      final p1 = points[next];
+      final ballNorm = Offset(
+        p0.dx + ((p1.dx - p0.dx) * frac),
+        p0.dy + ((p1.dy - p0.dy) * frac),
+      );
+      final ball = Offset(ballNorm.dx * size.width, ballNorm.dy * size.height);
+      final ballRect = Rect.fromCenter(center: ball, width: 12, height: 12);
+      final ballPaint = Paint()
+        ..color = Colors.redAccent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4;
+      canvas.drawRect(ballRect, ballPaint);
+    }
+
+    final label = TextPainter(
+      text: const TextSpan(
+        text: "DEBUG",
+        style: TextStyle(
+          color: Colors.white70,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    label.paint(canvas, const Offset(10, 10));
+  }
+
+  @override
+  bool shouldRepaint(covariant _DrsEdgeDebugPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.points != points;
+  }
+}
+
 class _DrsCinematicScreen extends StatefulWidget {
   final VideoPlayerController videoController;
   final _DrsTrackingGeometry geometry;
   final bool hasSpike;
   final String ultraedgeReason;
+  final List<double> ultraedgeWaveform;
+  final double? ultraedgeSpikeMs;
+  final double? ultraedgeSpikeT;
+  final String ultraedgeStatus;
   final String pitching;
   final String impact;
   final String wickets;
   final String wicketTarget;
   final String originalDecision;
+  final String decisionCall;
+  final String decisionDetail;
   final bool isOut;
   final double speedKmph;
   final double swingDeg;
   final double spinDeg;
+  final _DrsReplayMode mode;
 
   const _DrsCinematicScreen({
     required this.videoController,
     required this.geometry,
     required this.hasSpike,
     required this.ultraedgeReason,
+    required this.ultraedgeWaveform,
+    required this.ultraedgeSpikeMs,
+    required this.ultraedgeSpikeT,
+    required this.ultraedgeStatus,
     required this.pitching,
     required this.impact,
     required this.wickets,
     required this.wicketTarget,
     required this.originalDecision,
+    required this.decisionCall,
+    required this.decisionDetail,
     required this.isOut,
     required this.speedKmph,
     required this.swingDeg,
     required this.spinDeg,
+    required this.mode,
   });
 
   @override
@@ -1376,28 +1536,52 @@ class _DrsCinematicScreen extends StatefulWidget {
 
 class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     with TickerProviderStateMixin {
+  static const _heartbeatAsset = "audio/heartbeat.mp3";
+  static const _dingAsset = "audio/ding.wav";
+  static const _whistleAsset = "audio/umpire_whistle.wav";
+  static const _crowdCheerAsset = "audio/stadium_crowd_cheer.wav";
+  static const _buzzerAsset = "audio/drs_buzzer.wav";
+  static const _crowdSighAsset = "audio/crowd_sigh.wav";
+  static const _fallbackFxAsset = "audio/onboarding_whoosh.wav";
+
   late final VideoPlayerController _videoController;
   late final AnimationController _scannerController;
   late final AnimationController _pathController;
+  late final ConfettiController _confettiController;
+  late final PageController _whyPageController;
+  final AudioPlayer _heartbeatPlayer = AudioPlayer();
+  final AudioPlayer _fxPlayer = AudioPlayer();
+  Timer? _heartbeatTimer;
   bool _ready = false;
   late bool _finalOut;
+  late final _DrsReplayMode _mode;
   double _videoProgress = 0.0;
-  bool _impactLocked = false;
+  bool _impactVisualLocked = false;
   bool _showPitch = false;
   bool _showImpact = false;
   bool _showPath = false;
   bool _showWicket = false;
-  bool _showDecision = false;
+  bool _showDecisionBanner = false;
+  bool _showSidebarDecision = false;
   bool _showImpactRipple = false;
   bool _showRedZone = false;
   bool _showWicketFlash = false;
+  bool _showDebugOverlay = false;
+  bool _awaitingUmpireCall = false;
+  bool _showUserCallChip = false;
+  bool _showOutcomePanel = false;
+  bool _userCallMatchedAi = false;
+  bool _flashCrickNovaCall = false;
+  int _whyPageIndex = 0;
   String _stageText = "PREPARING REPLAY";
   int _sequenceToken = 0;
+  _DrsUmpireCall? _userCall;
 
   @override
   void initState() {
     super.initState();
     _finalOut = widget.isOut;
+    _mode = widget.mode;
     _videoController = widget.videoController;
     _scannerController = AnimationController(
       vsync: this,
@@ -1407,6 +1591,10 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
       vsync: this,
       duration: const Duration(milliseconds: 950),
     );
+    _confettiController = ConfettiController(
+      duration: const Duration(milliseconds: 1800),
+    );
+    _whyPageController = PageController(viewportFraction: 0.92);
     _initAndRun();
   }
 
@@ -1422,18 +1610,35 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     _scannerController.repeat(reverse: true);
     setState(() {
       _ready = true;
-      _stageText = "SLOW-MO TO IMPACT";
       _showWicketFlash = false;
+      _showOutcomePanel = false;
+      if (_mode == _DrsReplayMode.lbw) {
+        _awaitingUmpireCall = true;
+        _stageText = "DECISION PENDING";
+      } else {
+        _stageText = "ANALYZING $_modeLabel...";
+      }
     });
+    if (_mode == _DrsReplayMode.lbw) {
+      await _videoController.pause();
+      await _startDecisionHeartbeat();
+      return;
+    }
     await _videoController.play();
+    unawaited(_startTimedRevealSequence());
   }
 
   @override
   void dispose() {
     _sequenceToken++;
+    _heartbeatTimer?.cancel();
     _videoController.removeListener(_handleVideoTick);
     _scannerController.dispose();
     _pathController.dispose();
+    _whyPageController.dispose();
+    _confettiController.dispose();
+    _heartbeatPlayer.dispose();
+    _fxPlayer.dispose();
     super.dispose();
   }
 
@@ -1450,9 +1655,19 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
         _videoProgress = progress;
       });
     }
-    if (!_impactLocked && (progress >= impactGate || progress >= 0.985)) {
-      _impactLocked = true;
-      unawaited(_pauseAtImpactAndReveal());
+    if (!_impactVisualLocked && (progress >= impactGate || progress >= 0.985)) {
+      _impactVisualLocked = true;
+      if (mounted) {
+        setState(() {
+          _showImpactRipple = false;
+          if (_mode == _DrsReplayMode.lbw) {
+            _showRedZone = true;
+          }
+          if (_showImpact) {
+            _stageText = "IMPACT CONFIRMED";
+          }
+        });
+      }
     }
   }
 
@@ -1487,49 +1702,247 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     return mounted && token == _sequenceToken;
   }
 
-  Future<void> _pauseAtImpactAndReveal() async {
-    final token = ++_sequenceToken;
-    await _videoController.pause();
-    if (!mounted || token != _sequenceToken) return;
-    setState(() {
-      _showImpactRipple = true;
-      _showRedZone = true;
-      _stageText = "IMPACT LOCKED";
+  bool get _hasUserCall => _userCall != null;
+
+  bool get _isUmpiresCall {
+    final wickets = widget.wickets.toLowerCase();
+    final detail = widget.decisionDetail.toLowerCase();
+    return wickets.contains("umpire") || detail.contains("umpire");
+  }
+
+  String get _userCallLabel => _userCall == _DrsUmpireCall.out
+      ? "OUT"
+      : _userCall == _DrsUmpireCall.notOut
+      ? "NOT OUT"
+      : "UMPIRE'S CALL";
+
+  String get _aiCallLabel =>
+      _isUmpiresCall ? "UMPIRE'S CALL" : widget.decisionCall.toUpperCase();
+
+  IconData get _userCallIcon => _userCall == _DrsUmpireCall.out
+      ? Icons.gavel_rounded
+      : _userCall == _DrsUmpireCall.notOut
+      ? Icons.shield_rounded
+      : Icons.sports_cricket;
+
+  Color get _userCallAccent => _userCall == _DrsUmpireCall.out
+      ? const Color(0xFFFF6E6E)
+      : _userCall == _DrsUmpireCall.notOut
+      ? const Color(0xFF62FFB1)
+      : const Color(0xFFFFD54F);
+
+  bool get _userCallMatchesAi {
+    if (!_hasUserCall) return false;
+    if (_userCall == _DrsUmpireCall.umpire) {
+      return _isUmpiresCall;
+    }
+    return _userCall == _DrsUmpireCall.out ? _finalOut : !_finalOut;
+  }
+
+  Future<bool> _playFirstAvailable(
+    AudioPlayer player,
+    List<String> assets, {
+    required double volume,
+    ReleaseMode releaseMode = ReleaseMode.stop,
+  }) async {
+    try {
+      await player.stop();
+      await player.setReleaseMode(releaseMode);
+      await player.setVolume(volume);
+    } catch (_) {}
+
+    for (final asset in assets) {
+      try {
+        await player.play(AssetSource(asset));
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  Future<void> _startDecisionHeartbeat() async {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(milliseconds: 650), (
+      timer,
+    ) {
+      if (!mounted || !_awaitingUmpireCall) {
+        timer.cancel();
+        return;
+      }
+      if (timer.tick.isOdd) {
+        HapticFeedback.mediumImpact();
+      } else {
+        HapticFeedback.selectionClick();
+      }
     });
-    if (!await _waitStage(const Duration(milliseconds: 260), token)) return;
+    await _playFirstAvailable(
+      _heartbeatPlayer,
+      const [_heartbeatAsset],
+      volume: 0.52,
+      releaseMode: ReleaseMode.loop,
+    );
+  }
+
+  Future<void> _stopDecisionHeartbeat() async {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    try {
+      await _heartbeatPlayer.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _submitUmpireCall(_DrsUmpireCall call) async {
+    if (_mode != _DrsReplayMode.lbw || !_awaitingUmpireCall || _hasUserCall) {
+      return;
+    }
+    HapticFeedback.heavyImpact();
+    await _stopDecisionHeartbeat();
+    if (!mounted) return;
+    setState(() {
+      _userCall = call;
+      _awaitingUmpireCall = false;
+      _showUserCallChip = true;
+      _showOutcomePanel = false;
+      _showDecisionBanner = false;
+      _showSidebarDecision = false;
+      _stageText = "RUNNING BALL TRACKING";
+      _whyPageIndex = 0;
+    });
+    await _videoController.seekTo(Duration.zero);
+    if (!mounted) return;
+    await _videoController.play();
+    unawaited(_startTimedRevealSequence());
+  }
+
+  Future<void> _presentPredictionFeedback(int token) async {
+    if (!mounted ||
+        token != _sequenceToken ||
+        _mode != _DrsReplayMode.lbw ||
+        !_hasUserCall) {
+      return;
+    }
+
+    final matched = _userCallMatchesAi;
+    if (_whyPageController.hasClients) {
+      _whyPageController.jumpToPage(0);
+    }
+    setState(() {
+      _userCallMatchedAi = matched;
+      _showOutcomePanel = true;
+      _whyPageIndex = 0;
+    });
+    await _triggerCrickNovaCallFlash();
+
+    if (matched) {
+      _confettiController.play();
+      HapticFeedback.heavyImpact();
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    final played = await _playFirstAvailable(_fxPlayer, const [
+      _buzzerAsset,
+      _crowdSighAsset,
+    ], volume: 0.88);
+    if (!played) {
+      await SystemSound.play(SystemSoundType.alert);
+    }
+  }
+
+  Future<void> _triggerCrickNovaCallFlash() async {
+    if (!mounted) return;
+    setState(() => _flashCrickNovaCall = true);
+    final played = await _playFirstAvailable(_fxPlayer, const [
+      _dingAsset,
+    ], volume: 0.6);
+    if (!played) {
+      await SystemSound.play(SystemSoundType.click);
+    }
+    Future.delayed(const Duration(milliseconds: 520), () {
+      if (!mounted) return;
+      setState(() => _flashCrickNovaCall = false);
+    });
+  }
+
+  Future<void> _startTimedRevealSequence() async {
+    final token = ++_sequenceToken;
+    if (_mode == _DrsReplayMode.lbw && !_hasUserCall) return;
+    if (!await _waitStage(const Duration(milliseconds: 350), token)) return;
+
+    if (mounted) {
+      setState(() {
+        _showDecisionBanner = false;
+        _showSidebarDecision = false;
+        _showOutcomePanel = false;
+      });
+    }
+
+    Future<void> revealDecision() async {
+      if (!mounted || token != _sequenceToken) return;
+      if (_mode == _DrsReplayMode.lbw && _finalOut) {
+        _triggerWicketFlash();
+      }
+      setState(() {
+        _showDecisionBanner = true;
+        _showSidebarDecision = false;
+        _stageText = "DECISION READY";
+      });
+      await _playTickSound();
+      await _playDecisionSound();
+      Future.delayed(const Duration(milliseconds: 900), () async {
+        if (!mounted || token != _sequenceToken) return;
+        setState(() {
+          _showDecisionBanner = false;
+          _showSidebarDecision = true;
+        });
+        if (_mode == _DrsReplayMode.lbw) {
+          await _presentPredictionFeedback(token);
+        }
+      });
+    }
+
+    if (_mode == _DrsReplayMode.ultraEdge) {
+      setState(() {
+        _showPitch = false;
+        _showImpact = false;
+        _showPath = false;
+        _showWicket = false;
+        _showDecisionBanner = false;
+        _showSidebarDecision = false;
+        _stageText = "CHECKING EDGE";
+      });
+      await _playTickSound();
+      if (!await _waitStage(const Duration(milliseconds: 650), token)) return;
+
+      await revealDecision();
+      return;
+    }
 
     setState(() {
       _showPitch = true;
       _stageText = "PITCHING CONFIRMED";
     });
     await _playTickSound();
-    if (!await _waitStage(const Duration(seconds: 1), token)) return;
+    if (!await _waitStage(const Duration(milliseconds: 550), token)) return;
 
     setState(() {
       _showImpact = true;
-      _stageText = "IMPACT CONFIRMED";
+      _stageText = _impactVisualLocked ? "IMPACT CONFIRMED" : "TRACKING IMPACT";
     });
     await _playTickSound();
-    if (!await _waitStage(const Duration(seconds: 1), token)) return;
+    if (!await _waitStage(const Duration(milliseconds: 500), token)) return;
 
     setState(() {
       _showPath = true;
       _stageText = "PROJECTING TO WICKETS";
     });
-    await _pathController.forward(from: 0);
-    if (!mounted || token != _sequenceToken) return;
-    if (!await _waitStage(const Duration(seconds: 1), token)) return;
+    unawaited(_pathController.forward(from: 0));
+    if (!await _waitStage(const Duration(milliseconds: 600), token)) return;
 
     setState(() {
       _showWicket = true;
-      _showDecision = true;
-      _stageText = "DECISION READY";
     });
-    await _playTickSound();
-    await _playDecisionSound();
-    if (_finalOut) {
-      _triggerWicketFlash();
-    }
+    await revealDecision();
   }
 
   int? _detectBounceIndex(List<Offset> points) {
@@ -1586,21 +1999,38 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
       }
       return Colors.white;
     }
+    if (title == "DECISION") {
+      if (_mode == _DrsReplayMode.ultraEdge) {
+        return widget.hasSpike ? const Color(0xFF6FE7FF) : Colors.white70;
+      }
+      return _finalOut ? const Color(0xFFFF6E6E) : const Color(0xFF7DFFB1);
+    }
     return const Color(0xFF00E676);
   }
+
+  String get _modeLabel =>
+      _mode == _DrsReplayMode.ultraEdge ? "ULTRA-EDGE" : "LBW ANALYSIS";
+
+  String get _decisionLabel => widget.decisionDetail.isNotEmpty
+      ? "${widget.decisionCall} - ${widget.decisionDetail}"
+      : widget.decisionCall;
 
   Widget _statusIndicator(String title, String value) {
     final accent = _statusAccent(title, value);
     final lower = value.toLowerCase();
+    final isDecision = title == "DECISION";
     final isWicket = title == "WICKET";
-    final positive = lower.contains("in line") || lower.contains("hitting");
+    final useIcon = isWicket || isDecision;
+    final positive = isDecision
+        ? (_mode == _DrsReplayMode.ultraEdge ? widget.hasSpike : _finalOut)
+        : (lower.contains("in line") || lower.contains("hitting"));
     return Container(
-      width: 28,
-      height: 28,
+      width: 22,
+      height: 22,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isWicket ? Colors.transparent : accent.withOpacity(0.18),
-        border: Border.all(color: accent.withOpacity(0.95), width: 1.5),
+        color: useIcon ? Colors.transparent : accent.withOpacity(0.18),
+        border: Border.all(color: accent.withOpacity(0.95), width: 1.2),
         boxShadow: [
           BoxShadow(
             color: accent.withOpacity(0.55),
@@ -1610,17 +2040,19 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
         ],
       ),
       child: Center(
-        child: isWicket
+        child: useIcon
             ? Icon(
-                lower.contains("umpire")
+                isDecision
+                    ? (positive ? Icons.gavel_rounded : Icons.shield_outlined)
+                    : lower.contains("umpire")
                     ? Icons.trip_origin_rounded
                     : (positive ? Icons.check_rounded : Icons.close_rounded),
-                size: 18,
+                size: 14,
                 color: accent,
               )
             : Container(
-                width: 12,
-                height: 12,
+                width: 9,
+                height: 9,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: accent,
@@ -1642,8 +2074,8 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
         duration: const Duration(milliseconds: 220),
         offset: visible ? Offset.zero : const Offset(-0.08, 0),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
           decoration: BoxDecoration(
             color: Colors.black.withOpacity(0.26),
             borderRadius: BorderRadius.circular(20),
@@ -1652,7 +2084,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
           child: Row(
             children: [
               _statusIndicator(title, value),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1662,7 +2094,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       title,
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.72),
-                        fontSize: 10.5,
+                        fontSize: 9,
                         letterSpacing: 1.0,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1672,7 +2104,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       value.toUpperCase(),
                       style: TextStyle(
                         color: _statusAccent(title, value),
-                        fontSize: 14,
+                        fontSize: 12,
                         letterSpacing: 0.5,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1762,17 +2194,738 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   }
 
   Widget _sideToolButton(IconData icon, {VoidCallback? onTap}) {
-    final child = Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.72),
-        shape: BoxShape.circle,
+    final child = SizedBox(
+      width: 56,
+      height: 56,
+      child: Center(
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.72),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 21, color: const Color(0xFF616161)),
+        ),
       ),
-      child: Icon(icon, size: 21, color: const Color(0xFF616161)),
     );
     if (onTap == null) return child;
-    return GestureDetector(onTap: onTap, child: child);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: child,
+    );
+  }
+
+  Widget _ultraEdgeWaveformPanel(double progress) {
+    final statusText = widget.ultraedgeStatus.isNotEmpty
+        ? widget.ultraedgeStatus
+        : (widget.hasSpike ? "EDGE DETECTED" : "NO EDGE");
+    final statusColor = widget.hasSpike
+        ? const Color(0xFF6FE7FF)
+        : Colors.white70;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.55),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "ULTRA-EDGE: $statusText",
+                style: TextStyle(
+                  color: statusColor,
+                  fontFamily: "RobotoCondensed",
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                  letterSpacing: 0.4,
+                ),
+              ),
+              if (widget.ultraedgeReason.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  widget.ultraedgeReason,
+                  style: const TextStyle(color: Colors.white60, fontSize: 10),
+                ),
+              ],
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 70,
+                child: CustomPaint(
+                  painter: _UltraEdgeWaveformPainter(
+                    waveform: widget.ultraedgeWaveform,
+                    progress: progress,
+                    spikeT: widget.ultraedgeSpikeT,
+                    highlightSpike: widget.hasSpike,
+                  ),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _decisionBanner() {
+    final accent = _mode == _DrsReplayMode.ultraEdge
+        ? (widget.hasSpike ? const Color(0xFF6FE7FF) : Colors.white70)
+        : (_finalOut ? const Color(0xFFFF4D4D) : const Color(0xFF4CFF7A));
+    final reason = widget.decisionDetail;
+    final jitter = _showDecisionBanner
+        ? math.sin((_scannerController.value + 0.18) * math.pi * 10) * 1.4
+        : 0.0;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 180),
+      opacity: _showDecisionBanner ? 1.0 : 0.0,
+      child: Transform.translate(
+        offset: Offset(jitter, 0),
+        child: AnimatedScale(
+          scale: _showDecisionBanner ? 1.0 : 0.92,
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutBack,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.62),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accent.withOpacity(0.9), width: 1.6),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withOpacity(0.45),
+                  blurRadius: 26,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.decisionCall.toUpperCase(),
+                  style: TextStyle(
+                    color: accent,
+                    fontFamily: "Montserrat",
+                    fontWeight: FontWeight.w900,
+                    fontSize: 32,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                if (reason.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    reason.toUpperCase(),
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.85),
+                      fontFamily: "RobotoCondensed",
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, Object>> _lbwReasonCards() {
+    final wicketLower = widget.wickets.toLowerCase();
+    final wicketReason = wicketLower.contains("hitting")
+        ? "Ball tracking had the delivery crashing into the ${widget.wicketTarget.toUpperCase()} stump."
+        : wicketLower.contains("umpire")
+        ? "Projection clipped the ${widget.wicketTarget.toUpperCase()} stump, so the call stayed with the umpire."
+        : "Ball tracking showed the delivery missing the ${widget.wicketTarget.toUpperCase()} stump.";
+
+    return [
+      {
+        "title": "PITCHING",
+        "value": widget.pitching.toUpperCase(),
+        "reason": widget.pitching.toLowerCase().contains("in line")
+            ? "The ball pitched in line, so the LBW review stayed alive."
+            : "The ball pitched outside the line, which takes LBW out of play.",
+        "accent": _statusAccent("PITCHING", widget.pitching),
+      },
+      {
+        "title": "IMPACT",
+        "value": widget.impact.toUpperCase(),
+        "reason": widget.impact.toLowerCase().contains("in line")
+            ? "Impact was in line with the stumps."
+            : "Impact was outside the line, so the batter survives.",
+        "accent": _statusAccent("IMPACT", widget.impact),
+      },
+      {
+        "title": "WICKETS",
+        "value": widget.wickets.toUpperCase(),
+        "reason": wicketReason,
+        "accent": _statusAccent("WICKET", widget.wickets),
+      },
+    ];
+  }
+
+  Widget _predictionActionButton({
+    required String title,
+    required String subtitle,
+    required Color accent,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            colors: [
+              accent.withValues(alpha: 0.92),
+              accent.withValues(alpha: 0.58),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withValues(alpha: 0.32),
+              blurRadius: 26,
+              spreadRadius: 1,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Colors.white, size: 28),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: "Montserrat",
+                fontWeight: FontWeight.w900,
+                fontSize: 26,
+                letterSpacing: 1.1,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.86),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _lbwDecisionOverlay() {
+    if (_mode != _DrsReplayMode.lbw || !_awaitingUmpireCall) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.42),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(30),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFF071018).withValues(alpha: 0.94),
+                        const Color(0xFF101C29).withValues(alpha: 0.88),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    border: Border.all(
+                      color: const Color(0xFFFFD54F).withValues(alpha: 0.16),
+                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0xAA000000),
+                        blurRadius: 34,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final stackButtons = constraints.maxWidth < 430;
+                      final buttons = stackButtons
+                          ? Column(
+                              children: [
+                                _predictionActionButton(
+                                  title: "OUT",
+                                  subtitle:
+                                      "Finger goes up. You are calling it dead straight.",
+                                  accent: const Color(0xFFD93D47),
+                                  icon: Icons.gavel_rounded,
+                                  onTap: () =>
+                                      _submitUmpireCall(_DrsUmpireCall.out),
+                                ),
+                                const SizedBox(height: 12),
+                                _predictionActionButton(
+                                  title: "NOT OUT",
+                                  subtitle:
+                                      "Batter survives. You think the ball is missing.",
+                                  accent: const Color(0xFF12B76A),
+                                  icon: Icons.shield_rounded,
+                                  onTap: () =>
+                                      _submitUmpireCall(_DrsUmpireCall.notOut),
+                                ),
+                                const SizedBox(height: 12),
+                                _predictionActionButton(
+                                  title: "UMPIRE'S CALL",
+                                  subtitle:
+                                      "Marginal impact. You leave it with the on-field umpire.",
+                                  accent: const Color(0xFFFFD54F),
+                                  icon: Icons.sports_cricket,
+                                  onTap: () =>
+                                      _submitUmpireCall(_DrsUmpireCall.umpire),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _predictionActionButton(
+                                        title: "OUT",
+                                        subtitle:
+                                            "Finger goes up. You are calling it dead straight.",
+                                        accent: const Color(0xFFD93D47),
+                                        icon: Icons.gavel_rounded,
+                                        onTap: () => _submitUmpireCall(
+                                          _DrsUmpireCall.out,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _predictionActionButton(
+                                        title: "NOT OUT",
+                                        subtitle:
+                                            "Batter survives. You think the ball is missing.",
+                                        accent: const Color(0xFF12B76A),
+                                        icon: Icons.shield_rounded,
+                                        onTap: () => _submitUmpireCall(
+                                          _DrsUmpireCall.notOut,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                _predictionActionButton(
+                                  title: "UMPIRE'S CALL",
+                                  subtitle:
+                                      "Marginal impact. You leave it with the on-field umpire.",
+                                  accent: const Color(0xFFFFD54F),
+                                  icon: Icons.sports_cricket,
+                                  onTap: () =>
+                                      _submitUmpireCall(_DrsUmpireCall.umpire),
+                                ),
+                              ],
+                            );
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFFFFD54F,
+                              ).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFFFFD54F,
+                                ).withValues(alpha: 0.22),
+                              ),
+                            ),
+                            child: const Text(
+                              "DECISION PENDING",
+                              style: TextStyle(
+                                color: Color(0xFFFFE082),
+                                fontFamily: "Montserrat",
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            "Close call! What's your decision, Umpire?",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: "Montserrat",
+                              fontWeight: FontWeight.w900,
+                              fontSize: 24,
+                              height: 1.15,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            "Lock your verdict before CrickNova reveals the ball tracking.",
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.74),
+                              fontSize: 13,
+                              height: 1.4,
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          buttons,
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _userCallChip() {
+    if (!_showUserCallChip || !_hasUserCall) {
+      return const SizedBox.shrink();
+    }
+
+    return AnimatedSlide(
+      duration: const Duration(milliseconds: 260),
+      offset: Offset.zero,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 260),
+        opacity: 1,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: _userCallAccent.withValues(alpha: 0.5),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: _userCallAccent.withValues(alpha: 0.2),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _userCallAccent.withValues(alpha: 0.18),
+                      border: Border.all(
+                        color: _userCallAccent.withValues(alpha: 0.68),
+                      ),
+                    ),
+                    child: Icon(
+                      _userCallIcon,
+                      color: _userCallAccent,
+                      size: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "YOUR CALL",
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.72),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      Text(
+                        _userCallLabel,
+                        style: TextStyle(
+                          color: _userCallAccent,
+                          fontFamily: "Montserrat",
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lbwOutcomePanel() {
+    if (_mode != _DrsReplayMode.lbw || !_showOutcomePanel || !_hasUserCall) {
+      return const SizedBox.shrink();
+    }
+
+    final accent = _userCallMatchedAi
+        ? const Color(0xFFFFD86B)
+        : const Color(0xFFFF8A65);
+    final reasonCards = _lbwReasonCards();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedSlide(
+          duration: const Duration(milliseconds: 280),
+          offset: Offset.zero,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 280),
+            opacity: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _userCallMatchedAi
+                          ? [
+                              const Color(0xFF3F2A05).withValues(alpha: 0.96),
+                              const Color(0xFF9A6E11).withValues(alpha: 0.78),
+                            ]
+                          : [
+                              const Color(0xFF2B1010).withValues(alpha: 0.96),
+                              const Color(0xFF5A1F18).withValues(alpha: 0.84),
+                            ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: accent.withValues(alpha: 0.54)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.22),
+                        blurRadius: 26,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _userCallMatchedAi
+                            ? "Brilliant! Your Call matches the CrickNova Call."
+                            : "Sharp try! But the CrickNova Call spotted something different.",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: "Montserrat",
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                          height: 1.15,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AnimatedScale(
+                        duration: const Duration(milliseconds: 260),
+                        scale: _flashCrickNovaCall ? 1.03 : 1.0,
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 260),
+                          opacity: _flashCrickNovaCall ? 1.0 : 0.85,
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.82),
+                                fontFamily: "Montserrat",
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              children: [
+                                TextSpan(text: "Your call: $_userCallLabel | "),
+                                TextSpan(
+                                  text: "CrickNova Call",
+                                  style: TextStyle(
+                                    color: const Color(0xFFFFD54F),
+                                    fontWeight: FontWeight.w900,
+                                    shadows: [
+                                      BoxShadow(
+                                        color: const Color(
+                                          0xFFFFD54F,
+                                        ).withValues(alpha: 0.65),
+                                        blurRadius: _flashCrickNovaCall
+                                            ? 12
+                                            : 6,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                TextSpan(text: ": $_aiCallLabel"),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (!_userCallMatchedAi) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 172,
+            child: PageView.builder(
+              controller: _whyPageController,
+              itemCount: reasonCards.length,
+              onPageChanged: (index) {
+                if (!mounted) return;
+                setState(() => _whyPageIndex = index);
+              },
+              itemBuilder: (context, index) {
+                final card = reasonCards[index];
+                final accentColor = card["accent"]! as Color;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(22),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.54),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: accentColor.withValues(alpha: 0.42),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: accentColor.withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    card["title"]! as String,
+                                    style: TextStyle(
+                                      color: accentColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  card["value"]! as String,
+                                  style: TextStyle(
+                                    color: accentColor,
+                                    fontFamily: "Montserrat",
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              card["reason"]! as String,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.86),
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List<Widget>.generate(reasonCards.length, (index) {
+              final active = index == _whyPageIndex;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: active ? 18 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: active
+                      ? accent.withValues(alpha: 0.96)
+                      : Colors.white.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              );
+            }),
+          ),
+        ],
+      ],
+    );
   }
 
   void _resetOrbitView() {
@@ -1824,66 +2977,50 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                               geometry: widget.geometry,
                               scannerProgress: _scannerController.value,
                               pathProgress: _pathController.value,
-                              showPath: _showPath,
-                              showImpactRipple: _showImpactRipple,
-                              showRedZone: _showRedZone,
-                              showGlassStumps: true,
-                              wicketText: widget.wickets,
+                              showPath: _mode == _DrsReplayMode.lbw
+                                  ? _showPath
+                                  : false,
+                              showImpactRipple: _mode == _DrsReplayMode.lbw
+                                  ? _showImpactRipple
+                                  : false,
+                              showRedZone: _mode == _DrsReplayMode.lbw
+                                  ? _showRedZone
+                                  : false,
+                              showGlassStumps: _mode == _DrsReplayMode.lbw,
+                              wicketText: _mode == _DrsReplayMode.lbw
+                                  ? widget.wickets
+                                  : "",
                             ),
                           ),
                         ),
                       ),
-                      Positioned(
-                        top: 6,
-                        right: 8,
-                        child: _sideToolButton(
-                          Icons.close,
-                          onTap: () => Navigator.pop(context),
-                        ),
-                      ),
-                      Positioned(
-                        top: 10,
-                        left: 14,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.26),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.14),
-                            ),
-                          ),
-                          child: const Text(
-                            "CRICKNOVA REPLAY",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontFamily: "Montserrat",
-                              fontWeight: FontWeight.w900,
-                              fontSize: 12,
-                              letterSpacing: 1.2,
+                      if (_mode == _DrsReplayMode.ultraEdge &&
+                          _showDebugOverlay)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: _DrsEdgeDebugPainter(
+                                points: widget.geometry.pathPoints,
+                                progress: _videoProgress,
+                              ),
                             ),
                           ),
                         ),
-                      ),
                       Positioned(
-                        top: 62,
-                        left: 14,
+                        top: 58,
+                        left: 12,
                         child: SizedBox(
-                          width: 232,
+                          width: 182,
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(24),
                             child: BackdropFilter(
                               filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                               child: Container(
                                 padding: const EdgeInsets.fromLTRB(
-                                  14,
-                                  16,
-                                  14,
-                                  6,
+                                  10,
+                                  10,
+                                  10,
+                                  4,
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(
@@ -1897,20 +3034,28 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    if (_mode == _DrsReplayMode.lbw)
+                                      _sidebarRow(
+                                        title: "PITCHING",
+                                        value: widget.pitching,
+                                        visible: _showPitch,
+                                      ),
+                                    if (_mode == _DrsReplayMode.lbw)
+                                      _sidebarRow(
+                                        title: "IMPACT",
+                                        value: widget.impact,
+                                        visible: _showImpact,
+                                      ),
+                                    if (_mode == _DrsReplayMode.lbw)
+                                      _sidebarRow(
+                                        title: "WICKET",
+                                        value: widget.wickets.toUpperCase(),
+                                        visible: _showWicket,
+                                      ),
                                     _sidebarRow(
-                                      title: "PITCHING",
-                                      value: widget.pitching,
-                                      visible: _showPitch,
-                                    ),
-                                    _sidebarRow(
-                                      title: "IMPACT",
-                                      value: widget.impact,
-                                      visible: _showImpact,
-                                    ),
-                                    _sidebarRow(
-                                      title: "WICKET",
-                                      value: widget.wickets.toUpperCase(),
-                                      visible: _showWicket,
+                                      title: "DECISION",
+                                      value: _decisionLabel,
+                                      visible: _showSidebarDecision,
                                     ),
                                   ],
                                 ),
@@ -1922,64 +3067,44 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                       Positioned(
                         top: 18,
                         right: 68,
-                        child: _stageLabel(_stageText),
+                        child: GestureDetector(
+                          onLongPress: () {
+                            setState(() {
+                              _showDebugOverlay = !_showDebugOverlay;
+                            });
+                          },
+                          child: _stageLabel(_stageText),
+                        ),
                       ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Center(
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 240),
-                              opacity: _showDecision ? 1.0 : 0.0,
-                              child: AnimatedScale(
-                                duration: const Duration(milliseconds: 260),
-                                scale: _showDecision ? 1.0 : 0.92,
-                                curve: Curves.easeOutBack,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 34,
-                                    vertical: 20,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _finalOut
-                                        ? const Color(0xCC8E0A0A)
-                                        : const Color(0xCC10251A),
-                                    borderRadius: BorderRadius.circular(22),
-                                    border: Border.all(
-                                      color: _finalOut
-                                          ? const Color(0xFFFF5252)
-                                          : const Color(0xFF7DFFB1),
-                                      width: 1.8,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color:
-                                            (_finalOut
-                                                    ? const Color(0xAAFF4D4D)
-                                                    : const Color(0x6635FF9A))
-                                                .withOpacity(0.88),
-                                        blurRadius: 26,
-                                        spreadRadius: 2,
-                                      ),
-                                    ],
-                                  ),
-                                  child: Text(
-                                    _finalOut ? "OUT" : "NOT OUT",
-                                    style: TextStyle(
-                                      color: _finalOut
-                                          ? const Color(0xFFFFB3B3)
-                                          : const Color(0xFFEDFFF4),
-                                      fontFamily: "Montserrat",
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 34,
-                                      letterSpacing: 1.4,
-                                    ),
-                                  ),
-                                ),
+                      if (_mode == _DrsReplayMode.lbw &&
+                          _showOutcomePanel &&
+                          _userCallMatchedAi)
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              child: ConfettiWidget(
+                                confettiController: _confettiController,
+                                blastDirectionality:
+                                    BlastDirectionality.explosive,
+                                emissionFrequency: 0.035,
+                                numberOfParticles: 18,
+                                gravity: 0.18,
+                                shouldLoop: false,
+                                maxBlastForce: 18,
+                                minBlastForce: 8,
+                                colors: const [
+                                  Color(0xFFFFE082),
+                                  Color(0xFFFFD54F),
+                                  Color(0xFFFFFFFF),
+                                  Color(0xFFFFB300),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                      ),
+                      if (_mode == _DrsReplayMode.lbw && _showUserCallChip)
+                        Positioned(top: 56, right: 16, child: _userCallChip()),
                       if (_showWicketFlash)
                         Positioned.fill(
                           child: IgnorePointer(
@@ -2024,65 +3149,66 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             ),
                           ),
                         ),
-                      Positioned(
-                        left: 14,
-                        bottom: 18,
-                        right: 14,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              "LIVE MOTION ANALYSIS - 120 FPS INTERPOLATED",
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.95),
-                                fontFamily: "Montserrat",
-                                fontWeight: FontWeight.w800,
-                                fontSize: 12,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              "SPEED ${widget.speedKmph.toStringAsFixed(1)} KM/H  •  SWING ${widget.swingDeg.toStringAsFixed(1)}°",
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.76),
-                                fontFamily: "Montserrat",
-                                fontWeight: FontWeight.w600,
-                                fontSize: 10.5,
-                                letterSpacing: 0.35,
-                              ),
-                            ),
-                          ],
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Center(child: _decisionBanner()),
                         ),
                       ),
-                      Positioned(
-                        right: 14,
-                        bottom: 62,
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 220),
-                          opacity: _showPath ? 1.0 : 0.0,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.44),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: Colors.white12),
-                            ),
-                            child: const Text(
-                              "BALL TRACKING PROJECTION",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontFamily: "Montserrat",
-                                fontWeight: FontWeight.w800,
-                                fontSize: 10.5,
-                                letterSpacing: 0.7,
+                      _lbwDecisionOverlay(),
+                      if (_mode == _DrsReplayMode.ultraEdge)
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          bottom: 18,
+                          child: _ultraEdgeWaveformPanel(
+                            _scannerController.value,
+                          ),
+                        )
+                      else
+                        Positioned(
+                          right: 14,
+                          bottom: 62,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 220),
+                            opacity: _showPath && !_showOutcomePanel
+                                ? 1.0
+                                : 0.0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.44),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: const Text(
+                                "CRICKNOVA REPLAY",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontFamily: "Montserrat",
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 10.5,
+                                  letterSpacing: 0.7,
+                                ),
                               ),
                             ),
                           ),
+                        ),
+                      if (_mode == _DrsReplayMode.lbw && _showOutcomePanel)
+                        Positioned(
+                          left: 16,
+                          right: 16,
+                          bottom: 18,
+                          child: _lbwOutcomePanel(),
+                        ),
+                      Positioned(
+                        top: 6,
+                        right: 8,
+                        child: _sideToolButton(
+                          Icons.close,
+                          onTap: () => Navigator.pop(context),
                         ),
                       ),
                     ],
@@ -2129,6 +3255,153 @@ class _UploadScreenState extends State<UploadScreen>
       setScale(1.0);
       setRotation(0.0);
     });
+  }
+
+  Widget _drsModeButton({
+    required String title,
+    required IconData icon,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withOpacity(0.18)),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withOpacity(0.25),
+              blurRadius: 18,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.16),
+                shape: BoxShape.circle,
+                border: Border.all(color: accent.withOpacity(0.8)),
+              ),
+              child: Icon(icon, color: accent, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontFamily: "Montserrat",
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<_DrsReplayMode?> _showDrsModeSelector() async {
+    if (!mounted) return null;
+    return showGeneralDialog<_DrsReplayMode>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "DRS Mode",
+      barrierColor: Colors.black.withOpacity(0.38),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(color: Colors.black.withOpacity(0.35)),
+                ),
+              ),
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 22),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 20,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B121A).withOpacity(0.78),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.45),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "SELECT REVIEW MODE",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontFamily: "Montserrat",
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _drsModeButton(
+                        title: "ULTRA-EDGE",
+                        icon: Icons.sports_cricket,
+                        accent: const Color(0xFFFFD54F),
+                        onTap: () =>
+                            Navigator.of(context).pop(_DrsReplayMode.ultraEdge),
+                      ),
+                      const SizedBox(height: 12),
+                      _drsModeButton(
+                        title: "LBW ANALYSIS",
+                        icon: Icons.shield_rounded,
+                        accent: const Color(0xFF4FC3F7),
+                        onTap: () =>
+                            Navigator.of(context).pop(_DrsReplayMode.lbw),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   double? speedKmph;
@@ -2222,6 +3495,90 @@ class _UploadScreenState extends State<UploadScreen>
     debugPrint("XP UPDATED (HIVE) => +$amount | TOTAL => $updatedXp");
   }
 
+  void _applyEliteHeaders(http.MultipartRequest request) {
+    if (!PremiumService.isElite) return;
+    request.headers["X-Priority"] = "elite";
+    request.headers["X-Speed"] = "2x";
+  }
+
+  Future<void> _maybeShowUsageLimitReached({
+    required String featureName,
+    required int current,
+    required int limit,
+    required String entrySource,
+  }) async {
+    if (!mounted) return;
+    if (!PremiumService.isPremium || limit <= 0) return;
+    if (current < limit || (current - 1) >= limit) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            "Usage Limit Reached",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            "You've reached your monthly limit for $featureName.\n\nUpgrade to keep your elite streak going.",
+            style: const TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                "Later",
+                style: TextStyle(color: Colors.white54),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PremiumScreen(entrySource: entrySource),
+                  ),
+                );
+              },
+              child: const Text(
+                "Upgrade",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _eliteSpeedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFD86B).withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFFFD86B)),
+      ),
+      child: const Text(
+        "Processing with Elite Speed: 2x Faster",
+        style: TextStyle(
+          color: Color(0xFFFFD86B),
+          fontSize: 11.5,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2257,17 +3614,26 @@ class _UploadScreenState extends State<UploadScreen>
   _DrsCinematicPhase _drsPhase = _DrsCinematicPhase.idle;
   bool _drsHasSpike = false;
   String _drsUltraedgeReason = "";
+  List<double> _drsUltraedgeWaveform = const [];
+  double? _drsUltraedgeSpikeMs;
+  double? _drsUltraedgeSpikeT;
+  String _drsUltraedgeStatus = "NO EDGE";
   String _drsPitching = "In Line";
   String _drsImpact = "In Line";
   String _drsWickets = "Hitting";
   String _drsWicketTarget = "Middle";
   String _drsOriginalDecision = "OUT";
+  String _drsDecisionCall = "NOT OUT";
+  String _drsDecisionDetail = "";
+  bool _drsEdgeDetected = false;
+  double _drsEdgeConfidence = 0.0;
   double _drsSwingDeg = 0.0;
   double _drsSpinDeg = 0.0;
   _DrsTrackingGeometry _drsGeometry = const _DrsTrackingGeometry.fallback();
   bool _drsOut = false;
   int _drsRunId = 0;
   late final AnimationController _drsPhaseController;
+  _DrsReplayMode _drsReplayMode = _DrsReplayMode.lbw;
 
   bool showCoach = false;
   String? coachReply;
@@ -2289,6 +3655,392 @@ class _UploadScreenState extends State<UploadScreen>
   List<Map<String, double>> _extractTrajectoryPoints(dynamic rawTrajectory) {
     final cleaned = _sanitizeVideoTrajectory(rawTrajectory);
     return _smoothVideoTrajectory(cleaned);
+  }
+
+  static const double _batXMin = 0.44;
+  static const double _batXMax = 0.58;
+  static const double _batYMin = 0.22;
+  static const double _batYMax = 0.50;
+
+  bool _isInBatZone(Map<String, double> p) {
+    final x = p["x"] ?? 0.0;
+    final y = p["y"] ?? 0.0;
+    return x >= _batXMin && x <= _batXMax && y >= _batYMin && y <= _batYMax;
+  }
+
+  int? _findBatContactIndex(List<Map<String, double>> points) {
+    if (points.isEmpty) return null;
+    for (int i = 0; i < points.length; i++) {
+      if (_isInBatZone(points[i])) return i;
+    }
+    return null;
+  }
+
+  bool _isLikelyPadImpact(Map<String, double> lastPoint, double stumpsY) {
+    final x = lastPoint["x"] ?? 0.0;
+    final y = lastPoint["y"] ?? 0.0;
+    const padXMin = 0.50;
+    const padXMax = 0.80;
+    const padYMin = 0.52;
+    const padYMax = 0.85;
+    final inPadZone =
+        x >= padXMin && x <= padXMax && y >= padYMin && y <= padYMax;
+    final beforeStumps = y < (stumpsY - 0.02);
+    return inPadZone && beforeStumps;
+  }
+
+  double _edgeProximityThreshold({double quality = 0.6}) {
+    final size = controller?.value.isInitialized == true
+        ? controller!.value.size
+        : null;
+    final clampedQuality = quality.clamp(0.0, 1.0);
+    final minDim = size == null || size.width <= 0 || size.height <= 0
+        ? 720.0
+        : math.min(size.width, size.height);
+    final basePx = 8.0 - (clampedQuality * 4.0);
+    return (basePx / minDim).clamp(0.0035, 0.035);
+  }
+
+  double _trajectoryQualityScore(List<Map<String, double>> points) {
+    if (points.isEmpty) return 0.0;
+    final size = controller?.value.isInitialized == true
+        ? controller!.value.size
+        : null;
+    final minDim = size == null || size.width <= 0 || size.height <= 0
+        ? 720.0
+        : math.min(size.width, size.height);
+    final resScore = ((minDim - 240.0) / 840.0).clamp(0.0, 1.0);
+    final countScore = ((points.length - 6) / 20.0).clamp(0.0, 1.0);
+
+    final deltas = <double>[];
+    for (int i = 1; i < points.length; i++) {
+      final dx = points[i]["x"]! - points[i - 1]["x"]!;
+      final dy = points[i]["y"]! - points[i - 1]["y"]!;
+      final d = math.sqrt((dx * dx) + (dy * dy));
+      if (d > 0) deltas.add(d);
+    }
+    double jitterScore = 0.5;
+    if (deltas.length >= 2) {
+      final mean = deltas.reduce((a, b) => a + b) / deltas.length;
+      double variance = 0.0;
+      for (final d in deltas) {
+        final diff = d - mean;
+        variance += diff * diff;
+      }
+      variance /= deltas.length;
+      final std = math.sqrt(variance);
+      final ratio = mean > 0 ? (std / mean) : 1.0;
+      jitterScore = (1.0 - (ratio / 0.9)).clamp(0.0, 1.0);
+    }
+
+    final score = (0.5 * resScore) + (0.3 * countScore) + (0.2 * jitterScore);
+    return score.clamp(0.0, 1.0);
+  }
+
+  String _qualityLabel(double score) {
+    if (score >= 0.72) return "HIGH";
+    if (score >= 0.45) return "MEDIUM";
+    return "LOW";
+  }
+
+  double _distancePointToRect(Offset p, Rect rect) {
+    final dx = math.max(rect.left - p.dx, math.max(0.0, p.dx - rect.right));
+    final dy = math.max(rect.top - p.dy, math.max(0.0, p.dy - rect.bottom));
+    return math.sqrt((dx * dx) + (dy * dy));
+  }
+
+  double _directionChangeScore(List<Map<String, double>> points, int idx) {
+    if (points.length < 3) return 0.0;
+    final i0 = (idx - 2).clamp(0, points.length - 1);
+    final i1 = idx.clamp(0, points.length - 1);
+    final i2 = (idx + 2).clamp(0, points.length - 1);
+    if (i0 == i1 || i1 == i2) return 0.0;
+    final a = Offset(points[i0]["x"]!, points[i0]["y"]!);
+    final b = Offset(points[i1]["x"]!, points[i1]["y"]!);
+    final c = Offset(points[i2]["x"]!, points[i2]["y"]!);
+    final v1 = b - a;
+    final v2 = c - b;
+    final len1 = v1.distance;
+    final len2 = v2.distance;
+    if (len1 < 1e-6 || len2 < 1e-6) return 0.0;
+    final dot = (v1.dx * v2.dx) + (v1.dy * v2.dy);
+    final cos = (dot / (len1 * len2)).clamp(-1.0, 1.0);
+    final angle = math.acos(cos);
+    return (angle / (math.pi / 2)).clamp(0.0, 1.0);
+  }
+
+  ({
+    bool detected,
+    int? contactIndex,
+    double confidence,
+    double quality,
+    String qualityLabel,
+    double proximity,
+  })
+  _detectEdgeSummary(List<Map<String, double>> points) {
+    if (points.isEmpty) {
+      return (
+        detected: false,
+        contactIndex: null,
+        confidence: 0.0,
+        quality: 0.0,
+        qualityLabel: "LOW",
+        proximity: _edgeProximityThreshold(quality: 0.0),
+      );
+    }
+
+    final quality = _trajectoryQualityScore(points);
+    final proximity = _edgeProximityThreshold(quality: quality);
+    final batRect = Rect.fromLTRB(_batXMin, _batYMin, _batXMax, _batYMax);
+    final tight = proximity * (0.60 + ((1.0 - quality) * 0.25));
+    final expanded = batRect.inflate(proximity);
+    final tightRect = batRect.inflate(tight);
+
+    double minDist = double.infinity;
+    int? minIdx;
+    int nearCount = 0;
+    bool intersectsLoose = false;
+    bool intersectsTight = false;
+
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+      final x = p["x"] ?? 0.0;
+      final y = p["y"] ?? 0.0;
+      final offset = Offset(x, y);
+      final dist = _distancePointToRect(offset, batRect);
+      if (dist < minDist) {
+        minDist = dist;
+        minIdx = i;
+      }
+      if (expanded.contains(offset)) {
+        nearCount++;
+      }
+      if (tightRect.contains(offset)) {
+        intersectsTight = true;
+      }
+      if (i == 0) continue;
+      final prev = points[i - 1];
+      final a = Offset(prev["x"] ?? 0.0, prev["y"] ?? 0.0);
+      if (!intersectsLoose && _segmentIntersectsRect(a, offset, expanded)) {
+        intersectsLoose = true;
+      }
+      if (!intersectsTight && _segmentIntersectsRect(a, offset, tightRect)) {
+        intersectsTight = true;
+      }
+    }
+
+    final contactIndex = minIdx ?? (points.length ~/ 2);
+    final directionScore = _directionChangeScore(points, contactIndex);
+    final proximityScore = minDist.isFinite
+        ? (1.0 - (minDist / proximity).clamp(0.0, 1.0))
+        : 0.0;
+    final nearScore = points.isNotEmpty
+        ? ((nearCount / points.length).clamp(0.0, 0.35) / 0.35)
+        : 0.0;
+
+    final strongHit = intersectsTight || minDist <= tight;
+    final softHit = intersectsLoose || minDist <= proximity;
+    final base =
+        (strongHit
+            ? 0.62
+            : softHit
+            ? 0.38
+            : 0.0) +
+        (0.24 * directionScore) +
+        (0.14 * nearScore) +
+        (0.10 * proximityScore);
+    final confidence = (base * (0.82 + (0.18 * quality))).clamp(0.0, 1.0);
+    final threshold = (0.62 - (quality * 0.14));
+    final detected = confidence >= threshold;
+
+    return (
+      detected: detected,
+      contactIndex: contactIndex,
+      confidence: confidence,
+      quality: quality,
+      qualityLabel: _qualityLabel(quality),
+      proximity: proximity,
+    );
+  }
+
+  bool _segmentIntersectsRect(Offset a, Offset b, Rect rect) {
+    double t0 = 0.0;
+    double t1 = 1.0;
+    final dx = b.dx - a.dx;
+    final dy = b.dy - a.dy;
+
+    bool clip(double p, double q) {
+      if (p == 0) return q >= 0;
+      final r = q / p;
+      if (p < 0) {
+        if (r > t1) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return false;
+        if (r < t1) t1 = r;
+      }
+      return true;
+    }
+
+    if (!clip(-dx, a.dx - rect.left)) return false;
+    if (!clip(dx, rect.right - a.dx)) return false;
+    if (!clip(-dy, a.dy - rect.top)) return false;
+    if (!clip(dy, rect.bottom - a.dy)) return false;
+    return true;
+  }
+
+  int? _detectVisualEdgeIndex(
+    List<Map<String, double>> points,
+    double proximity,
+  ) {
+    if (points.isEmpty) return null;
+    final batRect = Rect.fromLTRB(_batXMin, _batYMin, _batXMax, _batYMax);
+    final expanded = batRect.inflate(proximity);
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+      final x = p["x"] ?? 0.0;
+      final y = p["y"] ?? 0.0;
+      if (expanded.contains(Offset(x, y))) return i;
+      if (i == 0) continue;
+      final prev = points[i - 1];
+      final a = Offset(prev["x"] ?? 0.0, prev["y"] ?? 0.0);
+      final b = Offset(x, y);
+      if (_segmentIntersectsRect(a, b, expanded)) return i;
+    }
+    return null;
+  }
+
+  ({bool isOut, String call, String detail, bool edgeDetected})
+  _resolveUltraEdgeDecision({
+    required List<Map<String, double>> points,
+    required bool spikeDetected,
+    required _DrsTrackingGeometry geometry,
+  }) {
+    if (points.isEmpty) {
+      return (
+        isOut: false,
+        call: "NOT OUT",
+        detail: "NO EDGE",
+        edgeDetected: false,
+      );
+    }
+    final summary = _detectEdgeSummary(points);
+    final visualDetected = summary.detected;
+    final edgeDetected = visualDetected || spikeDetected;
+    if (!edgeDetected) {
+      return (
+        isOut: false,
+        call: "NOT OUT",
+        detail: "NO EDGE",
+        edgeDetected: false,
+      );
+    }
+
+    final contactIdx = summary.contactIndex ?? _estimateBatContactIndex(points);
+    final bounceIdx = _detectBounceIndex(points);
+    final afterContactBounce = bounceIdx != -1 && bounceIdx > contactIdx + 1;
+    final lastPoint = points.last;
+    final padLikely = _isLikelyPadImpact(lastPoint, geometry.stumpsPoint.dy);
+    final caught = !afterContactBounce && !padLikely;
+
+    if (caught) {
+      return (isOut: true, call: "OUT", detail: "CAUGHT", edgeDetected: true);
+    }
+    return (
+      isOut: false,
+      call: "NOT OUT",
+      detail: "INSIDE EDGE",
+      edgeDetected: true,
+    );
+  }
+
+  int _estimateBatContactIndex(List<Map<String, double>> points) {
+    if (points.isEmpty) return 0;
+    final hitIdx = _findBatContactIndex(points);
+    if (hitIdx != null) return hitIdx;
+    return (points.length * 0.78).round().clamp(0, points.length - 1);
+  }
+
+  _UltraEdgeAudioResult _buildUltraEdgeVisuals({
+    required List<Map<String, double>> points,
+    required Duration videoDuration,
+    required bool spikeDetected,
+    int? contactIndexOverride,
+  }) {
+    if (points.isEmpty) {
+      return _UltraEdgeAudioResult.noSpike("NO_TRAJECTORY");
+    }
+    final durationMs = videoDuration.inMilliseconds;
+    final totalFrames = math.max(points.length - 1, 1);
+    final contactIdx = contactIndexOverride ?? _estimateBatContactIndex(points);
+    final spikeT = totalFrames > 0 ? (contactIdx / totalFrames) : 0.5;
+    final spikeMs = durationMs > 0 ? (spikeT * durationMs) : null;
+
+    if (!spikeDetected) {
+      return _UltraEdgeAudioResult(
+        spikeDetected: false,
+        waveform: const [],
+        reason: "NO_SPIKE",
+        spikeMs: null,
+        spikeT: null,
+      );
+    }
+
+    const waveformCount = 140;
+    final waveform = List<double>.generate(waveformCount, (i) {
+      final t = i / waveformCount;
+      final base = 0.14 + (0.05 * math.sin(t * 16)) + (0.04 * math.sin(t * 37));
+      return base.clamp(0.05, 0.35);
+    });
+
+    final spikeIndex = (spikeT * waveformCount).round().clamp(
+      0,
+      waveformCount - 1,
+    );
+    for (int offset = -3; offset <= 3; offset++) {
+      final idx = spikeIndex + offset;
+      if (idx < 0 || idx >= waveformCount) continue;
+      final strength = 1.0 - (offset.abs() * 0.2);
+      waveform[idx] = math.max(waveform[idx], strength);
+    }
+
+    final peak = waveform.reduce(math.max);
+    final normalized = peak > 0
+        ? waveform.map((v) => (v / peak).clamp(0.0, 1.0)).toList()
+        : waveform;
+
+    return _UltraEdgeAudioResult(
+      spikeDetected: spikeDetected,
+      waveform: normalized,
+      reason: spikeDetected ? "SPIKE_DETECTED" : "NO_SPIKE",
+      spikeMs: spikeMs,
+      spikeT: spikeDetected ? spikeT : null,
+    );
+  }
+
+  Future<_UltraEdgeAudioResult?> _buildUltraEdgeFromTrajectory(
+    Map<String, dynamic> drsPayload,
+    bool? edgeOverride,
+    int? contactIndexOverride,
+  ) async {
+    if (controller == null) return null;
+    if (!controller!.value.isInitialized) {
+      await controller!.initialize();
+    }
+    final duration = controller!.value.duration;
+    if (duration.inMilliseconds <= 0) return null;
+
+    final rawTrajectory = drsPayload["trajectory"] ?? trajectory;
+    final points = _extractTrajectoryPoints(rawTrajectory);
+    if (points.length < 3) return null;
+
+    final spikeDetected = edgeOverride ?? (drsPayload["ultraedge"] == true);
+    return _buildUltraEdgeVisuals(
+      points: points,
+      videoDuration: duration,
+      spikeDetected: spikeDetected,
+      contactIndexOverride: contactIndexOverride,
+    );
   }
 
   double? _deriveSpeedFromTrajectory(
@@ -2504,21 +4256,37 @@ class _UploadScreenState extends State<UploadScreen>
     return normalized.toUpperCase();
   }
 
+  String _sanitizeUltraEdgeReason(String? rawReason) {
+    final reason = rawReason?.trim() ?? "";
+    if (reason.isEmpty) return "";
+
+    final normalized = reason.toUpperCase();
+    if (normalized.contains("CONFIDENCE") ||
+        normalized.contains("VIDEO LOW") ||
+        normalized.contains("| VIDEO ")) {
+      return "";
+    }
+
+    return reason;
+  }
+
   Future<void> _configureDrsCinematic(Map<String, dynamic> drs) async {
     final decisionText = _normalizeDecision(drs["decision"]);
     final rawConfidence = drs["stump_confidence"];
     final confidence = rawConfidence is num
         ? rawConfidence.toDouble().clamp(0.0, 1.0)
         : 0.0;
-    final ultraedge = drs["ultraedge"] == true;
+    final audioSpike = drs["ultraedge"] == true;
     final ultraedgeReasonRaw =
         drs["ultraedge_reason"] ??
         drs["ultraedge_note"] ??
         drs["reason"] ??
         drs["edge_reason"];
-    _drsUltraedgeReason = ultraedgeReasonRaw?.toString().trim() ?? "";
+    _drsUltraedgeReason = _sanitizeUltraEdgeReason(
+      ultraedgeReasonRaw?.toString(),
+    );
 
-    _drsHasSpike = ultraedge;
+    _drsHasSpike = audioSpike;
     final drsTrajectory = drs["trajectory"];
     if (drsTrajectory is List && drsTrajectory.isNotEmpty) {
       trajectory = drsTrajectory;
@@ -2560,6 +4328,45 @@ class _UploadScreenState extends State<UploadScreen>
     }
     _drsOut = decisionText == "OUT" || backendHitStumps;
     _drsOriginalDecision = decisionText == "OUT" ? "OUT" : "NOT OUT";
+
+    final trajectoryPoints = _extractTrajectoryPoints(trajectory);
+    final visualEdgeRaw = drs["visual_edge"];
+    final edgeSummary = _detectEdgeSummary(trajectoryPoints);
+    _drsEdgeConfidence = edgeSummary.confidence;
+    final visualEdgeDetected = visualEdgeRaw is bool
+        ? visualEdgeRaw
+        : edgeSummary.detected;
+    if (visualEdgeRaw is bool) {
+      if (visualEdgeRaw) {
+        _drsEdgeConfidence = math.max(_drsEdgeConfidence, 0.70);
+      } else {
+        _drsEdgeConfidence = math.min(_drsEdgeConfidence, 0.35);
+      }
+    }
+    if (audioSpike) {
+      _drsEdgeConfidence = math.max(_drsEdgeConfidence, 0.78);
+    }
+    _drsEdgeDetected = audioSpike || visualEdgeDetected;
+
+    if (_drsHasSpike && _drsReplayMode == _DrsReplayMode.lbw) {
+      _drsOut = false;
+      _drsWickets = "Missing";
+      _drsOriginalDecision = "NOT OUT";
+      _drsGeometry = _DrsTrackingGeometry(
+        deliveryStart: _drsGeometry.deliveryStart,
+        pitchPoint: _drsGeometry.pitchPoint,
+        impactPoint: _drsGeometry.impactPoint,
+        stumpsPoint: _drsGeometry.stumpsPoint,
+        stumpLeft: _drsGeometry.stumpLeft,
+        stumpRight: _drsGeometry.stumpRight,
+        pathPoints: _drsGeometry.pathPoints,
+        pitchingText: _drsGeometry.pitchingText,
+        impactText: _drsGeometry.impactText,
+        wicketsText: "Missing",
+        wicketTarget: _drsGeometry.wicketTarget,
+        wicketsHitting: false,
+      );
+    }
     _drsSwingDeg =
         ((_drsGeometry.pitchPoint.dx - _drsGeometry.deliveryStart.dx).abs() *
                 6.0)
@@ -2571,7 +4378,105 @@ class _UploadScreenState extends State<UploadScreen>
     final confidenceText = confidence > 0
         ? " (${(confidence * 100).toStringAsFixed(0)}%)"
         : "";
-    drsResult = "${_drsOut ? "OUT" : "NOT OUT"}$confidenceText";
+    if (_drsReplayMode == _DrsReplayMode.ultraEdge) {
+      final decision = _resolveUltraEdgeDecision(
+        points: trajectoryPoints,
+        spikeDetected: audioSpike,
+        geometry: _drsGeometry,
+      );
+      _drsOut = decision.isOut;
+      _drsEdgeDetected = decision.edgeDetected;
+      _drsDecisionCall = decision.edgeDetected ? "EDGE DETECTED" : "NO EDGE";
+      _drsDecisionDetail = "";
+      drsResult = _drsDecisionCall;
+    } else {
+      _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
+      _drsDecisionDetail = _drsHasSpike ? "INSIDE EDGE" : "";
+      _drsEdgeDetected = _drsHasSpike;
+      if (_drsHasSpike) {
+        drsResult = "NOT OUT (INSIDE EDGE)";
+      } else {
+        drsResult = "${_drsOut ? "OUT" : "NOT OUT"}$confidenceText";
+      }
+    }
+  }
+
+  Map<String, dynamic> _serializeDrsGeometry(_DrsTrackingGeometry geometry) {
+    Map<String, double> asMap(Offset point) => {"x": point.dx, "y": point.dy};
+
+    return {
+      "deliveryStart": asMap(geometry.deliveryStart),
+      "pitchPoint": asMap(geometry.pitchPoint),
+      "impactPoint": asMap(geometry.impactPoint),
+      "stumpsPoint": asMap(geometry.stumpsPoint),
+      "stumpLeft": asMap(geometry.stumpLeft),
+      "stumpRight": asMap(geometry.stumpRight),
+      "pathPoints": geometry.pathPoints
+          .map((point) => asMap(point))
+          .toList(growable: false),
+      "pitchingText": geometry.pitchingText,
+      "impactText": geometry.impactText,
+      "wicketsText": geometry.wicketsText,
+      "wicketTarget": geometry.wicketTarget,
+      "wicketsHitting": geometry.wicketsHitting,
+    };
+  }
+
+  Map<String, dynamic> _buildLocalDrsPayload() {
+    final trackedPoints = _extractTrajectoryPoints(trajectory);
+    final confidence = trackedPoints.length >= 6 ? 0.64 : 0.42;
+    final geometry = _buildDrsGeometry(
+      decisionText: "NOT OUT",
+      confidence: confidence,
+    );
+    final isOut = geometry.wicketsHitting;
+    final wicketsText = isOut ? "Hitting" : geometry.wicketsText;
+
+    return {
+      "decision": isOut ? "OUT" : "NOT OUT",
+      "stump_confidence": confidence,
+      "ultraedge": false,
+      "ball_tracking": isOut,
+      "reason": "LOCAL_TRAJECTORY_FALLBACK",
+      "trajectory": trackedPoints
+          .map((point) => {"x": point["x"]!, "y": point["y"]!})
+          .toList(growable: false),
+      "geometry": _serializeDrsGeometry(geometry),
+      "pitching_text": geometry.pitchingText,
+      "impact_text": geometry.impactText,
+      "wickets_text": wicketsText,
+      "wicket_state": wicketsText.toUpperCase(),
+      "wicket_target": geometry.wicketTarget,
+    };
+  }
+
+  Future<Map<String, dynamic>?> _fetchBackendDrsPayload(String idToken) async {
+    if (video == null) return null;
+
+    final uri = Uri.parse(
+      "https://cricknova-backend.onrender.com/training/drs",
+    );
+    final request = http.MultipartRequest("POST", uri);
+    request.headers["Accept"] = "application/json";
+    request.headers["Authorization"] = "Bearer $idToken";
+    _applyEliteHeaders(request);
+    request.files.add(await http.MultipartFile.fromPath("file", video!.path));
+
+    try {
+      final response = await request.send().timeout(const Duration(seconds: 3));
+      final respStr = await response.stream.bytesToString();
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final data = jsonDecode(respStr);
+      final drs = data["drs"];
+      if (drs is Map) {
+        return Map<String, dynamic>.from(drs);
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
   }
 
   Future<bool> _runDrsPhase(
@@ -2709,9 +4614,14 @@ class _UploadScreenState extends State<UploadScreen>
                   Positioned(
                     top: 6,
                     right: 8,
-                    child: IconButton(
-                      onPressed: _closeDrsOverlay,
-                      icon: const Icon(Icons.close, color: Colors.white),
+                    child: SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: _closeDrsOverlay,
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
                     ),
                   ),
                   Align(
@@ -2732,7 +4642,7 @@ class _UploadScreenState extends State<UploadScreen>
                             child: CustomPaint(
                               painter: _BatBallPainter(
                                 progress,
-                                freezeAtBat: _drsHasSpike,
+                                freezeAtBat: _drsEdgeDetected,
                               ),
                               child: const SizedBox.expand(),
                             ),
@@ -2743,16 +4653,16 @@ class _UploadScreenState extends State<UploadScreen>
                             child: CustomPaint(
                               painter: _SnickoWavePainter(
                                 progress: progress,
-                                hasSpike: _drsHasSpike,
+                                hasSpike: _drsEdgeDetected,
                               ),
                               child: const SizedBox.expand(),
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "ULTRA-EDGE: ${_drsHasSpike ? "SPIKE DETECTED" : "CHECKING FOR SPIKE..."}",
+                            "ULTRA-EDGE: ${_drsEdgeDetected ? "EDGE DETECTED" : "NO EDGE"}",
                             style: TextStyle(
-                              color: _drsHasSpike
+                              color: _drsEdgeDetected
                                   ? Colors.redAccent
                                   : Colors.white,
                               fontFamily: "RobotoCondensed",
@@ -2789,9 +4699,14 @@ class _UploadScreenState extends State<UploadScreen>
                   Positioned(
                     top: 6,
                     right: 8,
-                    child: IconButton(
-                      onPressed: _closeDrsOverlay,
-                      icon: const Icon(Icons.close, color: Colors.white),
+                    child: SizedBox(
+                      width: 56,
+                      height: 56,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: _closeDrsOverlay,
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
                     ),
                   ),
                   if (showPitch)
@@ -2975,12 +4890,12 @@ class _UploadScreenState extends State<UploadScreen>
     );
   }
 
-  Future<void> pickAndUpload() async {
+  Future<bool> pickAndUpload() async {
     debugPrint("UPLOAD_SCREEN → pickAndUpload start");
 
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
-    if (picked == null) return;
+    if (picked == null) return false;
 
     video = File(picked.path);
 
@@ -3005,6 +4920,7 @@ class _UploadScreenState extends State<UploadScreen>
     final uri = Uri.parse(
       "https://cricknova-backend.onrender.com/training/analyze",
     );
+    bool analysisSucceeded = false;
 
     try {
       final request = http.MultipartRequest("POST", uri);
@@ -3019,6 +4935,7 @@ class _UploadScreenState extends State<UploadScreen>
       }
 
       request.headers["Authorization"] = "Bearer $token";
+      _applyEliteHeaders(request);
       request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
       final response = await request.send().timeout(
@@ -3043,19 +4960,6 @@ class _UploadScreenState extends State<UploadScreen>
 
       currentVideos += 1;
       await statsBox.put('totalVideos', currentVideos);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.deepPurpleAccent,
-            content: Text(
-              "🎥 Video added! Total videos: $currentVideos",
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
 
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
@@ -3119,7 +5023,7 @@ class _UploadScreenState extends State<UploadScreen>
 
         debugPrint("HIVE SPEED UPDATED => $allSpeeds");
       }
-      if (!mounted) return;
+      if (!mounted) return true;
 
       setState(() {
         final inferred = _inferLabelsFromTrajectory(analysis["trajectory"]);
@@ -3163,6 +5067,19 @@ class _UploadScreenState extends State<UploadScreen>
 
         controller?.play();
       });
+      analysisSucceeded = true;
+
+      try {
+        final usage = await PremiumService.recordSwingUsage();
+        await _maybeShowUsageLimitReached(
+          featureName: "CrickNova Swing Analysis",
+          current: usage.swingUsed,
+          limit: PremiumService.compareLimit,
+          entrySource: "swing_usage_limit",
+        );
+      } catch (e) {
+        debugPrint("USAGE TRACK ERROR (SWING) => $e");
+      }
     } catch (e) {
       debugPrint("UPLOAD ERROR => $e");
       if (mounted) {
@@ -3177,74 +5094,94 @@ class _UploadScreenState extends State<UploadScreen>
         });
       }
     }
+    // Review prompt removed (manual rating only).
+    return true;
   }
 
   Future<void> runDRS() async {
     if (video == null || drsLoading) return;
+
+    final selectedMode = await _showDrsModeSelector();
+    if (selectedMode == null) return;
+    _drsReplayMode = selectedMode;
 
     setState(() {
       showDRS = false;
       drsLoading = true;
       drsResult = "Reviewing decision...";
       _drsPhase = _DrsCinematicPhase.idle;
+      _drsHasSpike = false;
+      _drsEdgeDetected = false;
     });
 
-    final uri = Uri.parse(
-      "https://cricknova-backend.onrender.com/training/drs",
-    );
-
-    final request = http.MultipartRequest("POST", uri);
-    request.headers["Accept"] = "application/json";
-
+    Map<String, dynamic> drsPayload = _buildLocalDrsPayload();
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() {
-        drsResult = "USER NOT AUTHENTICATED";
-        drsLoading = false;
-      });
-      return;
-    }
-
-    final String? idToken = await user.getIdToken(true);
-    if (idToken == null || idToken.isEmpty) {
-      setState(() {
-        drsResult = "USER NOT AUTHENTICATED";
-        drsLoading = false;
-      });
-      return;
-    }
-
-    request.headers["Authorization"] = "Bearer $idToken";
-    request.files.add(await http.MultipartFile.fromPath("file", video!.path));
+    bool usedUltraEdgeAudio = false;
 
     try {
-      final response = await request.send().timeout(
-        const Duration(seconds: 40),
+      final localPoints = _extractTrajectoryPoints(trajectory);
+      final shouldAskBackend = localPoints.length < 2;
+      if (shouldAskBackend && user != null) {
+        final idToken = await user.getIdToken(true);
+        if (idToken != null && idToken.isNotEmpty) {
+          final backendDrs = await _fetchBackendDrsPayload(idToken);
+          if (backendDrs != null) {
+            drsPayload = backendDrs;
+          }
+        }
+      }
+
+      final rawTrajectory = drsPayload["trajectory"] ?? trajectory;
+      final visualPoints = _extractTrajectoryPoints(rawTrajectory);
+      final edgeSummary = _detectEdgeSummary(visualPoints);
+      final visualEdgeDetected = edgeSummary.detected;
+      _drsEdgeConfidence = edgeSummary.confidence;
+      drsPayload["visual_edge"] = visualEdgeDetected;
+      drsPayload["edge_confidence"] = edgeSummary.confidence;
+      drsPayload["edge_quality"] = edgeSummary.qualityLabel;
+
+      if (drsPayload["ultraedge"] == true) {
+        _drsEdgeConfidence = math.max(_drsEdgeConfidence, 0.78);
+      }
+
+      final edgeDetectedOverride =
+          (drsPayload["ultraedge"] == true) || visualEdgeDetected;
+
+      final ultraEdgeAudio = await _buildUltraEdgeFromTrajectory(
+        drsPayload,
+        edgeDetectedOverride,
+        edgeSummary.contactIndex,
       );
+      if (ultraEdgeAudio != null) {
+        usedUltraEdgeAudio = true;
+        _drsUltraedgeWaveform = ultraEdgeAudio.waveform;
+        _drsUltraedgeSpikeMs = ultraEdgeAudio.spikeMs;
+        _drsUltraedgeSpikeT = ultraEdgeAudio.spikeT;
+        _drsUltraedgeStatus = ultraEdgeAudio.spikeDetected
+            ? "EDGE DETECTED"
+            : "NO EDGE";
+        final existingReason =
+            (drsPayload["ultraedge_reason"] ??
+                    drsPayload["ultraedge_note"] ??
+                    drsPayload["edge_reason"])
+                ?.toString()
+                .trim();
+        if (existingReason != null && existingReason.isNotEmpty) {
+          drsPayload["ultraedge_reason"] = _sanitizeUltraEdgeReason(
+            existingReason,
+          );
+        }
+      } else {
+        _drsUltraedgeWaveform = const [];
+        _drsUltraedgeSpikeMs = null;
+        _drsUltraedgeSpikeT = null;
+      }
 
-      final respStr = await response.stream.bytesToString();
-      // 🎯 Give 20 XP for DRS usage (stored in Hive)
+      await _configureDrsCinematic(drsPayload);
+      if (!usedUltraEdgeAudio) {
+        _drsUltraedgeStatus = _drsEdgeDetected ? "EDGE DETECTED" : "NO EDGE";
+      }
       await _addXP(20);
-
-      if (response.statusCode != 200) {
-        setState(() {
-          drsResult = "DRS FAILED\nServer error";
-          drsLoading = false;
-        });
-        return;
-      }
-
-      final data = jsonDecode(respStr);
-      final drs = data["drs"];
-
-      if (drs == null || drs is! Map) {
-        setState(() {
-          drsResult = "DRS DATA INVALID";
-          drsLoading = false;
-        });
-        return;
-      }
-      await _configureDrsCinematic(Map<String, dynamic>.from(drs));
       if (!mounted) return;
       setState(() {
         showDRS = true;
@@ -3261,17 +5198,24 @@ class _UploadScreenState extends State<UploadScreen>
             return _DrsCinematicScreen(
               videoController: controller!,
               geometry: _drsGeometry,
-              hasSpike: _drsHasSpike,
+              hasSpike: _drsEdgeDetected,
               ultraedgeReason: _drsUltraedgeReason,
+              ultraedgeWaveform: _drsUltraedgeWaveform,
+              ultraedgeSpikeMs: _drsUltraedgeSpikeMs,
+              ultraedgeSpikeT: _drsUltraedgeSpikeT,
+              ultraedgeStatus: _drsUltraedgeStatus,
               pitching: _drsPitching,
               impact: _drsImpact,
               wickets: _drsWickets,
               wicketTarget: _drsWicketTarget,
               originalDecision: _drsOriginalDecision,
+              decisionCall: _drsDecisionCall,
+              decisionDetail: _drsDecisionDetail,
               isOut: _drsOut,
               speedKmph: speedKmph ?? 95.0,
               swingDeg: _drsSwingDeg,
               spinDeg: _drsSpinDeg,
+              mode: _drsReplayMode,
             );
           },
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -3358,6 +5302,7 @@ class _UploadScreenState extends State<UploadScreen>
       }
 
       request.headers["Authorization"] = "Bearer $token";
+      _applyEliteHeaders(request);
 
       // send video (REQUIRED by backend)
       request.files.add(await http.MultipartFile.fromPath("file", video!.path));
@@ -3519,21 +5464,38 @@ class _UploadScreenState extends State<UploadScreen>
       // (XP block removed here)
 
       if (response.statusCode == 200) {
+        bool didProduceReply = false;
         if (data["success"] == true && data["reply"] != null) {
           await _addXP(20);
           setState(() {
             coachReply = data["reply"];
           });
+          didProduceReply = true;
         } else if (data["coach_feedback"] != null) {
           await _addXP(20);
           setState(() {
             coachReply = data["coach_feedback"];
           });
+          didProduceReply = true;
         } else {
           setState(() {
             coachReply =
                 "Analysis completed, but no clear coaching feedback was generated.";
           });
+        }
+
+        if (didProduceReply) {
+          try {
+            final usage = await PremiumService.recordMistakeUsage();
+            await _maybeShowUsageLimitReached(
+              featureName: "Mistake Detection",
+              current: usage.mistakeUsed,
+              limit: PremiumService.mistakeLimit,
+              entrySource: "mistake_usage_limit",
+            );
+          } catch (e) {
+            debugPrint("USAGE TRACK ERROR (MISTAKE) => $e");
+          }
         }
       } else {
         setState(() {
@@ -3561,8 +5523,7 @@ class _UploadScreenState extends State<UploadScreen>
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        // Always go back to previous screen, never jump to Home
-        Navigator.of(context).pop();
+        await _handleBackToGallery();
         return false;
       },
       child: Scaffold(
@@ -3572,7 +5533,7 @@ class _UploadScreenState extends State<UploadScreen>
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
-              Navigator.of(context).pop();
+              _handleBackToGallery();
             },
           ),
           title: const Text("Upload Training Video"),
@@ -4016,14 +5977,14 @@ class _UploadScreenState extends State<UploadScreen>
                             borderRadius: BorderRadius.circular(22),
                             border: Border.all(color: Colors.white12),
                           ),
-                          child: const Column(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              CircularProgressIndicator(
+                              const CircularProgressIndicator(
                                 color: Color(0xFFFF5252),
                               ),
-                              SizedBox(height: 16),
-                              Text(
+                              const SizedBox(height: 16),
+                              const Text(
                                 "Preparing DRS Replay",
                                 style: TextStyle(
                                   color: Colors.white,
@@ -4031,8 +5992,8 @@ class _UploadScreenState extends State<UploadScreen>
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              SizedBox(height: 8),
-                              Text(
+                              const SizedBox(height: 8),
+                              const Text(
                                 "Analyzing impact, line and wickets...",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
@@ -4040,6 +6001,10 @@ class _UploadScreenState extends State<UploadScreen>
                                   fontSize: 13,
                                 ),
                               ),
+                              if (PremiumService.isElite) ...[
+                                const SizedBox(height: 12),
+                                _eliteSpeedBadge(),
+                              ],
                             ],
                           ),
                         ),
@@ -4058,31 +6023,42 @@ class _UploadScreenState extends State<UploadScreen>
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: Colors.white12),
                             ),
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 600),
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0.0, 0.3),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 600),
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0.0, 0.3),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: Text(
+                                    _cricketFacts[_currentFactIndex],
+                                    key: ValueKey(
+                                      _cricketFacts[_currentFactIndex],
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
-                                );
-                              },
-                              child: Text(
-                                _cricketFacts[_currentFactIndex],
-                                key: ValueKey(_cricketFacts[_currentFactIndex]),
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  height: 1.4,
-                                  fontWeight: FontWeight.w500,
                                 ),
-                              ),
+                                if (PremiumService.isElite) ...[
+                                  const SizedBox(height: 12),
+                                  _eliteSpeedBadge(),
+                                ],
+                              ],
                             ),
                           ),
                         ),
@@ -4098,6 +6074,22 @@ class _UploadScreenState extends State<UploadScreen>
               ),
       ),
     );
+  }
+
+  Future<void> _handleBackToGallery() async {
+    if (!mounted) return;
+    if (video == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (uploading || analysisLoading || drsLoading) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final picked = await pickAndUpload();
+    if (!picked && mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   Widget _metric(String label, String value) {

@@ -2,10 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:CrickNova_Ai/config/api_config.dart';
+
 class PremiumService {
   // ⚠️ RULE: Usage counters are NEVER reset on client.
   // They are restored ONLY from Firestore backend.
@@ -22,11 +24,13 @@ class PremiumService {
   static bool justExpired = false;
   static DateTime? expiryDate;
   static DateTime? startedDate;
+
   /// 🔐 Premium validity = premium flag only
   /// Limits are enforced strictly by backend
   static bool get isPremiumActive {
     return isPremium;
   }
+
   // Backward-compat alias (used by UI)
   static bool? get cachedIsPremium => isPremium;
   static String plan = "FREE";
@@ -67,7 +71,6 @@ class PremiumService {
       await loadPremiumFromUid(uid);
       _usageDirty = false;
       _lastLocalUsageUpdate = null;
-
     } catch (e) {
       debugPrint("Premium sync failed: $e");
     }
@@ -113,7 +116,9 @@ class PremiumService {
       // Support both old and new backend schemas
       final bool firestorePremium =
           data["isPremium"] == true || data["premium"] == true;
-      debugPrint("🔥 Premium flag from Firestore = $firestorePremium | raw keys: ${data.keys}");
+      debugPrint(
+        "🔥 Premium flag from Firestore = $firestorePremium | raw keys: ${data.keys}",
+      );
 
       final rawExpiry = data["expiry"] ?? data["expiryDate"];
       final rawStarted = data["started_at"] ?? data["startedAt"];
@@ -161,7 +166,9 @@ class PremiumService {
       final planId = data["plan"] ?? "FREE";
 
       // 2) Read usage from nested "used" map, fallback to root-level fields
-      final usedMap = (data["used"] is Map) ? Map<String, dynamic>.from(data["used"]) : {};
+      final usedMap = (data["used"] is Map)
+          ? Map<String, dynamic>.from(data["used"])
+          : {};
       final used = {
         "chat": usedMap["chat"] ?? data["chat_used"] ?? 0,
         "mistake": usedMap["mistake"] ?? data["mistake_used"] ?? 0,
@@ -277,13 +284,13 @@ class PremiumService {
         .collection("subscriptions")
         .doc(user.uid)
         .set({
-      "isPremium": true,
-      "plan": planId,
-      "chatLimit": chatLimit,
-      "mistakeLimit": mistakeLimit,
-      "diffLimit": diffLimit,
-      "updatedAt": FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+          "isPremium": true,
+          "plan": planId,
+          "chatLimit": chatLimit,
+          "mistakeLimit": mistakeLimit,
+          "diffLimit": diffLimit,
+          "updatedAt": FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
 
     await _cache(true, planId, chatLimit, mistakeLimit, diffLimit);
   }
@@ -385,9 +392,7 @@ class PremiumService {
     chatLimit = chat;
     mistakeLimit = mistake;
     compareLimit = compare;
-
   }
-
 
   // -----------------------------
   // LOGOUT / RESET
@@ -418,6 +423,7 @@ class PremiumService {
     // Notify UI listeners immediately
     premiumNotifier.notifyListeners();
   }
+
   static bool canChat() {
     if (!isLoaded) return true;
     return isPremium && chatUsed < chatLimit;
@@ -432,6 +438,11 @@ class PremiumService {
   static bool canCompare() {
     if (!isLoaded) return true;
     return isPremiumActive && compareUsed < compareLimit;
+  }
+
+  static bool get isElite {
+    if (!isPremium) return false;
+    return plan == "IN_1999" || plan.toUpperCase().contains("ULTRA");
   }
 
   // -----------------------------
@@ -456,9 +467,9 @@ class PremiumService {
           .collection("subscriptions")
           .doc(user.uid)
           .update({
-        "chat_used": FieldValue.increment(1),
-        "updatedAt": FieldValue.serverTimestamp(),
-      });
+            "chat_used": FieldValue.increment(1),
+            "updatedAt": FieldValue.serverTimestamp(),
+          });
     }
     await syncAfterUsage();
   }
@@ -489,10 +500,11 @@ class PremiumService {
           .collection("subscriptions")
           .doc(user.uid)
           .update({
-        "mistake_used": FieldValue.increment(1),
-        "updatedAt": FieldValue.serverTimestamp(),
-      });
+            "mistake_used": FieldValue.increment(1),
+            "updatedAt": FieldValue.serverTimestamp(),
+          });
     }
+    await _incrementMonthlyUsage(_UsageType.mistake);
     await syncAfterUsage();
   }
 
@@ -516,12 +528,129 @@ class PremiumService {
           .collection("subscriptions")
           .doc(user.uid)
           .update({
-        "compare_used": FieldValue.increment(1),
-        "updatedAt": FieldValue.serverTimestamp(),
-      });
+            "compare_used": FieldValue.increment(1),
+            "updatedAt": FieldValue.serverTimestamp(),
+          });
     }
+    await _incrementMonthlyUsage(_UsageType.swing);
     await syncAfterUsage();
   }
+
+  // -----------------------------
+  // MONTHLY USAGE (Elite Dashboard)
+  // -----------------------------
+  static const String _usageCollection = "usage_table";
+
+  static String _usageMonthKey([DateTime? now]) {
+    final current = now ?? DateTime.now();
+    final month = current.month.toString().padLeft(2, '0');
+    return "${current.year}-$month";
+  }
+
+  static String currentUsageMonthKey() {
+    return _usageMonthKey();
+  }
+
+  static DocumentReference<Map<String, dynamic>> _usageDoc(
+    String uid,
+    String monthKey,
+  ) {
+    return FirebaseFirestore.instance
+        .collection(_usageCollection)
+        .doc("${uid}_$monthKey");
+  }
+
+  static Stream<MonthlyUsage> monthlyUsageStream() {
+    final user = FirebaseAuth.instance.currentUser;
+    final initialKey = _usageMonthKey();
+    if (user == null) {
+      return Stream.value(MonthlyUsage.empty(initialKey));
+    }
+
+    final controller = StreamController<MonthlyUsage>();
+    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? sub;
+    Timer? monthTimer;
+    var currentKey = initialKey;
+
+    void listenForMonth(String key) {
+      sub?.cancel();
+      sub = _usageDoc(user.uid, key).snapshots().listen((snapshot) {
+        controller.add(MonthlyUsage.fromSnapshot(snapshot, key));
+      }, onError: controller.addError);
+    }
+
+    listenForMonth(currentKey);
+
+    monthTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      final newKey = _usageMonthKey();
+      if (newKey != currentKey) {
+        currentKey = newKey;
+        listenForMonth(currentKey);
+      }
+    });
+
+    controller.onCancel = () {
+      monthTimer?.cancel();
+      sub?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  static Future<MonthlyUsage> fetchMonthlyUsage() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final monthKey = _usageMonthKey();
+    if (user == null) return MonthlyUsage.empty(monthKey);
+    final snap = await _usageDoc(user.uid, monthKey).get();
+    return MonthlyUsage.fromSnapshot(snap, monthKey);
+  }
+
+  static Future<MonthlyUsage> recordSwingUsage() {
+    return _incrementMonthlyUsage(_UsageType.swing);
+  }
+
+  static Future<MonthlyUsage> recordMistakeUsage() {
+    return _incrementMonthlyUsage(_UsageType.mistake);
+  }
+
+  static Future<MonthlyUsage> _incrementMonthlyUsage(_UsageType type) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final monthKey = _usageMonthKey();
+    if (user == null) return MonthlyUsage.empty(monthKey);
+
+    final docRef = _usageDoc(user.uid, monthKey);
+    return FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snap = await transaction.get(docRef);
+      var swingUsed = 0;
+      var mistakeUsed = 0;
+      if (snap.exists) {
+        final data = snap.data();
+        if (data != null) {
+          swingUsed = (data["swing_used"] as num?)?.toInt() ?? 0;
+          mistakeUsed = (data["mistake_used"] as num?)?.toInt() ?? 0;
+        }
+      }
+      if (type == _UsageType.swing) {
+        swingUsed += 1;
+      } else {
+        mistakeUsed += 1;
+      }
+      transaction.set(docRef, {
+        "uid": user.uid,
+        "month_key": monthKey,
+        "swing_used": swingUsed,
+        "mistake_used": mistakeUsed,
+        "updatedAt": FieldValue.serverTimestamp(),
+        if (!snap.exists) "createdAt": FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      return MonthlyUsage(
+        monthKey: monthKey,
+        swingUsed: swingUsed,
+        mistakeUsed: mistakeUsed,
+      );
+    });
+  }
+
   // -----------------------------
   // PAYWALL HELPER
   // -----------------------------
@@ -582,8 +711,9 @@ class PremiumService {
       approvalUrl = data["approval_url"];
     } else if (data["links"] is List) {
       try {
-        final approveLink = (data["links"] as List)
-            .firstWhere((e) => e["rel"] == "approve");
+        final approveLink = (data["links"] as List).firstWhere(
+          (e) => e["rel"] == "approve",
+        );
         approvalUrl = approveLink["href"];
       } catch (_) {
         approvalUrl = null;
@@ -602,6 +732,7 @@ class PremiumService {
     // Open PayPal approval page in external browser
     await openPayPalApprovalUrl(approvalUrl);
   }
+
   static Future<void> openPayPalApprovalUrl(String approvalUrl) async {
     final uri = Uri.parse(approvalUrl);
     debugPrint("🌍 Opening PayPal URL: $approvalUrl");
@@ -613,21 +744,17 @@ class PremiumService {
     }
 
     // Try opening in external browser first
-    bool opened = await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
+    bool opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
 
     // Fallback to platform default if external fails
     if (!opened) {
-      opened = await launchUrl(
-        uri,
-        mode: LaunchMode.platformDefault,
-      );
+      opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
     }
 
     if (!opened) {
-      throw Exception("Unable to open PayPal. Please install or enable a browser.");
+      throw Exception(
+        "Unable to open PayPal. Please install or enable a browser.",
+      );
     }
   }
 
@@ -653,11 +780,7 @@ class PremiumService {
         "Content-Type": "application/json",
         "authorization": "Bearer $idToken",
       },
-      body: jsonEncode({
-        "order_id": orderId,
-        "plan": plan,
-        "user_id": userId,
-      }),
+      body: jsonEncode({"order_id": orderId, "plan": plan, "user_id": userId}),
     );
 
     if (response.statusCode != 200) {
@@ -717,4 +840,39 @@ class PremiumService {
     premiumNotifier.value = isPremium;
     premiumNotifier.notifyListeners();
   }
+}
+
+enum _UsageType { swing, mistake }
+
+class MonthlyUsage {
+  final String monthKey;
+  final int swingUsed;
+  final int mistakeUsed;
+
+  const MonthlyUsage({
+    required this.monthKey,
+    required this.swingUsed,
+    required this.mistakeUsed,
+  });
+
+  factory MonthlyUsage.empty(String monthKey) {
+    return MonthlyUsage(monthKey: monthKey, swingUsed: 0, mistakeUsed: 0);
+  }
+
+  factory MonthlyUsage.fromSnapshot(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+    String monthKey,
+  ) {
+    if (!snapshot.exists || snapshot.data() == null) {
+      return MonthlyUsage.empty(monthKey);
+    }
+    final data = snapshot.data()!;
+    return MonthlyUsage(
+      monthKey: data["month_key"]?.toString() ?? monthKey,
+      swingUsed: (data["swing_used"] as num?)?.toInt() ?? 0,
+      mistakeUsed: (data["mistake_used"] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  bool get isEmpty => swingUsed == 0 && mistakeUsed == 0;
 }

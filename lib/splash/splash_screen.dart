@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'intro_animation_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -49,7 +51,18 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _startFlow() async {
     // Keep a short branded splash only; do not block startup for several seconds.
-    await Future.delayed(const Duration(milliseconds: 900));
+    await Future.delayed(const Duration(milliseconds: 1600));
+
+    final prefs = await SharedPreferences.getInstance();
+    final bool isFirstLaunch = prefs.getBool("is_first_launch") ?? true;
+    if (!mounted) return;
+    if (isFirstLaunch) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const IntroAnimationScreen()),
+      );
+      return;
+    }
 
     final user = FirebaseAuth.instance.currentUser;
     final userName = user?.displayName ?? "Player";
@@ -95,8 +108,18 @@ class _SplashScreenState extends State<SplashScreen>
                 children: const [
                   Icon(
                     Icons.sports_cricket,
-                    color: Colors.greenAccent,
+                    color: const Color(0xFF7CFF6B),
                     size: 90,
+                    shadows: [
+                      Shadow(
+                        color: Color(0xFF7CFF6B),
+                        blurRadius: 18,
+                      ),
+                      Shadow(
+                        color: Color(0xAA7CFF6B),
+                        blurRadius: 32,
+                      ),
+                    ],
                   ),
                   SizedBox(height: 20),
                   Text(
@@ -112,7 +135,7 @@ class _SplashScreenState extends State<SplashScreen>
                     "Where Cricket Meets Intelligence",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: const Color(0xE6FFFFFF),
                       fontSize: 19,
                       letterSpacing: 1.1,
                       fontWeight: FontWeight.w900,

@@ -19,7 +19,6 @@ class AnalyseYourselfScreen extends StatefulWidget {
 }
 
 class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
-
   File? leftVideo;
   File? rightVideo;
 
@@ -113,17 +112,11 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
           ),
           title: const Text(
             "🚀 Analyse Limit Reached",
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: const Text(
             "You've used all your Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
-            style: TextStyle(
-              color: Colors.white70,
-              height: 1.5,
-            ),
+            style: TextStyle(color: Colors.white70, height: 1.5),
           ),
           actions: [
             TextButton(
@@ -174,8 +167,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
     _factTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (!mounted) return;
       setState(() {
-        _currentFactIndex =
-            (_currentFactIndex + 1) % cricketFacts.length;
+        _currentFactIndex = (_currentFactIndex + 1) % cricketFacts.length;
       });
     });
 
@@ -204,9 +196,17 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
     // Canonical Authorization header
     request.headers["Authorization"] = "Bearer $idToken";
+    if (PremiumService.isElite) {
+      request.headers["X-Priority"] = "elite";
+      request.headers["X-Speed"] = "2x";
+    }
 
-    request.files.add(await http.MultipartFile.fromPath("left", leftVideo!.path));
-    request.files.add(await http.MultipartFile.fromPath("right", rightVideo!.path));
+    request.files.add(
+      await http.MultipartFile.fromPath("left", leftVideo!.path),
+    );
+    request.files.add(
+      await http.MultipartFile.fromPath("right", rightVideo!.path),
+    );
 
     try {
       final response = await request.send();
@@ -230,6 +230,12 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         debugPrint("🔥 HIVE XP UPDATED (COMPARE) → $newXp");
 
         await PremiumService.consumeCompare();
+        try {
+          final usage = await PremiumService.fetchMonthlyUsage();
+          await _maybeShowCompareLimitReached(usage.swingUsed);
+        } catch (e) {
+          debugPrint("USAGE TRACK ERROR (COMPARE) => $e");
+        }
       } else if (response.statusCode == 401) {
         setState(() {
           diffResult = "Session expired. Please log in again.";
@@ -239,7 +245,8 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
           final data = jsonDecode(body);
           final detail = data["detail"]?.toString() ?? "";
 
-          if (detail == "COMPARE_LIMIT_REACHED" || detail == "PREMIUM_EXPIRED") {
+          if (detail == "COMPARE_LIMIT_REACHED" ||
+              detail == "PREMIUM_EXPIRED") {
             if (!mounted) return;
 
             await showDialog(
@@ -271,7 +278,8 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
             await Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => const PremiumScreen(entrySource: "compare_limit"),
+                builder: (_) =>
+                    const PremiumScreen(entrySource: "compare_limit"),
               ),
             );
             return;
@@ -292,13 +300,67 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       setState(() {
         diffResult = "Compare failed. Connection error: $e";
       });
-    // XP block must not be inside catch
+      // XP block must not be inside catch
     } finally {
       _factTimer?.cancel();
       setState(() {
         comparing = false;
       });
     }
+  }
+
+  Future<void> _maybeShowCompareLimitReached(int current) async {
+    if (!mounted) return;
+    final limit = PremiumService.compareLimit;
+    if (!PremiumService.isPremium || limit <= 0) return;
+    if (current < limit || (current - 1) >= limit) return;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF020617),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          "Analyse Limit Reached",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          "You've reached your monthly Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
+          style: TextStyle(color: Colors.white70, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Later", style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF38BDF8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const PremiumScreen(entrySource: "compare_limit"),
+                ),
+              );
+            },
+            child: const Text(
+              "Upgrade Now",
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget safeVideo(VideoPlayerController controller) {
@@ -373,11 +435,17 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF38BDF8).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF38BDF8), width: 1),
+                      border: Border.all(
+                        color: const Color(0xFF38BDF8),
+                        width: 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: const Color(0xFF38BDF8).withOpacity(0.6),
@@ -407,7 +475,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: canCompare ? const Color(0xFF38BDF8) : Colors.white24,
+                      color: canCompare
+                          ? const Color(0xFF38BDF8)
+                          : Colors.white24,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
@@ -497,7 +567,10 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF0F172A).withOpacity(0.8),
                     borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: const Color(0xFF38BDF8), width: 1),
+                    border: Border.all(
+                      color: const Color(0xFF38BDF8),
+                      width: 1,
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: const Color(0xFF38BDF8).withOpacity(0.3),
@@ -536,10 +609,10 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   }
 
   Widget videoCard({required bool isLeft}) {
-    final VideoPlayerController? controller =
-        isLeft ? leftController : rightController;
-    final bool hasVideo =
-        controller != null && controller.value.isInitialized;
+    final VideoPlayerController? controller = isLeft
+        ? leftController
+        : rightController;
+    final bool hasVideo = controller != null && controller.value.isInitialized;
 
     return Container(
       decoration: BoxDecoration(
@@ -562,16 +635,16 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
                         children: [
                           Stack(
                             fit: StackFit.expand,
-                            children: [
-                              VideoPlayer(controller),
-                            ],
+                            children: [VideoPlayer(controller)],
                           ),
                           Positioned(
                             top: 8,
                             right: 8,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.black54,
                                 borderRadius: BorderRadius.circular(12),
@@ -628,5 +701,4 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       ),
     );
   }
-
 }

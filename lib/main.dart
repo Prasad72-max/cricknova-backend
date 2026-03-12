@@ -61,12 +61,13 @@ class _MyAppState extends State<MyApp> {
         _premiumRestoreCalled = true;
         await PremiumService.restoreOnLaunch();
       } else {
-        debugPrint("🛑 Premium restore already executed. Skipping duplicate call.");
+        debugPrint(
+          "🛑 Premium restore already executed. Skipping duplicate call.",
+        );
       }
     });
     _initAppLinks();
   }
-
 
   Future<void> _initAppLinks() async {
     _appLinks = AppLinks();

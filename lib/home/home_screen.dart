@@ -1,11 +1,10 @@
-import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
+import '../premium/elite_status_screen.dart';
 import '../upload/upload_screen.dart';
 import '../compare/analyse_yourself_screen.dart';
 import '../premium/premium_expired_screen.dart';
@@ -33,7 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() {});
   }
-
 
   @override
   void initState() {
@@ -72,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() {});
   }
+
   void _checkExpiryPopup() {
     if (!mounted) return;
 
@@ -82,11 +81,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const PremiumExpiredScreen(),
-          ),
-        );
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PremiumExpiredScreen()));
       });
     }
   }
@@ -112,6 +109,24 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _openEliteStatusScreen() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 650),
+        reverseTransitionDuration: const Duration(milliseconds: 450),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            EliteStatusScreen(userName: widget.userName),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(opacity: curved, child: child);
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,7 +148,9 @@ class _HomeScreenState extends State<HomeScreen> {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: kBottomNavigationBarHeight + 24),
+          padding: const EdgeInsets.only(
+            bottom: kBottomNavigationBarHeight + 24,
+          ),
           children: [
             // HEADER
             Container(
@@ -149,7 +166,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(28),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Color(0x66000000),
@@ -179,24 +198,35 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  Column(
+                  Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "Welcome back, ${widget.userName} ",
-                        style: GoogleFonts.poppins(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "Ready for today’s cricket analysis?",
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.white.withOpacity(0.6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Welcome back, ${widget.userName} ",
+                              style: GoogleFonts.poppins(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              "Ready for today’s cricket analysis?",
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.white.withOpacity(0.6),
+                              ),
+                            ),
+                            if (PremiumService.isPremium) ...[
+                              const SizedBox(height: 14),
+                              _eliteNameBadge(),
+                            ],
+                          ],
                         ),
                       ),
                     ],
@@ -206,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
 
             const SizedBox(height: 25),
-            _premiumBadge(),
+            // Badge now appears next to the user's name for premium users.
 
             // ACTION TABS
             Padding(
@@ -219,9 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: Icons.upload_file_outlined,
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const UploadScreen(),
-                        ),
+                        MaterialPageRoute(builder: (_) => const UploadScreen()),
                       );
                     },
                   ),
@@ -233,7 +261,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     onTap: () {
                       if (!PremiumService.isLoaded) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Checking premium status...")),
+                          const SnackBar(
+                            content: Text("Checking premium status..."),
+                          ),
                         );
                         return;
                       }
@@ -241,7 +271,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (!PremiumService.isPremium) {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => const PremiumScreen(entrySource: "analyse"),
+                            builder: (_) =>
+                                const PremiumScreen(entrySource: "analyse"),
                           ),
                         );
                         return;
@@ -257,7 +288,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-
 
             const SizedBox(height: 50),
 
@@ -304,7 +334,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: GoogleFonts.poppins(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: PremiumService.isPremium ? Colors.green : Colors.grey,
+                                color: PremiumService.isPremium
+                                    ? Colors.green
+                                    : Colors.grey,
                               ),
                             ),
                           ],
@@ -363,10 +395,7 @@ class _HomeScreenState extends State<HomeScreen> {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.06),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.15),
-              width: 1,
-            ),
+            border: Border.all(color: Colors.white.withOpacity(0.15), width: 1),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x22000000),
@@ -435,11 +464,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                iconData,
-                size: 18,
-                color: Colors.white70,
-              ),
+              Icon(iconData, size: 18, color: Colors.white70),
               const SizedBox(width: 10),
               Text(
                 label,
@@ -479,46 +504,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _premiumBadge() {
-    if (!PremiumService.isPremium) return const SizedBox.shrink();
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(left: 20, top: 4, bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFFD700), Color(0xFFFFA000)],
-          ),
-          borderRadius: BorderRadius.circular(50),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.star_rounded, color: Colors.black, size: 16),
-            SizedBox(width: 6),
-            Text(
-              "ELITE USER",
-              style: TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  Widget _eliteNameBadge() {
+    return EliteStatusHeroBadge(onTap: _openEliteStatusScreen);
   }
+
   @override
   void dispose() {
     PremiumService.premiumNotifier.removeListener(_onPremiumChanged);

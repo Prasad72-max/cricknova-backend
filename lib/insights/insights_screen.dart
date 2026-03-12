@@ -11,7 +11,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'package:confetti/confetti.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'session_heatmap_screen.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -25,8 +24,6 @@ class _InsightsScreenState extends State<InsightsScreen>
   List<double> speedHistory = [];
   int currentSessionIndex = 0;
   List<List<double>> sessions = [];
-  List<Map<String, dynamic>> heatmapSessions = [];
-  List<String> sessionDocIds = [];
   String userName = "Player";
   String? _currentUid;
   StreamSubscription<User?>? _authSub;
@@ -52,9 +49,8 @@ class _InsightsScreenState extends State<InsightsScreen>
       if (user == null) {
         // User logged out → clear UI safely
         _currentUid = null;
-        speedHistory.clear();
-        sessions.clear();
-        heatmapSessions.clear();
+        speedHistory = <double>[];
+        sessions = <List<double>>[];
         currentSessionIndex = 0;
         if (mounted) setState(() {});
         return;
@@ -82,35 +78,9 @@ class _InsightsScreenState extends State<InsightsScreen>
 
   Future<void> _loadSpeedHistory() async {
     if (!Hive.isBoxOpen('speedBox')) return;
-    sessions.clear();
-    heatmapSessions.clear();
-    speedHistory.clear();
+    sessions = <List<double>>[];
+    speedHistory = <double>[];
     currentSessionIndex = 0;
-
-    final rawHeatmapSessions = _speedBox.get(
-      'sessionHeatmaps_${_currentUid ?? "guest"}',
-    );
-
-    if (rawHeatmapSessions is List && rawHeatmapSessions.isNotEmpty) {
-      for (final session in rawHeatmapSessions) {
-        if (session is! Map) continue;
-        heatmapSessions.add(Map<String, dynamic>.from(session));
-      }
-
-      sessions = heatmapSessions
-          .map((session) => _sessionSpeedsFromPoints(_sessionPoints(session)))
-          .toList(growable: false);
-
-      if (heatmapSessions.isNotEmpty) {
-        currentSessionIndex = heatmapSessions.length - 1;
-        speedHistory = currentSessionIndex < sessions.length
-            ? sessions[currentSessionIndex]
-            : <double>[];
-      }
-
-      if (mounted) setState(() {});
-      return;
-    }
 
     final storedSpeeds =
         _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
@@ -120,7 +90,7 @@ class _InsightsScreenState extends State<InsightsScreen>
           .map((e) => (e as num).toDouble())
           .toList();
 
-      sessions.clear();
+      sessions = <List<double>>[];
 
       for (int i = 0; i < flatSpeeds.length; i += 6) {
         final end = (i + 6 <= flatSpeeds.length) ? i + 6 : flatSpeeds.length;
@@ -138,10 +108,8 @@ class _InsightsScreenState extends State<InsightsScreen>
 
   Future<void> _clearAllSessions() async {
     await _speedBox.delete('allSpeeds_${_currentUid ?? "guest"}');
-    await _speedBox.delete('sessionHeatmaps_${_currentUid ?? "guest"}');
-    sessions.clear();
-    heatmapSessions.clear();
-    speedHistory.clear();
+    sessions = <List<double>>[];
+    speedHistory = <double>[];
     currentSessionIndex = 0;
 
     if (mounted) setState(() {});
@@ -149,38 +117,6 @@ class _InsightsScreenState extends State<InsightsScreen>
 
   Future<void> _deleteCurrentSession() async {
     if (_sessionCount == 0) return;
-
-    if (heatmapSessions.isNotEmpty) {
-      if (currentSessionIndex >= heatmapSessions.length) return;
-
-      heatmapSessions.removeAt(currentSessionIndex);
-      await _speedBox.put(
-        'sessionHeatmaps_${_currentUid ?? "guest"}',
-        heatmapSessions,
-      );
-
-      sessions = heatmapSessions
-          .map((session) => _sessionSpeedsFromPoints(_sessionPoints(session)))
-          .toList(growable: false);
-
-      final rebuiltFlat = sessions.expand((e) => e).toList();
-      await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', rebuiltFlat);
-
-      if (_sessionCount > 0) {
-        if (currentSessionIndex >= _sessionCount) {
-          currentSessionIndex = _sessionCount - 1;
-        }
-        speedHistory = currentSessionIndex < sessions.length
-            ? sessions[currentSessionIndex]
-            : <double>[];
-      } else {
-        currentSessionIndex = 0;
-        speedHistory.clear();
-      }
-
-      if (mounted) setState(() {});
-      return;
-    }
 
     sessions.removeAt(currentSessionIndex);
 
@@ -195,7 +131,7 @@ class _InsightsScreenState extends State<InsightsScreen>
       speedHistory = sessions[currentSessionIndex];
     } else {
       currentSessionIndex = 0;
-      speedHistory.clear();
+      speedHistory = <double>[];
     }
 
     if (mounted) setState(() {});
@@ -217,7 +153,7 @@ class _InsightsScreenState extends State<InsightsScreen>
     await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', flatSpeeds);
 
     // Rebuild sessions
-    sessions.clear();
+    sessions = <List<double>>[];
 
     for (int i = 0; i < flatSpeeds.length; i += 6) {
       final end = (i + 6 <= flatSpeeds.length) ? i + 6 : flatSpeeds.length;
@@ -230,39 +166,7 @@ class _InsightsScreenState extends State<InsightsScreen>
     if (mounted) setState(() {});
   }
 
-  int get _sessionCount =>
-      heatmapSessions.isNotEmpty ? heatmapSessions.length : sessions.length;
-
-  List<Map<String, dynamic>> get _currentHeatmapPoints {
-    if (currentSessionIndex < 0 ||
-        currentSessionIndex >= heatmapSessions.length) {
-      return const [];
-    }
-    return _sessionPoints(heatmapSessions[currentSessionIndex]);
-  }
-
-  List<Map<String, dynamic>> _sessionPoints(Map<String, dynamic> session) {
-    final points = <Map<String, dynamic>>[];
-    final rawPoints = session["points"];
-    if (rawPoints is List) {
-      for (final point in rawPoints) {
-        if (point is! Map) continue;
-        points.add(Map<String, dynamic>.from(point));
-      }
-    }
-    return points;
-  }
-
-  List<double> _sessionSpeedsFromPoints(List<Map<String, dynamic>> points) {
-    final speeds = <double>[];
-    for (final point in points) {
-      final speedRaw = point["speed"];
-      if (speedRaw is! num) continue;
-      final speed = speedRaw.toDouble();
-      if (speed > 0) speeds.add(speed);
-    }
-    return speeds;
-  }
+  int get _sessionCount => sessions.length;
 
   @override
   void dispose() {
@@ -293,7 +197,6 @@ class _InsightsScreenState extends State<InsightsScreen>
   @override
   Widget build(BuildContext context) {
     final sessionCount = _sessionCount;
-    final currentHeatmapPoints = _currentHeatmapPoints;
 
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
@@ -541,76 +444,6 @@ class _InsightsScreenState extends State<InsightsScreen>
               ),
 
               const SizedBox(height: 20),
-
-              ElevatedButton.icon(
-                onPressed: currentHeatmapPoints.isEmpty
-                    ? null
-                    : () {
-                        Navigator.of(context).push(
-                          PageRouteBuilder(
-                            transitionDuration: const Duration(
-                              milliseconds: 420,
-                            ),
-                            reverseTransitionDuration: const Duration(
-                              milliseconds: 280,
-                            ),
-                            pageBuilder:
-                                (context, animation, secondaryAnimation) {
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: SessionHeatmapScreen(
-                                      sessionId: currentSessionIndex + 1,
-                                      points: currentHeatmapPoints,
-                                    ),
-                                  );
-                                },
-                            transitionsBuilder:
-                                (
-                                  context,
-                                  animation,
-                                  secondaryAnimation,
-                                  child,
-                                ) {
-                                  final curved = CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeOutCubic,
-                                  );
-                                  return SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0.0, 0.06),
-                                      end: Offset.zero,
-                                    ).animate(curved),
-                                    child: FadeTransition(
-                                      opacity: curved,
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                          ),
-                        );
-                      },
-                icon: const Text("🎯", style: TextStyle(fontSize: 18)),
-                label: const Text("VIEW SESSION HEATMAP"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0EA5E9),
-                  foregroundColor: const Color(0xFF020617),
-                  disabledBackgroundColor: const Color(0xFF1E293B),
-                  disabledForegroundColor: Colors.white38,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-              ),
-
-              if (currentHeatmapPoints.isEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  "Heatmap appears automatically once bounce points are detected for this session.",
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
 
               ElevatedButton.icon(
                 onPressed: speedHistory.isEmpty
