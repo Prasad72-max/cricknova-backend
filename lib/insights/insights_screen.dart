@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
-import 'package:share_plus/share_plus.dart';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import 'package:confetti/confetti.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'performance_certificate.dart';
+import 'certificate_preview_screen.dart';
+import 'dart:math' as math;
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -27,9 +24,44 @@ class _InsightsScreenState extends State<InsightsScreen>
   String userName = "Player";
   String? _currentUid;
   StreamSubscription<User?>? _authSub;
-  final GlobalKey _certificateKey = GlobalKey();
   late ConfettiController _confettiController;
   late Box _speedBox;
+  Box? _statsBox;
+  bool _loadingSpeedHistory = false;
+  DateTime? _lastSpeedLoadAt;
+
+  String get _storageUid =>
+      FirebaseAuth.instance.currentUser?.uid ?? (_currentUid ?? "guest");
+
+  Future<Box> _getStatsBox(String uid) async {
+    final boxName = "local_stats_$uid";
+    if (_statsBox != null && _statsBox!.name == boxName) {
+      return _statsBox!;
+    }
+    _statsBox = await Hive.openBox(boxName);
+    return _statsBox!;
+  }
+
+  Future<void> _loadCertificateName() async {
+    final uid = _storageUid;
+    _currentUid = uid;
+    String resolved = "Player";
+    try {
+      final box = await _getStatsBox(uid);
+      final name = (box.get("profileName") as String?)?.trim();
+      if (name != null && name.isNotEmpty) {
+        resolved = name;
+      } else {
+        final email = FirebaseAuth.instance.currentUser?.email?.trim();
+        if (email != null && email.isNotEmpty) resolved = email;
+      }
+    } catch (_) {
+      final email = FirebaseAuth.instance.currentUser?.email?.trim();
+      if (email != null && email.isNotEmpty) resolved = email;
+    }
+
+    userName = resolved;
+  }
 
   @override
   void initState() {
@@ -77,37 +109,51 @@ class _InsightsScreenState extends State<InsightsScreen>
   }
 
   Future<void> _loadSpeedHistory() async {
-    if (!Hive.isBoxOpen('speedBox')) return;
-    sessions = <List<double>>[];
-    speedHistory = <double>[];
-    currentSessionIndex = 0;
-
-    final storedSpeeds =
-        _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
-
-    if (storedSpeeds != null) {
-      final List<double> flatSpeeds = storedSpeeds
-          .map((e) => (e as num).toDouble())
-          .toList();
-
-      sessions = <List<double>>[];
-
-      for (int i = 0; i < flatSpeeds.length; i += 6) {
-        final end = (i + 6 <= flatSpeeds.length) ? i + 6 : flatSpeeds.length;
-        sessions.add(flatSpeeds.sublist(i, end));
-      }
-
-      if (sessions.isNotEmpty) {
-        currentSessionIndex = sessions.length - 1;
-        speedHistory = sessions[currentSessionIndex];
-      }
+    if (_loadingSpeedHistory) return;
+    final now = DateTime.now();
+    if (_lastSpeedLoadAt != null &&
+        now.difference(_lastSpeedLoadAt!).inMilliseconds < 800) {
+      return;
     }
+    _loadingSpeedHistory = true;
+    try {
+      if (!Hive.isBoxOpen('speedBox')) return;
+      sessions = <List<double>>[];
+      speedHistory = <double>[];
+      currentSessionIndex = 0;
 
-    if (mounted) setState(() {});
+      final uid = _storageUid;
+      _currentUid = uid;
+      final storedSpeeds = _speedBox.get('allSpeeds_$uid') as List?;
+
+      if (storedSpeeds != null) {
+        final List<double> flatSpeeds = storedSpeeds
+            .map((e) => (e as num).toDouble())
+            .toList();
+
+        sessions = <List<double>>[];
+
+        for (int i = 0; i < flatSpeeds.length; i += 6) {
+          final end = (i + 6 <= flatSpeeds.length) ? i + 6 : flatSpeeds.length;
+          sessions.add(flatSpeeds.sublist(i, end));
+        }
+
+        if (sessions.isNotEmpty) {
+          currentSessionIndex = sessions.length - 1;
+          speedHistory = sessions[currentSessionIndex];
+        }
+      }
+
+      await _loadCertificateName();
+      _lastSpeedLoadAt = DateTime.now();
+      if (mounted) setState(() {});
+    } finally {
+      _loadingSpeedHistory = false;
+    }
   }
 
   Future<void> _clearAllSessions() async {
-    await _speedBox.delete('allSpeeds_${_currentUid ?? "guest"}');
+    await _speedBox.delete('allSpeeds_${_storageUid}');
     sessions = <List<double>>[];
     speedHistory = <double>[];
     currentSessionIndex = 0;
@@ -122,7 +168,7 @@ class _InsightsScreenState extends State<InsightsScreen>
 
     // rebuild flat list after deletion
     final List<double> rebuiltFlat = sessions.expand((e) => e).toList();
-    await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', rebuiltFlat);
+    await _speedBox.put('allSpeeds_${_storageUid}', rebuiltFlat);
 
     if (sessions.isNotEmpty) {
       if (currentSessionIndex >= sessions.length) {
@@ -140,8 +186,7 @@ class _InsightsScreenState extends State<InsightsScreen>
   Future<void> addNewSession(List<double> newSpeeds) async {
     if (newSpeeds.isEmpty) return;
 
-    final storedSpeeds =
-        _speedBox.get('allSpeeds_${_currentUid ?? "guest"}') as List?;
+    final storedSpeeds = _speedBox.get('allSpeeds_${_storageUid}') as List?;
     List<double> flatSpeeds = [];
 
     if (storedSpeeds != null) {
@@ -150,7 +195,7 @@ class _InsightsScreenState extends State<InsightsScreen>
 
     flatSpeeds.addAll(newSpeeds);
 
-    await _speedBox.put('allSpeeds_${_currentUid ?? "guest"}', flatSpeeds);
+    await _speedBox.put('allSpeeds_${_storageUid}', flatSpeeds);
 
     // Rebuild sessions
     sessions = <List<double>>[];
@@ -194,9 +239,31 @@ class _InsightsScreenState extends State<InsightsScreen>
     }
   }
 
+  List<double> _deriveAccuracyScores(List<double> speeds) {
+    if (speeds.isEmpty) return <double>[];
+    final mean = speeds.reduce((a, b) => a + b) / speeds.length;
+    final deltas = speeds.map((s) => (s - mean).abs()).toList();
+    final maxDelta = deltas.reduce(math.max);
+    if (maxDelta == 0) {
+      return List<double>.filled(speeds.length, 95);
+    }
+    return deltas.map((d) {
+      final score = 100 - ((d / maxDelta) * 25);
+      return score.clamp(60, 100).toDouble();
+    }).toList();
+  }
+
+  double _avgAccuracyPercent(List<double> speeds) {
+    final scores = _deriveAccuracyScores(speeds);
+    if (scores.isEmpty) return 0;
+    return scores.reduce((a, b) => a + b) / scores.length;
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionCount = _sessionCount;
+    final accuracyScores = _deriveAccuracyScores(speedHistory);
+    final avgAccuracy = _avgAccuracyPercent(speedHistory);
 
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
@@ -256,6 +323,48 @@ class _InsightsScreenState extends State<InsightsScreen>
               ),
 
               const SizedBox(height: 14),
+
+              // ===== ACCURACY (Derived from speed consistency) =====
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.verified_rounded,
+                      color: Color(0xFFFFD700),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Accuracy (derived): ${avgAccuracy == 0 ? '--' : '${avgAccuracy.toStringAsFixed(0)}%'}",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      "Consistency",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
               const SizedBox(height: 25),
 
@@ -437,10 +546,31 @@ class _InsightsScreenState extends State<InsightsScreen>
                           ),
                         ),
                       )
-                    : CustomPaint(
-                        painter: SpeedChartPainter(speedHistory),
-                        child: const SizedBox.expand(),
-                      ),
+                    : InteractiveSpeedChart(speeds: speedHistory),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ===== ACCURACY GRAPH =====
+              Container(
+                height: 260,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF1F2937)),
+                ),
+                child: accuracyScores.isEmpty
+                    ? Center(
+                        child: Text(
+                          "No accuracy data yet.",
+                          style: GoogleFonts.poppins(
+                            color: Colors.white54,
+                            fontSize: 14,
+                          ),
+                        ),
+                      )
+                    : InteractiveAccuracyChart(accuracy: accuracyScores),
               ),
 
               const SizedBox(height: 20),
@@ -449,353 +579,62 @@ class _InsightsScreenState extends State<InsightsScreen>
                 onPressed: speedHistory.isEmpty
                     ? null
                     : () async {
-                        // Show analysing dialog
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) => Dialog(
-                            backgroundColor: const Color(0xFF0F172A),
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const CircularProgressIndicator(
-                                    color: Color(0xFF00FF88),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Text(
-                                    "Generating your official performance certificate...",
-                                    style: GoogleFonts.poppins(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-
-                        // Artificial 7-second delay
-                        await Future.delayed(const Duration(seconds: 4));
-
-                        // Close analysing dialog
-                        Navigator.pop(context);
-                        _confettiController.play();
-
                         final currentSpeeds = List<double>.from(speedHistory);
                         final double top = currentSpeeds.isEmpty
                             ? 0.0
                             : currentSpeeds
                                   .reduce((a, b) => a > b ? a : b)
                                   .toDouble();
-                        final double lowest = currentSpeeds.isEmpty
-                            ? 0.0
-                            : currentSpeeds
-                                  .reduce((a, b) => a < b ? a : b)
-                                  .toDouble();
                         final double avg = currentSpeeds.isEmpty
                             ? 0.0
                             : (currentSpeeds.reduce((a, b) => a + b) /
                                       currentSpeeds.length)
                                   .toDouble();
+                        // Use the same accuracy used in Insights tab (not upload/video).
+                        final accuracyPercent = _avgAccuracyPercent(
+                          currentSpeeds,
+                        );
 
-                        // Show actual certificate dialog (existing UI continues below unchanged)
-                        showDialog(
-                          context: context,
-                          builder: (_) => Dialog(
-                            backgroundColor: Colors.transparent,
-                            child: RepaintBoundary(
-                              key: _certificateKey,
-                              child: Container(
-                                padding: const EdgeInsets.all(24),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(20),
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFF0F172A),
-                                      Color(0xFF020617),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                  border: Border.all(
-                                    color: top >= 100
-                                        ? const Color(0xFFFFD700) // Gold
-                                        : top >= 80
-                                        ? const Color(0xFFC0C0C0) // Silver
-                                        : const Color(0xFF00FF88),
-                                    width: 3,
-                                  ),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Align(
-                                      alignment: Alignment.topCenter,
-                                      child: ConfettiWidget(
-                                        confettiController: _confettiController,
-                                        blastDirectionality:
-                                            BlastDirectionality.explosive,
-                                        shouldLoop: false,
-                                        numberOfParticles: 40,
-                                        maxBlastForce: 25,
-                                        minBlastForce: 10,
-                                        emissionFrequency: 0.05,
-                                        gravity: 0.3,
-                                      ),
-                                    ),
-                                    // ===== Background Cricket Pattern =====
-                                    Positioned.fill(
-                                      child: Opacity(
-                                        opacity: 0.05,
-                                        child: Align(
-                                          alignment: Alignment.center,
-                                          child: Icon(
-                                            Icons.sports_cricket,
-                                            size: 220,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned.fill(
-                                      child: IgnorePointer(
-                                        child: Opacity(
-                                          opacity: 0.04,
-                                          child: Center(
-                                            child: Transform.rotate(
-                                              angle: -0.4,
-                                              child: Text(
-                                                "CRICKNOVA",
-                                                style: GoogleFonts.poppins(
-                                                  fontSize: 80,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.white,
-                                                  letterSpacing: 8,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          "CRICKNOVA PERFORMANCE CERTIFICATE",
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.poppins(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          userName,
-                                          style: GoogleFonts.poppins(
-                                            color: const Color(0xFFFFD700),
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        Text(
-                                          "Top Speed: ${top.toStringAsFixed(1)} km/h",
-                                          style: GoogleFonts.poppins(
-                                            color: const Color(0xFF00FF88),
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          "Average Speed: ${avg.toStringAsFixed(1)} km/h",
-                                          style: GoogleFonts.poppins(
-                                            color: const Color(0xFF38BDF8),
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          "Lowest Speed: ${lowest.toStringAsFixed(1)} km/h",
-                                          style: GoogleFonts.poppins(
-                                            color: const Color(0xFFFF4D4D),
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 20),
-                                        const Divider(color: Colors.white24),
-                                        const SizedBox(height: 12),
-
-                                        Text(
-                                          "This certificate is more than just a digital file. It is a testament to every drop of sweat you’ve shed on the pitch and every ball you’ve bowled with passion.\n\nAt CrickNova, our mission is to turn your hard work into elite performance. I am personally signing this to recognize your dedication to the game.\n\nWear this achievement with pride. Your journey to becoming a legend has just begun.",
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.poppins(
-                                            color: Colors.white70,
-                                            fontSize: 12,
-                                            height: 1.6,
-                                          ),
-                                        ),
-
-                                        const SizedBox(height: 28),
-
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.end,
-                                                children: [
-                                                  Text(
-                                                    "Prasad D. Dukare",
-                                                    style: GoogleFonts.poppins(
-                                                      color: Colors.white,
-                                                      fontSize: 16,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    "Founder of CrickNova-AI",
-                                                    style: GoogleFonts.poppins(
-                                                      color: Colors.white54,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-
-                                        const SizedBox(height: 30),
-
-                                        Divider(
-                                          color: Colors.white24,
-                                          thickness: 1,
-                                        ),
-
-                                        const SizedBox(height: 12),
-
-                                        Text(
-                                          "© CrickNova • Where Cricket Meets Intelligence",
-                                          textAlign: TextAlign.center,
-                                          style: GoogleFonts.poppins(
-                                            color: Colors.white38,
-                                            fontSize: 10,
-                                            letterSpacing: 1,
-                                          ),
-                                        ),
-
-                                        const SizedBox(height: 20),
-
-                                        // --- Begin Slogan & Link Block ---
-                                        // --- End Slogan & Link Block ---
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            ElevatedButton(
-                                              onPressed: () async {
-                                                try {
-                                                  RenderRepaintBoundary
-                                                  boundary =
-                                                      _certificateKey
-                                                              .currentContext!
-                                                              .findRenderObject()
-                                                          as RenderRepaintBoundary;
-
-                                                  ui.Image image =
-                                                      await boundary.toImage(
-                                                        pixelRatio: 3.0,
-                                                      );
-                                                  ByteData? byteData =
-                                                      await image.toByteData(
-                                                        format: ui
-                                                            .ImageByteFormat
-                                                            .png,
-                                                      );
-
-                                                  if (byteData == null) return;
-
-                                                  Uint8List pngBytes = byteData
-                                                      .buffer
-                                                      .asUint8List();
-
-                                                  final tempDir =
-                                                      await getTemporaryDirectory();
-                                                  final file = await File(
-                                                    '${tempDir.path}/cricknova_certificate.png',
-                                                  ).create();
-
-                                                  await file.writeAsBytes(
-                                                    pngBytes,
-                                                  );
-
-                                                  await Share.shareXFiles(
-                                                    [XFile(file.path)],
-                                                    text:
-                                                        '🔥 My Bowling Performance by CrickNova AI\nTop: ${top.toStringAsFixed(1)} km/h\nAverage: ${avg.toStringAsFixed(1)} km/h\n\n🌐 Visit: https://cricknova-5f94f.web.app',
-                                                  );
-
-                                                  // Open website externally after share
-                                                  final Uri url = Uri.parse(
-                                                    "https://cricknova-5f94f.web.app",
-                                                  );
-                                                  if (await canLaunchUrl(url)) {
-                                                    await launchUrl(
-                                                      url,
-                                                      mode: LaunchMode
-                                                          .externalApplication,
-                                                    );
-                                                  }
-                                                } catch (e) {
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        "Failed to share certificate",
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(
-                                                  0xFFFFA500,
-                                                ), // Neon Orange for stronger share urge
-                                                foregroundColor: Colors.black,
-                                              ),
-                                              child: const Text("Share"),
-                                            ),
-                                            ElevatedButton(
-                                              onPressed: () {
-                                                Navigator.pop(context);
-                                              },
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: const Color(
-                                                  0xFF1F2937,
-                                                ),
-                                                foregroundColor: Colors.white,
-                                              ),
-                                              child: const Text("Close"),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                        // Eligibility gating:
+                        // - Speed < 90 KMPH OR Accuracy < 72% => cannot generate certificate.
+                        if (top < 90 || accuracyPercent < 72) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: const Color(0xFF111827),
+                              content: Text(
+                                "Certificate unlocks at 90+ KMPH and 72%+ accuracy. "
+                                "Your session: ${top.toStringAsFixed(0)} KMPH, ${accuracyPercent.toStringAsFixed(0)}%.",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 13,
                                 ),
                               ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        _confettiController.play();
+                        final sessionXp = currentSpeeds.length * 12;
+                        final sessionId =
+                            "${DateTime.now().millisecondsSinceEpoch}";
+                        const appLink = "https://cricknova-5f94f.web.app";
+                        final serial = buildCertificateSerial(sessionId);
+
+                        if (!mounted) return;
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => CertificatePreviewScreen(
+                              playerName: userName,
+                              topSpeed: top,
+                              avgSpeed: avg,
+                              accuracyPercent: accuracyPercent,
+                              sessionXp: sessionXp,
+                              speedSeries: currentSpeeds,
+                              sessionId: sessionId,
+                              appLink: appLink,
+                              certificateSerial: serial,
                             ),
                           ),
                         );
@@ -838,10 +677,223 @@ class _InsightsScreenState extends State<InsightsScreen>
 
 // ===== SAME CHART AS HOME =====
 
-class SpeedChartPainter extends CustomPainter {
+class InteractiveSpeedChart extends StatefulWidget {
+  const InteractiveSpeedChart({super.key, required this.speeds});
   final List<double> speeds;
 
-  SpeedChartPainter(this.speeds);
+  @override
+  State<InteractiveSpeedChart> createState() => _InteractiveSpeedChartState();
+}
+
+class _InteractiveSpeedChartState extends State<InteractiveSpeedChart> {
+  int? _selectedIndex;
+  Timer? _clearTimer;
+
+  void _scheduleClear() {
+    _clearTimer?.cancel();
+    _clearTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      setState(() => _selectedIndex = null);
+    });
+  }
+
+  void _setFromLocal(Offset local, Size size) {
+    if (widget.speeds.isEmpty) return;
+    final usableWidth = size.width - 40;
+    if (usableWidth <= 0) return;
+    final t = ((local.dx - 40) / usableWidth).clamp(0.0, 1.0);
+    final idx = (t * (widget.speeds.length - 1)).round().clamp(
+      0,
+      widget.speeds.length - 1,
+    );
+    if (_selectedIndex != idx) setState(() => _selectedIndex = idx);
+  }
+
+  @override
+  void dispose() {
+    _clearTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) {
+            _setFromLocal(d.localPosition, size);
+            _scheduleClear();
+          },
+          onPanDown: (d) => _setFromLocal(d.localPosition, size),
+          onPanUpdate: (d) => _setFromLocal(d.localPosition, size),
+          onPanEnd: (_) => _scheduleClear(),
+          onPanCancel: _scheduleClear,
+          child: CustomPaint(
+            painter: SpeedChartPainter(
+              widget.speeds,
+              selectedIndex: _selectedIndex,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class InteractiveAccuracyChart extends StatefulWidget {
+  const InteractiveAccuracyChart({super.key, required this.accuracy});
+  final List<double> accuracy;
+
+  @override
+  State<InteractiveAccuracyChart> createState() =>
+      _InteractiveAccuracyChartState();
+}
+
+class _InteractiveAccuracyChartState extends State<InteractiveAccuracyChart> {
+  int? _selectedIndex;
+  Timer? _clearTimer;
+
+  void _scheduleClear() {
+    _clearTimer?.cancel();
+    _clearTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      setState(() => _selectedIndex = null);
+    });
+  }
+
+  void _setFromLocal(Offset local, Size size) {
+    if (widget.accuracy.isEmpty) return;
+    final usableWidth = size.width - 40;
+    if (usableWidth <= 0) return;
+    final t = ((local.dx - 40) / usableWidth).clamp(0.0, 1.0);
+    final idx = (t * (widget.accuracy.length - 1)).round().clamp(
+      0,
+      widget.accuracy.length - 1,
+    );
+    if (_selectedIndex != idx) setState(() => _selectedIndex = idx);
+  }
+
+  @override
+  void dispose() {
+    _clearTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) {
+            _setFromLocal(d.localPosition, size);
+            _scheduleClear();
+          },
+          onPanDown: (d) => _setFromLocal(d.localPosition, size),
+          onPanUpdate: (d) => _setFromLocal(d.localPosition, size),
+          onPanEnd: (_) => _scheduleClear(),
+          onPanCancel: _scheduleClear,
+          child: CustomPaint(
+            painter: AccuracyChartPainter(
+              widget.accuracy,
+              selectedIndex: _selectedIndex,
+            ),
+            child: const SizedBox.expand(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class SpeedChartPainter extends CustomPainter {
+  final List<double> speeds;
+  final int? selectedIndex;
+
+  SpeedChartPainter(this.speeds, {this.selectedIndex});
+
+  Path _smoothCurve(List<Offset> points) {
+    final path = Path();
+    if (points.isEmpty) return path;
+    if (points.length == 1) {
+      path.addOval(Rect.fromCircle(center: points.first, radius: 1));
+      return path;
+    }
+
+    path.moveTo(points.first.dx, points.first.dy);
+    for (int i = 1; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final mx = (p0.dx + p1.dx) / 2;
+      final my = (p0.dy + p1.dy) / 2;
+      path.quadraticBezierTo(p0.dx, p0.dy, mx, my);
+    }
+    path.quadraticBezierTo(
+      points[points.length - 2].dx,
+      points[points.length - 2].dy,
+      points.last.dx,
+      points.last.dy,
+    );
+    return path;
+  }
+
+  void _paintValuePill({
+    required Canvas canvas,
+    required Size size,
+    required Offset anchor,
+    required String text,
+    required Color bg,
+    required Color fg,
+  }) {
+    final tp = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+      text: TextSpan(
+        text: text,
+        style: TextStyle(color: fg, fontSize: 9.5, fontWeight: FontWeight.w800),
+      ),
+    )..layout();
+
+    const padX = 6.0;
+    const padY = 3.0;
+    final w = tp.width + (padX * 2);
+    final h = tp.height + (padY * 2);
+
+    var left = anchor.dx - (w / 2);
+    left = left.clamp(40.0, size.width - w);
+
+    // Prefer above, fallback below if near top.
+    var top = anchor.dy - h - 8;
+    if (top < 0) top = anchor.dy + 8;
+    top = top.clamp(0.0, size.height - h);
+
+    final r = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, w, h),
+      const Radius.circular(999),
+    );
+
+    canvas.drawRRect(
+      r,
+      Paint()
+        ..color = bg
+        ..style = PaintingStyle.fill,
+    );
+    canvas.drawRRect(
+      r,
+      Paint()
+        ..color = Colors.white.withOpacity(0.10)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    tp.paint(canvas, Offset(left + padX, top + padY));
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -851,17 +903,36 @@ class SpeedChartPainter extends CustomPainter {
     const double maxSpeed = 160;
 
     final axisPaint = Paint()
-      ..color = const Color(0xFF334155)
+      ..color = const Color(0xFF334155).withOpacity(0.55)
       ..strokeWidth = 1;
 
     final linePaint = Paint()
-      ..color = const Color(0xFF00FF88)
       ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF00FF88), Color(0xFF38BDF8)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
-    final dotPaint = Paint()
-      ..color = const Color(0xFF38BDF8)
-      ..style = PaintingStyle.fill;
+    final glowLinePaint = Paint()
+      ..strokeWidth = 10
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = const Color(0xFF00FF88).withOpacity(0.18)
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFF00FF88).withOpacity(0.18),
+          const Color(0xFF00FF88).withOpacity(0.0),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     final textPainter = TextPainter(
       textAlign: TextAlign.right,
@@ -879,7 +950,11 @@ class SpeedChartPainter extends CustomPainter {
 
       textPainter.text = TextSpan(
         text: value.toString(),
-        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+        style: const TextStyle(
+          color: Color(0xFF94A3B8),
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+        ),
       );
       textPainter.layout();
       textPainter.paint(canvas, Offset(0, y - 6));
@@ -889,7 +964,7 @@ class SpeedChartPainter extends CustomPainter {
     final double usableWidth = size.width - 40;
     final double stepX = ballsToShow > 1 ? usableWidth / (ballsToShow - 1) : 0;
 
-    final Path path = Path();
+    final List<Offset> points = <Offset>[];
 
     for (int i = 0; i < ballsToShow; i++) {
       final normalized = ((speeds[i] - minSpeed) / (maxSpeed - minSpeed)).clamp(
@@ -899,47 +974,355 @@ class SpeedChartPainter extends CustomPainter {
 
       final double x = 40 + (stepX * i);
       final double y = size.height - (normalized * size.height);
+      points.add(Offset(x, y));
 
-      if (ballsToShow > 1) {
-        if (i == 0) {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
+      if (selectedIndex == null) {
+        textPainter.text = TextSpan(
+          text: "Ball ${i + 1}",
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(canvas, Offset(x - 15, size.height + 4));
       }
-
-      canvas.drawCircle(Offset(x, y), 5, dotPaint);
-
-      textPainter.text = TextSpan(
-        text: "Ball ${i + 1}",
-        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
-      );
-      textPainter.layout();
-      textPainter.paint(canvas, Offset(x - 15, size.height + 4));
     }
 
     double peakSpeed = speeds.reduce((a, b) => a > b ? a : b);
     int peakIndex = speeds.indexOf(peakSpeed);
 
-    final normalizedPeak = ((peakSpeed - minSpeed) / (maxSpeed - minSpeed))
-        .clamp(0.0, 1.0);
+    // Avoid collisions: the peak point gets a single "Top" pill instead of
+    // drawing both the Top label and the per-dot value pill.
 
-    final double peakX = 40 + (stepX * peakIndex);
-    final double peakY = size.height - (normalizedPeak * size.height);
+    if (points.length > 1) {
+      final curvePath = _smoothCurve(points);
+      final fillPath = Path.from(curvePath)
+        ..lineTo(points.last.dx, size.height)
+        ..lineTo(points.first.dx, size.height)
+        ..close();
 
-    textPainter.text = const TextSpan(
-      text: "🔥 Top",
-      style: TextStyle(
-        color: Color(0xFFFFD700),
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-      ),
+      canvas.drawPath(fillPath, fillPaint);
+      canvas.drawPath(curvePath, glowLinePaint);
+      canvas.drawPath(curvePath, linePaint);
+    }
+
+    for (int i = 0; i < points.length; i++) {
+      final p = points[i];
+      final isSel = selectedIndex == i;
+      final glowDot = Paint()
+        ..color = const Color(0xFF38BDF8).withOpacity(isSel ? 0.32 : 0.20)
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 14 : 10);
+      canvas.drawCircle(p, isSel ? 12 : 10, glowDot);
+      canvas.drawCircle(
+        p,
+        isSel ? 6 : 5,
+        Paint()..color = const Color(0xFF38BDF8),
+      );
+      canvas.drawCircle(
+        p,
+        isSel ? 3 : 2.2,
+        Paint()..color = const Color(0xFF00FF88),
+      );
+    }
+
+    if (selectedIndex != null &&
+        selectedIndex! >= 0 &&
+        selectedIndex! < points.length) {
+      final p = points[selectedIndex!];
+      canvas.drawLine(
+        Offset(p.dx, 0),
+        Offset(p.dx, size.height),
+        Paint()
+          ..color = Colors.white.withOpacity(0.10)
+          ..strokeWidth = 1.2,
+      );
+
+      final hand = Path()
+        ..moveTo(p.dx, p.dy - 18)
+        ..lineTo(p.dx - 7, p.dy - 5)
+        ..lineTo(p.dx + 7, p.dy - 5)
+        ..close();
+      canvas.drawPath(
+        hand,
+        Paint()
+          ..color = const Color(0xFFFFD700).withOpacity(0.85)
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 2),
+      );
+
+      _paintValuePill(
+        canvas: canvas,
+        size: size,
+        anchor: p + const Offset(0, -34),
+        text:
+            "Ball ${selectedIndex! + 1}: ${speeds[selectedIndex!].toStringAsFixed(0)}",
+        bg: const Color(0xFF0B1220).withOpacity(0.90),
+        fg: const Color(0xFF38BDF8),
+      );
+    } else if (peakIndex >= 0 && peakIndex < points.length) {
+      final p = points[peakIndex];
+      _paintValuePill(
+        canvas: canvas,
+        size: size,
+        anchor: p + const Offset(0, -14),
+        text: "Top ${peakSpeed.toStringAsFixed(0)}",
+        bg: const Color(0xFF1F1402).withOpacity(0.86),
+        fg: const Color(0xFFFFD700),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class AccuracyChartPainter extends CustomPainter {
+  final List<double> accuracy;
+  final int? selectedIndex;
+
+  AccuracyChartPainter(this.accuracy, {this.selectedIndex});
+
+  Path _smoothCurve(List<Offset> points) {
+    final path = Path();
+    if (points.isEmpty) return path;
+    if (points.length == 1) {
+      path.addOval(Rect.fromCircle(center: points.first, radius: 1));
+      return path;
+    }
+
+    path.moveTo(points.first.dx, points.first.dy);
+    for (int i = 1; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final mx = (p0.dx + p1.dx) / 2;
+      final my = (p0.dy + p1.dy) / 2;
+      path.quadraticBezierTo(p0.dx, p0.dy, mx, my);
+    }
+    path.quadraticBezierTo(
+      points[points.length - 2].dx,
+      points[points.length - 2].dy,
+      points.last.dx,
+      points.last.dy,
     );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(peakX - 20, peakY - 25));
+    return path;
+  }
 
-    if (speeds.length > 1) {
-      canvas.drawPath(path, linePaint);
+  void _paintValuePill({
+    required Canvas canvas,
+    required Size size,
+    required Offset anchor,
+    required String text,
+    required Color bg,
+    required Color fg,
+  }) {
+    final tp = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+      text: TextSpan(
+        text: text,
+        style: TextStyle(color: fg, fontSize: 9.5, fontWeight: FontWeight.w800),
+      ),
+    )..layout();
+
+    const padX = 6.0;
+    const padY = 3.0;
+    final w = tp.width + (padX * 2);
+    final h = tp.height + (padY * 2);
+
+    var left = anchor.dx - (w / 2);
+    left = left.clamp(40.0, size.width - w);
+
+    var top = anchor.dy - h - 8;
+    if (top < 0) top = anchor.dy + 8;
+    top = top.clamp(0.0, size.height - h);
+
+    final r = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, w, h),
+      const Radius.circular(999),
+    );
+
+    canvas.drawRRect(r, Paint()..color = bg);
+    canvas.drawRRect(
+      r,
+      Paint()
+        ..color = Colors.white.withOpacity(0.10)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    tp.paint(canvas, Offset(left + padX, top + padY));
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (accuracy.isEmpty) return;
+
+    const double minVal = 0;
+    const double maxVal = 100;
+
+    final axisPaint = Paint()
+      ..color = const Color(0xFF334155).withOpacity(0.55)
+      ..strokeWidth = 1;
+
+    final linePaint = Paint()
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFFFD700), Color(0xFF00FF88)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final glowLinePaint = Paint()
+      ..strokeWidth = 10
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = const Color(0xFFFFD700).withOpacity(0.18)
+      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFFFFD700).withOpacity(0.18),
+          const Color(0xFFFFD700).withOpacity(0.0),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final textPainter = TextPainter(
+      textAlign: TextAlign.right,
+      textDirection: TextDirection.ltr,
+    );
+
+    for (int value = 0; value <= 100; value += 20) {
+      final normalized = ((value - minVal) / (maxVal - minVal)).clamp(0.0, 1.0);
+      final double y = size.height - (normalized * size.height);
+      canvas.drawLine(Offset(40, y), Offset(size.width, y), axisPaint);
+
+      textPainter.text = TextSpan(
+        text: "$value%",
+        style: const TextStyle(
+          color: Color(0xFF94A3B8),
+          fontSize: 9.5,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(0, y - 6));
+    }
+
+    final int points = accuracy.length;
+    final double usableWidth = size.width - 40;
+    final double stepX = points > 1 ? usableWidth / (points - 1) : 0;
+
+    final List<Offset> pts = <Offset>[];
+
+    for (int i = 0; i < points; i++) {
+      final normalized = ((accuracy[i] - minVal) / (maxVal - minVal)).clamp(
+        0.0,
+        1.0,
+      );
+      final double x = 40 + (stepX * i);
+      final double y = size.height - (normalized * size.height);
+      pts.add(Offset(x, y));
+
+      if (selectedIndex == null) {
+        textPainter.text = TextSpan(
+          text: "Ball ${i + 1}",
+          style: const TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(canvas, Offset(x - 15, size.height + 4));
+      }
+    }
+
+    if (pts.length > 1) {
+      final curvePath = _smoothCurve(pts);
+      final fillPath = Path.from(curvePath)
+        ..lineTo(pts.last.dx, size.height)
+        ..lineTo(pts.first.dx, size.height)
+        ..close();
+
+      canvas.drawPath(fillPath, fillPaint);
+      canvas.drawPath(curvePath, glowLinePaint);
+      canvas.drawPath(curvePath, linePaint);
+    }
+
+    final bestAcc = accuracy.reduce((a, b) => a > b ? a : b);
+    final bestIndex = accuracy.indexOf(bestAcc);
+
+    for (int i = 0; i < pts.length; i++) {
+      final p = pts[i];
+      final isSel = selectedIndex == i;
+      final glowDot = Paint()
+        ..color = const Color(0xFFFFD700).withOpacity(isSel ? 0.32 : 0.20)
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 14 : 10);
+      canvas.drawCircle(p, isSel ? 12 : 10, glowDot);
+      canvas.drawCircle(
+        p,
+        isSel ? 6 : 5,
+        Paint()..color = const Color(0xFFFFD700),
+      );
+      canvas.drawCircle(
+        p,
+        isSel ? 3 : 2.2,
+        Paint()..color = const Color(0xFF00FF88),
+      );
+    }
+
+    if (selectedIndex != null &&
+        selectedIndex! >= 0 &&
+        selectedIndex! < pts.length) {
+      final p = pts[selectedIndex!];
+      canvas.drawLine(
+        Offset(p.dx, 0),
+        Offset(p.dx, size.height),
+        Paint()
+          ..color = Colors.white.withOpacity(0.10)
+          ..strokeWidth = 1.2,
+      );
+
+      final hand = Path()
+        ..moveTo(p.dx, p.dy - 18)
+        ..lineTo(p.dx - 7, p.dy - 5)
+        ..lineTo(p.dx + 7, p.dy - 5)
+        ..close();
+      canvas.drawPath(
+        hand,
+        Paint()
+          ..color = const Color(0xFFFFD700).withOpacity(0.85)
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 2),
+      );
+
+      _paintValuePill(
+        canvas: canvas,
+        size: size,
+        anchor: p + const Offset(0, -34),
+        text:
+            "Ball ${selectedIndex! + 1}: ${accuracy[selectedIndex!].toStringAsFixed(0)}%",
+        bg: const Color(0xFF0B1220).withOpacity(0.90),
+        fg: const Color(0xFFFFD700),
+      );
+    } else if (bestIndex >= 0 && bestIndex < pts.length) {
+      final p = pts[bestIndex];
+      _paintValuePill(
+        canvas: canvas,
+        size: size,
+        anchor: p + const Offset(0, -14),
+        text: "Best ${bestAcc.toStringAsFixed(0)}%",
+        bg: const Color(0xFF1F1402).withOpacity(0.86),
+        fg: const Color(0xFFFFD700),
+      );
     }
   }
 

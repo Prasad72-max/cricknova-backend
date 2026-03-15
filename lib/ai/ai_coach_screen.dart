@@ -8,7 +8,9 @@ import 'package:provider/provider.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
+import '../services/weekly_stats_service.dart';
 import 'chat_sessions_provider.dart';
+import '../widgets/premium_blur_lock.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? payloadContext;
@@ -21,6 +23,7 @@ class AICoachScreen extends StatefulWidget {
 }
 
 class _AICoachScreenState extends State<AICoachScreen> {
+  static const int _maxChars = 120;
   bool _redirectedToPremium = false;
 
   late Uri uri;
@@ -32,6 +35,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   bool loading = false;
   bool isListening = false;
+  int _charCount = 0;
+  int _lastMessageCount = 0;
+  bool _scrollScheduled = false;
+  bool _lastPremiumState = PremiumService.isPremiumActive;
 
   @override
   void initState() {
@@ -39,6 +46,19 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
     _chatProvider = ChatSessionsProvider()..init();
+
+    Future.microtask(() async {
+      await PremiumService.restoreOnLaunch();
+      if (mounted) setState(() {});
+    });
+    PremiumService.premiumNotifier.addListener(_onPremiumChanged);
+
+    controller.addListener(() {
+      final next = controller.text.characters.length;
+      if (next == _charCount) return;
+      if (!mounted) return;
+      setState(() => _charCount = next);
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (widget.initialQuestion != null &&
@@ -56,45 +76,56 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   @override
   void dispose() {
+    PremiumService.premiumNotifier.removeListener(_onPremiumChanged);
     _chatProvider.dispose();
     controller.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _onPremiumChanged() {
+    if (!mounted) return;
+    final next = PremiumService.isPremiumActive;
+    if (next == _lastPremiumState) return;
+    _lastPremiumState = next;
+    setState(() {});
+  }
+
+  void _scheduleScrollToBottom({bool animated = true}) {
+    if (_scrollScheduled) return;
+    _scrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+      if (!_scrollController.hasClients) return;
+      final target = _scrollController.position.maxScrollExtent;
+      if (!animated) {
+        _scrollController.jumpTo(target);
+        return;
+      }
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    });
+  }
+
+  void _scheduleScrollToBottomRobust({bool animated = true}) {
+    _scheduleScrollToBottom(animated: animated);
+    Future.delayed(const Duration(milliseconds: 80), () {
+      if (!mounted) return;
+      _scheduleScrollToBottom(animated: animated);
+    });
+    Future.delayed(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      _scheduleScrollToBottom(animated: animated);
+    });
+  }
+
   Future<void> _redirectToPremiumWithReason() async {
     if (_redirectedToPremium) return;
     _redirectedToPremium = true;
-
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF020617),
-        title: const Text(
-          "Premium Feature",
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          "AI Coach is a premium feature.\n\nUpgrade to unlock personalised cricket coaching, mistake analysis, and match-level insights.",
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text(
-              "Upgrade",
-              style: TextStyle(color: Color(0xFF38BDF8)),
-            ),
-          ),
-        ],
-      ),
-    );
-
     if (!mounted) return;
-
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -106,17 +137,29 @@ class _AICoachScreenState extends State<AICoachScreen> {
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
-    String userMessage = controller.text.trim();
-    if (userMessage.isEmpty) return;
-    controller.clear();
-
-    // 🔒 Real-time premium gate (single source of truth)
-    if (!PremiumService.isPremiumActive) {
-      await _redirectToPremiumWithReason();
+    final raw = controller.text;
+    if (raw.characters.length > _maxChars) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Message too long. Limit is 120 characters."),
+          ),
+        );
+      }
       return;
     }
 
+    String userMessage = raw.trim();
+    if (userMessage.isEmpty) return;
+
+    // 🔒 Real-time premium gate (single source of truth)
+    if (!PremiumService.isLoaded || !PremiumService.isPremiumActive) {
+      return;
+    }
+
+    controller.clear();
     await _chatProvider.addUserMessage(userMessage);
+    _scheduleScrollToBottomRobust(animated: true);
     loading = true;
     setState(() {});
 
@@ -152,6 +195,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
       debugPrint(
         "🔥 FIREBASE ID TOKEN (AI COACH) PREFIX → ${idToken.substring(0, 30)}",
       );
+
+      try {
+        await WeeklyStatsService.recordAiChat(user.uid);
+      } catch (_) {}
 
       http.Response response = await http
           .post(
@@ -209,16 +256,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
             "No reply received from AI.";
 
         await _chatProvider.addCoachMessage(coachText);
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+        _scheduleScrollToBottomRobust(animated: true);
       } else {
         debugPrint("AI COACH ERROR ${response.statusCode} => ${response.body}");
         loading = false;
@@ -232,15 +270,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
         return;
       }
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      _scheduleScrollToBottomRobust(animated: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -248,15 +278,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
         );
       }
 
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+      _scheduleScrollToBottomRobust(animated: true);
 
       return;
     } finally {
@@ -280,6 +302,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
       if (mounted) {
         loading = false;
         setState(() {});
+        _scheduleScrollToBottomRobust(animated: true);
       }
     }
 
@@ -458,7 +481,23 @@ class _AICoachScreenState extends State<AICoachScreen> {
       value: _chatProvider,
       child: Consumer<ChatSessionsProvider>(
         builder: (context, provider, _) {
+          final locked =
+              !PremiumService.isLoaded || !PremiumService.isPremiumActive;
+          void unlock() {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => const PremiumScreen(entrySource: "ai_coach"),
+              ),
+            );
+          }
+
           final hasMessages = provider.messages.isNotEmpty;
+          if (hasMessages && provider.messages.length != _lastMessageCount) {
+            _lastMessageCount = provider.messages.length;
+            _scheduleScrollToBottomRobust(animated: false);
+          } else if (!hasMessages) {
+            _lastMessageCount = 0;
+          }
           return Scaffold(
             drawer: buildHistoryDrawer(provider),
             backgroundColor: const Color(0xFF020617),
@@ -477,82 +516,154 @@ class _AICoachScreenState extends State<AICoachScreen> {
               children: [
                 Flexible(
                   fit: FlexFit.tight,
-                  child: !hasMessages
-                      ? SingleChildScrollView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 20,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 👤 Coach Greeting
-                              Row(
-                                children: [
-                                  const CircleAvatar(
-                                    radius: 22,
-                                    backgroundColor: Color(0xFF0F172A),
-                                    child: Icon(
-                                      Icons.sports_cricket,
-                                      color: Color(0xFF38BDF8),
+                  child: locked
+                      ? Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF111827),
+                                    borderRadius: BorderRadius.circular(18),
+                                    border: Border.all(
+                                      color: const Color(0xFF38BDF8),
+                                      width: 1.2,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      "Hello ${getUserName()}!\nI am your CrickNova AI. How can I help you improve your game today?",
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                      ),
-                                    ),
+                                  child: const Text(
+                                    "CrickNova AI: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
+                                    maxLines: 2,
+                                    overflow: TextOverflow.fade,
+                                    style: TextStyle(color: Colors.white),
                                   ),
-                                ],
-                              ),
-
-                              const SizedBox(height: 24),
-
-                              // ⚡ Quick Action Chips
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  quickChip("🏏 Batting Tips"),
-                                  quickChip("🥎 Bowling Tips"),
-                                  quickChip("🧠 Match Mindset"),
-                                  quickChip("📉 My Mistakes"),
-                                ],
-                              ),
-
-                              const SizedBox(height: 28),
-
-                              // 🏆 Suggested Questions
-                              const Text(
-                                "Suggested Questions",
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 10),
-                              suggestionTile(
-                                "How to play a perfect cover drive?",
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  0,
+                                  12,
+                                  12,
+                                ),
+                                child: PremiumBlurLock(
+                                  locked: true,
+                                  ctaText: "TALK TO CRICKNOVA AI",
+                                  title: "AI Coach Locked",
+                                  subtitle:
+                                      "See full AI coaching, personalised mistakes and drills with Premium.",
+                                  onUnlock: unlock,
+                                  child: ListView(
+                                    controller: _scrollController,
+                                    padding: const EdgeInsets.only(top: 6),
+                                    children: [
+                                      buildMessage({
+                                        "role": "user",
+                                        "content":
+                                            "Why am I losing pace in the last 5 overs?",
+                                      }),
+                                      buildMessage({
+                                        "role": "coach",
+                                        "content":
+                                            "You're dropping your elbow at release and your front foot is landing too wide, which kills energy transfer. Fix: 1) 3x10 wrist snaps, 2) one-step bowl drill, 3) target a straight run-up line. Also track your follow-through and keep your head still through impact.",
+                                      }),
+                                      buildMessage({
+                                        "role": "user",
+                                        "content":
+                                            "Give me a 7-day drill plan.",
+                                      }),
+                                      buildMessage({
+                                        "role": "coach",
+                                        "content":
+                                            "Day 1–2: Seam control + release point. Day 3–4: Front-foot alignment + balance. Day 5: Pace build with controlled run-up. Day 6: Accuracy challenge with targets. Day 7: Match simulation with variations and recovery routines.",
+                                      }),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              suggestionTile(
-                                "What is the ideal release point for an outswinger?",
-                              ),
-                              suggestionTile(
-                                "Show me drills for better footwork.",
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         )
-                      : ListView.builder(
-                          controller: _scrollController,
-                          itemCount: provider.messages.length,
-                          itemBuilder: (_, i) =>
-                              buildMessage(provider.messages[i]),
-                        ),
+                      : (!hasMessages
+                            ? SingleChildScrollView(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 20,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // 👤 Coach Greeting
+                                    Row(
+                                      children: [
+                                        const CircleAvatar(
+                                          radius: 22,
+                                          backgroundColor: Color(0xFF0F172A),
+                                          child: Icon(
+                                            Icons.sports_cricket,
+                                            color: Color(0xFF38BDF8),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            "Hello ${getUserName()}!\nI am your CrickNova AI. How can I help you improve your game today?",
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+
+                                    const SizedBox(height: 24),
+
+                                    // ⚡ Quick Action Chips
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        quickChip("🏏 Batting Tips"),
+                                        quickChip("🥎 Bowling Tips"),
+                                        quickChip("🧠 Match Mindset"),
+                                        quickChip("📉 My Mistakes"),
+                                      ],
+                                    ),
+
+                                    const SizedBox(height: 28),
+
+                                    // 🏆 Suggested Questions
+                                    const Text(
+                                      "Suggested Questions",
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    suggestionTile(
+                                      "How to play a perfect cover drive?",
+                                    ),
+                                    suggestionTile(
+                                      "What is the ideal release point for an outswinger?",
+                                    ),
+                                    suggestionTile(
+                                      "Show me drills for better footwork.",
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                itemCount: provider.messages.length,
+                                itemBuilder: (_, i) =>
+                                    buildMessage(provider.messages[i]),
+                              )),
                 ),
                 // Clean AI analyzing indicator
                 if (loading)
@@ -598,43 +709,64 @@ class _AICoachScreenState extends State<AICoachScreen> {
                   ),
                 Container(
                   padding: const EdgeInsets.all(10),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: AbsorbPointer(
-                          absorbing: false,
-                          child: TextField(
-                            controller: controller,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: InputDecoration(
-                              hintText: "Ask CrickNova AI Coach...",
-                              hintStyle: const TextStyle(
-                                color: Color(0xFF64748B),
-                              ),
-                              filled: true,
-                              fillColor: const Color(0xFF0F172A),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide.none,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AbsorbPointer(
+                              absorbing: locked,
+                              child: TextField(
+                                controller: controller,
+                                style: const TextStyle(color: Colors.white),
+                                decoration: InputDecoration(
+                                  hintText: "Ask CrickNova AI Coach...",
+                                  hintStyle: const TextStyle(
+                                    color: Color(0xFF64748B),
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFF0F172A),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          IconButton(
+                            icon: Icon(
+                              isListening ? Icons.mic : Icons.mic_none,
+                              color: isListening ? Colors.red : Colors.white,
+                            ),
+                            onPressed: locked ? unlock : toggleMic,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.send, color: Colors.white),
+                            onPressed: (_charCount > _maxChars)
+                                ? null
+                                : (locked ? unlock : sendMessage),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: Icon(
-                          isListening ? Icons.mic : Icons.mic_none,
-                          color: isListening ? Colors.red : Colors.white,
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          "${_charCount.toString()}/$_maxChars",
+                          style: TextStyle(
+                            color: _charCount > _maxChars
+                                ? const Color(0xFFEF4444)
+                                : const Color(0xFF22C55E),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        onPressed: toggleMic,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.send, color: Colors.white),
-                        onPressed: sendMessage,
                       ),
                     ],
                   ),

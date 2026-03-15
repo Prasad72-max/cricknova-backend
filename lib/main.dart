@@ -2,12 +2,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:CrickNova_Ai/splash/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
-import 'package:CrickNova_Ai/config/api_config.dart';
 import 'package:CrickNova_Ai/services/premium_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
-import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 Future<void> main() async {
@@ -38,7 +35,6 @@ class _MyAppState extends State<MyApp> {
 
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
-  bool _premiumRestoreCalled = false;
 
   void setTheme(ThemeMode mode) {
     setState(() {
@@ -56,14 +52,11 @@ class _MyAppState extends State<MyApp> {
       }
 
       debugPrint("🔐 AUTH: stable user uid=${user.uid}");
-
-      if (!_premiumRestoreCalled) {
-        _premiumRestoreCalled = true;
-        await PremiumService.restoreOnLaunch();
-      } else {
-        debugPrint(
-          "🛑 Premium restore already executed. Skipping duplicate call.",
-        );
+      try {
+        // Always refresh premium from Firestore on auth-ready.
+        await PremiumService.refresh();
+      } catch (e) {
+        debugPrint("❌ Premium refresh failed: $e");
       }
     });
     _initAppLinks();

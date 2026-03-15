@@ -21,15 +21,18 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   List<String> trainingVideos = [];
   List<double> speedHistory = [];
+  bool _lastPremiumState = PremiumService.isPremiumActive;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    PremiumService.premiumNotifier.addListener(_onPremiumChanged);
   }
 
   void _onPremiumChanged() {
     if (!mounted) return;
+    final next = PremiumService.isPremiumActive;
+    if (next == _lastPremiumState) return;
+    _lastPremiumState = next;
     setState(() {});
   }
 
@@ -38,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
 
     // Listen for premium state changes
+    PremiumService.premiumNotifier.addListener(_onPremiumChanged);
     PremiumService.premiumNotifier.addListener(_checkExpiryPopup);
 
     // Run once after first frame
@@ -54,8 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // 🔐 Force refresh Firebase ID token so backend always receives a valid one
       final String? token = await user.getIdToken(true);
       if (token != null && token.isNotEmpty) {
-        // ⚠️ DEBUG ONLY: log full token to test backend auth
-        debugPrint("🔥 FULL_FIREBASE_TOKEN=$token");
+        // Token refresh succeeded.
       } else {
         debugPrint("⚠️ HOME SCREEN: Firebase token is null or empty");
       }
@@ -104,9 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> loadTrainingVideos() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() {
-      trainingVideos = prefs.getStringList("trainingVideos") ?? [];
-    });
+    trainingVideos = prefs.getStringList("trainingVideos") ?? [];
   }
 
   void _openEliteStatusScreen() {
@@ -130,7 +131,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint("HOME → isPremium=${PremiumService.isPremium}");
     return Container(
       color: const Color(0xFF020617),
       child: RefreshIndicator(
@@ -222,10 +222,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white.withOpacity(0.6),
                               ),
                             ),
-                            if (PremiumService.isPremium) ...[
-                              const SizedBox(height: 14),
-                              _eliteNameBadge(),
-                            ],
+                            const SizedBox(height: 14),
+                            if (!PremiumService.isLoaded)
+                              _checkingPlanBadge()
+                            else if (PremiumService.isPremiumActive)
+                              _eliteNameBadge()
+                            else
+                              _risingStarBadge(),
                           ],
                         ),
                       ),
@@ -268,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         return;
                       }
 
-                      if (!PremiumService.isPremium) {
+                      if (!PremiumService.isPremiumActive) {
                         Navigator.of(context).push(
                           MaterialPageRoute(
                             builder: (_) =>
@@ -506,6 +509,71 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _eliteNameBadge() {
     return EliteStatusHeroBadge(onTap: _openEliteStatusScreen);
+  }
+
+  Widget _checkingPlanBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: Colors.white.withOpacity(0.06),
+        border: Border.all(color: Colors.white.withOpacity(0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            "CHECKING PLAN...",
+            style: GoogleFonts.poppins(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _risingStarBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: Colors.white.withOpacity(0.08),
+        border: Border.all(color: Colors.white.withOpacity(0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF22C55E).withOpacity(0.22),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, size: 16, color: Color(0xFF22C55E)),
+          const SizedBox(width: 8),
+          Text(
+            "RISING STAR",
+            style: GoogleFonts.poppins(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

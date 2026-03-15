@@ -8,10 +8,8 @@ import '../ai/ai_coach_screen.dart';
 import '../premium/premium_screen.dart';
 import '../profile/profile_screen.dart';
 import '../services/premium_service.dart';
+import '../services/weekly_stats_service.dart';
 import 'dart:async';
-
-import '../upload/upload_screen.dart';
-import '../compare/analyse_yourself_screen.dart';
 import '../insights/insights_screen.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -27,10 +25,13 @@ class MainNavigation extends StatefulWidget {
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation>
+    with WidgetsBindingObserver {
   int _index = 0;
   String userName = "Player";
   late List<Widget> _screens;
+  DateTime? _activeSince;
+  Timer? _minuteTimer;
 
   void goHome() {
     if (_index != 0) {
@@ -50,8 +51,59 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _activeSince = DateTime.now();
+    _startMinuteTimer();
     _screens = _buildScreens();
     _bootstrapSession();
+  }
+
+  void _startMinuteTimer() {
+    _minuteTimer?.cancel();
+    _minuteTimer = Timer.periodic(const Duration(minutes: 1), (_) async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      try {
+        await WeeklyStatsService.addAppMinutes(user.uid, 1);
+      } catch (_) {}
+      _activeSince = DateTime.now();
+    });
+  }
+
+  void _stopMinuteTimer() {
+    _minuteTimer?.cancel();
+    _minuteTimer = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Always refresh premium from Firestore when app returns to foreground.
+      PremiumService.refresh().catchError((_) {});
+      _activeSince = DateTime.now();
+      _startMinuteTimer();
+      return;
+    }
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _stopMinuteTimer();
+      _flushUsageMinutes();
+    }
+  }
+
+  Future<void> _flushUsageMinutes() async {
+    final started = _activeSince;
+    if (started == null) return;
+    _activeSince = null;
+
+    final minutes = DateTime.now().difference(started).inMinutes;
+    if (minutes <= 0) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      await WeeklyStatsService.addAppMinutes(user.uid, minutes);
+    } catch (_) {}
   }
 
   Future<void> _bootstrapSession() async {
@@ -59,6 +111,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       await user.getIdToken(true);
+      await WeeklyStatsService.recordAppOpen(user.uid);
     }
 
     await loadUser();
@@ -69,6 +122,9 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stopMinuteTimer();
+    _flushUsageMinutes();
     super.dispose();
   }
 
@@ -85,8 +141,8 @@ class _MainNavigationState extends State<MainNavigation> {
       name = prefs.getString("profileName");
     }
     setState(() {
-      userName = (name != null && name!.trim().isNotEmpty)
-          ? name!.trim()
+      userName = (name != null && name.trim().isNotEmpty)
+          ? name.trim()
           : widget.userName;
       _screens = _buildScreens();
     });
@@ -160,40 +216,6 @@ class _MainNavigationState extends State<MainNavigation> {
           debugPrint(
             "BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}",
           );
-
-          // AI Coach tab (index 2) is premium-only
-          if (i == 2 && !PremiumService.isPremiumActive) {
-            if (!mounted) return;
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text("🔒 AI Coach Locked"),
-                content: const Text(
-                  "AI Coach is a premium feature.\n\n"
-                  "Upgrade your plan to unlock personalised batting and bowling analysis.",
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text("Cancel"),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const PremiumScreen(entrySource: "coach"),
-                        ),
-                      );
-                    },
-                    child: const Text("Upgrade"),
-                  ),
-                ],
-              ),
-            );
-            return;
-          }
 
           if (!mounted) return;
           setTab(i);

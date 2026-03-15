@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'dart:developer';
 import 'dart:convert';
@@ -1136,6 +1137,177 @@ class _PremiumScreenState extends State<PremiumScreen>
     super.dispose();
   }
 
+  void onMethodSelected(String method) {
+    final price = _lastPlanPrice;
+    if (price == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please choose a plan first.")),
+      );
+      return;
+    }
+    final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
+    if (method == "cricknova_pay") {
+      if (isIndia == true) {
+        debugPrint("CrickNova payment for ₹${numeric.toInt()}");
+        _startRazorpayCheckout(numeric.toInt());
+      } else {
+        debugPrint("CrickNova PayPal payment for $price");
+        _startPayPalCheckout(price);
+      }
+      return;
+    }
+    if (method == "google_play") {
+      if (isIndia == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Google Play payment coming soon")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Redirecting via secure checkout")),
+        );
+        _startPayPalCheckout(price);
+      }
+    }
+  }
+
+  Future<void> showPaymentMethodSelector(BuildContext context) async {
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: false,
+      builder: (sheetContext) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0B1220).withValues(alpha: 0.9),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(26)),
+                border: Border.all(color: Colors.white12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black45,
+                    blurRadius: 24,
+                    offset: Offset(0, -8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const Text(
+                    "Choose Payment Method",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _paymentMethodTile(
+                    title: "CrickNova Pay (UPI / Cards)",
+                    subtitle: "Pay directly via Razorpay",
+                    leading: Icons.account_balance_wallet_rounded,
+                    leadingColor: const Color(0xFFFFD700),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onMethodSelected("cricknova_pay");
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _paymentMethodTile(
+                    title: "Google Play",
+                    subtitle: "Use your Play Store balance or saved cards",
+                    leading: Icons.play_arrow_rounded,
+                    leadingColor: const Color(0xFF38BDF8),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      onMethodSelected("google_play");
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _paymentMethodTile({
+    required String title,
+    required String subtitle,
+    required IconData leading,
+    required Color leadingColor,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(leading, color: leadingColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right,
+                color: Colors.white54,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final args =
@@ -1571,39 +1743,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                     price.replaceAll(RegExp(r'[^0-9.]'), ''),
                   );
 
-                  // SHOW payment option selector dialog
-                  await _showPaymentOptionDialog(
-                    price: price,
-                    onCrickNova: () {
-                      if (isIndia == true) {
-                        debugPrint(
-                          "🟢 CrickNova payment for ₹${numeric.toInt()}",
-                        );
-                        _startRazorpayCheckout(numeric.toInt());
-                      } else {
-                        debugPrint("🌍 CrickNova PayPal payment for $price");
-                        _startPayPalCheckout(price);
-                      }
-                    },
-                    onGooglePlay: () async {
-                      if (isIndia == true) {
-                        // Google Play Billing not yet integrated for India
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Google Play payment coming soon"),
-                          ),
-                        );
-                      } else {
-                        // 🌍 International users: fallback to CrickNova (PayPal)
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Redirecting via secure checkout"),
-                          ),
-                        );
-                        _startPayPalCheckout(price);
-                      }
-                    },
-                  );
+                  await showPaymentMethodSelector(context);
 
                   setState(() {
                     _animatingPlan = null;

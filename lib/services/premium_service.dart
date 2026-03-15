@@ -104,10 +104,10 @@ class PremiumService {
           .get(const GetOptions(source: Source.server));
 
       if (!doc.exists) {
-        // Do NOT force downgrade during runtime
-        if (!isLoaded) {
-          await _cache(false, "FREE", 0, 0, 0);
-        }
+        await _cache(false, "FREE", 0, 0, 0);
+        isLoaded = true;
+        premiumNotifier.value = isPremium;
+        premiumNotifier.notifyListeners();
         return;
       }
 
@@ -119,6 +119,14 @@ class PremiumService {
       debugPrint(
         "🔥 Premium flag from Firestore = $firestorePremium | raw keys: ${data.keys}",
       );
+
+      if (!firestorePremium) {
+        await _cache(false, "FREE", 0, 0, 0);
+        isLoaded = true;
+        premiumNotifier.value = isPremium;
+        premiumNotifier.notifyListeners();
+        return;
+      }
 
       final rawExpiry = data["expiry"] ?? data["expiryDate"];
       final rawStarted = data["started_at"] ?? data["startedAt"];

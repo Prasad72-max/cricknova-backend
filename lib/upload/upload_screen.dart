@@ -1,6 +1,4 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -17,6 +15,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:confetti/confetti.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
+import '../services/weekly_stats_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
@@ -4827,63 +4826,80 @@ class _UploadScreenState extends State<UploadScreen>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "🎥 Video Recording Guidelines",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A).withOpacity(0.70),
+                border: Border.all(color: Colors.white12),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(22),
                 ),
               ),
-              const SizedBox(height: 14),
-              const Text(
-                "• Record in normal speed (no slow motion)\n"
-                "• Ball must be clearly visible\n"
-                "• Keep camera stable\n"
-                "• Full pitch & batsman visible\n"
-                "• Prefer side-on or behind bowler angle\n"
-                "• Avoid heavy zoom or filters\n\n"
-                "⚠️ AI accuracy depends on video quality.",
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurpleAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "🎥 Video Recording Guidelines",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    debugPrint("UPLOAD_SCREEN → pickAndUpload triggered");
-                    pickAndUpload();
-                  },
-                  child: const Text(
-                    "Next",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      "• Record in normal speed (no slow motion)\n"
+                      "• Ball must be clearly visible\n"
+                      "• Keep camera stable\n"
+                      "• Full pitch & batsman visible\n"
+                      "• Prefer side-on or behind bowler angle\n"
+                      "• Avoid heavy zoom or filters\n\n"
+                      "⚠️ AI accuracy depends on video quality.",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF8B5CF6),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                          shadowColor: Colors.transparent,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          debugPrint("UPLOAD_SCREEN → pickAndUpload triggered");
+                          pickAndUpload();
+                        },
+                        child: const Text(
+                          "Next",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         );
       },
@@ -5330,62 +5346,11 @@ class _UploadScreenState extends State<UploadScreen>
             detail.contains("MISTAKE_LIMIT_REACHED") ||
             detail.contains("LIMIT")) {
           if (!mounted) return;
-
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) {
-              return AlertDialog(
-                backgroundColor: const Color(0xFF0F172A),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                title: const Text(
-                  "Plan Limit Reached 🔒",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                content: const Text(
-                  "Your AI mistake detection limit has ended.\n\nUpgrade to Premium to continue getting advanced AI feedback.",
-                  style: TextStyle(color: Colors.white70, height: 1.4),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      setState(() {
-                        showCoach = false;
-                      });
-                    },
-                    child: const Text(
-                      "Later",
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
-                    ),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const PremiumScreen(entrySource: "mistake_limit"),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "Buy Premium",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
-              );
-            },
+          setState(() => showCoach = false);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const PremiumScreen(entrySource: "mistake_limit"),
+            ),
           );
           return;
         }
@@ -5397,65 +5362,11 @@ class _UploadScreenState extends State<UploadScreen>
 
       if (premiumRequired && !success) {
         if (!mounted) return;
-
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: const Text(
-                "Premium Feature 🔒",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: const Text(
-                "AI Coach is a premium feature.\n\nUpgrade your plan to unlock personalised batting & bowling analysis from our AI coach.",
-                style: TextStyle(color: Colors.white70, height: 1.4),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    setState(() {
-                      showCoach = false;
-                    });
-                  },
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const PremiumScreen(entrySource: "coach"),
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "Upgrade",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            );
-          },
+        setState(() => showCoach = false);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "coach"),
+          ),
         );
 
         return;
@@ -5486,6 +5397,10 @@ class _UploadScreenState extends State<UploadScreen>
 
         if (didProduceReply) {
           try {
+            final user = FirebaseAuth.instance.currentUser;
+            if (user != null) {
+              await WeeklyStatsService.recordMistakeDetection(user.uid);
+            }
             final usage = await PremiumService.recordMistakeUsage();
             await _maybeShowUsageLimitReached(
               featureName: "Mistake Detection",
@@ -5527,9 +5442,11 @@ class _UploadScreenState extends State<UploadScreen>
         return false;
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
-          backgroundColor: Colors.black,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
@@ -5538,120 +5455,160 @@ class _UploadScreenState extends State<UploadScreen>
           ),
           title: const Text("Upload Training Video"),
         ),
-        body: controller == null
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // 🏏 Mode Selection Label
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blueAccent.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.blueAccent.withOpacity(0.4),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF0F172A), Color(0xFF000000)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+              ),
+            ),
+            if (controller == null)
+              SafeArea(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 🏏 Mode Selection Label
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.blueAccent.withOpacity(0.4),
+                          ),
+                        ),
+                        child: const Text(
+                          "🏏 Batting Analysis Mode",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                      child: const Text(
-                        "🏏 Batting Analysis Mode",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+
+                      const SizedBox(height: 18),
+
+                      // 💡 Instruction Tip Box
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 30),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: const Text(
+                          "Tip: Ensure your full body is visible from the side for better AI analysis.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 28),
 
-                    // 💡 Instruction Tip Box
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 30),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: const Text(
-                        "Tip: Ensure your full body is visible from the side for better AI analysis.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 13,
-                          height: 1.4,
+                      // 🎥 Upload Button
+                      GestureDetector(
+                        onTapDown: (_) => _pressDown(
+                          (v) => _uploadScale = v,
+                          (r) => _uploadRotation = r,
                         ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // 🎥 Upload Button
-                    GestureDetector(
-                      onTapDown: (_) => _pressDown(
-                        (v) => _uploadScale = v,
-                        (r) => _uploadRotation = r,
-                      ),
-                      onTapUp: (_) => _pressUp(
-                        (v) => _uploadScale = v,
-                        (r) => _uploadRotation = r,
-                      ),
-                      onTapCancel: () => _pressUp(
-                        (v) => _uploadScale = v,
-                        (r) => _uploadRotation = r,
-                      ),
-                      onTap: _showVideoRulesThenPick,
-                      child: AnimatedRotation(
-                        turns: _uploadRotation,
-                        duration: const Duration(milliseconds: 120),
-                        child: AnimatedScale(
-                          scale: _uploadScale,
+                        onTapUp: (_) => _pressUp(
+                          (v) => _uploadScale = v,
+                          (r) => _uploadRotation = r,
+                        ),
+                        onTapCancel: () => _pressUp(
+                          (v) => _uploadScale = v,
+                          (r) => _uploadRotation = r,
+                        ),
+                        onTap: _showVideoRulesThenPick,
+                        child: AnimatedRotation(
+                          turns: _uploadRotation,
                           duration: const Duration(milliseconds: 120),
-                          curve: Curves.easeOutBack,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 22,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [
-                                  Colors.blueAccent,
-                                  Colors.deepPurpleAccent,
+                          child: AnimatedScale(
+                            scale: _uploadScale,
+                            duration: const Duration(milliseconds: 120),
+                            curve: Curves.easeOutBack,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 40,
+                                vertical: 22,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF8B5CF6),
+                                    Color(0xFF22D3EE),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF8B5CF6,
+                                    ).withOpacity(0.5),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF22D3EE,
+                                    ).withOpacity(0.30),
+                                    blurRadius: 22,
+                                    spreadRadius: 1,
+                                  ),
                                 ],
                               ),
-                              borderRadius: BorderRadius.circular(22),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.deepPurpleAccent.withOpacity(
-                                    0.6,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.18),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.center_focus_strong,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                  blurRadius: 20,
-                                  spreadRadius: 2,
-                                ),
-                              ],
-                            ),
-                            child: const Text(
-                              "Upload Training Video",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
+                                  const SizedBox(width: 12),
+                                  const Text(
+                                    "Upload Training Video",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               )
-            : Stack(
+            else
+              Stack(
                 children: [
                   Center(
                     child: AspectRatio(
@@ -5849,6 +5806,18 @@ class _UploadScreenState extends State<UploadScreen>
                                 (r) => _coachRotation = r,
                               ),
                               onTap: () async {
+                                if (!PremiumService.isPremiumActive) {
+                                  if (!mounted) return;
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const PremiumScreen(
+                                        entrySource: "mistake_lock",
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+
                                 setState(() {
                                   showCoach = true;
                                   coachReply =
@@ -5920,43 +5889,63 @@ class _UploadScreenState extends State<UploadScreen>
                     Positioned.fill(
                       child: Container(
                         color: Colors.black.withOpacity(0.8),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                "AI COACH REVIEW",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                ),
+                        child: SafeArea(
+                          child: Center(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 18,
                               ),
-                              const SizedBox(height: 20),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                ),
-                                child: Text(
-                                  coachReply ?? "",
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    "AI COACH REVIEW",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF0F172A,
+                                      ).withOpacity(0.55),
+                                      borderRadius: BorderRadius.circular(18),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.14),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      coachReply ?? "",
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          showCoach = false;
+                                        });
+                                      },
+                                      child: const Text("Close"),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 30),
-                              ElevatedButton(
-                                onPressed: () {
-                                  setState(() {
-                                    showCoach = false;
-                                  });
-                                },
-                                child: const Text("Close"),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -6072,24 +6061,15 @@ class _UploadScreenState extends State<UploadScreen>
                     ),
                 ],
               ),
+          ],
+        ),
       ),
     );
   }
 
   Future<void> _handleBackToGallery() async {
     if (!mounted) return;
-    if (video == null) {
-      Navigator.of(context).pop();
-      return;
-    }
-    if (uploading || analysisLoading || drsLoading) {
-      Navigator.of(context).pop();
-      return;
-    }
-    final picked = await pickAndUpload();
-    if (!picked && mounted) {
-      Navigator.of(context).pop();
-    }
+    Navigator.of(context).pop();
   }
 
   Widget _metric(String label, String value) {

@@ -170,10 +170,8 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
   bool _loadingMetrics = true;
   double _powerLevel = 0;
   double _consistencyScore = 0;
-  double _trendPercent = 0;
   double _maxSpeed = 0;
   double _recentAvg = 0;
-  List<double> _recentSpeeds = const <double>[];
 
   @override
   void initState() {
@@ -209,9 +207,7 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
     if (speeds.isEmpty) {
       if (!mounted) return;
       setState(() {
-        _recentSpeeds = const <double>[];
         _recentAvg = 0;
-        _trendPercent = 0;
         _consistencyScore = 0;
         _powerLevel = 0;
         _maxSpeed = 0;
@@ -241,9 +237,7 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
 
     if (!mounted) return;
     setState(() {
-      _recentSpeeds = recent;
       _recentAvg = recentAvg;
-      _trendPercent = trendPercent;
       _consistencyScore = consistencyScore;
       _powerLevel = powerLevel;
       _maxSpeed = speeds.isEmpty ? 0 : speeds.reduce(math.max);
@@ -268,27 +262,6 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
     return (100 - (coefficient * 100)).clamp(0.0, 100.0);
   }
 
-  bool _fatigueDetected() {
-    if (_recentSpeeds.length < 5) return false;
-    final mid = _recentSpeeds.length ~/ 2;
-    final first = _recentSpeeds.sublist(0, mid);
-    final last = _recentSpeeds.sublist(_recentSpeeds.length - mid);
-    return _average(first) - _average(last) >= 2;
-  }
-
-  String _trendInsightText() {
-    if (_recentSpeeds.length < 2) {
-      return "Your speed trend will appear after a few deliveries.";
-    }
-    if (_trendPercent >= 1) {
-      return "Your average speed has increased by ${_trendPercent.toStringAsFixed(1)}% this week!";
-    }
-    if (_trendPercent <= -1) {
-      return "Your average speed dipped by ${_trendPercent.abs().toStringAsFixed(1)}% this week.";
-    }
-    return "Your average speed is holding steady this week!";
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -299,12 +272,6 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
         : gapToExpress <= 0
         ? "Express Pace unlocked. Time to chase the 'Thunderbolt' badge!"
         : "You are ${gapToExpress.toStringAsFixed(1)} KMPH away from reaching the 'Express Pace' Badge!";
-    final adviceText = _consistencyScore < 60
-        ? "Your wrist position at release is slightly tilted. Focus on keeping it upright for more swing."
-        : "Release alignment looks steady. Keep the wrist upright for late swing.";
-    final alertText = _fatigueDetected()
-        ? "Fatigue detected in last 5 balls. Take a break to avoid injury."
-        : "Recovery looks balanced. Keep your workload steady.";
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -433,42 +400,6 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
                               ),
                             );
                           },
-                        ),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
-                        child: _SectionTitle(
-                          title: "CrickNova Pro Insights",
-                          subtitle:
-                              "Personalized signals from your latest sessions",
-                        ),
-                      ),
-                    ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                        child: Column(
-                          children: [
-                            _InsightTile(
-                              icon: Icons.psychology_rounded,
-                              label: "AI Advice",
-                              text: adviceText,
-                            ),
-                            const SizedBox(height: 12),
-                            _InsightTile(
-                              icon: Icons.trending_up_rounded,
-                              label: "Trend",
-                              text: _trendInsightText(),
-                            ),
-                            const SizedBox(height: 12),
-                            _InsightTile(
-                              icon: Icons.warning_amber_rounded,
-                              label: "Alert",
-                              text: alertText,
-                            ),
-                          ],
                         ),
                       ),
                     ),
@@ -1087,69 +1018,6 @@ class _MilestoneCard extends StatelessWidget {
                 "Challenge Mode",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InsightTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String text;
-
-  const _InsightTile({
-    required this.icon,
-    required this.label,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: const Color(0xFFFFD86B).withValues(alpha: 0.14),
-            ),
-            child: Icon(icon, color: const Color(0xFFFFD86B)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  text,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 13.2,
-                    height: 1.4,
-                  ),
-                ),
-              ],
             ),
           ),
         ],

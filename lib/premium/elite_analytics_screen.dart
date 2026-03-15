@@ -1,16 +1,13 @@
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
-import '../upload/upload_screen.dart';
+import '../services/weekly_stats_service.dart';
 
 class EliteAnalyticsScreen extends StatefulWidget {
   const EliteAnalyticsScreen({super.key});
@@ -21,55 +18,31 @@ class EliteAnalyticsScreen extends StatefulWidget {
 
 class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
   bool _loading = true;
-  List<double> _speeds = <double>[];
-  List<double> _accuracy = <double>[];
   bool _generating = false;
   String? _savedPath;
+
+  WeeklyStats? _stats;
+  Map<String, Map<String, int>> _daily = <String, Map<String, int>>{};
 
   @override
   void initState() {
     super.initState();
-    _loadAnalytics();
+    _loadWeeklyUsage();
   }
 
-  Future<void> _loadAnalytics() async {
+  Future<void> _loadWeeklyUsage() async {
     final user = FirebaseAuth.instance.currentUser;
     final uid = user?.uid ?? "guest";
 
-    final box = await Hive.openBox('speedBox');
-    final stored = box.get('allSpeeds_$uid') as List?;
-
-    var speeds = <double>[];
-    if (stored != null) {
-      speeds = stored.map((e) => (e as num).toDouble()).toList();
-    }
-
-    if (speeds.length > 7) {
-      speeds = speeds.sublist(speeds.length - 7);
-    }
-
-    final accuracy = _deriveAccuracyScores(speeds);
+    final stats = await WeeklyStatsService.loadCurrentWeek(uid);
+    final daily = await WeeklyStatsService.loadCurrentWeekDaily(uid);
 
     if (!mounted) return;
     setState(() {
-      _speeds = speeds;
-      _accuracy = accuracy;
+      _stats = stats;
+      _daily = daily;
       _loading = false;
     });
-  }
-
-  List<double> _deriveAccuracyScores(List<double> speeds) {
-    if (speeds.isEmpty) return <double>[];
-    final mean = speeds.reduce((a, b) => a + b) / speeds.length;
-    final deltas = speeds.map((s) => (s - mean).abs()).toList();
-    final maxDelta = deltas.reduce(math.max);
-    if (maxDelta == 0) {
-      return List<double>.filled(speeds.length, 95);
-    }
-    return deltas.map((d) {
-      final score = 100 - ((d / maxDelta) * 25);
-      return score.clamp(60, 100).toDouble();
-    }).toList();
   }
 
   Future<Directory> _reportDirectory() async {
@@ -83,21 +56,53 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
   Future<void> _shareReport(String path) async {
     await Share.shareXFiles([
       XFile(path),
-    ], text: "CrickNova Weekly Progress Report");
+    ], text: "CrickNova Weekly Usage Report");
+  }
+
+  int _activeDays(WeeklyStats stats, Map<String, Map<String, int>> daily) {
+    int count = 0;
+    for (int i = 0; i < 7; i++) {
+      final d = stats.weekStart.add(Duration(days: i));
+      final key = _dateKey(d);
+      final m = daily[key] ?? const <String, int>{};
+      if (_isActiveDay(m)) count++;
+    }
+    return count;
+  }
+
+  List<List<String>> _activeDayRows(
+    WeeklyStats stats,
+    Map<String, Map<String, int>> daily,
+  ) {
+    final rows = <List<String>>[];
+    for (int i = 0; i < 7; i++) {
+      final d = stats.weekStart.add(Duration(days: i));
+      final key = _dateKey(d);
+      final m = daily[key] ?? const <String, int>{};
+      if (!_isActiveDay(m)) continue;
+      rows.add([
+        _fmtDay(d),
+        "${m[WeeklyStatsService.fieldAppOpens] ?? 0}",
+        "${m[WeeklyStatsService.fieldAiChat] ?? 0}",
+        "${m[WeeklyStatsService.fieldAnalyseAi] ?? 0}",
+        "${m[WeeklyStatsService.fieldMistakeDetection] ?? 0}",
+      ]);
+    }
+    return rows;
+  }
+
+  bool _isActiveDay(Map<String, int> m) {
+    return (m[WeeklyStatsService.fieldAppOpens] ?? 0) > 0 ||
+        (m[WeeklyStatsService.fieldAiChat] ?? 0) > 0 ||
+        (m[WeeklyStatsService.fieldAnalyseAi] ?? 0) > 0 ||
+        (m[WeeklyStatsService.fieldMistakeDetection] ?? 0) > 0 ||
+        (m[WeeklyStatsService.fieldAppMinutes] ?? 0) > 0;
   }
 
   Future<void> _generatePdfReport() async {
     if (_generating) return;
-    if (_speeds.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("No progress yet. Upload a session first."),
-          backgroundColor: Color(0xFF0B1220),
-        ),
-      );
-      return;
-    }
+    final stats = _stats;
+    if (stats == null) return;
 
     setState(() {
       _generating = true;
@@ -107,50 +112,59 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
     try {
       final doc = pw.Document();
       final now = DateTime.now();
-      final avgSpeed = _speeds.reduce((a, b) => a + b) / _speeds.length;
-      final maxSpeed = _speeds.reduce(math.max);
-      final avgAccuracy = _accuracy.isEmpty
-          ? 0
-          : _accuracy.reduce((a, b) => a + b) / _accuracy.length;
+      final daily = _daily;
+      final activeDays = _activeDays(stats, daily);
+      final rows = _activeDayRows(stats, daily);
 
       doc.addPage(
         pw.MultiPage(
           build: (context) => [
             pw.Text(
-              "CrickNova Weekly Progress Report",
+              "CrickNova Weekly Usage Report",
               style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 6),
+            pw.Text(
+              "Week: ${_fmtDate(stats.weekStart)} – ${_fmtDate(stats.weekEnd)}",
+            ),
             pw.Text("Generated: ${now.toLocal()}"),
             pw.SizedBox(height: 16),
-            pw.Text("Summary", style: pw.TextStyle(fontSize: 16)),
-            pw.Bullet(text: "Avg Speed: ${avgSpeed.toStringAsFixed(1)} km/h"),
-            pw.Bullet(text: "Top Speed: ${maxSpeed.toStringAsFixed(1)} km/h"),
+            pw.Text("Summary", style: const pw.TextStyle(fontSize: 16)),
+            pw.Bullet(text: "App opens: ${stats.appOpens}"),
+            pw.Bullet(text: "Active days: $activeDays / 7"),
+            pw.Bullet(text: "AI Coach chats: ${stats.aiChats}"),
+            pw.Bullet(text: "Analyse Yourself uses: ${stats.analyseAi}"),
             pw.Bullet(
-              text: "Accuracy Index: ${avgAccuracy.toStringAsFixed(0)}%",
+              text: "Mistake Detection uses: ${stats.mistakeDetection}",
             ),
+            if (stats.appMinutes > 0)
+              pw.Bullet(text: "Time in app: ${_fmtUsage(stats.appMinutes)}"),
             pw.SizedBox(height: 16),
-            pw.Text("Progress Details", style: pw.TextStyle(fontSize: 16)),
+            pw.Text("Daily Breakdown", style: const pw.TextStyle(fontSize: 16)),
             pw.SizedBox(height: 8),
             pw.Table.fromTextArray(
-              headers: const ["Session", "Speed (km/h)", "Accuracy (%)"],
-              data: List.generate(_speeds.length, (i) {
-                final speed = _speeds[i].toStringAsFixed(1);
-                final acc = _accuracy.isNotEmpty
-                    ? _accuracy[i].toStringAsFixed(0)
-                    : "--";
-                return ["${i + 1}", speed, acc];
-              }),
+              headers: const [
+                "Day",
+                "App opens",
+                "AI chats",
+                "Analyse",
+                "Mistake",
+              ],
+              data: rows.isEmpty
+                  ? const [
+                      ["No activity yet", "0", "0", "0", "0"],
+                    ]
+                  : rows,
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
               cellAlignment: pw.Alignment.centerLeft,
-              headerDecoration: const pw.BoxDecoration(),
             ),
           ],
         ),
       );
 
       final dir = await _reportDirectory();
-      final filename = "CrickNova_Report_${now.millisecondsSinceEpoch}.pdf";
+      final filename =
+          "CrickNova_Weekly_Usage_${now.millisecondsSinceEpoch}.pdf";
       final file = File("${dir.path}/$filename");
       await file.writeAsBytes(await doc.save());
 
@@ -180,14 +194,57 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
     }
   }
 
+  static String _fmtDate(DateTime d) {
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    return "${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}";
+  }
+
+  static String _fmtDay(DateTime d) {
+    const wd = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    final w = wd[(d.weekday - 1).clamp(0, 6)];
+    return "$w ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}";
+  }
+
+  static String _dateKey(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return "$y-$m-$day";
+  }
+
+  static String _fmtUsage(int minutes) {
+    if (minutes <= 0) return "0 min";
+    final hrs = minutes ~/ 60;
+    final mins = minutes % 60;
+    if (hrs <= 0) return "${mins} min";
+    if (mins == 0) return "${hrs} hr";
+    return "${hrs} hr ${mins} min";
+  }
+
   @override
   Widget build(BuildContext context) {
+    final stats = _stats;
+    final activeDays = stats == null ? 0 : _activeDays(stats, _daily);
+
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
       appBar: AppBar(
         backgroundColor: const Color(0xFF020617),
         title: Text(
-          "Deep-Dive Analytics",
+          "Weekly Usage Report",
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
       ),
@@ -198,54 +255,14 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
           : RefreshIndicator(
               color: const Color(0xFFFFD86B),
               backgroundColor: const Color(0xFF0F172A),
-              onRefresh: _loadAnalytics,
+              onRefresh: _loadWeeklyUsage,
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
-                  Text(
-                    "Last 7 sessions (derived)",
-                    style: GoogleFonts.poppins(
-                      color: Colors.white70,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (_speeds.isEmpty)
-                    _AnalyticsEmptyState(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const UploadScreen(),
-                          ),
-                        );
-                      },
-                    )
-                  else ...[
-                    _SummaryRow(speeds: _speeds, accuracy: _accuracy),
-                    const SizedBox(height: 18),
-                    _LineChartCard(
-                      title: "Speed (km/h)",
-                      values: _speeds,
-                      lineColor: const Color(0xFF60A5FA),
-                      fillColor: const Color(0xFF1E3A8A),
-                    ),
+                  if (stats != null) ...[
+                    _UsageSummaryRow(stats: stats, activeDays: activeDays),
                     const SizedBox(height: 16),
-                    _LineChartCard(
-                      title: "Accuracy Index",
-                      values: _accuracy,
-                      lineColor: const Color(0xFFFFD86B),
-                      fillColor: const Color(0xFF3B2F12),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      "Accuracy is derived from speed consistency.",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white54,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _ProgressList(speeds: _speeds, accuracy: _accuracy),
+                    _DailyUsageCard(stats: stats, daily: _daily),
                     const SizedBox(height: 18),
                     _PdfActionCard(
                       generating: _generating,
@@ -263,109 +280,100 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
   }
 }
 
-class _AnalyticsEmptyState extends StatelessWidget {
-  final VoidCallback onTap;
+class _UsageSummaryRow extends StatelessWidget {
+  final WeeklyStats stats;
+  final int activeDays;
 
-  const _AnalyticsEmptyState({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        color: Colors.white.withValues(alpha: 0.05),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "No analytics yet",
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            "Upload your first training video to unlock speed and accuracy charts.",
-            style: GoogleFonts.poppins(
-              color: Colors.white70,
-              fontSize: 12.5,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD86B),
-                foregroundColor: Colors.black,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: onTap,
-              child: const Text(
-                "Start Your First Analysis",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  final List<double> speeds;
-  final List<double> accuracy;
-
-  const _SummaryRow({required this.speeds, required this.accuracy});
+  const _UsageSummaryRow({required this.stats, required this.activeDays});
 
   @override
   Widget build(BuildContext context) {
-    final avgSpeed = speeds.isEmpty
-        ? 0
-        : speeds.reduce((a, b) => a + b) / speeds.length;
-    final maxSpeed = speeds.isEmpty ? 0 : speeds.reduce(math.max);
-    final avgAccuracy = accuracy.isEmpty
-        ? 0
-        : accuracy.reduce((a, b) => a + b) / accuracy.length;
-
-    return Row(
+    return Column(
       children: [
-        _StatChip(
-          label: "Avg Speed",
-          value: avgSpeed == 0 ? "--" : "${avgSpeed.toStringAsFixed(1)} km/h",
+        Row(
+          children: [
+            _StatChip(label: "App Opens", value: stats.appOpens.toString()),
+            const SizedBox(width: 10),
+            _StatChip(
+              label: "Time Used",
+              value: _EliteAnalyticsScreenState._fmtUsage(stats.appMinutes),
+            ),
+            const SizedBox(width: 10),
+            _StatChip(label: "Active Days", value: "$activeDays/7"),
+          ],
         ),
-        const SizedBox(width: 10),
-        _StatChip(
-          label: "Top Speed",
-          value: maxSpeed == 0 ? "--" : "${maxSpeed.toStringAsFixed(1)} km/h",
-        ),
-        const SizedBox(width: 10),
-        _StatChip(
-          label: "Accuracy",
-          value: avgAccuracy == 0 ? "--" : "${avgAccuracy.toStringAsFixed(0)}%",
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _StatChip(label: "AI Chats", value: stats.aiChats.toString()),
+            const SizedBox(width: 10),
+            _StatChip(label: "Analyse", value: stats.analyseAi.toString()),
+            const SizedBox(width: 10),
+            _StatChip(
+              label: "Mistake",
+              value: stats.mistakeDetection.toString(),
+            ),
+          ],
         ),
       ],
     );
   }
 }
 
-class _ProgressList extends StatelessWidget {
-  final List<double> speeds;
-  final List<double> accuracy;
+class _DailyUsageCard extends StatelessWidget {
+  final WeeklyStats stats;
+  final Map<String, Map<String, int>> daily;
 
-  const _ProgressList({required this.speeds, required this.accuracy});
+  const _DailyUsageCard({required this.stats, required this.daily});
 
   @override
   Widget build(BuildContext context) {
+    final active = <Widget>[];
+    for (int i = 0; i < 7; i++) {
+      final d = stats.weekStart.add(Duration(days: i));
+      final key = _EliteAnalyticsScreenState._dateKey(d);
+      final m = daily[key] ?? const <String, int>{};
+      final opens = m[WeeklyStatsService.fieldAppOpens] ?? 0;
+      final chats = m[WeeklyStatsService.fieldAiChat] ?? 0;
+      final analyse = m[WeeklyStatsService.fieldAnalyseAi] ?? 0;
+      final mistake = m[WeeklyStatsService.fieldMistakeDetection] ?? 0;
+      final minutes = m[WeeklyStatsService.fieldAppMinutes] ?? 0;
+      final isActive =
+          opens > 0 || chats > 0 || analyse > 0 || mistake > 0 || minutes > 0;
+      if (!isActive) continue;
+
+      active.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 84,
+                child: Text(
+                  _EliteAnalyticsScreenState._fmtDay(d),
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Opens: $opens  •  Time: ${_EliteAnalyticsScreenState._fmtUsage(minutes)}  •  AI: $chats  •  Analyse: $analyse  •  Mistake: $mistake",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 12.2,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -377,56 +385,20 @@ class _ProgressList extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Progress Summary",
+            "Daily usage (real)",
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 10),
-          ...List.generate(speeds.length, (index) {
-            final speed = speeds[index].toStringAsFixed(1);
-            final acc = accuracy.isNotEmpty
-                ? "${accuracy[index].toStringAsFixed(0)}%"
-                : "--";
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      "D${index + 1}",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "Speed $speed km/h",
-                      style: GoogleFonts.poppins(color: Colors.white),
-                    ),
-                  ),
-                  Text(
-                    acc,
-                    style: GoogleFonts.poppins(
-                      color: const Color(0xFFFFD86B),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
+          if (active.isEmpty)
+            Text(
+              "No activity yet this week.",
+              style: GoogleFonts.poppins(color: Colors.white54, fontSize: 12.5),
+            )
+          else
+            ...active,
         ],
       ),
     );
@@ -467,7 +439,7 @@ class _PdfActionCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "Your progress summary is ready. Generate a PDF and download it to your phone.",
+            "Generate your weekly usage PDF (app opens + AI feature usage by day).",
             style: GoogleFonts.poppins(
               color: Colors.white70,
               fontSize: 12.5,
@@ -561,138 +533,6 @@ class _StatChip extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _LineChartCard extends StatelessWidget {
-  final String title;
-  final List<double> values;
-  final Color lineColor;
-  final Color fillColor;
-
-  const _LineChartCard({
-    required this.title,
-    required this.values,
-    required this.lineColor,
-    required this.fillColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final maxY = values.isEmpty ? 0 : values.reduce(math.max);
-    final minY = values.isEmpty ? 0 : values.reduce(math.min);
-    final padding = (maxY - minY).abs() * 0.2;
-    final chartMin = (minY - padding).clamp(0, double.infinity);
-    final chartMax = maxY + padding;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 180,
-            child: LineChart(
-              LineChartData(
-                minX: 0,
-                maxX: math.max(0, values.length - 1).toDouble(),
-                minY: chartMin.toDouble(),
-                maxY: chartMax.toDouble(),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: values.isEmpty
-                      ? 5
-                      : (chartMax - chartMin) / 4,
-                  getDrawingHorizontalLine: (value) {
-                    return FlLine(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      strokeWidth: 1,
-                    );
-                  },
-                ),
-                borderData: FlBorderData(show: false),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 36,
-                      interval: values.isEmpty ? 5 : (chartMax - chartMin) / 4,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          value.toStringAsFixed(0),
-                          style: GoogleFonts.poppins(
-                            color: Colors.white54,
-                            fontSize: 10,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        final idx = value.toInt();
-                        if (idx < 0 || idx >= values.length) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            "D${idx + 1}",
-                            style: GoogleFonts.poppins(
-                              color: Colors.white54,
-                              fontSize: 10,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: [
-                      for (int i = 0; i < values.length; i++)
-                        FlSpot(i.toDouble(), values[i]),
-                    ],
-                    isCurved: true,
-                    color: lineColor,
-                    barWidth: 3,
-                    dotData: FlDotData(show: true),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: fillColor.withValues(alpha: 0.35),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

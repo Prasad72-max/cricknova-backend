@@ -1,15 +1,16 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import 'package:hive/hive.dart';
+import '../services/weekly_stats_service.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   const AnalyseYourselfScreen({super.key});
@@ -18,7 +19,8 @@ class AnalyseYourselfScreen extends StatefulWidget {
   State<AnalyseYourselfScreen> createState() => _AnalyseYourselfScreenState();
 }
 
-class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
+class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
+    with TickerProviderStateMixin {
   File? leftVideo;
   File? rightVideo;
 
@@ -27,6 +29,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
 
   final ImagePicker picker = ImagePicker();
 
+  bool _pickingLeft = false;
+  bool _pickingRight = false;
+
   bool comparing = false;
   String? diffResult;
 
@@ -34,6 +39,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
   int _currentFactIndex = 0;
   late List<String> cricketFacts;
   Timer? _factTimer;
+  late final AnimationController _vsPulseController;
+  late final AnimationController _shimmerController;
+  bool _redirected = false;
 
   @override
   void initState() {
@@ -51,50 +59,81 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       "Elite Tip: Balance at release defines bowling accuracy.",
       // Add your full 50 facts list here
     ];
+
+    _vsPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
   }
 
   Future<void> pickVideo({required bool isLeft}) async {
-    final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
-    if (picked == null) return;
+    try {
+      if (isLeft) {
+        if (_pickingLeft) return;
+        _pickingLeft = true;
+      } else {
+        if (_pickingRight) return;
+        _pickingRight = true;
+      }
 
-    final File file = File(picked.path);
+      final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
+      if (picked == null) return;
 
-    if (isLeft) {
-      leftController?.dispose();
-      leftController = VideoPlayerController.file(file)
-        ..initialize().then((_) {
-          setState(() {});
-          leftController!.play();
-        });
-      leftVideo = file;
-    } else {
-      rightController?.dispose();
-      rightController = VideoPlayerController.file(file)
-        ..initialize().then((_) {
-          setState(() {});
-          rightController!.play();
-        });
-      rightVideo = file;
+      final File file = File(picked.path);
+
+      if (isLeft) {
+        leftController?.dispose();
+        leftController = VideoPlayerController.file(file)
+          ..initialize().then((_) {
+            if (!mounted) return;
+            setState(() {});
+            leftController?.play();
+          });
+        leftVideo = file;
+      } else {
+        rightController?.dispose();
+        rightController = VideoPlayerController.file(file)
+          ..initialize().then((_) {
+            if (!mounted) return;
+            setState(() {});
+            rightController?.play();
+          });
+        rightVideo = file;
+      }
+
+      if (!mounted) return;
+      setState(() {});
+    } finally {
+      if (isLeft) {
+        _pickingLeft = false;
+      } else {
+        _pickingRight = false;
+      }
     }
+  }
 
-    setState(() {});
+  void _startPick(bool isLeft) {
+    if ((isLeft && _pickingLeft) || (!isLeft && _pickingRight)) return;
+    // Open gallery immediately (no UI changes).
+    pickVideo(isLeft: isLeft);
   }
 
   Future<void> runCompare() async {
-    // 🔒 Compare feature allowed ONLY for IN_499 and IN_1999
+    // 🔒 Locked users see blur CTA (no popup/snackbar).
     if (!PremiumService.isLoaded ||
         !PremiumService.isPremium ||
         (PremiumService.plan != "IN_499" && PremiumService.plan != "IN_1999")) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "🔒 Analyse Yourself is available in ₹499 / ₹1999 plans.",
-            ),
-            backgroundColor: Colors.black87,
-          ),
-        );
-      }
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const PremiumScreen(entrySource: "compare_lock"),
+        ),
+      );
       return;
     }
 
@@ -218,6 +257,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         setState(() {
           diffResult = data["difference"] ?? "No difference returned.";
         });
+        try {
+          await WeeklyStatsService.recordAnalyseAi(user.uid);
+        } catch (_) {}
         // 🎯 XP update → Always stored locally in Hive
         final uid = user.uid;
         final box = await Hive.openBox("local_stats_$uid");
@@ -382,12 +424,30 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
     leftController?.dispose();
     rightController?.dispose();
     _factTimer?.cancel();
+    _vsPulseController.dispose();
+    _shimmerController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final bool canCompare = leftVideo != null && rightVideo != null;
+    final bool locked =
+        !PremiumService.isLoaded ||
+        !PremiumService.isPremium ||
+        (PremiumService.plan != "IN_499" && PremiumService.plan != "IN_1999");
+
+    if (locked && !_redirected) {
+      _redirected = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "analyse"),
+          ),
+        );
+      });
+    }
 
     void toggleSync() {
       if (leftController == null || rightController == null) return;
@@ -406,204 +466,198 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0B0E11),
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: const Color(0xFF0B0E11),
         title: const Text('Analyse Yourself'),
+        foregroundColor: Colors.white,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        fit: FlexFit.tight,
-                        child: videoCard(isLeft: true),
-                      ),
-                      const SizedBox(width: 16),
-                      Flexible(
-                        fit: FlexFit.tight,
-                        child: videoCard(isLeft: false),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF0B0E11), Color(0xFF060A12)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _GridPainter(
+                lineColor: Colors.white.withOpacity(0.05),
+                majorLineColor: Colors.white.withOpacity(0.07),
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: videoCard(isLeft: true)),
+                        const SizedBox(width: 16),
+                        Expanded(child: videoCard(isLeft: false)),
+                      ],
                     ),
+                    AnimatedBuilder(
+                      animation: Listenable.merge([
+                        _vsPulseController,
+                        _shimmerController,
+                      ]),
+                      builder: (context, _) {
+                        return Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: _LaserPainter(
+                                enabled: canCompare,
+                                t: _shimmerController.value,
+                                glow: _vsPulseController.value,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    AnimatedBuilder(
+                      animation: _vsPulseController,
+                      builder: (context, _) {
+                        final pulse = 0.95 + (0.10 * _vsPulseController.value);
+                        return Transform.scale(
+                          scale: pulse,
+                          child: _NeonVsBadge(intensity: pulse),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 26),
+                _ShimmerCompareButton(
+                  enabled: canCompare && !locked,
+                  shimmer: _shimmerController,
+                  onTap: runCompare,
+                ),
+                const SizedBox(height: 18),
+
+                if (leftController != null && rightController != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Center(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isSynced
+                              ? const Color(0xFF22C55E)
+                              : const Color(0xFF1E293B),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        onPressed: toggleSync,
+                        child: Text(
+                          isSynced ? "SYNC ON" : "SYNC PLAY",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                if (comparing)
+                  Container(
+                    margin: const EdgeInsets.only(top: 20),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF38BDF8).withOpacity(0.15),
+                      color: Colors.white10,
                       borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: Column(
+                      children: [
+                        const LinearProgressIndicator(minHeight: 3),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "AI is matching frames to find technique differences...",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          child: Text(
+                            cricketFacts[_currentFactIndex],
+                            key: ValueKey(_currentFactIndex),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.4,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (diffResult != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 20),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A).withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: const Color(0xFF38BDF8),
                         width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF38BDF8).withOpacity(0.6),
+                          color: const Color(0xFF38BDF8).withOpacity(0.3),
                           blurRadius: 12,
                           spreadRadius: 1,
                         ),
                       ],
                     ),
-                    child: const Text(
-                      "VS",
-                      style: TextStyle(
-                        color: Color(0xFF38BDF8),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: canCompare ? runCompare : null,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: canCompare
-                          ? const Color(0xFF38BDF8)
-                          : Colors.white24,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'COMPARE',
-                        style: TextStyle(
-                          color: canCompare ? Colors.black : Colors.white54,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.smart_toy_outlined,
+                          color: Color(0xFF38BDF8),
+                          size: 22,
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              if (leftController != null && rightController != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Center(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isSynced
-                            ? const Color(0xFF22C55E)
-                            : const Color(0xFF1E293B),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      onPressed: toggleSync,
-                      child: Text(
-                        isSynced ? "SYNC ON" : "SYNC PLAY",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-              if (comparing)
-                Container(
-                  margin: const EdgeInsets.only(top: 20),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    children: [
-                      const LinearProgressIndicator(minHeight: 3),
-                      const SizedBox(height: 16),
-                      const Text(
-                        "AI is matching frames to find technique differences...",
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 500),
-                        child: Text(
-                          cricketFacts[_currentFactIndex],
-                          key: ValueKey(_currentFactIndex),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            height: 1.4,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              if (diffResult != null)
-                Container(
-                  margin: const EdgeInsets.only(top: 20),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A).withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: const Color(0xFF38BDF8),
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF38BDF8).withOpacity(0.3),
-                        blurRadius: 12,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.smart_toy_outlined,
-                        color: Color(0xFF38BDF8),
-                        size: 22,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          "Difference: ${diffResult!}",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            height: 1.5,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            "Difference: ${diffResult!}",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.5,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -614,91 +668,365 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
         : rightController;
     final bool hasVideo = controller != null && controller.value.isInitialized;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            flex: 3,
-            child: hasVideo
-                ? AspectRatio(
-                    aspectRatio: controller!.value.aspectRatio,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          Stack(
-                            fit: StackFit.expand,
-                            children: [VideoPlayer(controller)],
-                          ),
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                "READY",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+    return GestureDetector(
+      onTapDown: (_) => _startPick(isLeft),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            height: 220,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.14)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF38BDF8).withOpacity(0.10),
+                  blurRadius: 22,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (!hasVideo)
+                  Opacity(
+                    opacity: 0.22,
+                    child: ImageFiltered(
+                      imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Image.asset(
+                        "assets/images/pitch.png",
+                        fit: BoxFit.cover,
                       ),
                     ),
-                  )
-                : const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 40),
-                    child: Icon(
-                      Icons.video_library_outlined,
-                      color: Colors.white38,
-                      size: 48,
-                    ),
                   ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 1,
-            child: GestureDetector(
-              onTap: () => pickVideo(isLeft: isLeft),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    isLeft ? 'ADD\nVID 1' : 'ADD\nVID 2',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                if (controller != null && controller.value.isInitialized)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: VideoPlayer(controller),
+                  ),
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withOpacity(0.10)),
+                    ),
+                    child: Text(
+                      isLeft ? "VIDEO A" : "VIDEO B",
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                   ),
                 ),
-              ),
+                Center(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 240),
+                    opacity: hasVideo ? 0.0 : 1.0,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.white70,
+                          size: 42,
+                        ),
+                        SizedBox(height: 10),
+                        Text(
+                          "Add Video",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A).withOpacity(0.65),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: const Color(0xFF38BDF8).withOpacity(0.35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.video_call_outlined,
+                          color: Color(0xFF38BDF8),
+                          size: 16,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          "Add",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NeonVsBadge extends StatelessWidget {
+  final double intensity;
+  const _NeonVsBadge({required this.intensity});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 84,
+      height: 84,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          colors: [Color(0xFF22D3EE), Color(0xFF8B5CF6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF22D3EE).withOpacity(0.35 * intensity),
+            blurRadius: 22,
+            spreadRadius: 2,
+          ),
+          BoxShadow(
+            color: const Color(0xFF8B5CF6).withOpacity(0.30 * intensity),
+            blurRadius: 26,
+            spreadRadius: 2,
           ),
         ],
       ),
+      child: Center(
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF0B0E11).withOpacity(0.65),
+            border: Border.all(color: Colors.white.withOpacity(0.18)),
+          ),
+          alignment: Alignment.center,
+          child: const Text(
+            "VS",
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.6,
+              fontSize: 18,
+            ),
+          ),
+        ),
+      ),
     );
+  }
+}
+
+class _ShimmerCompareButton extends StatelessWidget {
+  final bool enabled;
+  final AnimationController shimmer;
+  final VoidCallback onTap;
+
+  const _ShimmerCompareButton({
+    required this.enabled,
+    required this.shimmer,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
+          children: [
+            Container(
+              height: 58,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: enabled
+                      ? const [Color(0xFF8B5CF6), Color(0xFF22D3EE)]
+                      : [
+                          const Color(0xFF8B5CF6).withOpacity(0.35),
+                          const Color(0xFF22D3EE).withOpacity(0.25),
+                        ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF22D3EE).withOpacity(0.22),
+                    blurRadius: 24,
+                    spreadRadius: 1,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF8B5CF6).withOpacity(0.22),
+                    blurRadius: 28,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: const Text(
+                "COMPARE ANALYSIS",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.0,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            if (enabled)
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: shimmer,
+                  builder: (context, _) {
+                    return FractionallySizedBox(
+                      widthFactor: 0.28,
+                      alignment: Alignment(-1 + (2 * shimmer.value), 0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Colors.white.withOpacity(0.55),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GridPainter extends CustomPainter {
+  final Color lineColor;
+  final Color majorLineColor;
+
+  const _GridPainter({required this.lineColor, required this.majorLineColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const gap = 22.0;
+    const majorEvery = 4;
+
+    for (int i = 0; i <= (size.width / gap).ceil(); i++) {
+      final x = i * gap;
+      final paint = Paint()
+        ..color = (i % majorEvery == 0) ? majorLineColor : lineColor
+        ..strokeWidth = (i % majorEvery == 0) ? 1.0 : 0.6;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+
+    for (int i = 0; i <= (size.height / gap).ceil(); i++) {
+      final y = i * gap;
+      final paint = Paint()
+        ..color = (i % majorEvery == 0) ? majorLineColor : lineColor
+        ..strokeWidth = (i % majorEvery == 0) ? 1.0 : 0.6;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _GridPainter oldDelegate) {
+    return oldDelegate.lineColor != lineColor ||
+        oldDelegate.majorLineColor != majorLineColor;
+  }
+}
+
+class _LaserPainter extends CustomPainter {
+  final bool enabled;
+  final double t;
+  final double glow;
+
+  const _LaserPainter({
+    required this.enabled,
+    required this.t,
+    required this.glow,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!enabled) return;
+
+    final center = Offset(size.width / 2, 110);
+    final leftTarget = Offset(size.width * 0.25, 110);
+    final rightTarget = Offset(size.width * 0.75, 110);
+
+    final baseWidth = 1.6 + (1.2 * glow);
+    final paint = Paint()
+      ..strokeWidth = baseWidth
+      ..style = PaintingStyle.stroke
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF22D3EE), Color(0xFF60A5FA), Color(0xFF8B5CF6)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final pulsePaint = Paint()
+      ..strokeWidth = baseWidth + 2.2
+      ..color = const Color(0xFF38BDF8).withOpacity(0.12 + (0.10 * glow))
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    canvas.drawLine(center, leftTarget, pulsePaint);
+    canvas.drawLine(center, rightTarget, pulsePaint);
+
+    canvas.drawLine(center, leftTarget, paint);
+    canvas.drawLine(center, rightTarget, paint);
+
+    // Moving highlight dot.
+    final dotXLeft = center.dx + (leftTarget.dx - center.dx) * t;
+    final dotXRight = center.dx + (rightTarget.dx - center.dx) * t;
+    final dotPaint = Paint()
+      ..color = Colors.white.withOpacity(0.9)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(Offset(dotXLeft, center.dy), 2.6, dotPaint);
+    canvas.drawCircle(Offset(dotXRight, center.dy), 2.6, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LaserPainter oldDelegate) {
+    return oldDelegate.enabled != enabled ||
+        oldDelegate.t != t ||
+        oldDelegate.glow != glow;
   }
 }

@@ -2216,7 +2216,8 @@ class _RewardsScreenState extends State<RewardsScreen> {
             const SizedBox(height: 16),
             _rewardCard(
               title: "English Willow Bat + Special Gift",
-              description: "Unlock at 20 Lakh XP milestone.",
+              description:
+                  "Unlock at 20 Lakh XP milestone. Delivered in 30–45 days.",
               threshold: 2000000,
               eligible: isEligible(2000000),
               extraXP: extraXPFor(2000000),
@@ -2356,6 +2357,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
     String rewardTitle,
     int threshold,
   ) {
+    final rewardsContext = context;
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
     final pincodeController = TextEditingController();
@@ -2365,11 +2367,11 @@ class _RewardsScreenState extends State<RewardsScreen> {
     final cityStateController = TextEditingController();
     String selectedCountryCode = "+91";
     String selectedSize = "M";
-    String selectedGlovesSize = "M";
-    String selectedPadsSize = "Adult";
-    String selectedHelmetSize = "M";
+    String selectedGlovesSize = "Men";
+    String selectedPadsSize = "Men";
+    String selectedHelmetSize = "Men";
     String selectedBatCompany = "SS";
-    String selectedBatWeight = "1180g";
+    String selectedBatWeight = "Medium (1130–1200g)";
     String selectedBatSize = "SH";
     final formKey = GlobalKey<FormState>();
 
@@ -2417,7 +2419,6 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           ),
                         ),
                         const SizedBox(height: 25),
-
                         _premiumField(
                           controller: nameController,
                           label: "Full Name",
@@ -2427,240 +2428,244 @@ class _RewardsScreenState extends State<RewardsScreen> {
 
                         Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  dropdownColor: const Color(0xFF1E293B),
-                                  value: selectedCountryCode,
-                                  style: const TextStyle(color: Colors.white),
-                                  items:
-                                      const [
-                                        "+1",
-                                        "+7",
-                                        "+20",
-                                        "+27",
-                                        "+30",
-                                        "+31",
-                                        "+32",
-                                        "+33",
-                                        "+34",
-                                        "+36",
-                                        "+39",
-                                        "+40",
-                                        "+41",
-                                        "+43",
-                                        "+44",
-                                        "+45",
-                                        "+46",
-                                        "+47",
-                                        "+48",
-                                        "+49",
-                                        "+51",
-                                        "+52",
-                                        "+53",
-                                        "+54",
-                                        "+55",
-                                        "+56",
-                                        "+57",
-                                        "+58",
-                                        "+60",
-                                        "+61",
-                                        "+62",
-                                        "+63",
-                                        "+64",
-                                        "+65",
-                                        "+66",
-                                        "+81",
-                                        "+82",
-                                        "+84",
-                                        "+86",
-                                        "+90",
-                                        "+91",
-                                        "+93",
-                                        "+94",
-                                        "+95",
-                                        "+98",
-                                        "+211",
-                                        "+212",
-                                        "+213",
-                                        "+216",
-                                        "+218",
-                                        "+220",
-                                        "+221",
-                                        "+222",
-                                        "+223",
-                                        "+224",
-                                        "+225",
-                                        "+226",
-                                        "+227",
-                                        "+228",
-                                        "+229",
-                                        "+230",
-                                        "+231",
-                                        "+232",
-                                        "+233",
-                                        "+234",
-                                        "+235",
-                                        "+236",
-                                        "+237",
-                                        "+238",
-                                        "+239",
-                                        "+240",
-                                        "+241",
-                                        "+242",
-                                        "+243",
-                                        "+244",
-                                        "+245",
-                                        "+246",
-                                        "+248",
-                                        "+249",
-                                        "+250",
-                                        "+251",
-                                        "+252",
-                                        "+253",
-                                        "+254",
-                                        "+255",
-                                        "+256",
-                                        "+257",
-                                        "+258",
-                                        "+260",
-                                        "+261",
-                                        "+262",
-                                        "+263",
-                                        "+264",
-                                        "+265",
-                                        "+266",
-                                        "+267",
-                                        "+268",
-                                        "+269",
-                                        "+290",
-                                        "+291",
-                                        "+297",
-                                        "+298",
-                                        "+299",
-                                        "+350",
-                                        "+351",
-                                        "+352",
-                                        "+353",
-                                        "+354",
-                                        "+355",
-                                        "+356",
-                                        "+357",
-                                        "+358",
-                                        "+359",
-                                        "+370",
-                                        "+371",
-                                        "+372",
-                                        "+373",
-                                        "+374",
-                                        "+375",
-                                        "+376",
-                                        "+377",
-                                        "+378",
-                                        "+380",
-                                        "+381",
-                                        "+382",
-                                        "+383",
-                                        "+385",
-                                        "+386",
-                                        "+387",
-                                        "+389",
-                                        "+420",
-                                        "+421",
-                                        "+423",
-                                        "+500",
-                                        "+501",
-                                        "+502",
-                                        "+503",
-                                        "+504",
-                                        "+505",
-                                        "+506",
-                                        "+507",
-                                        "+508",
-                                        "+509",
-                                        "+590",
-                                        "+591",
-                                        "+592",
-                                        "+593",
-                                        "+594",
-                                        "+595",
-                                        "+596",
-                                        "+597",
-                                        "+598",
-                                        "+599",
-                                        "+670",
-                                        "+672",
-                                        "+673",
-                                        "+674",
-                                        "+675",
-                                        "+676",
-                                        "+677",
-                                        "+678",
-                                        "+679",
-                                        "+680",
-                                        "+681",
-                                        "+682",
-                                        "+683",
-                                        "+685",
-                                        "+686",
-                                        "+687",
-                                        "+688",
-                                        "+689",
-                                        "+690",
-                                        "+691",
-                                        "+692",
-                                        "+850",
-                                        "+852",
-                                        "+853",
-                                        "+855",
-                                        "+856",
-                                        "+880",
-                                        "+886",
-                                        "+960",
-                                        "+961",
-                                        "+962",
-                                        "+963",
-                                        "+964",
-                                        "+965",
-                                        "+966",
-                                        "+967",
-                                        "+968",
-                                        "+970",
-                                        "+971",
-                                        "+972",
-                                        "+973",
-                                        "+974",
-                                        "+975",
-                                        "+976",
-                                        "+977",
-                                        "+992",
-                                        "+993",
-                                        "+994",
-                                        "+995",
-                                        "+996",
-                                        "+998",
-                                      ].map((code) {
-                                        return DropdownMenuItem(
-                                          value: code,
-                                          child: Text(code),
-                                        );
-                                      }).toList(),
-                                  onChanged: (value) {
-                                    setState(() {
-                                      selectedCountryCode = value!;
-                                    });
-                                  },
+                            Visibility(
+                              visible: false,
+                              maintainState: true,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1E293B),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    dropdownColor: const Color(0xFF1E293B),
+                                    value: selectedCountryCode,
+                                    style: const TextStyle(color: Colors.white),
+                                    items:
+                                        const [
+                                          "+1",
+                                          "+7",
+                                          "+20",
+                                          "+27",
+                                          "+30",
+                                          "+31",
+                                          "+32",
+                                          "+33",
+                                          "+34",
+                                          "+36",
+                                          "+39",
+                                          "+40",
+                                          "+41",
+                                          "+43",
+                                          "+44",
+                                          "+45",
+                                          "+46",
+                                          "+47",
+                                          "+48",
+                                          "+49",
+                                          "+51",
+                                          "+52",
+                                          "+53",
+                                          "+54",
+                                          "+55",
+                                          "+56",
+                                          "+57",
+                                          "+58",
+                                          "+60",
+                                          "+61",
+                                          "+62",
+                                          "+63",
+                                          "+64",
+                                          "+65",
+                                          "+66",
+                                          "+81",
+                                          "+82",
+                                          "+84",
+                                          "+86",
+                                          "+90",
+                                          "+91",
+                                          "+93",
+                                          "+94",
+                                          "+95",
+                                          "+98",
+                                          "+211",
+                                          "+212",
+                                          "+213",
+                                          "+216",
+                                          "+218",
+                                          "+220",
+                                          "+221",
+                                          "+222",
+                                          "+223",
+                                          "+224",
+                                          "+225",
+                                          "+226",
+                                          "+227",
+                                          "+228",
+                                          "+229",
+                                          "+230",
+                                          "+231",
+                                          "+232",
+                                          "+233",
+                                          "+234",
+                                          "+235",
+                                          "+236",
+                                          "+237",
+                                          "+238",
+                                          "+239",
+                                          "+240",
+                                          "+241",
+                                          "+242",
+                                          "+243",
+                                          "+244",
+                                          "+245",
+                                          "+246",
+                                          "+248",
+                                          "+249",
+                                          "+250",
+                                          "+251",
+                                          "+252",
+                                          "+253",
+                                          "+254",
+                                          "+255",
+                                          "+256",
+                                          "+257",
+                                          "+258",
+                                          "+260",
+                                          "+261",
+                                          "+262",
+                                          "+263",
+                                          "+264",
+                                          "+265",
+                                          "+266",
+                                          "+267",
+                                          "+268",
+                                          "+269",
+                                          "+290",
+                                          "+291",
+                                          "+297",
+                                          "+298",
+                                          "+299",
+                                          "+350",
+                                          "+351",
+                                          "+352",
+                                          "+353",
+                                          "+354",
+                                          "+355",
+                                          "+356",
+                                          "+357",
+                                          "+358",
+                                          "+359",
+                                          "+370",
+                                          "+371",
+                                          "+372",
+                                          "+373",
+                                          "+374",
+                                          "+375",
+                                          "+376",
+                                          "+377",
+                                          "+378",
+                                          "+380",
+                                          "+381",
+                                          "+382",
+                                          "+383",
+                                          "+385",
+                                          "+386",
+                                          "+387",
+                                          "+389",
+                                          "+420",
+                                          "+421",
+                                          "+423",
+                                          "+500",
+                                          "+501",
+                                          "+502",
+                                          "+503",
+                                          "+504",
+                                          "+505",
+                                          "+506",
+                                          "+507",
+                                          "+508",
+                                          "+509",
+                                          "+590",
+                                          "+591",
+                                          "+592",
+                                          "+593",
+                                          "+594",
+                                          "+595",
+                                          "+596",
+                                          "+597",
+                                          "+598",
+                                          "+599",
+                                          "+670",
+                                          "+672",
+                                          "+673",
+                                          "+674",
+                                          "+675",
+                                          "+676",
+                                          "+677",
+                                          "+678",
+                                          "+679",
+                                          "+680",
+                                          "+681",
+                                          "+682",
+                                          "+683",
+                                          "+685",
+                                          "+686",
+                                          "+687",
+                                          "+688",
+                                          "+689",
+                                          "+690",
+                                          "+691",
+                                          "+692",
+                                          "+850",
+                                          "+852",
+                                          "+853",
+                                          "+855",
+                                          "+856",
+                                          "+880",
+                                          "+886",
+                                          "+960",
+                                          "+961",
+                                          "+962",
+                                          "+963",
+                                          "+964",
+                                          "+965",
+                                          "+966",
+                                          "+967",
+                                          "+968",
+                                          "+970",
+                                          "+971",
+                                          "+972",
+                                          "+973",
+                                          "+974",
+                                          "+975",
+                                          "+976",
+                                          "+977",
+                                          "+992",
+                                          "+993",
+                                          "+994",
+                                          "+995",
+                                          "+996",
+                                          "+998",
+                                        ].map((code) {
+                                          return DropdownMenuItem(
+                                            value: code,
+                                            child: Text(code),
+                                          );
+                                        }).toList(),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        selectedCountryCode = value!;
+                                      });
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox.shrink(),
                             Expanded(
                               child: TextFormField(
                                 controller: phoneController,
@@ -2671,9 +2676,14 @@ class _RewardsScreenState extends State<RewardsScreen> {
                                     Icons.phone,
                                     color: Color(0xFF3B82F6),
                                   ),
-                                  labelText: "Mobile Number",
+                                  labelText:
+                                      "Mobile Number (with country code)",
                                   labelStyle: const TextStyle(
                                     color: Colors.white70,
+                                  ),
+                                  helperText: "Example: +91XXXXXXXXXX",
+                                  helperStyle: const TextStyle(
+                                    color: Colors.white54,
                                   ),
                                   filled: true,
                                   fillColor: const Color(0xFF1E293B),
@@ -2683,10 +2693,16 @@ class _RewardsScreenState extends State<RewardsScreen> {
                                   ),
                                 ),
                                 validator: (value) {
-                                  if (value == null || value.trim().isEmpty) {
+                                  final raw = (value ?? "").trim();
+                                  if (raw.isEmpty) {
                                     return "Contact number required";
                                   }
-                                  if (value.trim().length < 6) {
+                                  if (!raw.startsWith("+")) {
+                                    return "Add country code (example: +91)";
+                                  }
+                                  final normalized =
+                                      "+${raw.substring(1).replaceAll(RegExp(r'\\D'), '')}";
+                                  if (normalized.length < 8) {
                                     return "Enter valid number";
                                   }
                                   return null;
@@ -2791,7 +2807,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           const SizedBox(height: 10),
                           Wrap(
                             spacing: 10,
-                            children: ["S", "M", "L", "XL", "XXL"].map((size) {
+                            children: ["Small", "Youth", "Men"].map((size) {
                               final bool isSelected =
                                   selectedGlovesSize == size;
                               return ChoiceChip(
@@ -2829,7 +2845,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           _kitDropdown(
                             label: "Batting Pads Size",
                             value: selectedPadsSize,
-                            options: ["Youth", "Adult", "Large Adult"],
+                            options: ["Small", "Youth", "Men"],
                             onChanged: (val) =>
                                 setState(() => selectedPadsSize = val),
                           ),
@@ -2837,7 +2853,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           _kitDropdown(
                             label: "Batting Gloves Size",
                             value: selectedGlovesSize,
-                            options: ["S", "M", "L", "XL", "XXL"],
+                            options: ["Small", "Youth", "Men"],
                             onChanged: (val) =>
                                 setState(() => selectedGlovesSize = val),
                           ),
@@ -2845,7 +2861,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           _kitDropdown(
                             label: "Helmet Size",
                             value: selectedHelmetSize,
-                            options: ["S", "M", "L"],
+                            options: ["Small", "Youth", "Men"],
                             onChanged: (val) =>
                                 setState(() => selectedHelmetSize = val),
                           ),
@@ -2861,6 +2877,15 @@ class _RewardsScreenState extends State<RewardsScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            "Delivered in 30–45 days",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           const SizedBox(height: 10),
                           _kitDropdown(
                             label: "Bat Company",
@@ -2873,7 +2898,11 @@ class _RewardsScreenState extends State<RewardsScreen> {
                           _kitDropdown(
                             label: "Bat Weight",
                             value: selectedBatWeight,
-                            options: ["1160g", "1180g", "1200g", "1220g"],
+                            options: [
+                              "Light (1080–1120g)",
+                              "Medium (1130–1200g)",
+                              "Heavy (1200g+)",
+                            ],
                             onChanged: (val) =>
                                 setState(() => selectedBatWeight = val),
                           ),
@@ -2911,7 +2940,7 @@ ${threshold == 1000000 ? "Pads: $selectedPadsSize\nGloves: $selectedGlovesSize\n
 ${threshold == 2000000 ? "Bat Company: $selectedBatCompany\nBat Weight: $selectedBatWeight\nBat Size: $selectedBatSize" : ""}
 
 Full Name: ${nameController.text}
-Phone: $selectedCountryCode ${phoneController.text}
+Phone: ${phoneController.text}
 
 Address:
 Pincode: ${pincodeController.text}
@@ -2948,30 +2977,34 @@ Total XP: $totalXP
                                     box.get("xp", defaultValue: 0) as int;
                                 final now = DateTime.now();
 
-                                setState(() {
-                                  jerseyClaimed = true;
-                                  claimDate = now;
-                                  xpAtClaim = currentXP;
-                                });
-
-                                // Do NOT reset XP. Keep cumulative progress.
-                                await box.put("xpAtClaim", currentXP);
-                                await box.put(
-                                  "claimDateMillis",
-                                  now.millisecondsSinceEpoch,
-                                );
+                                final isJersey = threshold == 50000;
+                                if (isJersey) {
+                                  // Do NOT reset XP. Keep cumulative progress.
+                                  await box.put("xpAtClaim", currentXP);
+                                  await box.put(
+                                    "claimDateMillis",
+                                    now.millisecondsSinceEpoch,
+                                  );
+                                }
                                 await box.put("claimed_$threshold", true);
                                 await box.flush();
 
-                                // Keep totalXP unchanged (milestones are cumulative)
-                                setState(() {
-                                  totalXP = currentXP;
-                                });
+                                if (mounted) {
+                                  this.setState(() {
+                                    if (isJersey) {
+                                      jerseyClaimed = true;
+                                      claimDate = now;
+                                      xpAtClaim = currentXP;
+                                    }
+                                    totalXP = currentXP;
+                                  });
+                                }
 
                                 Navigator.pop(context);
 
-                                showDialog(
-                                  context: context,
+                                await showDialog(
+                                  context: rewardsContext,
+                                  barrierDismissible: false,
                                   builder: (_) => AlertDialog(
                                     backgroundColor: const Color(0xFF11151C),
                                     shape: RoundedRectangleBorder(
@@ -2999,8 +3032,24 @@ Total XP: $totalXP
                                         ),
                                       ],
                                     ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(rewardsContext),
+                                        child: const Text(
+                                          "OK",
+                                          style: TextStyle(
+                                            color: Color(0xFF38BDF8),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 );
+
+                                if (!mounted) return;
+                                Navigator.of(rewardsContext).pop();
                               }
                             },
                             child: const Text(
