@@ -2,8 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/premium_service.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../services/pricing_location_service.dart';
 
 class GoogleAuthService {
   static final _auth = FirebaseAuth.instance;
@@ -29,7 +28,9 @@ class GoogleAuthService {
       // 🔐 Force refresh Firebase ID token and store it
       final idToken = await userCred.user!.getIdToken(true);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString("firebaseIdToken", idToken);
+      if (idToken != null && idToken.isNotEmpty) {
+        await prefs.setString("firebaseIdToken", idToken);
+      }
 
       await prefs.setBool("isLoggedIn", true);
       await prefs.setString("loginType", "google");
@@ -42,33 +43,16 @@ class GoogleAuthService {
 
       // 🌍 Detect IP and set pricing mode
       try {
-        final res = await http
-            .get(Uri.parse("https://ipapi.co/json/"))
-            .timeout(const Duration(seconds: 10));
-
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          final countryCode = data["country_code"];
-          final ip = data["ip"];
-
-          print("🌍 LOGIN IP DATA => $data");
-
-          if (countryCode == "IN") {
-            await prefs.setString("pricingMode", "INR");
-            print("🇮🇳 PRICING MODE SET => INR");
-          } else {
-            await prefs.setString("pricingMode", "USD");
-            print("🌎 PRICING MODE SET => USD");
-          }
-
-          print("🧠 USER IP => $ip | COUNTRY => $countryCode");
-        }
+        final region = await PricingLocationService.refreshPricingRegion(
+          timeout: const Duration(seconds: 2),
+        );
+        print(
+          region == PricingRegion.india
+              ? "🇮🇳 LOGIN PRICING MODE => INR"
+              : "🌎 LOGIN PRICING MODE => USD",
+        );
       } catch (e) {
         print("❌ IP detection failed at login: $e");
-
-        // 🌍 Default to International pricing to avoid incorrect INR exposure
-        await prefs.setString("pricingMode", "USD");
-        print("🌎 FALLBACK PRICING MODE SET => USD");
       }
 
       return true;

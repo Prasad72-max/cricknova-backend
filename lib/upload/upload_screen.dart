@@ -3406,6 +3406,8 @@ class _UploadScreenState extends State<UploadScreen>
   double? speedKmph;
   String speedType = "unavailable";
   String speedNote = "";
+  String _analysisStatusText = "Analyzing video...";
+  bool _autoZoomRetryInProgress = false;
 
   String swing = "";
   String spin = "";
@@ -3559,23 +3561,64 @@ class _UploadScreenState extends State<UploadScreen>
     );
   }
 
-  Widget _eliteSpeedBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFD86B).withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFFFD86B)),
-      ),
-      child: const Text(
-        "Processing with Elite Speed: 2x Faster",
-        style: TextStyle(
-          color: Color(0xFFFFD86B),
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+  bool _isSpeedSentinelUnavailable(dynamic speedVal) {
+    if (speedVal is! String) return false;
+    final token = speedVal.trim().toLowerCase();
+    return token == "none" ||
+        token == "__" ||
+        token == "null" ||
+        token == "na" ||
+        token == "n/a" ||
+        token == "unavailable" ||
+        token.isEmpty;
+  }
+
+  Future<Map<String, dynamic>?> _runAutoZoomSpeedRetry({
+    required File sourceVideo,
+    required String idToken,
+  }) async {
+    if (!mounted) return null;
+    setState(() {
+      _autoZoomRetryInProgress = true;
+      _analysisStatusText =
+          "Speed unavailable. Auto-zoom recheck in progress...";
+    });
+    await Future.delayed(const Duration(milliseconds: 900));
+
+    final retryUri = Uri.parse(
+      "https://cricknova-backend.onrender.com/training/analyze",
     );
+    final retryRequest = http.MultipartRequest("POST", retryUri);
+    retryRequest.headers["Accept"] = "application/json";
+    retryRequest.headers["Authorization"] = "Bearer $idToken";
+    _applyEliteHeaders(retryRequest);
+    retryRequest.fields["auto_zoom"] = "true";
+    retryRequest.fields["zoom_factor"] = "1.35";
+    retryRequest.fields["speed_retry"] = "1";
+    retryRequest.files.add(
+      await http.MultipartFile.fromPath("file", sourceVideo.path),
+    );
+
+    final retryResponse = await retryRequest.send().timeout(
+      const Duration(seconds: 40),
+    );
+    final retryRaw = await retryResponse.stream.bytesToString();
+    debugPrint("AUTO-ZOOM RETRY ${retryResponse.statusCode} => $retryRaw");
+    if (retryResponse.statusCode != 200) {
+      if (mounted) {
+        setState(() {
+          _autoZoomRetryInProgress = false;
+        });
+      }
+      return null;
+    }
+    final decoded = jsonDecode(retryRaw);
+    if (mounted) {
+      setState(() {
+        _autoZoomRetryInProgress = false;
+      });
+    }
+    return (decoded["analysis"] ?? decoded) as Map<String, dynamic>;
   }
 
   @override
@@ -4925,6 +4968,8 @@ class _UploadScreenState extends State<UploadScreen>
       setState(() {
         uploading = true;
         analysisLoading = true;
+        _analysisStatusText = "Analyzing video...";
+        _autoZoomRetryInProgress = false;
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
@@ -4967,24 +5012,12 @@ class _UploadScreenState extends State<UploadScreen>
       // ✅ Increment total uploaded videos (only on successful analysis)
       await _incrementTotalVideos();
 
-      // 🔥 Also update & show total videos from Hive (for instant UI feedback)
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
-      final statsBox = await Hive.openBox("local_stats_$uid");
-
-      int currentVideos = (statsBox.get('totalVideos', defaultValue: 0) as num)
-          .toInt();
-
-      currentVideos += 1;
-      await statsBox.put('totalVideos', currentVideos);
-
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
       final dynamic speedVal = analysis["speed_kmph"] ?? decoded["speed_kmph"];
-
       final dynamic speedTypeVal =
           analysis["speed_type"] ?? decoded["speed_type"];
-
       final dynamic speedNoteVal =
           analysis["speed_note"] ?? decoded["speed_note"];
       final dynamic fpsVal = analysis["fps"] ?? decoded["fps"];
@@ -4993,11 +5026,30 @@ class _UploadScreenState extends State<UploadScreen>
         analysis["trajectory"],
         fps: fpsForFallback,
       );
-
       if (speedVal is num && speedVal > 0) {
         speedKmph = speedVal.toDouble();
         speedType = speedTypeVal?.toString() ?? "estimated";
         speedNote = speedNoteVal?.toString() ?? "";
+      } else if (_isSpeedSentinelUnavailable(speedVal)) {
+        final retryAnalysis = await _runAutoZoomSpeedRetry(
+          sourceVideo: video!,
+          idToken: token,
+        );
+        final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
+        final dynamic retrySpeedTypeVal = retryAnalysis?["speed_type"];
+        final dynamic retrySpeedNoteVal = retryAnalysis?["speed_note"];
+
+        if (retrySpeedVal is num && retrySpeedVal > 0) {
+          speedKmph = retrySpeedVal.toDouble();
+          speedType = retrySpeedTypeVal?.toString() ?? "auto_zoom_recheck";
+          speedNote =
+              retrySpeedNoteVal?.toString() ??
+              "Speed recovered after auto-zoom recheck";
+        } else {
+          speedKmph = null;
+          speedType = "unavailable";
+          speedNote = "Auto-zoom recheck completed. Speed unavailable.";
+        }
       } else if (fallbackSpeed != null) {
         speedKmph = fallbackSpeed;
         speedType = "trajectory_fallback";
@@ -5080,6 +5132,7 @@ class _UploadScreenState extends State<UploadScreen>
         showTrajectory = false;
 
         analysisLoading = false;
+        _analysisStatusText = "";
 
         controller?.play();
       });
@@ -5102,11 +5155,18 @@ class _UploadScreenState extends State<UploadScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Analysis failed. Please try again.")),
         );
+        setState(() {
+          _analysisStatusText = "";
+          _autoZoomRetryInProgress = false;
+        });
       }
     } finally {
       if (mounted) {
         setState(() {
           uploading = false;
+          analysisLoading = false;
+          _analysisStatusText = "";
+          _autoZoomRetryInProgress = false;
         });
       }
     }
@@ -5652,7 +5712,9 @@ class _UploadScreenState extends State<UploadScreen>
                               child: _metric(
                                 "Speed",
                                 analysisLoading
-                                    ? "Analyzing..."
+                                    ? (_autoZoomRetryInProgress
+                                          ? "Auto zooming..."
+                                          : "Analyzing...")
                                     : (speedKmph != null
                                           ? "${speedKmph!.toStringAsFixed(1)} km/h"
                                           : ""),
@@ -5990,10 +6052,6 @@ class _UploadScreenState extends State<UploadScreen>
                                   fontSize: 13,
                                 ),
                               ),
-                              if (PremiumService.isElite) ...[
-                                const SizedBox(height: 12),
-                                _eliteSpeedBadge(),
-                              ],
                             ],
                           ),
                         ),
@@ -6043,10 +6101,40 @@ class _UploadScreenState extends State<UploadScreen>
                                     ),
                                   ),
                                 ),
-                                if (PremiumService.isElite) ...[
-                                  const SizedBox(height: 12),
-                                  _eliteSpeedBadge(),
-                                ],
+                                const SizedBox(height: 14),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: _autoZoomRetryInProgress
+                                          ? const Icon(
+                                              Icons.zoom_in_rounded,
+                                              color: Color(0xFF38BDF8),
+                                              size: 16,
+                                            )
+                                          : const CircularProgressIndicator(
+                                              strokeWidth: 2.2,
+                                              color: Color(0xFF38BDF8),
+                                            ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Flexible(
+                                      child: Text(
+                                        _analysisStatusText.isEmpty
+                                            ? "Analyzing video..."
+                                            : _analysisStatusText,
+                                        textAlign: TextAlign.center,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),

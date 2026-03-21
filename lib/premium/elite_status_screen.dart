@@ -113,18 +113,29 @@ class _EliteBadgeFrame extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF201405).withValues(alpha: 0.95),
-            const Color(0xFF3B2508).withValues(alpha: 0.98),
+            const Color(0xFFFFF2C8).withValues(alpha: 0.96),
+            const Color(0xFFE8B84D).withValues(alpha: 0.96),
+            const Color(0xFFC9861E).withValues(alpha: 0.95),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
+          stops: const [0.05, 0.55, 1.0],
         ),
-        border: Border.all(color: const Color(0xFFFFD700), width: 1.4),
+        border: Border.all(
+          color: const Color(0xFFFFE6A2).withValues(alpha: 0.95),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.4),
-            blurRadius: expanded ? 16 : 10,
-            spreadRadius: 1,
+            color: const Color(0xFFFFD166).withValues(alpha: 0.34),
+            blurRadius: expanded ? 18 : 12,
+            spreadRadius: expanded ? 1.2 : 0.8,
+          ),
+          BoxShadow(
+            color: const Color(0x88FFF8D6).withValues(alpha: 0.18),
+            blurRadius: expanded ? 12 : 8,
+            spreadRadius: 0.4,
+            offset: const Offset(0, -1),
           ),
         ],
       ),
@@ -133,7 +144,7 @@ class _EliteBadgeFrame extends StatelessWidget {
         children: [
           Icon(
             Icons.workspace_premium_rounded,
-            color: const Color(0xFFFFD700),
+            color: const Color(0xFF704A10),
             size: iconSize,
           ),
           const SizedBox(width: 8),
@@ -143,7 +154,7 @@ class _EliteBadgeFrame extends StatelessWidget {
             overflow: TextOverflow.fade,
             softWrap: false,
             style: TextStyle(
-              color: const Color(0xFFFFD700),
+              color: const Color(0xFF5D3C0A),
               fontWeight: FontWeight.w800,
               fontSize: fontSize,
               letterSpacing: 1.2,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:CrickNova_Ai/splash/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:CrickNova_Ai/services/premium_service.dart';
+import 'package:CrickNova_Ai/services/pricing_location_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -15,6 +16,7 @@ Future<void> main() async {
   }
 
   await Hive.initFlutter();
+  await PricingLocationService.primeFromCache();
 
   runApp(const MyApp());
 }

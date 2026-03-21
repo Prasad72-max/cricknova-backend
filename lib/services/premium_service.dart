@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:CrickNova_Ai/config/api_config.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class PremiumService {
   // ⚠️ RULE: Usage counters are NEVER reset on client.
@@ -552,7 +553,7 @@ class PremiumService {
   // -----------------------------
   // MONTHLY USAGE (Elite Dashboard)
   // -----------------------------
-  static const String _usageCollection = "usage_table";
+  static const String _usageHiveBoxName = "usage_cache";
 
   static String _usageMonthKey([DateTime? now]) {
     final current = now ?? DateTime.now();
@@ -564,13 +565,41 @@ class PremiumService {
     return _usageMonthKey();
   }
 
-  static DocumentReference<Map<String, dynamic>> _usageDoc(
+  static String _usageHiveSwingKey(String uid, String monthKey) =>
+      "swing_used_${uid}_$monthKey";
+
+  static String _usageHiveMistakeKey(String uid, String monthKey) =>
+      "mistake_used_${uid}_$monthKey";
+
+  static Future<void> _persistMonthlyUsageToHive(
+    String uid,
+    MonthlyUsage usage,
+  ) async {
+    final box = await Hive.openBox(_usageHiveBoxName);
+    await box.put(
+      _usageHiveSwingKey(uid, usage.monthKey),
+      usage.swingUsed,
+    );
+    await box.put(
+      _usageHiveMistakeKey(uid, usage.monthKey),
+      usage.mistakeUsed,
+    );
+  }
+
+  static Future<MonthlyUsage> _readMonthlyUsageFromHive(
     String uid,
     String monthKey,
-  ) {
-    return FirebaseFirestore.instance
-        .collection(_usageCollection)
-        .doc("${uid}_$monthKey");
+  ) async {
+    final box = await Hive.openBox(_usageHiveBoxName);
+    return MonthlyUsage(
+      monthKey: monthKey,
+      swingUsed:
+          (box.get(_usageHiveSwingKey(uid, monthKey), defaultValue: 0) as num)
+              .toInt(),
+      mistakeUsed:
+          (box.get(_usageHiveMistakeKey(uid, monthKey), defaultValue: 0) as num)
+              .toInt(),
+    );
   }
 
   static Stream<MonthlyUsage> monthlyUsageStream() {
@@ -581,24 +610,30 @@ class PremiumService {
     }
 
     final controller = StreamController<MonthlyUsage>();
-    StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? sub;
+    StreamSubscription<BoxEvent>? sub;
     Timer? monthTimer;
     var currentKey = initialKey;
+    Hive.openBox(_usageHiveBoxName).then((box) async {
+      if (controller.isClosed) return;
+      controller.add(await _readMonthlyUsageFromHive(user.uid, currentKey));
 
-    void listenForMonth(String key) {
       sub?.cancel();
-      sub = _usageDoc(user.uid, key).snapshots().listen((snapshot) {
-        controller.add(MonthlyUsage.fromSnapshot(snapshot, key));
+      sub = box.watch().listen((event) async {
+        final swingKey = _usageHiveSwingKey(user.uid, currentKey);
+        final mistakeKey = _usageHiveMistakeKey(user.uid, currentKey);
+        if (event.key == swingKey || event.key == mistakeKey) {
+          controller.add(await _readMonthlyUsageFromHive(user.uid, currentKey));
+        }
       }, onError: controller.addError);
-    }
-
-    listenForMonth(currentKey);
+    }).catchError((error, stackTrace) {
+      controller.addError(error, stackTrace);
+    });
 
     monthTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       final newKey = _usageMonthKey();
       if (newKey != currentKey) {
         currentKey = newKey;
-        listenForMonth(currentKey);
+        _readMonthlyUsageFromHive(user.uid, currentKey).then(controller.add);
       }
     });
 
@@ -614,8 +649,7 @@ class PremiumService {
     final user = FirebaseAuth.instance.currentUser;
     final monthKey = _usageMonthKey();
     if (user == null) return MonthlyUsage.empty(monthKey);
-    final snap = await _usageDoc(user.uid, monthKey).get();
-    return MonthlyUsage.fromSnapshot(snap, monthKey);
+    return _readMonthlyUsageFromHive(user.uid, monthKey);
   }
 
   static Future<MonthlyUsage> recordSwingUsage() {
@@ -630,38 +664,14 @@ class PremiumService {
     final user = FirebaseAuth.instance.currentUser;
     final monthKey = _usageMonthKey();
     if (user == null) return MonthlyUsage.empty(monthKey);
-
-    final docRef = _usageDoc(user.uid, monthKey);
-    return FirebaseFirestore.instance.runTransaction((transaction) async {
-      final snap = await transaction.get(docRef);
-      var swingUsed = 0;
-      var mistakeUsed = 0;
-      if (snap.exists) {
-        final data = snap.data();
-        if (data != null) {
-          swingUsed = (data["swing_used"] as num?)?.toInt() ?? 0;
-          mistakeUsed = (data["mistake_used"] as num?)?.toInt() ?? 0;
-        }
-      }
-      if (type == _UsageType.swing) {
-        swingUsed += 1;
-      } else {
-        mistakeUsed += 1;
-      }
-      transaction.set(docRef, {
-        "uid": user.uid,
-        "month_key": monthKey,
-        "swing_used": swingUsed,
-        "mistake_used": mistakeUsed,
-        "updatedAt": FieldValue.serverTimestamp(),
-        if (!snap.exists) "createdAt": FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      return MonthlyUsage(
-        monthKey: monthKey,
-        swingUsed: swingUsed,
-        mistakeUsed: mistakeUsed,
-      );
-    });
+    final current = await _readMonthlyUsageFromHive(user.uid, monthKey);
+    final usage = MonthlyUsage(
+      monthKey: monthKey,
+      swingUsed: current.swingUsed + (type == _UsageType.swing ? 1 : 0),
+      mistakeUsed: current.mistakeUsed + (type == _UsageType.mistake ? 1 : 0),
+    );
+    await _persistMonthlyUsageToHive(user.uid, usage);
+    return usage;
   }
 
   // -----------------------------
@@ -871,21 +881,5 @@ class MonthlyUsage {
   factory MonthlyUsage.empty(String monthKey) {
     return MonthlyUsage(monthKey: monthKey, swingUsed: 0, mistakeUsed: 0);
   }
-
-  factory MonthlyUsage.fromSnapshot(
-    DocumentSnapshot<Map<String, dynamic>> snapshot,
-    String monthKey,
-  ) {
-    if (!snapshot.exists || snapshot.data() == null) {
-      return MonthlyUsage.empty(monthKey);
-    }
-    final data = snapshot.data()!;
-    return MonthlyUsage(
-      monthKey: data["month_key"]?.toString() ?? monthKey,
-      swingUsed: (data["swing_used"] as num?)?.toInt() ?? 0,
-      mistakeUsed: (data["mistake_used"] as num?)?.toInt() ?? 0,
-    );
-  }
-
   bool get isEmpty => swingUsed == 0 && mistakeUsed == 0;
 }

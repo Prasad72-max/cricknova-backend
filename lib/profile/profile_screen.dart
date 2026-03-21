@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -24,7 +25,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final TextEditingController nameController = TextEditingController();
 
   final GoogleSignIn _googleSignIn = GoogleSignIn();
@@ -36,6 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _isEditingProfile = false;
   bool _nameDirty = false;
   String _savedName = "";
+  bool _profileDataLoaded = false;
 
   double maxSpeed = 0;
   int totalVideos = 0;
@@ -46,6 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Box? _statsBox;
   int nextMilestone = 50000;
   late final AnimationController _supportPulseController;
+  late final AnimationController _xpShimmerController;
   late final Animation<double> _supportPulse;
   bool _showRatingDetails = false;
   int _selectedRating = 0;
@@ -70,6 +73,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     _supportPulse = Tween<double>(begin: 1.0, end: 1.06).animate(
       CurvedAnimation(parent: _supportPulseController, curve: Curves.easeInOut),
     );
+    _xpShimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
     _reviewController = TextEditingController(
       text:
           "CrickNova AI is very good and accurate. It helped me improve my bowling speed and swing.",
@@ -80,6 +87,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void dispose() {
     _supportPulseController.dispose();
+    _xpShimmerController.dispose();
     nameController.dispose();
     _reviewController.dispose();
     super.dispose();
@@ -99,14 +107,22 @@ class _ProfileScreenState extends State<ProfileScreen>
     profileImage = null;
     final hiveImagePath = box.get("profileImagePath") as String?;
     if (hiveImagePath != null && hiveImagePath.isNotEmpty) {
-      profileImage = File(hiveImagePath);
+      final file = File(hiveImagePath);
+      if (await file.exists()) {
+        profileImage = file;
+      } else {
+        await box.delete("profileImagePath");
+      }
     } else {
       // 🔁 Migrate legacy SharedPreferences value (global) into Hive
       final legacyPath = prefs.getString("profileImagePath");
       if (legacyPath != null && legacyPath.isNotEmpty) {
-        await box.put("profileImagePath", legacyPath);
+        final file = File(legacyPath);
+        if (await file.exists()) {
+          await box.put("profileImagePath", legacyPath);
+          profileImage = file;
+        }
         await prefs.remove("profileImagePath");
-        profileImage = File(legacyPath);
       }
     }
 
@@ -163,6 +179,8 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     totalCertificates = uniqueCerts.length;
 
+    _profileDataLoaded = true;
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -238,30 +256,36 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   @override
   Widget build(BuildContext context) {
+    final statsBox = _statsBox;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E11),
+      backgroundColor: const Color(0xFF07090D),
       body: RefreshIndicator(
         color: const Color(0xFF3B82F6),
-        backgroundColor: const Color(0xFF11151C),
+        backgroundColor: const Color(0xFF0E131B),
         onRefresh: () async {
           await loadProfileData();
         },
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // 🌌 SPACEFOCO PREMIUM HEADER
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.fromLTRB(20, 70, 20, 40),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0F131A),
-                  borderRadius: BorderRadius.vertical(
-                    bottom: Radius.circular(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0B0F15), Color(0xFF11161F)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
                   ),
                 ),
                 child: Stack(
                   children: [
-                    // Removed glowing circle Positioned widget for a cleaner look.
                     Column(
                       children: [
                         GestureDetector(
@@ -270,77 +294,99 @@ class _ProfileScreenState extends State<ProfileScreen>
                             alignment: Alignment.center,
                             children: [
                               Container(
-                                height: 110,
-                                width: 110,
+                                height: 154,
+                                width: 154,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: const Color(0xFF020617),
-                                  border: Border.all(
-                                    color: totalXP >= 25000
-                                        ? const Color(
-                                            0xFFFFD700,
-                                          ) // Gold if 10k XP
-                                        : const Color(
-                                            0xFF3B82F6,
-                                          ), // Default Electric Blue
-                                    width: 2,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      _levelGlowColor(
+                                        totalXP,
+                                      ).withValues(alpha: 0.28),
+                                      const Color(0xFF020617),
+                                    ],
                                   ),
+                                  border: Border.all(
+                                    color: _levelGlowColor(totalXP),
+                                    width: 2.4,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _levelGlowColor(
+                                        totalXP,
+                                      ).withValues(alpha: 0.45),
+                                      blurRadius: 28,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
                                 ),
                                 child: ClipOval(
                                   child: profileImage != null
                                       ? Image.file(
                                           profileImage!,
-                                          width: 110,
-                                          height: 110,
+                                          width: 154,
+                                          height: 154,
                                           fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                            return const Icon(
+                                              Icons.person,
+                                              size: 86,
+                                              color: Colors.white,
+                                            );
+                                          },
                                         )
                                       : const Icon(
                                           Icons.person,
-                                          size: 70,
+                                          size: 86,
                                           color: Colors.white,
                                         ),
                                 ),
                               ),
                               if (PremiumService.isPremium)
                                 Positioned(
-                                  bottom: 0,
+                                  bottom: 4,
                                   right: 0,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
+                                      horizontal: 10,
+                                      vertical: 5,
                                     ),
                                     decoration: BoxDecoration(
                                       gradient: const LinearGradient(
                                         colors: [
-                                          Color(0xFFFFD700),
-                                          Color(0xFFFFA000),
+                                          Color(0xFFFFF1BF),
+                                          Color(0xFFFFD15C),
+                                          Color(0xFFB8862B),
                                         ],
                                       ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: const [
+                                      borderRadius: BorderRadius.circular(14),
+                                      boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black38,
-                                          blurRadius: 6,
-                                          offset: Offset(0, 2),
+                                          color: const Color(
+                                            0xFFFFD15C,
+                                          ).withValues(alpha: 0.45),
+                                          blurRadius: 16,
+                                          spreadRadius: 0.5,
                                         ),
                                       ],
                                     ),
-                                    child: const Row(
+                                    child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
+                                        const Icon(
                                           Icons.star,
-                                          color: Colors.black,
+                                          color: Color(0xFF2C2208),
                                           size: 14,
                                         ),
-                                        SizedBox(width: 4),
+                                        const SizedBox(width: 5),
                                         Text(
                                           "ELITE",
-                                          style: TextStyle(
-                                            color: Colors.black,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 10,
+                                          style: GoogleFonts.orbitron(
+                                            color: const Color(0xFF2C2208),
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 10.5,
+                                            letterSpacing: 0.9,
                                           ),
                                         ),
                                       ],
@@ -355,10 +401,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                           nameController.text.isNotEmpty
                               ? nameController.text
                               : "Player",
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.orbitron(
                             color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 23,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
                           ),
                         ),
                         if (userEmail != null)
@@ -371,218 +418,130 @@ class _ProfileScreenState extends State<ProfileScreen>
                               textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontSize: 13,
-                                color: Colors.white54,
+                                color: Colors.white.withValues(alpha: 0.58),
                               ),
                             ),
                           ),
                         const SizedBox(height: 20),
 
-                        // ⭐ XP PROGRESS SECTION
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Column(
+                        if (!_profileDataLoaded || statsBox == null)
+                          Column(
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  ValueListenableBuilder<Box>(
-                                    valueListenable: _statsBox!.listenable(
-                                      keys: ['xp'],
-                                    ),
-                                    builder: (context, box, _) {
-                                      final xp = box.get('xp', defaultValue: 0);
-                                      final String levelTitle = _getLevelTitle(
-                                        xp,
-                                      );
-
-                                      Color levelColor;
-                                      if (xp >= 2000000) {
-                                        levelColor = const Color(
-                                          0xFFFFD700,
-                                        ); // Gold
-                                      } else if (xp >= 1000000) {
-                                        levelColor = const Color(
-                                          0xFF8B5CF6,
-                                        ); // Purple
-                                      } else if (xp >= 500000) {
-                                        levelColor = const Color(
-                                          0xFF3B82F6,
-                                        ); // Blue
-                                      } else if (xp >= 250000) {
-                                        levelColor = const Color(
-                                          0xFF10B981,
-                                        ); // Green
-                                      } else if (xp >= 50000) {
-                                        levelColor = const Color(
-                                          0xFFFFA500,
-                                        ); // Orange
-                                      } else {
-                                        levelColor = Colors.white70;
-                                      }
-
-                                      return AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 600,
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: levelColor.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(
-                                            20,
-                                          ),
-                                          boxShadow: xp >= 1000000
-                                              ? [
-                                                  BoxShadow(
-                                                    color: levelColor
-                                                        .withOpacity(0.6),
-                                                    blurRadius: 16,
-                                                    spreadRadius: 1,
-                                                  ),
-                                                ]
-                                              : [],
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            if (xp >= 2000000)
-                                              const Padding(
-                                                padding: EdgeInsets.only(
-                                                  right: 6,
-                                                ),
-                                                child: Icon(
-                                                  Icons.emoji_events,
-                                                  color: Color(0xFFFFD700),
-                                                  size: 16,
-                                                ),
-                                              ),
-                                            Text(
-                                              levelTitle,
-                                              style: GoogleFonts.poppins(
-                                                color: levelColor,
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F141C),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.12),
                                   ),
-                                  ValueListenableBuilder<Box>(
-                                    valueListenable: _statsBox!.listenable(
-                                      keys: ['xp'],
-                                    ),
-                                    builder: (context, box, _) {
-                                      final int xp =
-                                          (box.get('xp', defaultValue: 0)
-                                                  as num)
-                                              .toInt();
-                                      return Text(
-                                        "$xp / $nextMilestone XP",
-                                        style: GoogleFonts.poppins(
-                                          color: Colors.white54,
-                                          fontSize: 12,
-                                        ),
-                                      );
-                                    },
+                                ),
+                                child: Text(
+                                  "Loading...",
+                                  style: GoogleFonts.orbitron(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
                                   ),
-                                ],
+                                ),
                               ),
-                              const SizedBox(height: 8),
-                              Stack(
-                                alignment: Alignment.centerRight,
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: ValueListenableBuilder<Box>(
-                                      valueListenable: _statsBox!.listenable(
-                                        keys: ['xp'],
-                                      ),
-                                      builder: (context, box, _) {
-                                        final int xp =
-                                            (box.get('xp', defaultValue: 0)
-                                                    as num)
-                                                .toInt();
-                                        final double progress =
-                                            xp >= nextMilestone
-                                            ? 1.0
-                                            : xp / nextMilestone;
-                                        return TweenAnimationBuilder<double>(
-                                          tween: Tween<double>(
-                                            begin: 0,
-                                            end: progress,
-                                          ),
-                                          duration: const Duration(
-                                            milliseconds: 800,
-                                          ),
-                                          curve: Curves.easeOutCubic,
-                                          builder: (context, value, _) {
-                                            return LinearProgressIndicator(
-                                              minHeight: 14,
-                                              value: value,
-                                              backgroundColor: const Color(
-                                                0xFF1E293B,
-                                              ),
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                    xp >= 10000
-                                                        ? const Color(
-                                                            0xFFFFD700,
-                                                          )
-                                                        : const Color(
-                                                            0xFF1E90FF,
-                                                          ),
-                                                  ),
-                                            );
-                                          },
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4),
-                                    child: Icon(
-                                      Icons.card_giftcard,
-                                      size: 18,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
+                              const SizedBox(height: 14),
+                              _metallicShimmerProgressBar(
+                                progress: 0,
+                                color: Colors.white70,
                               ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: ValueListenableBuilder<Box>(
-                                  valueListenable: _statsBox!.listenable(
-                                    keys: ['xp'],
-                                  ),
-                                  builder: (context, box, _) {
-                                    final int xp =
-                                        (box.get('xp', defaultValue: 0) as num)
-                                            .toInt();
-                                    int remaining = nextMilestone - xp;
-                                    if (remaining < 0) remaining = 0;
-
-                                    return Text(
-                                      remaining > 0
-                                          ? "$remaining XP remaining to reach next milestone"
-                                          : "🎉 Milestone Achieved!",
-                                      style: GoogleFonts.poppins(
-                                        color: const Color(0xFFFFA500),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    );
-                                  },
+                              const SizedBox(height: 12),
+                              Text(
+                                "Loading XP...",
+                                style: GoogleFonts.orbitron(
+                                  color: Colors.white.withValues(alpha: 0.82),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.4,
                                 ),
                               ),
                             ],
+                          )
+                        else
+                          ValueListenableBuilder<Box>(
+                            valueListenable: statsBox.listenable(
+                              keys: const ['xp'],
+                            ),
+                            builder: (context, box, _) {
+                              final int xp =
+                                  (box.get('xp', defaultValue: 0) as num)
+                                      .toInt();
+                              final double progress = xp >= nextMilestone
+                                  ? 1.0
+                                  : xp / nextMilestone;
+                              final Color levelColor = _levelGlowColor(xp);
+                              final int localRemaining = max(
+                                nextMilestone - xp,
+                                0,
+                              );
+
+                              return Column(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F141C),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: levelColor.withValues(
+                                          alpha: 0.42,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      _getLevelTitle(xp),
+                                      style: GoogleFonts.orbitron(
+                                        color: levelColor,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _metallicShimmerProgressBar(
+                                    progress: progress,
+                                    color: levelColor,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    "$xp / $nextMilestone XP",
+                                    style: GoogleFonts.orbitron(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.82,
+                                      ),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    progress >= 1
+                                        ? "Milestone achieved"
+                                        : "$localRemaining XP remaining to reach next milestone",
+                                    style: GoogleFonts.poppins(
+                                      color: const Color(0xFFFFB454),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                        ),
                       ],
                     ),
                   ],
@@ -622,58 +581,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ),
                     ),
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // 🏆 LIFETIME ACHIEVEMENTS
-              cardContainer(
-                title: "Lifetime Achievements",
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: ValueListenableBuilder<Box>(
-                        valueListenable: _statsBox!.listenable(
-                          keys: ['maxSpeed'],
-                        ),
-                        builder: (context, box, _) {
-                          final double speed =
-                              (box.get('maxSpeed', defaultValue: 0.0) as num)
-                                  .toDouble();
-                          return _achievementItem(
-                            "Max Speed",
-                            "${speed.toStringAsFixed(1)} km/h",
-                            const Color(0xFFFFD700),
-                          );
-                        },
-                      ),
-                    ),
-                    Container(
-                      width: 1,
-                      height: 40,
-                      margin: const EdgeInsets.symmetric(horizontal: 12),
-                      color: Colors.white24,
-                    ),
-                    Expanded(
-                      child: ValueListenableBuilder<Box>(
-                        valueListenable: _statsBox!.listenable(
-                          keys: ['totalVideos'],
-                        ),
-                        builder: (context, box, _) {
-                          final int videos =
-                              (box.get('totalVideos', defaultValue: 0) as num)
-                                  .toInt();
-                          return _achievementItem(
-                            "Total Videos Uploaded",
-                            "$videos",
-                            const Color(0xFF1E90FF),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
                 ),
               ),
 
@@ -1601,27 +1508,77 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _achievementItem(String title, String value, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
+  Widget _metallicShimmerProgressBar({
+    required double progress,
+    required Color color,
+  }) {
+    return Container(
+      height: 18,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C1017),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          children: [
+            FractionallySizedBox(
+              widthFactor: progress.clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF656C78),
+                      color.withValues(alpha: 0.75),
+                      const Color(0xFFE1E4EA),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                ),
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _xpShimmerController,
+              builder: (context, _) {
+                final t = _xpShimmerController.value;
+                return FractionallySizedBox(
+                  widthFactor: progress.clamp(0.0, 1.0),
+                  child: ShaderMask(
+                    blendMode: BlendMode.lighten,
+                    shaderCallback: (rect) {
+                      final start = (t - 0.12).clamp(0.0, 1.0);
+                      final mid = t.clamp(0.0, 1.0);
+                      final end = (t + 0.12).clamp(0.0, 1.0);
+                      return LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: const [
+                          Color(0x00FFFFFF),
+                          Color(0x88FFFFFF),
+                          Color(0x00FFFFFF),
+                        ],
+                        stops: [start, mid, end],
+                      ).createShader(rect);
+                    },
+                    child: Container(color: Colors.white),
+                  ),
+                );
+              },
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(fontSize: 12, color: Colors.white54),
-        ),
-      ],
+      ),
     );
+  }
+
+  Color _levelGlowColor(int xp) {
+    if (xp >= 25000) {
+      return const Color(0xFFFFD15C); // Elite Gold
+    }
+    return const Color(0xFF36A7FF); // Beginner Neon Blue
   }
 
   String _getLevelTitle(int xp) {

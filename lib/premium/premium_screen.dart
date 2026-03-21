@@ -5,18 +5,17 @@ import 'dart:developer';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:async';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:confetti/confetti.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 import '../services/premium_service.dart';
+import '../services/pricing_location_service.dart';
 
 Future<void> showPremiumSuccessScreen(
   BuildContext context, {
@@ -563,6 +562,69 @@ class _IconFlightData {
   });
 }
 
+class _StadiumLightBackdrop extends StatelessWidget {
+  const _StadiumLightBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF020A1F), Color(0xFF060C23), Color(0xFF010713)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
+        Positioned(
+          top: -140,
+          left: -40,
+          right: -40,
+          child: ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 38, sigmaY: 38),
+            child: Container(
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFFE8F2FF).withValues(alpha: 0.28),
+                    const Color(0xFF9EC6FF).withValues(alpha: 0.16),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 80,
+          left: 14,
+          right: 14,
+          child: ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              height: 140,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(120),
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF3B82F6).withValues(alpha: 0.08),
+                    const Color(0xFF8B5CF6).withValues(alpha: 0.18),
+                    const Color(0xFF1D4ED8).withValues(alpha: 0.08),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class PremiumScreen extends StatefulWidget {
   final String? entrySource;
 
@@ -648,7 +710,7 @@ class PayPalWebViewScreen extends StatelessWidget {
 
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
-  bool? isIndia; // null until IP detection completes
+  late bool isIndia;
   static const bool isPayPalSandbox = true; // set false when going live
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
 
@@ -668,6 +730,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   @override
   void initState() {
     super.initState();
+    isIndia = PricingLocationService.isIndia;
     _razorpay = Razorpay();
     debugPrint("Razorpay initialized");
 
@@ -676,28 +739,19 @@ class _PremiumScreenState extends State<PremiumScreen>
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
 
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-    // 🌍 Detect IP on screen load
-    _loadCachedPricingMode();
-    _detectIPAndSetPricing();
+    PricingLocationService.regionNotifier.addListener(_handlePricingRegionChange);
     _shimmerController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
     );
+    _shimmerController.repeat();
     _loadShimmerPreference();
   }
 
-  Future<void> _loadCachedPricingMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString("pricingMode");
-    bool? cached;
-    if (stored == "INR") {
-      cached = true;
-    } else if (stored == "USD") {
-      cached = false;
-    }
-    cached ??= Platform.localeName.toUpperCase().contains("_IN");
-    if (!mounted) return;
-    setState(() => isIndia = cached);
+  void _handlePricingRegionChange() {
+    final nextIsIndia = PricingLocationService.isIndia;
+    if (nextIsIndia == isIndia || !mounted) return;
+    setState(() => isIndia = nextIsIndia);
   }
 
   Future<void> _loadShimmerPreference() async {
@@ -717,45 +771,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     setState(() => _showPremiumShimmer = true);
     if (!_shimmerController.isAnimating) {
       _shimmerController.repeat();
-    }
-  }
-
-  Future<void> _detectIPAndSetPricing() async {
-    try {
-      final res = await http
-          .get(Uri.parse("https://ipapi.co/json/"))
-          .timeout(const Duration(seconds: 10));
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        final countryCode = data["country_code"];
-        final ip = data["ip"];
-
-        debugPrint("🌍 PREMIUM IP DATA => $data");
-
-        final prefs = await SharedPreferences.getInstance();
-
-        if (countryCode == "IN") {
-          await prefs.setString("pricingMode", "INR");
-          debugPrint("🇮🇳 PRICING MODE SET => INR");
-        } else {
-          await prefs.setString("pricingMode", "USD");
-          debugPrint("🌎 PRICING MODE SET => USD");
-        }
-
-        if (!mounted) return;
-
-        setState(() {
-          isIndia = countryCode == "IN";
-        });
-
-        debugPrint("🧠 USER IP => $ip | COUNTRY => $countryCode");
-      }
-    } catch (e) {
-      debugPrint("❌ PREMIUM IP detection failed: $e");
-      if (isIndia == null) {
-        await _loadCachedPricingMode();
-      }
     }
   }
 
@@ -1132,6 +1147,9 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   @override
   void dispose() {
+    PricingLocationService.regionNotifier.removeListener(
+      _handlePricingRegionChange,
+    );
     _razorpay.clear();
     _shimmerController.dispose();
     super.dispose();
@@ -1171,6 +1189,13 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   Future<void> showPaymentMethodSelector(BuildContext context) async {
+    final directPayTitle = isIndia
+        ? "CrickNova Pay (UPI / Cards)"
+        : "International Checkout";
+    final directPaySubtitle = isIndia
+        ? "Pay directly via Razorpay"
+        : "Pay securely via PayPal";
+
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1184,8 +1209,9 @@ class _PremiumScreenState extends State<PremiumScreen>
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               decoration: BoxDecoration(
                 color: const Color(0xFF0B1220).withValues(alpha: 0.9),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(26)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(26),
+                ),
                 border: Border.all(color: Colors.white12),
                 boxShadow: const [
                   BoxShadow(
@@ -1217,8 +1243,8 @@ class _PremiumScreenState extends State<PremiumScreen>
                   ),
                   const SizedBox(height: 14),
                   _paymentMethodTile(
-                    title: "CrickNova Pay (UPI / Cards)",
-                    subtitle: "Pay directly via Razorpay",
+                    title: directPayTitle,
+                    subtitle: directPaySubtitle,
                     leading: Icons.account_balance_wallet_rounded,
                     leadingColor: const Color(0xFFFFD700),
                     onTap: () {
@@ -1296,11 +1322,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                   ],
                 ),
               ),
-              const Icon(
-                Icons.chevron_right,
-                color: Colors.white54,
-                size: 22,
-              ),
+              const Icon(Icons.chevron_right, color: Colors.white54, size: 22),
             ],
           ),
         ),
@@ -1330,14 +1352,6 @@ class _PremiumScreenState extends State<PremiumScreen>
         }
       });
     }
-    if (isIndia == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF020A1F),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
-        ),
-      );
-    }
     return Scaffold(
       backgroundColor: const Color(0xFF020A1F),
 
@@ -1356,23 +1370,26 @@ class _PremiumScreenState extends State<PremiumScreen>
         ),
       ),
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          children: [
-            // INDIA PLANS
-            if (isIndia == true)
-              ...((sourceFromArgs ?? widget.entrySource) == "analyse"
-                  ? indiaCompareOnlyPlans()
-                  : indiaPlans()),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: _StadiumLightBackdrop()),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                // INDIA PLANS
+                if (isIndia == true)
+                  ...((sourceFromArgs ?? widget.entrySource) == "analyse"
+                      ? indiaCompareOnlyPlans()
+                      : indiaPlans()),
 
-            // INTERNATIONAL PLANS
-            if (isIndia == false)
-              ...((sourceFromArgs ?? widget.entrySource) == "analyse"
-                  ? internationalCompareOnlyPlans()
-                  : internationalPlans()),
-          ],
-        ),
+                // INTERNATIONAL PLANS
+                if (isIndia == false)
+                  ...internationalPlans(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1619,6 +1636,13 @@ class _PremiumScreenState extends State<PremiumScreen>
     required List<String> features,
     String? tag,
   }) {
+    final bool isMostPopular = (tag ?? "").contains("Most Popular");
+    final cardGradient = isMostPopular
+        ? const [Color(0xFF9A2BFF), Color(0xFF1D2CFF), Color(0xFF06155A)]
+        : [
+            Colors.white.withValues(alpha: 0.06),
+            Colors.white.withValues(alpha: 0.04),
+          ];
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -1626,15 +1650,31 @@ class _PremiumScreenState extends State<PremiumScreen>
           margin: const EdgeInsets.only(top: 18, bottom: 22),
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
+            gradient: LinearGradient(
+              colors: cardGradient,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withOpacity(0.08), width: 1),
+            border: Border.all(
+              color: isMostPopular
+                  ? const Color(0xFFBA78FF).withValues(alpha: 0.88)
+                  : Colors.white.withValues(alpha: 0.12),
+              width: 1.1,
+            ),
             boxShadow: [
               BoxShadow(
-                color: glowColor.withOpacity(0.35),
+                color: (isMostPopular ? const Color(0xFF8F4BFF) : glowColor)
+                    .withValues(alpha: isMostPopular ? 0.55 : 0.35),
                 blurRadius: 28,
                 spreadRadius: 1,
               ),
+              if (isMostPopular)
+                BoxShadow(
+                  color: const Color(0xFF2D4BFF).withValues(alpha: 0.45),
+                  blurRadius: 40,
+                  spreadRadius: 2,
+                ),
             ],
           ),
           child: Column(
@@ -1651,10 +1691,24 @@ class _PremiumScreenState extends State<PremiumScreen>
               ),
               Text(
                 price,
-                style: const TextStyle(
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 36,
                   fontWeight: FontWeight.bold,
+                  shadows: [
+                    Shadow(
+                      color:
+                          (isMostPopular ? const Color(0xFF9A2BFF) : glowColor)
+                              .withValues(alpha: 0.75),
+                      blurRadius: 16,
+                    ),
+                    Shadow(
+                      color:
+                          (isMostPopular ? const Color(0xFF2D4BFF) : glowColor)
+                              .withValues(alpha: 0.45),
+                      blurRadius: 26,
+                    ),
+                  ],
                 ),
               ),
               if (price == "\$159.99")
@@ -1697,15 +1751,17 @@ class _PremiumScreenState extends State<PremiumScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        f.contains("AI")
-                            ? "💬"
-                            : f.contains("Mistake")
-                            ? "🎯"
-                            : f.contains("Compare")
-                            ? "🎥"
-                            : "✅",
-                        style: const TextStyle(fontSize: 16),
+                      AnimatedBuilder(
+                        animation: _shimmerController,
+                        builder: (context, _) {
+                          return _animatedFeatureTick(
+                            t: _shimmerController.value,
+                            phase: (features.indexOf(f) * 0.18) % 1.0,
+                            tint: isMostPopular
+                                ? const Color(0xFFAF74FF)
+                                : glowColor,
+                          );
+                        },
                       ),
                       const SizedBox(width: 12),
                       Flexible(
@@ -1762,17 +1818,27 @@ class _PremiumScreenState extends State<PremiumScreen>
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [glowColor, glowColor.withOpacity(0.8)],
+                            colors: isMostPopular
+                                ? const [Color(0xFFBE47FF), Color(0xFF364BFF)]
+                                : [glowColor, glowColor.withValues(alpha: 0.8)],
                           ),
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: [
                             BoxShadow(
-                              color: glowColor.withOpacity(0.6),
+                              color:
+                                  (isMostPopular
+                                          ? const Color(0xFF9A2BFF)
+                                          : glowColor)
+                                      .withValues(alpha: 0.6),
                               blurRadius: 18,
                               spreadRadius: 1,
                             ),
                             BoxShadow(
-                              color: glowColor.withOpacity(0.25),
+                              color:
+                                  (isMostPopular
+                                          ? const Color(0xFF2D4BFF)
+                                          : glowColor)
+                                      .withValues(alpha: 0.32),
                               blurRadius: 35,
                               spreadRadius: 2,
                             ),
@@ -1812,7 +1878,11 @@ class _PremiumScreenState extends State<PremiumScreen>
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                gradient: tag.contains("Elite")
+                gradient: isMostPopular
+                    ? const LinearGradient(
+                        colors: [Color(0xFFD776FF), Color(0xFF5F5DFF)],
+                      )
+                    : tag.contains("Elite")
                     ? const LinearGradient(
                         colors: [Color(0xFFFFD700), Color(0xFFE6A800)],
                       )
@@ -1825,7 +1895,11 @@ class _PremiumScreenState extends State<PremiumScreen>
                       ),
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
-                  BoxShadow(color: glowColor.withOpacity(0.5), blurRadius: 18),
+                  BoxShadow(
+                    color: (isMostPopular ? const Color(0xFF9A2BFF) : glowColor)
+                        .withValues(alpha: 0.5),
+                    blurRadius: 18,
+                  ),
                 ],
               ),
               child: Row(
@@ -1856,29 +1930,67 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   Widget _shimmerWrap(Widget child) {
-    if (!_showPremiumShimmer) return child;
     return AnimatedBuilder(
       animation: _shimmerController,
       builder: (context, _) {
         final t = _shimmerController.value;
+        final slide = (t * 1.6) - 0.3;
+        final start = (slide - 0.22).clamp(0.0, 1.0);
+        final mid = slide.clamp(0.0, 1.0);
+        final end = (slide + 0.22).clamp(0.0, 1.0);
         return ShaderMask(
-          blendMode: BlendMode.srcATop,
+          blendMode: BlendMode.lighten,
           shaderCallback: (rect) {
-            final start = (t - 0.3).clamp(0.0, 1.0);
-            final mid = t.clamp(0.0, 1.0);
-            final end = (t + 0.3).clamp(0.0, 1.0);
             return LinearGradient(
               colors: const [
                 Color(0x00FFFFFF),
-                Color(0x66FFFFFF),
+                Color(0x8FFFFFFF),
                 Color(0x00FFFFFF),
               ],
               stops: [start, mid, end],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ).createShader(rect);
           },
           child: child,
         );
       },
+    );
+  }
+
+  Widget _animatedFeatureTick({
+    required double t,
+    required double phase,
+    required Color tint,
+  }) {
+    final wave = math.sin((t + phase) * math.pi * 2);
+    final scale = 0.92 + ((wave + 1) * 0.09);
+    final glow = 0.18 + ((wave + 1) * 0.16);
+    return Transform.scale(
+      scale: scale,
+      child: Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [
+              tint.withValues(alpha: 0.95),
+              tint.withValues(alpha: 0.62),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: tint.withValues(alpha: glow.clamp(0.0, 0.45)),
+              blurRadius: 10,
+              spreadRadius: 0.3,
+            ),
+          ],
+        ),
+        child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+      ),
     );
   }
 

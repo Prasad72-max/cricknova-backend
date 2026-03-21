@@ -94,12 +94,12 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     final userName = user.displayName?.trim().isNotEmpty == true
         ? user.displayName!.trim()
         : "Player";
-    final showWelcomeEntrance = await PostLoginWelcomeScreen.shouldShowFor(
+    final welcomeDecision = await PostLoginWelcomeScreen.shouldShowFor(
       prefs: prefs,
       user: user,
       explicitIsNewUser: userCredential.additionalUserInfo?.isNewUser,
     );
-    if (showWelcomeEntrance) {
+    if (welcomeDecision.shouldShow) {
       await PostLoginWelcomeScreen.markSeen(prefs, user.uid);
     }
 
@@ -108,8 +108,11 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => showWelcomeEntrance
-            ? PostLoginWelcomeScreen(userName: userName)
+        builder: (_) => welcomeDecision.shouldShow
+            ? PostLoginWelcomeScreen(
+                userName: userName,
+                showSkip: welcomeDecision.showSkip,
+              )
             : MainNavigation(userName: userName),
       ),
       (_) => false,

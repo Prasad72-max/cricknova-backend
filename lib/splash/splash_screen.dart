@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/pricing_location_service.dart';
 import 'intro_animation_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -50,8 +51,11 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _startFlow() async {
-    // Keep a short branded splash only; do not block startup for several seconds.
-    await Future.delayed(const Duration(milliseconds: 1600));
+    // Keep pricing ready before users can reach premium screens.
+    await Future.wait([
+      Future.delayed(const Duration(milliseconds: 1600)),
+      PricingLocationService.bootstrap(timeout: const Duration(seconds: 2)),
+    ]);
 
     final prefs = await SharedPreferences.getInstance();
     final bool isFirstLaunch = prefs.getBool("is_first_launch") ?? true;
@@ -106,22 +110,6 @@ class _SplashScreenState extends State<SplashScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: const [
-                  Icon(
-                    Icons.sports_cricket,
-                    color: const Color(0xFF7CFF6B),
-                    size: 90,
-                    shadows: [
-                      Shadow(
-                        color: Color(0xFF7CFF6B),
-                        blurRadius: 18,
-                      ),
-                      Shadow(
-                        color: Color(0xAA7CFF6B),
-                        blurRadius: 32,
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 20),
                   Text(
                     "CrickNova AI",
                     style: TextStyle(
@@ -135,7 +123,7 @@ class _SplashScreenState extends State<SplashScreen>
                     "Where Cricket Meets Intelligence",
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      color: const Color(0xE6FFFFFF),
+                      color: Color(0xE6FFFFFF),
                       fontSize: 19,
                       letterSpacing: 1.1,
                       fontWeight: FontWeight.w900,

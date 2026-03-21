@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/premium_service.dart';
+import '../services/pricing_location_service.dart';
 import '../navigation/main_navigation.dart';
 import 'login_screen.dart';
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -34,42 +32,27 @@ class _AuthGateState extends State<AuthGate> {
     if (user != null) {
       // 🔐 Force refresh Firebase ID token
       final idToken = await user.getIdToken(true);
-      await prefs.setString("firebase_id_token", idToken);
+      if (idToken != null && idToken.isNotEmpty) {
+        await prefs.setString("firebase_id_token", idToken);
+      }
 
       // 🧠 Sync premium before entering app
-      final premiumSynced =
-          await PremiumService.syncFromFirestore(user.uid);
+      await PremiumService.syncFromFirestore(user.uid);
 
-      debugPrint(
-          "AUTH_GATE → premiumSynced=$premiumSynced uid=${user.uid}");
+      debugPrint("AUTH_GATE → premium synced uid=${user.uid}");
 
       // 🌍 Detect IP at login and set pricing mode
       try {
-        final res = await http
-            .get(Uri.parse("https://ipapi.co/json/"))
-            .timeout(const Duration(seconds: 10));
-
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          final countryCode = data["country_code"];
-          final ip = data["ip"];
-
-          debugPrint("🌍 LOGIN IP DATA => $data");
-
-          if (countryCode == "IN") {
-            await prefs.setString("pricingMode", "INR");
-            debugPrint("🇮🇳 PRICING MODE SET => INR");
-          } else {
-            await prefs.setString("pricingMode", "USD");
-            debugPrint("🌎 PRICING MODE SET => USD");
-          }
-
-          debugPrint("🧠 USER IP => $ip | COUNTRY => $countryCode");
-        }
+        final region = await PricingLocationService.refreshPricingRegion(
+          timeout: const Duration(seconds: 2),
+        );
+        debugPrint(
+          region == PricingRegion.india
+              ? "🇮🇳 LOGIN PRICING MODE => INR"
+              : "🌎 LOGIN PRICING MODE => USD",
+        );
       } catch (e) {
         debugPrint("❌ IP detection failed at login: $e");
-        await prefs.setString("pricingMode", "USD");
-        debugPrint("🌎 FALLBACK PRICING MODE SET => USD");
       }
 
       userId = prefs.getString("userName") ?? "Player";
