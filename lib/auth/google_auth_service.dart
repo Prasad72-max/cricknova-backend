@@ -44,7 +44,7 @@ class GoogleAuthService {
       // 🌍 Detect IP and set pricing mode
       try {
         final region = await PricingLocationService.refreshPricingRegion(
-          timeout: const Duration(seconds: 2),
+          timeout: const Duration(seconds: 5),
         );
         print(
           region == PricingRegion.india

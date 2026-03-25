@@ -47,6 +47,9 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    unawaited(
+      PricingLocationService.bootstrap(timeout: const Duration(seconds: 5)),
+    );
     FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (user == null) {
         debugPrint("⚠️ AUTH: transient null ignored");

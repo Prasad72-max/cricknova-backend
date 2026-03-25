@@ -14,8 +14,640 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:in_app_review/in_app_review.dart';
 import '../premium/premium_screen.dart';
 import '../auth/login_screen.dart';
+import '../services/pricing_location_service.dart';
 import '../services/premium_service.dart';
+import 'faq_screen.dart';
 import 'legal_info_screen.dart';
+
+class _SubscriptionPlanSpec {
+  const _SubscriptionPlanSpec({
+    required this.planId,
+    required this.title,
+    required this.price,
+    required this.region,
+    required this.icon,
+    required this.features,
+    this.recommended = false,
+  });
+
+  final String planId;
+  final String title;
+  final String price;
+  final String region;
+  final IconData icon;
+  final List<String> features;
+  final bool recommended;
+}
+
+class _SubscriptionHub extends StatelessWidget {
+  const _SubscriptionHub({required this.onUpgrade});
+
+  final VoidCallback onUpgrade;
+
+  static const _domesticPlans = [
+    _SubscriptionPlanSpec(
+      planId: 'IN_99',
+      title: 'Domestic Basic',
+      price: 'INR 99',
+      region: 'Domestic',
+      icon: Icons.star_border_rounded,
+      features: ['AI Ball Tracking', 'Speed Summary'],
+    ),
+    _SubscriptionPlanSpec(
+      planId: 'IN_299',
+      title: 'Domestic Plus',
+      price: 'INR 299',
+      region: 'Domestic',
+      icon: Icons.auto_awesome_outlined,
+      features: ['AI Ball Tracking', 'RPM Analysis', 'Priority Queue'],
+    ),
+    _SubscriptionPlanSpec(
+      planId: 'IN_499',
+      title: 'Domestic Pro',
+      price: 'INR 499',
+      region: 'Domestic',
+      icon: Icons.workspace_premium_outlined,
+      features: [
+        'AI Ball Tracking',
+        'RPM Analysis',
+        'Pro Coaching Insights',
+      ],
+    ),
+    _SubscriptionPlanSpec(
+      planId: 'IN_1999',
+      title: 'Domestic Ultra',
+      price: 'INR 1999',
+      region: 'Domestic',
+      icon: Icons.emoji_events_outlined,
+      features: [
+        'AI Ball Tracking',
+        'RPM Analysis',
+        'Pro Coaching Insights',
+        'Elite DRS Tools',
+      ],
+      recommended: true,
+    ),
+  ];
+
+  static const _globalPlans = [
+    _SubscriptionPlanSpec(
+      planId: 'INTL_MONTHLY',
+      title: 'Global Basic',
+      price: '\$29.99',
+      region: 'Global',
+      icon: Icons.star_border_rounded,
+      features: ['AI Ball Tracking', 'Speed Summary'],
+    ),
+    _SubscriptionPlanSpec(
+      planId: 'INTL_6M',
+      title: 'Global Plus',
+      price: '\$49.99',
+      region: 'Global',
+      icon: Icons.auto_awesome_outlined,
+      features: ['AI Ball Tracking', 'RPM Analysis', 'Priority Queue'],
+    ),
+    _SubscriptionPlanSpec(
+      planId: 'INTL_YEARLY',
+      title: 'Global Pro',
+      price: '\$59.99',
+      region: 'Global',
+      icon: Icons.workspace_premium_outlined,
+      features: [
+        'AI Ball Tracking',
+        'RPM Analysis',
+        'Pro Coaching Insights',
+      ],
+    ),
+    _SubscriptionPlanSpec(
+      planId: 'INTL_ULTRA',
+      title: 'Global Ultra',
+      price: '\$159.99',
+      region: 'Global',
+      icon: Icons.emoji_events_outlined,
+      features: [
+        'AI Ball Tracking',
+        'RPM Analysis',
+        'Pro Coaching Insights',
+        'Elite DRS Tools',
+      ],
+      recommended: true,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: PremiumService.premiumNotifier,
+      builder: (context, _, __) {
+        return ValueListenableBuilder<PricingRegion>(
+          valueListenable: PricingLocationService.regionNotifier,
+          builder: (context, region, __) {
+            final currentPlan = _planForId(PremiumService.plan, region);
+            final visiblePlans = region == PricingRegion.india
+                ? _domesticPlans
+                : _globalPlans;
+            final visibleTitle = region == PricingRegion.india
+                ? 'Domestic'
+                : 'Global';
+            final visibleSubtitle = region == PricingRegion.india
+                ? 'INR tiers for India-based pricing'
+                : 'USD tiers for international pricing';
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ActiveSubscriptionCard(plan: currentPlan),
+                const SizedBox(height: 16),
+                _SectionLabel(
+                  title: visibleTitle,
+                  subtitle: visibleSubtitle,
+                ),
+                const SizedBox(height: 10),
+                _PlanRail(
+                  plans: visiblePlans,
+                  currentPlanId: PremiumService.plan,
+                  onTap: (plan) => _showPlanDetails(context, plan),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Ready for the pitch? Your AI is awake and calibrated.',
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFA0A0A0),
+                    fontSize: 12.5,
+                    fontStyle: FontStyle.italic,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  _SubscriptionPlanSpec _planForId(String planId, PricingRegion region) {
+    final all = [..._domesticPlans, ..._globalPlans];
+    for (final plan in all) {
+      if (plan.planId == planId) return plan;
+    }
+    return region == PricingRegion.india
+        ? _domesticPlans.last
+        : _globalPlans.last;
+  }
+
+  void _showPlanDetails(BuildContext context, _SubscriptionPlanSpec plan) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _PlanComparisonSheet(
+        plan: plan,
+        currentPlanId: PremiumService.plan,
+        onUpgrade: onUpgrade,
+      ),
+    );
+  }
+}
+
+class _ActiveSubscriptionCard extends StatelessWidget {
+  const _ActiveSubscriptionCard({required this.plan});
+
+  final _SubscriptionPlanSpec plan;
+
+  @override
+  Widget build(BuildContext context) {
+    final expiry = PremiumService.expiryDate;
+    final isPremium = PremiumService.isPremiumActive;
+    final now = DateTime.now();
+    final remaining = expiry == null ? null : expiry.difference(now);
+    final renewalLabel = remaining == null
+        ? 'Renewal not synced'
+        : remaining.isNegative
+            ? 'Expired'
+            : '${remaining.inDays}d ${remaining.inHours % 24}h left';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0x80D4A84F),
+              width: 1.1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0x33D4A84F),
+                blurRadius: 22,
+                spreadRadius: 0.5,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0x1AD4A84F),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      isPremium ? 'PRO' : 'FREE',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFFF2D08B),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    plan.icon,
+                    color: const Color(0xFFF2D08B),
+                    size: 20,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Current Plan',
+                style: GoogleFonts.inter(
+                  color: Colors.white70,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isPremium ? '${plan.title} ${plan.price}' : 'Free Access',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatusChip(
+                      label: 'Next renewal',
+                      value: renewalLabel,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatusChip(
+                      label: 'Plan code',
+                      value: PremiumService.plan,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanRail extends StatelessWidget {
+  const _PlanRail({
+    required this.plans,
+    required this.currentPlanId,
+    required this.onTap,
+  });
+
+  final List<_SubscriptionPlanSpec> plans;
+  final String currentPlanId;
+  final ValueChanged<_SubscriptionPlanSpec> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 172,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: plans.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final plan = plans[index];
+          final selected = plan.planId == currentPlanId;
+          return GestureDetector(
+            onTap: () => onTap(plan),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              width: 170,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: plan.recommended
+                    ? const Color(0xFF17120A)
+                    : const Color(0xFF14181E),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: selected
+                      ? const Color(0xFF3B82F6)
+                      : plan.recommended
+                          ? const Color(0x66D4A84F)
+                          : const Color(0x22FFFFFF),
+                ),
+                boxShadow: plan.recommended
+                    ? [
+                        BoxShadow(
+                          color: const Color(0x22D4A84F),
+                          blurRadius: 20,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        plan.icon,
+                        size: 20,
+                        color: plan.recommended
+                            ? const Color(0xFFF2D08B)
+                            : const Color(0xFFD0D6DD),
+                      ),
+                      const Spacer(),
+                      if (plan.recommended)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0x1AD4A84F),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'Recommended',
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFFF2D08B),
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    plan.title,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    plan.price,
+                    style: GoogleFonts.inter(
+                      color: plan.recommended
+                          ? const Color(0xFFF2D08B)
+                          : const Color(0xFFD0D6DD),
+                      fontSize: 21,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    plan.features.join(' • '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFA0A0A0),
+                      fontSize: 11.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PlanComparisonSheet extends StatelessWidget {
+  const _PlanComparisonSheet({
+    required this.plan,
+    required this.currentPlanId,
+    required this.onUpgrade,
+  });
+
+  final _SubscriptionPlanSpec plan;
+  final String currentPlanId;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = [
+      ('AI Ball Tracking', true),
+      ('RPM Analysis', plan.features.contains('RPM Analysis')),
+      (
+        'Pro Coaching Insights',
+        plan.features.contains('Pro Coaching Insights'),
+      ),
+      ('Elite DRS Tools', plan.features.contains('Elite DRS Tools')),
+    ];
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0B0E13),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  plan.icon,
+                  color: plan.recommended
+                      ? const Color(0xFFF2D08B)
+                      : Colors.white70,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '${plan.title} ${plan.price}',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                children: rows
+                    .map(
+                      (row) => ListTile(
+                        dense: true,
+                        leading: Icon(
+                          row.$2 ? Icons.check_rounded : Icons.close_rounded,
+                          color: row.$2
+                              ? const Color(0xFF3B82F6)
+                              : Colors.white24,
+                          size: 18,
+                        ),
+                        title: Text(
+                          row.$1,
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: currentPlanId == plan.planId
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                        onUpgrade();
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: plan.recommended
+                      ? const Color(0xFFD4A84F)
+                      : const Color(0xFF2563EB),
+                  foregroundColor: plan.recommended
+                      ? Colors.black
+                      : Colors.white,
+                  disabledBackgroundColor: Colors.white10,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
+                child: Text(
+                  currentPlanId == plan.planId ? 'Current plan' : 'View Checkout',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 15.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          subtitle,
+          style: GoogleFonts.inter(
+            color: const Color(0xFFA0A0A0),
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -263,9 +895,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       body: RefreshIndicator(
         color: const Color(0xFF3B82F6),
         backgroundColor: const Color(0xFF0E131B),
-        onRefresh: () async {
-          await loadProfileData();
-        },
+        notificationPredicate: (_) => false,
+        onRefresh: () async {},
         child: SingleChildScrollView(
           child: Column(
             children: [
@@ -867,8 +1498,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                     color: Color(0xFFFFD700),
                   ),
                   title: const Text(
-                    "See all premium benefits",
+                    "Open Subscription Hub",
                     style: TextStyle(color: Colors.white),
+                  ),
+                  subtitle: Text(
+                    PremiumService.isPremiumActive
+                        ? "Manage your current premium plan"
+                        : "Compare all plans and feature tiers",
+                    style: GoogleFonts.inter(
+                      color: Colors.white54,
+                      fontSize: 12.5,
+                    ),
                   ),
                   trailing: const Icon(
                     Icons.arrow_forward_ios,
@@ -876,27 +1516,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                     color: Color(0xFF3B82F6),
                   ),
                   onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) {
-                        return SafeArea(
-                          child: _PremiumBrochureSheet(
-                            onUpgrade: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const PremiumScreen(
-                                    entrySource: "profile",
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      },
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PremiumScreen(
+                          entrySource: "profile",
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -1104,6 +1730,31 @@ class _ProfileScreenState extends State<ProfileScreen>
                             builder: (_) => LegalInfoScreen(
                               document: LegalDocument.terms(),
                             ),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(color: Colors.white12),
+
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.help_outline,
+                        color: Color(0xFF3B82F6),
+                      ),
+                      title: const Text(
+                        "FAQs",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 18,
+                        color: Color(0xFF3B82F6),
+                      ),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const FaqScreen(),
                           ),
                         );
                       },
@@ -1956,7 +2607,7 @@ class _PremiumFeatureTile extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
+              ),
             ],
           ),
         ),

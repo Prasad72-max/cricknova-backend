@@ -48,6 +48,8 @@ class PremiumService {
   // Init guard
   static bool isLoaded = false;
   static bool _initialized = false;
+  static String? _lastLoadedUid;
+  static Future<void>? _loadInFlight;
 
   static const String _premiumKey = "is_premium";
   static const String _planKey = "premium_plan";
@@ -88,7 +90,7 @@ class PremiumService {
       throw Exception("USER_NOT_AUTHENTICATED");
     }
 
-    await loadPremiumFromUid(user.uid);
+    await _runSingleLoad(user.uid, force: true);
 
     // 🔔 Force immediate UI update
     premiumNotifier.value = isPremium;
@@ -98,6 +100,13 @@ class PremiumService {
   }
 
   static Future<void> loadPremiumFromUid(String uid) async {
+    if (_loadInFlight != null) {
+      await _loadInFlight;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _loadInFlight = completer.future;
     try {
       final doc = await FirebaseFirestore.instance
           .collection("subscriptions")
@@ -107,8 +116,10 @@ class PremiumService {
       if (!doc.exists) {
         await _cache(false, "FREE", 0, 0, 0);
         isLoaded = true;
+        _lastLoadedUid = uid;
         premiumNotifier.value = isPremium;
         premiumNotifier.notifyListeners();
+        completer.complete();
         return;
       }
 
@@ -124,8 +135,10 @@ class PremiumService {
       if (!firestorePremium) {
         await _cache(false, "FREE", 0, 0, 0);
         isLoaded = true;
+        _lastLoadedUid = uid;
         premiumNotifier.value = isPremium;
         premiumNotifier.notifyListeners();
+        completer.complete();
         return;
       }
 
@@ -164,10 +177,12 @@ class PremiumService {
           }
 
           await _cache(false, "FREE", 0, 0, 0);
+          _lastLoadedUid = uid;
 
           premiumNotifier.value = false;
           premiumNotifier.notifyListeners();
 
+          completer.complete();
           return;
         }
       }
@@ -216,9 +231,26 @@ class PremiumService {
       }
 
       isLoaded = true;
+      _lastLoadedUid = uid;
+      completer.complete();
     } catch (e) {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+      return;
+    } finally {
+      _loadInFlight = null;
+    }
+  }
+
+  static Future<void> _runSingleLoad(
+    String uid, {
+    bool force = false,
+  }) async {
+    if (!force && isLoaded && _lastLoadedUid == uid) {
       return;
     }
+    await loadPremiumFromUid(uid);
   }
 
   /// 🔁 Call this on every app launch (Splash / main)
@@ -268,7 +300,7 @@ class PremiumService {
         return;
       }
 
-      await loadPremiumFromUid(user.uid);
+      await _runSingleLoad(user.uid);
 
       // Mark loaded and notify UI immediately
       isLoaded = true;
@@ -418,6 +450,8 @@ class PremiumService {
     chatLimit = 0;
     mistakeLimit = 0;
     compareLimit = 0;
+    isLoaded = false;
+    _lastLoadedUid = null;
     // ❌ DO NOT reset usage here
   }
 
@@ -428,13 +462,7 @@ class PremiumService {
   // 🔄 FORCE USAGE SYNC AFTER EVERY AI USE
   // -----------------------------
   static Future<void> syncAfterUsage() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    // Re-fetch latest usage + limits from Firestore
-    await loadPremiumFromUid(user.uid);
-
-    // Notify UI listeners immediately
+    isLoaded = true;
     premiumNotifier.notifyListeners();
   }
 

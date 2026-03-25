@@ -11,6 +11,7 @@ import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import 'package:hive/hive.dart';
 import '../services/weekly_stats_service.dart';
+import '../ai/elite_coach_prompt.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   const AnalyseYourselfScreen({super.key});
@@ -42,6 +43,20 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
   late final AnimationController _vsPulseController;
   late final AnimationController _shimmerController;
   bool _redirected = false;
+
+  String _formatCompareReply(String raw) {
+    final cleaned = raw.replaceAll('\r', '').trim();
+    final lines = cleaned
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final limitedLines = lines.take(6).toList();
+    final compact = (limitedLines.isNotEmpty ? limitedLines : [cleaned]).join('\n');
+    final words = compact.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.length <= 280) return compact;
+    return '${words.take(280).join(' ')}...';
+  }
 
   @override
   void initState() {
@@ -246,6 +261,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     request.files.add(
       await http.MultipartFile.fromPath("right", rightVideo!.path),
     );
+    request.fields["prompt"] = EliteCoachPrompt.forComparison();
 
     try {
       final response = await request.send();
@@ -255,7 +271,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
         final data = jsonDecode(body);
 
         setState(() {
-          diffResult = data["difference"] ?? "No difference returned.";
+          diffResult = _formatCompareReply(
+            (data["difference"] ?? "No difference returned.").toString(),
+          );
         });
         try {
           await WeeklyStatsService.recordAnalyseAi(user.uid);

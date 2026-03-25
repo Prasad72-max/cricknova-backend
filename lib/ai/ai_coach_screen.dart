@@ -5,10 +5,12 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:hive/hive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
+import 'elite_coach_prompt.dart';
 import 'chat_sessions_provider.dart';
 import '../widgets/premium_blur_lock.dart';
 
@@ -39,6 +41,20 @@ class _AICoachScreenState extends State<AICoachScreen> {
   int _lastMessageCount = 0;
   bool _scrollScheduled = false;
   bool _lastPremiumState = PremiumService.isPremiumActive;
+  String _resolvedUserName = "Player";
+
+  String _formatCoachReply(String raw) {
+    final cleaned = raw.replaceAll('\r', '').trim();
+    final lines = cleaned
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final compact = (lines.isNotEmpty ? lines : [cleaned]).join('\n');
+    final words = compact.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.length <= 280) return compact;
+    return '${words.take(280).join(' ')}...';
+  }
 
   @override
   void initState() {
@@ -46,6 +62,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
     _chatProvider = ChatSessionsProvider()..init();
+    _loadResolvedUserName();
 
     Future.microtask(() async {
       await PremiumService.restoreOnLaunch();
@@ -89,6 +106,34 @@ class _AICoachScreenState extends State<AICoachScreen> {
     if (next == _lastPremiumState) return;
     _lastPremiumState = next;
     setState(() {});
+  }
+
+  Future<void> _loadResolvedUserName() async {
+    final user = FirebaseAuth.instance.currentUser;
+    String nextName = "Player";
+    if (user != null) {
+      try {
+        final box = await Hive.openBox("local_stats_${user.uid}");
+        final profileName = box.get("profileName") as String?;
+        if (profileName != null && profileName.trim().isNotEmpty) {
+          nextName = profileName.trim();
+        } else if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
+          nextName = user.displayName!.trim().split(" ").first;
+        } else if ((user.email ?? "").contains("@")) {
+          nextName = user.email!.split("@").first;
+        }
+      } catch (_) {
+        final prefs = await SharedPreferences.getInstance();
+        final profileName = prefs.getString("profileName");
+        if (profileName != null && profileName.trim().isNotEmpty) {
+          nextName = profileName.trim();
+        }
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _resolvedUserName = nextName;
+    });
   }
 
   void _scheduleScrollToBottom({bool animated = true}) {
@@ -208,7 +253,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
               "Accept": "application/json",
               "authorization": "Bearer ${idToken.trim()}",
             },
-            body: jsonEncode({"message": userMessage}),
+            body: jsonEncode({
+              "message": EliteCoachPrompt.forChat(userMessage: userMessage),
+            }),
           )
           .timeout(const Duration(seconds: 30));
 
@@ -255,7 +302,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
             decoded["coach_feedback"]?.toString() ??
             "No reply received from AI.";
 
-        await _chatProvider.addCoachMessage(coachText);
+        await _chatProvider.addCoachMessage(_formatCoachReply(coachText));
+        await PremiumService.consumeChat();
         _scheduleScrollToBottomRobust(animated: true);
       } else {
         debugPrint("AI COACH ERROR ${response.statusCode} => ${response.body}");
@@ -357,11 +405,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   // ---------------- USER NAME HELPER ----------------
   String getUserName() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
-      return user.displayName!.split(" ").first;
-    }
-    return "Player";
+    return _resolvedUserName;
   }
 
   // ---------------- QUICK CHIP + SUGGESTION WIDGETS ----------------
@@ -402,6 +446,26 @@ class _AICoachScreenState extends State<AICoachScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
               child: Row(
                 children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    margin: const EdgeInsets.only(right: 10),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        3,
+                        (_) => Container(
+                          width: 18,
+                          height: 1.6,
+                          margin: const EdgeInsets.symmetric(vertical: 1.8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const Text(
                     "Chat History",
                     style: TextStyle(color: Colors.white, fontSize: 18),
@@ -418,7 +482,19 @@ class _AICoachScreenState extends State<AICoachScreen> {
                 ],
               ),
             ),
-            const Divider(color: Colors.white24, height: 1),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.transparent,
+                    Colors.white.withValues(alpha: 0.34),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
             Expanded(
               child: provider.loadingList
                   ? const Center(
@@ -504,6 +580,16 @@ class _AICoachScreenState extends State<AICoachScreen> {
             appBar: AppBar(
               backgroundColor: const Color(0xFF020617),
               elevation: 0,
+              leading: Builder(
+                builder: (context) => IconButton(
+                  tooltip: "Chat History",
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  icon: const Icon(
+                    Icons.drag_handle_rounded,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
               title: const Text(
                 "CrickNova AI Coach",
                 style: TextStyle(

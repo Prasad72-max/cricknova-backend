@@ -44,7 +44,7 @@ class _AuthGateState extends State<AuthGate> {
       // 🌍 Detect IP at login and set pricing mode
       try {
         final region = await PricingLocationService.refreshPricingRegion(
-          timeout: const Duration(seconds: 2),
+          timeout: const Duration(seconds: 5),
         );
         debugPrint(
           region == PricingRegion.india

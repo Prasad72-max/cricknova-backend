@@ -10,12 +10,10 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:confetti/confetti.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:audioplayers/audioplayers.dart';
 
 import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
+import '../navigation/main_navigation.dart';
 
 Future<void> showPremiumSuccessScreen(
   BuildContext context, {
@@ -45,224 +43,335 @@ class PremiumSuccessScreen extends StatefulWidget {
 }
 
 class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final ConfettiController _confettiController;
-  final AudioPlayer _gongPlayer = AudioPlayer();
-  final AudioPlayer _sparklePlayer = AudioPlayer();
-  bool _triggeredGong = false;
-  bool _triggeredSparkle = false;
-  bool _heartbeatStarted = false;
-  Timer? _heartbeatTimer;
-  int _heartbeatTick = 0;
-  bool _ready = false;
+    with TickerProviderStateMixin {
+  late final AnimationController _entryController;
+  late final AnimationController _pulseController;
+  late final AnimationController _floatController;
+  final List<_WelcomeFeature> _features = const [
+    _WelcomeFeature(Icons.psychology_rounded, "AI-Powered Analysis"),
+    _WelcomeFeature(Icons.gavel_rounded, "DRS Decision System"),
+    _WelcomeFeature(Icons.graphic_eq_rounded, "UltraEdge Detection"),
+    _WelcomeFeature(Icons.query_stats_rounded, "Speed & Accuracy Graphs"),
+    _WelcomeFeature(Icons.emoji_events_rounded, "XP & Rewards System"),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _entryController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5200),
-    )..addListener(_tick);
-    _confettiController = ConfettiController(
-      duration: const Duration(milliseconds: 1800),
-    );
-    _controller.forward();
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => _ready = true);
-    });
+      duration: const Duration(milliseconds: 1400),
+    )..forward();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+    _floatController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
-    _confettiController.dispose();
-    _gongPlayer.dispose();
-    _sparklePlayer.dispose();
-    _heartbeatTimer?.cancel();
+    _entryController.dispose();
+    _pulseController.dispose();
+    _floatController.dispose();
     super.dispose();
-  }
-
-  void _tick() {
-    final t = _controller.value;
-    if (!_triggeredGong && t >= 0.02) {
-      _triggeredGong = true;
-      _playGong();
-      _startHeartbeat();
-    }
-    if (!_triggeredSparkle && t >= 0.12) {
-      _triggeredSparkle = true;
-      _confettiController.play();
-      _playSparkle();
-    }
-  }
-
-  void _startHeartbeat() {
-    if (_heartbeatStarted) return;
-    _heartbeatStarted = true;
-    _heartbeatTick = 0;
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(milliseconds: 260), (t) {
-      _heartbeatTick += 1;
-      if (_heartbeatTick >= 8) {
-        t.cancel();
-        return;
-      }
-      if (_heartbeatTick.isOdd) {
-        HapticFeedback.heavyImpact();
-      } else {
-        HapticFeedback.mediumImpact();
-      }
-    });
-  }
-
-  Future<void> _playGong() async {
-    try {
-      await _gongPlayer.setReleaseMode(ReleaseMode.stop);
-      await _gongPlayer.play(AssetSource("audio/premium_gong.wav"));
-    } catch (_) {}
-  }
-
-  Future<void> _playSparkle() async {
-    try {
-      await _sparklePlayer.setReleaseMode(ReleaseMode.stop);
-      await _sparklePlayer.play(AssetSource("audio/gold_sparkle.wav"));
-    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
+    final displayName = widget.userName.trim().isEmpty
+        ? "Player"
+        : widget.userName.trim();
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.transparent,
       body: AnimatedBuilder(
-        animation: _controller,
+        animation: Listenable.merge([
+          _entryController,
+          _pulseController,
+          _floatController,
+        ]),
         builder: (context, _) {
-          final t = _controller.value;
-          final flareT = _segment(t, 0.00, 0.16);
-          final cardT = _segment(t, 0.18, 0.62);
-          final iconsT = _segment(t, 0.60, 0.92);
-          final bgColor = Color.lerp(
-            Colors.white,
-            const Color(0xFF050B1E),
-            flareT,
-          )!;
+          final entry = Curves.easeOutCubic.transform(_entryController.value);
+          final popupScale = 0.92 + (entry * 0.08);
+          final popupOffset = 36 * (1 - entry);
+          final pulse = 0.85 + (_pulseController.value * 0.25);
+          final floatDy = math.sin(_floatController.value * math.pi * 2) * 5;
+          final ctaScale = _entryController.value < 0.75
+              ? 0.94
+              : 0.94 +
+                    (Curves.elasticOut.transform(
+                          ((_entryController.value - 0.75) / 0.25).clamp(0.0, 1.0),
+                        ) *
+                        0.06);
           return Stack(
             children: [
               Positioned.fill(
-                child: Container(color: _ready ? bgColor : Colors.black),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: 10 * entry,
+                    sigmaY: 10 * entry,
+                  ),
+                  child: Container(
+                    color: const Color(0xFF0B0E11).withValues(alpha: 0.88),
+                  ),
+                ),
               ),
               Positioned.fill(
-                child: CustomPaint(painter: _LensFlarePainter(flareT)),
-              ),
-              Align(
-                alignment: Alignment.center,
-                child: _PremiumCardFlip(
-                  progress: cardT,
-                  userName: widget.userName,
-                ),
-              ),
-              Positioned.fill(child: _FeatureIconFlight(progress: iconsT)),
-              Positioned(
-                top: 96,
-                right: 40,
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF0F172A),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700),
-                      width: 1.6,
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _WelcomeParticlesPainter(
+                      drift: _floatController.value,
+                      opacity: 0.55 * entry,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFFD700).withOpacity(0.4),
-                        blurRadius: 18,
-                        spreadRadius: 1,
-                      ),
-                    ],
                   ),
-                  child: const Icon(Icons.person, color: Colors.white),
                 ),
               ),
-              Align(
-                alignment: Alignment.topCenter,
-                child: ConfettiWidget(
-                  confettiController: _confettiController,
-                  blastDirectionality: BlastDirectionality.directional,
-                  blastDirection: math.pi / 2,
-                  emissionFrequency: 0.03,
-                  numberOfParticles: 18,
-                  minBlastForce: 2,
-                  maxBlastForce: 6,
-                  gravity: 0.12,
-                  colors: const [Color(0xFFFFD700), Color(0xFFFFE8A3)],
-                  createParticlePath: _stripParticlePath,
-                ),
-              ),
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 96,
-                child: Column(
-                  children: const [
-                    Text(
-                      "You are now in the top 1% of serious cricketers.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Color(0xFFFFD700),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 34,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Share.share(
-                            "I just unlocked CrickNova Elite Member status! 🏏✨",
-                          );
-                        },
-                        icon: const Icon(Icons.share, color: Colors.white),
-                        label: const Text(
-                          "Share Success",
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white24),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: Colors.white10,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () => Navigator.pop(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFD700),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: const Text(
-                          "ENTER THE ELITE ARENA",
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.w800,
+              Center(
+                child: Opacity(
+                  opacity: entry,
+                  child: Transform.translate(
+                    offset: Offset(0, popupOffset),
+                    child: Transform.scale(
+                      scale: popupScale,
+                      child: Transform.translate(
+                        offset: Offset(0, floatDy),
+                        child: Container(
+                          width: math.min(
+                            MediaQuery.of(context).size.width - 34,
+                            430,
+                          ),
+                          padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(30),
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF10161F).withValues(alpha: 0.98),
+                                const Color(0xFF0C1118).withValues(alpha: 0.96),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            border: Border.all(
+                              color: const Color(0xFF1E90FF).withValues(alpha: 0.34),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF1E90FF).withValues(alpha: 0.14),
+                                blurRadius: 36,
+                                spreadRadius: 1,
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.42),
+                                blurRadius: 36,
+                                offset: const Offset(0, 18),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(26),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: RadialGradient(
+                                        center: const Alignment(0, -0.8),
+                                        radius: 1.25,
+                                        colors: [
+                                          const Color(0xFF1E90FF).withValues(alpha: 0.17 * pulse),
+                                          Colors.transparent,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned.fill(
+                                  child: IgnorePointer(
+                                    child: CustomPaint(
+                                      painter: _CardSweepPainter(
+                                        progress: _floatController.value,
+                                        opacity: 0.12 * entry,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Container(
+                                          width: 108 * pulse,
+                                          height: 108 * pulse,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: RadialGradient(
+                                              colors: [
+                                                const Color(0xFF1E90FF).withValues(alpha: 0.22),
+                                                const Color(0xFF1E90FF).withValues(alpha: 0.04),
+                                                Colors.transparent,
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        Container(
+                                          width: 88,
+                                          height: 88,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                Colors.white.withValues(alpha: 0.13),
+                                                const Color(0xFF1B2430).withValues(alpha: 0.95),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFF1E90FF).withValues(alpha: 0.46),
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: const Color(0xFF1E90FF).withValues(alpha: 0.18 * pulse),
+                                                blurRadius: 28,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Center(
+                                            child: Text(
+                                              "CN",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 28,
+                                                fontWeight: FontWeight.w900,
+                                                letterSpacing: 1.4,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 18),
+                                    const Text(
+                                      "Welcome to CrickNova AI ⚡",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 25,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      "Your personal AI cricket coach starts now",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: const Color(0xFFC0CAD8).withValues(alpha: 0.92),
+                                        fontSize: 14.5,
+                                        height: 1.45,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      displayName,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Color(0xFF6DB6FF),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    for (int i = 0; i < _features.length; i++)
+                                      _featureTile(
+                                        feature: _features[i],
+                                        index: i,
+                                      ),
+                                    const SizedBox(height: 22),
+                                    Transform.scale(
+                                      scale: ctaScale,
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            HapticFeedback.mediumImpact();
+                                            Navigator.pop(context);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.transparent,
+                                            shadowColor: Colors.transparent,
+                                            padding: EdgeInsets.zero,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(18),
+                                            ),
+                                          ),
+                                          child: Ink(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(18),
+                                              gradient: const LinearGradient(
+                                                colors: [
+                                                  Color(0xFF36A2FF),
+                                                  Color(0xFF1E90FF),
+                                                  Color(0xFF136DCC),
+                                                ],
+                                              ),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(0xFF1E90FF).withValues(alpha: 0.34),
+                                                  blurRadius: 24,
+                                                  spreadRadius: 1,
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Padding(
+                                              padding: EdgeInsets.symmetric(vertical: 16),
+                                              child: Center(
+                                                child: Text(
+                                                  "Start Training 🚀",
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    TextButton(
+                                      onPressed: () {
+                                        HapticFeedback.selectionClick();
+                                        Navigator.pop(context);
+                                      },
+                                      child: const Text(
+                                        "Explore Premium",
+                                        style: TextStyle(
+                                          color: Color(0xFF8CBFFF),
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
             ],
@@ -272,294 +381,250 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
     );
   }
 
-  double _segment(double t, double start, double end) {
-    if (t <= start) return 0.0;
-    if (t >= end) return 1.0;
-    return ((t - start) / (end - start)).clamp(0.0, 1.0);
-  }
-
-  Path _stripParticlePath(Size size) {
-    final path = Path();
-    path.addOval(Rect.fromCircle(center: Offset.zero, radius: 3.2));
-    return path;
-  }
-}
-
-class _LensFlarePainter extends CustomPainter {
-  final double progress;
-
-  _LensFlarePainter(this.progress);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0) return;
-    final center = Offset(size.width / 2, size.height * 0.32);
-    final radius = lerpDouble(40, size.width * 0.9, progress);
-    final glowOpacity = (1 - progress).clamp(0.0, 1.0);
-    final flarePaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Colors.white.withOpacity(0.9 * glowOpacity),
-          Colors.white.withOpacity(0.4 * glowOpacity),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawCircle(center, radius, flarePaint);
-    final streakPaint = Paint()
-      ..color = Colors.white.withOpacity(0.45 * glowOpacity)
-      ..strokeWidth = 2.2
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawLine(
-      Offset(0, center.dy),
-      Offset(size.width, center.dy),
-      streakPaint,
+  Widget _featureTile({
+    required _WelcomeFeature feature,
+    required int index,
+  }) {
+    final start = 0.18 + (index * 0.10);
+    final end = (start + 0.22).clamp(0.0, 1.0);
+    final reveal = Curves.easeOutCubic.transform(
+      ((_entryController.value - start) / (end - start)).clamp(0.0, 1.0),
     );
-  }
-
-  double lerpDouble(double a, double b, double t) => a + (b - a) * t;
-
-  @override
-  bool shouldRepaint(covariant _LensFlarePainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
-}
-
-class _PremiumCardFlip extends StatelessWidget {
-  final double progress;
-  final String userName;
-
-  const _PremiumCardFlip({required this.progress, required this.userName});
-
-  @override
-  Widget build(BuildContext context) {
-    final rotation = (1 - progress) * math.pi;
-    final eased = Curves.easeOut.transform(progress);
-    final scale = 0.84 + (0.16 * eased);
-    final isFront = rotation <= (math.pi / 2);
-    return Transform.scale(
-      scale: scale,
-      child: Transform(
-        alignment: Alignment.center,
-        transform: Matrix4.identity()
-          ..setEntry(3, 2, 0.0015)
-          ..rotateY(rotation),
+    return Opacity(
+      opacity: reveal,
+      child: Transform.translate(
+        offset: Offset(0, 14 * (1 - reveal)),
         child: Container(
-          width: 290,
-          height: 170,
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(18),
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFFF1B8), Color(0xFFB8860B), Color(0xFFFFE39A)],
-            ),
-            border: Border.all(color: const Color(0xFFFFD700), width: 1.4),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFFFD700).withOpacity(0.45),
-                blurRadius: 30,
-                spreadRadius: 2,
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFF1E90FF).withValues(alpha: 0.14),
+                ),
+                child: Icon(
+                  feature.icon,
+                  color: const Color(0xFF6DB6FF),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  feature.label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
-          child: isFront
-              ? const _PremiumCardFront()
-              : Transform(
-                  alignment: Alignment.center,
-                  transform: Matrix4.rotationY(math.pi),
-                  child: _PremiumCardBack(userName: userName),
-                ),
         ),
       ),
     );
   }
 }
 
-class _PremiumCardFront extends StatelessWidget {
-  const _PremiumCardFront();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Spacer(),
-          Text(
-            "CRICKNOVA ELITE",
-            style: TextStyle(
-              color: const Color(0xFF2C1C00),
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
-              shadows: [
-                Shadow(
-                  color: Colors.white.withOpacity(0.75),
-                  offset: const Offset(-1, -1),
-                  blurRadius: 2,
-                ),
-                const Shadow(
-                  color: Color(0xFF8A6A00),
-                  offset: Offset(1, 2),
-                  blurRadius: 2,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: 120,
-            height: 6,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: const Color(0xFF8A6A00).withOpacity(0.4),
-            ),
-          ),
-          const Spacer(),
-          const Text(
-            "Elite Membership Card",
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PremiumCardBack extends StatelessWidget {
-  final String userName;
-
-  const _PremiumCardBack({required this.userName});
-
-  @override
-  Widget build(BuildContext context) {
-    final name = userName.isEmpty ? "Player" : userName;
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            "ELITE MEMBER",
-            style: TextStyle(
-              color: Color(0xFF2C1C00),
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            "Member Since 2026",
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeatureIconFlight extends StatelessWidget {
-  final double progress;
-
-  const _FeatureIconFlight({required this.progress});
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    final target = Offset(size.width - 70, 140);
-    final icons = [
-      _IconFlightData(
-        icon: Icons.all_inclusive,
-        label: "Unlimited CrickNova Analysis",
-        start: Offset(size.width * 0.2, size.height * 0.65),
-      ),
-      _IconFlightData(
-        icon: Icons.track_changes,
-        label: "Pro-Level Mistake Detection",
-        start: Offset(size.width * 0.5, size.height * 0.7),
-      ),
-      _IconFlightData(
-        icon: Icons.workspace_premium,
-        label: "Priority Server Access",
-        start: Offset(size.width * 0.8, size.height * 0.62),
-      ),
-    ];
-
-    return Stack(
-      children: icons.map((data) {
-        final dx = lerpDouble(data.start.dx, target.dx, progress);
-        final dy = lerpDouble(data.start.dy, target.dy, progress);
-        final opacity = (progress * 1.2).clamp(0.0, 1.0);
-        return Positioned(
-          left: dx - 18,
-          top: dy - 18,
-          child: Opacity(
-            opacity: opacity,
-            child: Column(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF0F172A),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFFD700).withOpacity(0.6),
-                        blurRadius: 18,
-                      ),
-                    ],
-                    border: Border.all(color: const Color(0xFFFFD700)),
-                  ),
-                  child: Icon(data.icon, color: const Color(0xFFFFD700)),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  data.label,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  double lerpDouble(double a, double b, double t) => a + (b - a) * t;
-}
-
-class _IconFlightData {
+class _WelcomeFeature {
   final IconData icon;
   final String label;
-  final Offset start;
 
-  _IconFlightData({
-    required this.icon,
-    required this.label,
-    required this.start,
-  });
+  const _WelcomeFeature(this.icon, this.label);
+}
+
+class _WelcomeParticlesPainter extends CustomPainter {
+  final double drift;
+  final double opacity;
+
+  _WelcomeParticlesPainter({required this.drift, required this.opacity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (opacity <= 0) return;
+    final paint = Paint()..style = PaintingStyle.fill;
+    final points = <Offset>[
+      Offset(size.width * 0.14, size.height * 0.22),
+      Offset(size.width * 0.82, size.height * 0.18),
+      Offset(size.width * 0.22, size.height * 0.72),
+      Offset(size.width * 0.76, size.height * 0.68),
+      Offset(size.width * 0.52, size.height * 0.30),
+      Offset(size.width * 0.48, size.height * 0.82),
+      Offset(size.width * 0.90, size.height * 0.48),
+      Offset(size.width * 0.10, size.height * 0.50),
+    ];
+    for (int i = 0; i < points.length; i++) {
+      final phase = drift + (i * 0.11);
+      final dy = math.sin(phase * math.pi * 2) * 8;
+      final radius = 1.8 + (i.isEven ? 0.8 : 0.0);
+      paint.color = const Color(0xFF6DB6FF).withValues(
+        alpha: opacity * (i.isEven ? 0.75 : 0.46),
+      );
+      canvas.drawCircle(points[i] + Offset(0, dy), radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WelcomeParticlesPainter oldDelegate) {
+    return oldDelegate.drift != drift || oldDelegate.opacity != opacity;
+  }
+}
+
+class _CardSweepPainter extends CustomPainter {
+  final double progress;
+  final double opacity;
+
+  _CardSweepPainter({required this.progress, required this.opacity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (opacity <= 0) return;
+    final left = (size.width + 120) * progress - 120;
+    final rect = Rect.fromLTWH(left, 0, 90, size.height);
+    final paint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.transparent,
+          Colors.white.withValues(alpha: opacity),
+          Colors.transparent,
+        ],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      ).createShader(rect);
+    canvas.save();
+    canvas.rotate(-0.18);
+    canvas.drawRect(rect.shift(const Offset(0, -20)), paint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardSweepPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.opacity != opacity;
+  }
+}
+
+class _FreePlanDetailsScreen extends StatelessWidget {
+  const _FreePlanDetailsScreen();
+
+  static const List<String> _features = [
+    "Unlimited Speed Detection",
+    "Unlimited Swing Detection",
+    "Unlimited Spin Detection",
+    "DRS Decision System",
+    "UltraEdge Detection",
+    "Speed Graph",
+    "Accuracy Table",
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF020A1F),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          "Free Plan",
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withValues(alpha: 0.07),
+                const Color(0xFF0B1220).withValues(alpha: 0.95),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Free Plan Features",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "Everything currently available in your Free Plan.",
+                style: TextStyle(
+                  color: Color(0xFFA0A0A0),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: _features.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final feature = _features[index];
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: Color(0xFF38BDF8),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              feature,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _StadiumLightBackdrop extends StatelessWidget {
@@ -711,6 +776,7 @@ class PayPalWebViewScreen extends StatelessWidget {
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   late bool isIndia;
+  bool _isRegionLoading = false;
   static const bool isPayPalSandbox = true; // set false when going live
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
 
@@ -725,7 +791,7 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   String? _animatingPlan;
   bool _showPremiumShimmer = false;
-  late final AnimationController _shimmerController;
+  Timer? _countdownTimer;
 
   @override
   void initState() {
@@ -740,12 +806,39 @@ class _PremiumScreenState extends State<PremiumScreen>
 
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
     PricingLocationService.regionNotifier.addListener(_handlePricingRegionChange);
-    _shimmerController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
-    _shimmerController.repeat();
+    PremiumService.premiumNotifier.addListener(_handlePremiumStateChange);
+    MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
     _loadShimmerPreference();
+    _startCountdownTicker();
+    unawaited(_prefetchRazorpayKey());
+    unawaited(_resolvePricingRegion());
+  }
+
+  bool get _isPremiumTabVisible {
+    if (widget.entrySource != 'tab') return true;
+    return !PremiumService.isPremiumActive &&
+        MainNavigation.activeTabNotifier.value == 3;
+  }
+
+  void _handleTabVisibilityChange() {
+    _startCountdownTicker();
+  }
+
+  Future<void> _resolvePricingRegion() async {
+    try {
+      final region = await PricingLocationService.refreshPricingRegion(
+        timeout: const Duration(seconds: 5),
+      );
+      if (!mounted) return;
+      setState(() {
+        isIndia = region == PricingRegion.india;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isIndia = PricingLocationService.isIndia;
+      });
+    }
   }
 
   void _handlePricingRegionChange() {
@@ -759,9 +852,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     final enabled = prefs.getBool("premium_shimmer") ?? false;
     if (!mounted) return;
     setState(() => _showPremiumShimmer = enabled);
-    if (enabled) {
-      _shimmerController.repeat();
-    }
   }
 
   Future<void> _enablePremiumShimmer() async {
@@ -769,9 +859,25 @@ class _PremiumScreenState extends State<PremiumScreen>
     await prefs.setBool("premium_shimmer", true);
     if (!mounted) return;
     setState(() => _showPremiumShimmer = true);
-    if (!_shimmerController.isAnimating) {
-      _shimmerController.repeat();
-    }
+  }
+
+  void _handlePremiumStateChange() {
+    if (!mounted) return;
+    setState(() {});
+    _startCountdownTicker();
+  }
+
+  void _startCountdownTicker() {
+    _countdownTimer?.cancel();
+    if (PremiumService.expiryDate == null || !_isPremiumTabVisible) return;
+    _countdownTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (!mounted) return;
+      if (PremiumService.expiryDate == null || !_isPremiumTabVisible) {
+        _countdownTimer?.cancel();
+        return;
+      }
+      setState(() {});
+    });
   }
 
   Future<void> _prefetchRazorpayKey() async {
@@ -1150,9 +1256,192 @@ class _PremiumScreenState extends State<PremiumScreen>
     PricingLocationService.regionNotifier.removeListener(
       _handlePricingRegionChange,
     );
+    PremiumService.premiumNotifier.removeListener(_handlePremiumStateChange);
+    MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
+    _countdownTimer?.cancel();
     _razorpay.clear();
-    _shimmerController.dispose();
     super.dispose();
+  }
+
+  String _currentPlanLabel() {
+    switch (PremiumService.plan) {
+      case "IN_99":
+        return "Monthly • ₹99";
+      case "IN_299":
+        return "6 Months • ₹299";
+      case "IN_499":
+        return "Yearly • ₹499";
+      case "IN_1999":
+        return "Ultra Pro • ₹1999";
+      case "INTL_MONTHLY":
+        return "Monthly • \$29.99";
+      case "INTL_6M":
+        return "6 Months • \$49.99";
+      case "INTL_YEARLY":
+        return "Yearly • \$59.99";
+      case "INTL_ULTRA":
+      case "INT_ULTRA":
+      case "ULTRA":
+        return "Ultra International • \$159.99";
+      default:
+        return "Free Plan";
+    }
+  }
+
+  bool _isCurrentPlan(String price) {
+    switch (PremiumService.plan) {
+      case "IN_99":
+        return price == "₹99";
+      case "IN_299":
+        return price == "₹299";
+      case "IN_499":
+        return price == "₹499";
+      case "IN_1999":
+        return price == "₹1999";
+      case "INTL_MONTHLY":
+        return price == "\$29.99";
+      case "INTL_6M":
+        return price == "\$49.99";
+      case "INTL_YEARLY":
+        return price == "\$59.99" || price == "\$69.99";
+      case "INTL_ULTRA":
+      case "INT_ULTRA":
+      case "ULTRA":
+        return price == "\$159.99";
+      default:
+        return false;
+    }
+  }
+
+  Duration? _remainingDuration() {
+    final expiry = PremiumService.expiryDate;
+    if (expiry == null) return null;
+    final diff = expiry.difference(DateTime.now());
+    if (diff.isNegative) return Duration.zero;
+    return diff;
+  }
+
+  String _formatCountdown(Duration? duration) {
+    if (duration == null) return "--D --H --M --S --MS";
+    final days = duration.inDays;
+    final hours = duration.inHours.remainder(24);
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    final milliseconds = duration.inMilliseconds.remainder(1000);
+    return "${days}D ${hours.toString().padLeft(2, '0')}H ${minutes.toString().padLeft(2, '0')}M ${seconds.toString().padLeft(2, '0')}S ${milliseconds.toString().padLeft(3, '0')}MS";
+  }
+
+  Widget _currentPlanOverviewCard() {
+    final remaining = _remainingDuration();
+    final isActive = PremiumService.isPremiumActive;
+    final card = Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.08),
+            const Color(0xFF0A1533).withValues(alpha: 0.92),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: isActive
+              ? const Color(0xFFFFD700).withValues(alpha: 0.75)
+              : Colors.white12,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (isActive ? const Color(0xFFFFD700) : const Color(0xFF38BDF8))
+                .withValues(alpha: 0.18),
+            blurRadius: 24,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? const Color(0xFFFFD700).withValues(alpha: 0.16)
+                      : Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: isActive
+                        ? const Color(0xFFFFD700).withValues(alpha: 0.55)
+                        : Colors.white24,
+                  ),
+                ),
+                child: Text(
+                  isActive ? "CURRENT PLAN" : "NO ACTIVE PLAN",
+                  style: TextStyle(
+                    color:
+                        isActive ? const Color(0xFFFFD700) : Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                isActive ? Icons.workspace_premium : Icons.lock_outline_rounded,
+                color:
+                    isActive ? const Color(0xFFFFD700) : Colors.white54,
+                size: 20,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _currentPlanLabel(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            isActive
+                ? "Remaining: ${_formatCountdown(remaining)}"
+                : "Tap to view Free Plan features.",
+            style: TextStyle(
+              color: isActive ? Colors.white : const Color(0xFFA0A0A0),
+              fontSize: isActive ? 14 : 13,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (isActive) return card;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const _FreePlanDetailsScreen(),
+            ),
+          );
+        },
+        child: card,
+      ),
+    );
   }
 
   void onMethodSelected(String method) {
@@ -1373,22 +1662,31 @@ class _PremiumScreenState extends State<PremiumScreen>
       body: Stack(
         children: [
           const Positioned.fill(child: _StadiumLightBackdrop()),
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              children: [
-                // INDIA PLANS
-                if (isIndia == true)
-                  ...((sourceFromArgs ?? widget.entrySource) == "analyse"
-                      ? indiaCompareOnlyPlans()
-                      : indiaPlans()),
-
-                // INTERNATIONAL PLANS
-                if (isIndia == false)
-                  ...internationalPlans(),
-              ],
+          if (_isRegionLoading)
+            const Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white,
+                ),
+              ),
+            )
+          else
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  _currentPlanOverviewCard(),
+                  if (isIndia == true)
+                    ...((sourceFromArgs ?? widget.entrySource) == "analyse"
+                        ? indiaCompareOnlyPlans()
+                        : indiaPlans()),
+                  if (isIndia == false) ...internationalPlans(),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1447,9 +1745,12 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.blueAccent,
         features: [
           "200 AI Chats",
-          "15 Mistake Detections",
-          "Speed • Swing • Spin (Basic)",
-          "Basic Swing Path",
+          "15 Mistake Detection",
+          "Basic Speed Detection",
+          "Basic Swing Detection",
+          "Basic Spin Detection",
+          "Basic DRS Decision System",
+          "Basic UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1460,9 +1761,14 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.purpleAccent,
         features: [
           "1,200 AI Chats",
-          "30 Mistake Detections",
-          "Advanced Speed Tracking",
-          "Shot Map Lite",
+          "30 Mistake Detection",
+          "Enhanced Speed Detection",
+          "Enhanced Swing Detection",
+          "Enhanced Spin Detection",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Enhanced DRS Decision System",
+          "Enhanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1473,10 +1779,17 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.greenAccent,
         features: [
           "3,000 AI Chats",
-          "60 Mistake Detections",
-          "50 Video Compare",
-          "Shot Heatmap",
-          "Game Simulation AI",
+          "60 Mistake Detection",
+          "Advanced Speed Detection",
+          "Advanced Swing Detection",
+          "Advanced Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Advanced DRS Decision System",
+          "Advanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1486,12 +1799,20 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Elite Access 👑",
         glowColor: Colors.redAccent,
         features: [
-          "1 Year Access",
           "5,000 AI Chats",
-          "150 Mistake Detections",
-          "150 Video Compare",
-          "All Premium Features",
-          "Priority AI Processing",
+          "150 Mistake Detection",
+          "Pro Speed Detection",
+          "Pro Swing Detection",
+          "Pro Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Special Gifts",
+          "Pro DRS Decision System",
+          "Pro UltraEdge Detection",
+          "Priority AI",
         ],
       ),
     ];
@@ -1505,10 +1826,18 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Analyse Pro 🎯",
         glowColor: Colors.greenAccent,
         features: [
-          "Analyse Yourself",
-          "50 Video Compare",
           "3,000 AI Chats",
-          "60 Mistake Detections",
+          "60 Mistake Detection",
+          "Advanced Speed Detection",
+          "Advanced Swing Detection",
+          "Advanced Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Advanced DRS Decision System",
+          "Advanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1518,10 +1847,20 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Unlimited Analysis 🚀",
         glowColor: Colors.redAccent,
         features: [
-          "Unlimited Analyse",
-          "150 Video Compare",
           "5,000 AI Chats",
-          "150 Mistake Detections",
+          "150 Mistake Detection",
+          "Pro Speed Detection",
+          "Pro Swing Detection",
+          "Pro Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Special Gifts",
+          "Pro DRS Decision System",
+          "Pro UltraEdge Detection",
+          "Priority AI",
         ],
       ),
     ];
@@ -1537,8 +1876,12 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.blueAccent,
         features: [
           "200 AI Chats",
-          "20 Mistake Detections",
-          "Basic Speed • Swing • Spin",
+          "20 Mistake Detection",
+          "Basic Speed Detection",
+          "Basic Swing Detection",
+          "Basic Spin Detection",
+          "Basic DRS Decision System",
+          "Basic UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1549,8 +1892,14 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.purpleAccent,
         features: [
           "1,200 AI Chats",
-          "30 Mistake Detections",
-          "5 Video Compare",
+          "30 Mistake Detection",
+          "Enhanced Speed Detection",
+          "Enhanced Swing Detection",
+          "Enhanced Spin Detection",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Enhanced DRS Decision System",
+          "Enhanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1561,8 +1910,17 @@ class _PremiumScreenState extends State<PremiumScreen>
         glowColor: Colors.greenAccent,
         features: [
           "1,800 AI Chats",
-          "50 Mistake Detections",
-          "10 Video Compare",
+          "50 Mistake Detection",
+          "Advanced Speed Detection",
+          "Advanced Swing Detection",
+          "Advanced Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Advanced DRS Decision System",
+          "Advanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1572,11 +1930,20 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Elite International 🌍",
         glowColor: Colors.redAccent,
         features: [
-          "1 Year Access",
-          "7,000 AI Chats",
-          "150 Mistake Detections",
-          "150 Video Compare",
-          "All Features Unlocked",
+          "7000 AI Chats",
+          "150 Diff Analyse",
+          "150 Mistake Detection",
+          "Pro Speed Detection",
+          "Pro Swing Detection",
+          "Pro Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Special Gifts",
+          "Pro DRS Decision System",
+          "Pro UltraEdge Detection",
           "Priority AI",
         ],
       ),
@@ -1591,10 +1958,15 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Analyse Pro 🎯",
         glowColor: Colors.purpleAccent,
         features: [
-          "Analyse Yourself",
-          "5 Video Compare",
           "1,200 AI Chats",
-          "30 Mistake Detections",
+          "30 Mistake Detection",
+          "Enhanced Speed Detection",
+          "Enhanced Swing Detection",
+          "Enhanced Spin Detection",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Enhanced DRS Decision System",
+          "Enhanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1604,10 +1976,18 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Best Value 💎",
         glowColor: Colors.greenAccent,
         features: [
-          "Analyse Yourself",
-          "10 Video Compare",
           "1,800 AI Chats",
-          "50 Mistake Detections",
+          "50 Mistake Detection",
+          "Advanced Speed Detection",
+          "Advanced Swing Detection",
+          "Advanced Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Advanced DRS Decision System",
+          "Advanced UltraEdge Detection",
         ],
       ),
       const SizedBox(height: 20),
@@ -1617,11 +1997,20 @@ class _PremiumScreenState extends State<PremiumScreen>
         tag: "Unlimited Analysis 🚀",
         glowColor: Colors.redAccent,
         features: [
-          "Unlimited Analyse",
-          "150 Video Compare",
-          "7,000 AI Chats",
-          "150 Mistake Detections",
-          "All Features Unlocked",
+          "7000 AI Chats",
+          "150 Diff Analyse",
+          "150 Mistake Detection",
+          "Pro Speed Detection",
+          "Pro Swing Detection",
+          "Pro Spin Detection",
+          "Speed Graph",
+          "Accuracy Graph",
+          "Monthly Reports",
+          "XP System & Milestones",
+          "Speed Certificates",
+          "Special Gifts",
+          "Pro DRS Decision System",
+          "Pro UltraEdge Detection",
           "Priority AI",
         ],
       ),
@@ -1637,15 +2026,19 @@ class _PremiumScreenState extends State<PremiumScreen>
     String? tag,
   }) {
     final bool isMostPopular = (tag ?? "").contains("Most Popular");
+    final bool isCurrentPlan = _isCurrentPlan(price);
     final cardGradient = isMostPopular
         ? const [Color(0xFF9A2BFF), Color(0xFF1D2CFF), Color(0xFF06155A)]
+        : isCurrentPlan
+        ? const [Color(0xFF10203F), Color(0xFF0C1730), Color(0xFF07101E)]
         : [
             Colors.white.withValues(alpha: 0.06),
             Colors.white.withValues(alpha: 0.04),
           ];
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
+    return RepaintBoundary(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
         Container(
           margin: const EdgeInsets.only(top: 18, bottom: 22),
           padding: const EdgeInsets.all(20),
@@ -1657,15 +2050,21 @@ class _PremiumScreenState extends State<PremiumScreen>
             ),
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: isMostPopular
+              color: isCurrentPlan
+                  ? const Color(0xFFFFD700).withValues(alpha: 0.9)
+                  : isMostPopular
                   ? const Color(0xFFBA78FF).withValues(alpha: 0.88)
                   : Colors.white.withValues(alpha: 0.12),
-              width: 1.1,
+              width: isCurrentPlan ? 1.5 : 1.1,
             ),
             boxShadow: [
               BoxShadow(
-                color: (isMostPopular ? const Color(0xFF8F4BFF) : glowColor)
-                    .withValues(alpha: isMostPopular ? 0.55 : 0.35),
+                color: (isCurrentPlan
+                        ? const Color(0xFFFFD700)
+                        : (isMostPopular ? const Color(0xFF8F4BFF) : glowColor))
+                    .withValues(
+                      alpha: isCurrentPlan ? 0.34 : (isMostPopular ? 0.55 : 0.35),
+                    ),
                 blurRadius: 28,
                 spreadRadius: 1,
               ),
@@ -1751,17 +2150,10 @@ class _PremiumScreenState extends State<PremiumScreen>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      AnimatedBuilder(
-                        animation: _shimmerController,
-                        builder: (context, _) {
-                          return _animatedFeatureTick(
-                            t: _shimmerController.value,
-                            phase: (features.indexOf(f) * 0.18) % 1.0,
-                            tint: isMostPopular
-                                ? const Color(0xFFAF74FF)
-                                : glowColor,
-                          );
-                        },
+                      _featureTick(
+                        tint: isMostPopular
+                            ? const Color(0xFFAF74FF)
+                            : glowColor,
                       ),
                       const SizedBox(width: 12),
                       Flexible(
@@ -1788,16 +2180,10 @@ class _PremiumScreenState extends State<PremiumScreen>
                     _animatingPlan = price;
                   });
 
-                  await Future.delayed(const Duration(milliseconds: 180));
-
                   _lastPlanTitle = title;
                   _lastPlanPrice = price;
 
                   if (!mounted) return;
-
-                  final numeric = double.parse(
-                    price.replaceAll(RegExp(r'[^0-9.]'), ''),
-                  );
 
                   await showPaymentMethodSelector(context);
 
@@ -1809,11 +2195,10 @@ class _PremiumScreenState extends State<PremiumScreen>
                   scale: _animatingPlan == price ? 0.94 : 1.0,
                   duration: const Duration(milliseconds: 160),
                   curve: Curves.easeOut,
-                  child: AnimatedOpacity(
+                child: AnimatedOpacity(
                     opacity: _animatingPlan == price ? 0.85 : 1.0,
                     duration: const Duration(milliseconds: 160),
-                    child: _shimmerWrap(
-                      Container(
+                    child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
@@ -1854,16 +2239,15 @@ class _PremiumScreenState extends State<PremiumScreen>
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Text(
-                                  "BUY NOW",
-                                  style: TextStyle(
+                              : Text(
+                                  isCurrentPlan ? "CURRENT PLAN" : "BUY NOW",
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                         ),
-                      ),
                     ),
                   ),
                 ),
@@ -1925,72 +2309,65 @@ class _PremiumScreenState extends State<PremiumScreen>
               ),
             ),
           ),
-      ],
+        if (isCurrentPlan)
+          Positioned(
+            top: 0,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFE28A), Color(0xFFFFB300)],
+                ),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.34),
+                    blurRadius: 16,
+                  ),
+                ],
+              ),
+              child: const Text(
+                "ACTIVE",
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 12,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _shimmerWrap(Widget child) {
-    return AnimatedBuilder(
-      animation: _shimmerController,
-      builder: (context, _) {
-        final t = _shimmerController.value;
-        final slide = (t * 1.6) - 0.3;
-        final start = (slide - 0.22).clamp(0.0, 1.0);
-        final mid = slide.clamp(0.0, 1.0);
-        final end = (slide + 0.22).clamp(0.0, 1.0);
-        return ShaderMask(
-          blendMode: BlendMode.lighten,
-          shaderCallback: (rect) {
-            return LinearGradient(
-              colors: const [
-                Color(0x00FFFFFF),
-                Color(0x8FFFFFFF),
-                Color(0x00FFFFFF),
-              ],
-              stops: [start, mid, end],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ).createShader(rect);
-          },
-          child: child,
-        );
-      },
-    );
-  }
-
-  Widget _animatedFeatureTick({
-    required double t,
-    required double phase,
+  Widget _featureTick({
     required Color tint,
   }) {
-    final wave = math.sin((t + phase) * math.pi * 2);
-    final scale = 0.92 + ((wave + 1) * 0.09);
-    final glow = 0.18 + ((wave + 1) * 0.16);
-    return Transform.scale(
-      scale: scale,
-      child: Container(
-        width: 20,
-        height: 20,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [
-              tint.withValues(alpha: 0.95),
-              tint.withValues(alpha: 0.62),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: tint.withValues(alpha: glow.clamp(0.0, 0.45)),
-              blurRadius: 10,
-              spreadRadius: 0.3,
-            ),
+    return Container(
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [
+            tint.withValues(alpha: 0.95),
+            tint.withValues(alpha: 0.62),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+        boxShadow: [
+          BoxShadow(
+            color: tint.withValues(alpha: 0.20),
+            blurRadius: 8,
+            spreadRadius: 0.2,
+          ),
+        ],
       ),
+      child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
     );
   }
 

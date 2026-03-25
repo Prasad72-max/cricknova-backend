@@ -8,6 +8,7 @@ import 'package:confetti/confetti.dart';
 import 'performance_certificate.dart';
 import 'certificate_preview_screen.dart';
 import 'dart:math' as math;
+import '../services/premium_service.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -264,6 +265,11 @@ class _InsightsScreenState extends State<InsightsScreen>
     final sessionCount = _sessionCount;
     final accuracyScores = _deriveAccuracyScores(speedHistory);
     final avgAccuracy = _avgAccuracyPercent(speedHistory);
+    final topSpeed = speedHistory.isEmpty
+        ? 0.0
+        : speedHistory.reduce((a, b) => a > b ? a : b).toDouble();
+    final canGenerateCertificate =
+        speedHistory.isNotEmpty && topSpeed >= 95 && avgAccuracy > 72;
 
     return Scaffold(
       backgroundColor: const Color(0xFF020617),
@@ -271,7 +277,13 @@ class _InsightsScreenState extends State<InsightsScreen>
         child: RefreshIndicator(
           color: const Color(0xFF00FF88),
           backgroundColor: const Color(0xFF0F172A),
+          notificationPredicate: (notification) {
+            return PremiumService.isPremiumActive &&
+                notification.depth == 0;
+          },
           onRefresh: () async {
+            if (!PremiumService.isPremiumActive) return;
+            await PremiumService.refresh();
             await _loadSpeedHistory();
           },
           child: ListView(
@@ -294,11 +306,7 @@ class _InsightsScreenState extends State<InsightsScreen>
                 children: [
                   _buildStat(
                     "🔥 Top Speed",
-                    speedHistory.isEmpty
-                        ? 0.0
-                        : speedHistory
-                              .reduce((a, b) => a > b ? a : b)
-                              .toDouble(),
+                    topSpeed,
                     const Color(0xFF00FF88),
                   ),
                   _buildStat(
@@ -595,15 +603,13 @@ class _InsightsScreenState extends State<InsightsScreen>
                           currentSpeeds,
                         );
 
-                        // Eligibility gating:
-                        // - Speed < 90 KMPH OR Accuracy < 72% => cannot generate certificate.
-                        if (top < 90 || accuracyPercent < 72) {
+                        if (top < 95 || accuracyPercent <= 72) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               backgroundColor: const Color(0xFF111827),
                               content: Text(
-                                "Certificate unlocks at 90+ KMPH and 72%+ accuracy. "
+                                "Certificate unlocks at 95+ KMPH and above 72% accuracy. "
                                 "Your session: ${top.toStringAsFixed(0)} KMPH, ${accuracyPercent.toStringAsFixed(0)}%.",
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
@@ -642,9 +648,17 @@ class _InsightsScreenState extends State<InsightsScreen>
                 icon: const Icon(Icons.workspace_premium),
                 label: const Text("Generate Certificate"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00FF88),
-                  foregroundColor: Colors.black,
+                  backgroundColor: canGenerateCertificate
+                      ? const Color(0xFF00FF88)
+                      : const Color(0xFF1F2937),
+                  foregroundColor: canGenerateCertificate
+                      ? Colors.black
+                      : Colors.white70,
                   padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: canGenerateCertificate ? 10 : 0,
+                  shadowColor: canGenerateCertificate
+                      ? const Color(0xFF00FF88).withValues(alpha: 0.35)
+                      : Colors.transparent,
                 ),
               ),
             ],

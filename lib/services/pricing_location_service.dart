@@ -1,13 +1,13 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum PricingRegion { india, global }
 
 class PricingLocationService {
-  static const _endpoint = 'https://api.country.is/';
+  static const _endpoint = 'http://ip-api.com/json';
   static const _pricingModeKey = 'pricingMode';
   static const _countryCodeKey = 'pricingCountryCode';
   static bool _bootstrapped = false;
@@ -20,7 +20,7 @@ class PricingLocationService {
   static bool get isIndia => currentRegion == PricingRegion.india;
 
   static Future<void> bootstrap({
-    Duration timeout = const Duration(seconds: 2),
+    Duration timeout = const Duration(seconds: 5),
     http.Client? client,
   }) async {
     if (_bootstrapped) return;
@@ -38,57 +38,46 @@ class PricingLocationService {
       return;
     }
 
-    if (cachedMode == 'USD') {
-      _setRegion(PricingRegion.global);
-      return;
-    }
-
     _setRegion(PricingRegion.global);
   }
 
-  /// Returns INR region only for countryCode == IN.
-  /// Falls back to global on any error, timeout, or invalid response.
   static Future<PricingRegion> detectPricingRegion({
-    Duration timeout = const Duration(seconds: 2),
+    Duration timeout = const Duration(seconds: 5),
     http.Client? client,
   }) async {
     final localClient = client ?? http.Client();
-    final shouldClose = client == null;
 
     try {
       final response = await localClient
           .get(Uri.parse(_endpoint))
           .timeout(timeout);
 
-      if (response.statusCode != 200) {
-        return PricingRegion.global;
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          final countryCode =
+              decoded['countryCode']?.toString().toUpperCase();
+          if (countryCode != null && countryCode.isNotEmpty) {
+            return countryCode == 'IN'
+                ? PricingRegion.india
+                : PricingRegion.global;
+          }
+        }
       }
+    } catch (_) {}
 
-      final decoded = jsonDecode(response.body);
-      if (decoded is! Map<String, dynamic>) {
-        return PricingRegion.global;
-      }
-
-      final countryCode =
-          (decoded['country'] ?? decoded['country_code'])
-              ?.toString()
-              .toUpperCase();
-
-      if (countryCode == 'IN') {
-        return PricingRegion.india;
-      }
-      return PricingRegion.global;
-    } catch (_) {
-      return PricingRegion.global;
-    } finally {
-      if (shouldClose) {
-        localClient.close();
-      }
+    final localeCountry = _deviceLocaleCountryCode();
+    if (localeCountry != null && localeCountry.isNotEmpty) {
+      return localeCountry == 'IN'
+          ? PricingRegion.india
+          : PricingRegion.global;
     }
+
+    return _cachedOrGlobal();
   }
 
   static Future<PricingRegion> refreshPricingRegion({
-    Duration timeout = const Duration(seconds: 2),
+    Duration timeout = const Duration(seconds: 5),
     http.Client? client,
   }) async {
     final region = await detectPricingRegion(timeout: timeout, client: client);
@@ -117,5 +106,25 @@ class PricingLocationService {
 
     await prefs.setString(_pricingModeKey, 'USD');
     await prefs.setString(_countryCodeKey, 'GLOBAL');
+  }
+
+  static Future<PricingRegion> _cachedOrGlobal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedMode = prefs.getString(_pricingModeKey);
+    final cachedCountry = prefs.getString(_countryCodeKey)?.toUpperCase();
+
+    if (cachedMode == 'INR' || cachedCountry == 'IN') {
+      return PricingRegion.india;
+    }
+    return PricingRegion.global;
+  }
+
+  static String? _deviceLocaleCountryCode() {
+    try {
+      final Locale locale = WidgetsBinding.instance.platformDispatcher.locale;
+      return locale.countryCode?.toUpperCase();
+    } catch (_) {
+      return null;
+    }
   }
 }

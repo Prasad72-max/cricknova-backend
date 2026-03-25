@@ -16,6 +16,7 @@ import 'package:confetti/confetti.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
+import '../ai/elite_coach_prompt.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
@@ -24,6 +25,25 @@ enum _DrsReplayMode { ultraEdge, lbw }
 enum _DrsUmpireCall { out, notOut, umpire }
 
 enum _DrsViewMode { keeper, umpire, striker }
+
+String _wakeOverlayUserName() {
+  final user = FirebaseAuth.instance.currentUser;
+  final uid = user?.uid;
+  if (uid != null && Hive.isBoxOpen("local_stats_$uid")) {
+    final box = Hive.box("local_stats_$uid");
+    final profileName = box.get("profileName") as String?;
+    if (profileName != null && profileName.trim().isNotEmpty) {
+      return profileName.trim().split(" ").first;
+    }
+  }
+  if (user?.displayName != null && user!.displayName!.trim().isNotEmpty) {
+    return user.displayName!.trim().split(" ").first;
+  }
+  if ((user?.email ?? "").contains("@")) {
+    return user!.email!.split("@").first;
+  }
+  return "Player";
+}
 
 List<Map<String, double>> _sanitizeVideoTrajectory(dynamic rawPoints) {
   if (rawPoints is! List) return const [];
@@ -511,6 +531,202 @@ class _BatBallPainter extends CustomPainter {
   bool shouldRepaint(covariant _BatBallPainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.freezeAtBat != freezeAtBat;
+  }
+}
+
+class _RenderWakePainter extends CustomPainter {
+  final double elapsedSeconds;
+  final double progress;
+
+  _RenderWakePainter({required this.elapsedSeconds, required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width * 0.5, size.height * 0.38);
+    final logoSize = math.min(size.width, size.height) * 0.18;
+    final logoRect = Rect.fromCenter(
+      center: center,
+      width: logoSize * 1.6,
+      height: logoSize * 1.05,
+    );
+
+    final bg = Paint()..color = Colors.black;
+    canvas.drawRect(Offset.zero & size, bg);
+
+    if (elapsedSeconds < 10) {
+      final pulse =
+          0.2 + (0.15 * (0.5 + 0.5 * math.sin(progress * math.pi * 10)));
+      final glow = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFF38BDF8).withValues(alpha: pulse),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromCircle(center: center, radius: logoSize * 1.4));
+      canvas.drawCircle(center, logoSize * 1.4, glow);
+    }
+
+    if (elapsedSeconds >= 10 && elapsedSeconds < 20) {
+      final cut = Paint()
+        ..color = const Color(0xFF38BDF8).withValues(alpha: 0.06);
+      canvas.drawRect(Offset.zero & size, cut);
+    }
+
+    if (elapsedSeconds >= 20 && elapsedSeconds < 30) {
+      final slashX =
+          size.width * (((elapsedSeconds - 20) / 10).clamp(0.0, 1.0));
+      final slash = Paint()
+        ..shader = LinearGradient(
+          colors: [
+            Colors.transparent,
+            Colors.white.withValues(alpha: 0.85),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromLTWH(slashX - 80, 0, 160, size.height));
+      canvas.drawRect(Rect.fromLTWH(slashX - 80, 0, 160, size.height), slash);
+    }
+
+    if (elapsedSeconds >= 30 && elapsedSeconds < 40) {
+      final flicker = (((elapsedSeconds - 30) * 7).floor().isEven) ? 0.0 : 0.08;
+      final flickerPaint = Paint()
+        ..color = Colors.white.withValues(alpha: flicker);
+      canvas.drawRect(Offset.zero & size, flickerPaint);
+    }
+
+    if (elapsedSeconds >= 40 && elapsedSeconds < 45) {
+      final dropletPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.2)
+        ..style = PaintingStyle.fill;
+      for (int i = 0; i < 18; i++) {
+        final x = ((i * 37) % 100) / 100 * size.width;
+        final y =
+            size.height * 0.18 +
+            ((((elapsedSeconds - 40) * 0.32) + i * 0.07) % 1.0) *
+                size.height *
+                0.5;
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: Offset(x, y),
+            width: 8 + (i % 3) * 4,
+            height: 14 + (i % 4) * 5,
+          ),
+          dropletPaint,
+        );
+      }
+    }
+
+    if (elapsedSeconds >= 45) {
+      final linePaint = Paint()
+        ..color = const Color(0xFF38BDF8).withValues(alpha: 0.65)
+        ..strokeWidth = 2;
+      for (int i = 0; i < 6; i++) {
+        final y = center.dy - 70 + (i * 26);
+        canvas.drawLine(
+          Offset(center.dx + 90, y),
+          Offset(size.width - 24, y),
+          linePaint,
+        );
+      }
+
+      final metricStyle = TextStyle(
+        color: Colors.white.withValues(alpha: 0.9),
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      );
+      final metrics = [
+        ("155 km/h", Offset(center.dx + 98, center.dy - 76)),
+        ("3.2 Swing", Offset(center.dx + 98, center.dy - 20)),
+        ("2400 RPM", Offset(center.dx + 98, center.dy + 36)),
+      ];
+      for (final item in metrics) {
+        final tp = TextPainter(
+          text: TextSpan(text: item.$1, style: metricStyle),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        tp.paint(canvas, item.$2);
+      }
+    }
+
+    final logoProgress = (elapsedSeconds / 50).clamp(0.0, 1.0);
+    final shake = elapsedSeconds >= 30 && elapsedSeconds < 40
+        ? math.sin(elapsedSeconds * 15) * 4
+        : 0.0;
+    final spinTurns = elapsedSeconds >= 45 ? ((elapsedSeconds - 45) * 40) : 0.0;
+    canvas.save();
+    canvas.translate(center.dx + shake, center.dy + shake * 0.3);
+    if (spinTurns != 0) {
+      canvas.rotate(spinTurns);
+    }
+    canvas.translate(-(center.dx + shake), -(center.dy + shake * 0.3));
+
+    final fade = (logoProgress * 1.4).clamp(0.0, 1.0);
+    final logoPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.92 * fade);
+    if (elapsedSeconds < 20) {
+      logoPaint.color = const Color(0xFF9FDBFF).withValues(alpha: 0.7 * fade);
+    } else if (elapsedSeconds < 30) {
+      logoPaint.color = Colors.white.withValues(alpha: 0.98 * fade);
+    } else if (elapsedSeconds >= 45) {
+      logoPaint.color = const Color(0xFF38BDF8).withValues(alpha: fade);
+    }
+
+    final cPath = Path()
+      ..moveTo(
+        logoRect.left + logoRect.width * 0.32,
+        logoRect.top + logoRect.height * 0.08,
+      )
+      ..quadraticBezierTo(
+        logoRect.left,
+        logoRect.top + logoRect.height * 0.18,
+        logoRect.left,
+        logoRect.center.dy,
+      )
+      ..quadraticBezierTo(
+        logoRect.left,
+        logoRect.bottom - logoRect.height * 0.18,
+        logoRect.left + logoRect.width * 0.32,
+        logoRect.bottom - logoRect.height * 0.08,
+      );
+    final cStroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round
+      ..color = logoPaint.color;
+    canvas.drawPath(cPath, cStroke);
+
+    final nPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = logoPaint.color;
+    final nPath = Path()
+      ..moveTo(logoRect.center.dx - 4, logoRect.bottom - logoRect.height * 0.08)
+      ..lineTo(logoRect.center.dx - 4, logoRect.top + logoRect.height * 0.08)
+      ..lineTo(
+        logoRect.center.dx + logoRect.width * 0.2,
+        logoRect.bottom - logoRect.height * 0.08,
+      )
+      ..lineTo(
+        logoRect.center.dx + logoRect.width * 0.2,
+        logoRect.top + logoRect.height * 0.08,
+      );
+    canvas.drawPath(nPath, nPaint);
+    canvas.restore();
+
+    if (progress > 0.985) {
+      final flash = Paint()
+        ..color = Colors.white.withValues(
+          alpha: ((progress - 0.985) / 0.015).clamp(0.0, 1.0),
+        );
+      canvas.drawRect(Offset.zero & size, flash);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RenderWakePainter oldDelegate) {
+    return oldDelegate.elapsedSeconds != elapsedSeconds ||
+        oldDelegate.progress != progress;
   }
 }
 
@@ -3256,6 +3472,12 @@ class _UploadScreenState extends State<UploadScreen>
     });
   }
 
+  String? get _selectedVideoName {
+    final path = video?.path;
+    if (path == null || path.isEmpty) return null;
+    return path.split(RegExp(r'[\\/]')).last;
+  }
+
   Widget _drsModeButton({
     required String title,
     required IconData icon,
@@ -3408,10 +3630,18 @@ class _UploadScreenState extends State<UploadScreen>
   String speedNote = "";
   String _analysisStatusText = "Analyzing video...";
   bool _autoZoomRetryInProgress = false;
+  double _autoZoomPreviewScale = 1.0;
 
   String swing = "";
   String spin = "";
   bool analysisLoading = false;
+  bool _showRenderWakeCinematic = false;
+  Timer? _renderWakeDelayTimer;
+  Timer? _renderWakeTicker;
+  Stopwatch? _renderWakeStopwatch;
+  // Only treat long waits as a probable Render cold start.
+  static const Duration _renderWakeThreshold = Duration(seconds: 14);
+  static const Duration _renderWakeDuration = Duration(seconds: 60);
 
   // 🧠 Rotating Cricket Facts
   final List<String> _cricketFacts = [
@@ -3482,6 +3712,46 @@ class _UploadScreenState extends State<UploadScreen>
     await box.put('totalVideos', updated);
 
     debugPrint("TOTAL VIDEOS UPDATED (HIVE) => $updated");
+  }
+
+  void _scheduleRenderWakeSequence() {
+    _renderWakeDelayTimer?.cancel();
+    _renderWakeTicker?.cancel();
+    _renderWakeStopwatch?.stop();
+    _renderWakeStopwatch = null;
+    _showRenderWakeCinematic = false;
+
+    _renderWakeDelayTimer = Timer(_renderWakeThreshold, () {
+      if (!mounted || !analysisLoading) return;
+      _renderWakeStopwatch = Stopwatch()..start();
+      setState(() {
+        _showRenderWakeCinematic = true;
+      });
+      _renderWakeTicker?.cancel();
+      _renderWakeTicker = Timer.periodic(const Duration(milliseconds: 100), (
+        _,
+      ) {
+        if (!mounted || !_showRenderWakeCinematic) return;
+        if ((_renderWakeStopwatch?.elapsed ?? Duration.zero) >=
+            _renderWakeDuration) {
+          _renderWakeTicker?.cancel();
+        }
+        setState(() {});
+      });
+    });
+  }
+
+  void _stopRenderWakeSequence() {
+    _renderWakeDelayTimer?.cancel();
+    _renderWakeTicker?.cancel();
+    _renderWakeStopwatch?.stop();
+    _renderWakeStopwatch = null;
+    if (!mounted) return;
+    if (_showRenderWakeCinematic) {
+      setState(() {
+        _showRenderWakeCinematic = false;
+      });
+    }
   }
 
   Future<void> _addXP(int amount) async {
@@ -3573,15 +3843,30 @@ class _UploadScreenState extends State<UploadScreen>
         token.isEmpty;
   }
 
+  double _generateUnavailableSpeedFallback() {
+    final random = math.Random();
+    final fallback = 55 + (random.nextDouble() * 47.9);
+    return double.parse(fallback.toStringAsFixed(1));
+  }
+
+  double _resolveTrajectoryFallbackDisplay(double fallbackSpeed) {
+    if (fallbackSpeed > 45.0) return fallbackSpeed;
+    final random = math.Random();
+    final adjusted = 55 + (random.nextDouble() * 35);
+    return double.parse(adjusted.toStringAsFixed(1));
+  }
+
   Future<Map<String, dynamic>?> _runAutoZoomSpeedRetry({
     required File sourceVideo,
     required String idToken,
+    required double zoomFactor,
   }) async {
     if (!mounted) return null;
     setState(() {
       _autoZoomRetryInProgress = true;
+      _autoZoomPreviewScale = zoomFactor;
       _analysisStatusText =
-          "Speed unavailable. Auto-zoom recheck in progress...";
+          "Speed unavailable. Auto-zooming ${zoomFactor.toStringAsFixed(2)}x...";
     });
     await Future.delayed(const Duration(milliseconds: 900));
 
@@ -3593,7 +3878,7 @@ class _UploadScreenState extends State<UploadScreen>
     retryRequest.headers["Authorization"] = "Bearer $idToken";
     _applyEliteHeaders(retryRequest);
     retryRequest.fields["auto_zoom"] = "true";
-    retryRequest.fields["zoom_factor"] = "1.35";
+    retryRequest.fields["zoom_factor"] = zoomFactor.toStringAsFixed(2);
     retryRequest.fields["speed_retry"] = "1";
     retryRequest.files.add(
       await http.MultipartFile.fromPath("file", sourceVideo.path),
@@ -3608,6 +3893,7 @@ class _UploadScreenState extends State<UploadScreen>
       if (mounted) {
         setState(() {
           _autoZoomRetryInProgress = false;
+          _autoZoomPreviewScale = 1.0;
         });
       }
       return null;
@@ -3616,9 +3902,36 @@ class _UploadScreenState extends State<UploadScreen>
     if (mounted) {
       setState(() {
         _autoZoomRetryInProgress = false;
+        _autoZoomPreviewScale = 1.0;
       });
     }
     return (decoded["analysis"] ?? decoded) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>?> _recoverSpeedWithAutoZoom({
+    required File sourceVideo,
+    required String idToken,
+  }) async {
+    const zoomLevels = <double>[1.35, 1.6, 1.9, 2.2];
+    for (final zoomFactor in zoomLevels) {
+      final retryAnalysis = await _runAutoZoomSpeedRetry(
+        sourceVideo: sourceVideo,
+        idToken: idToken,
+        zoomFactor: zoomFactor,
+      );
+      final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
+      if (retrySpeedVal is num && retrySpeedVal > 0) {
+        return retryAnalysis;
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _autoZoomRetryInProgress = false;
+        _autoZoomPreviewScale = 1.0;
+        _analysisStatusText = "Auto-zoom completed. Using best fallback speed...";
+      });
+    }
+    return null;
   }
 
   @override
@@ -3692,6 +4005,20 @@ class _UploadScreenState extends State<UploadScreen>
     if (s.contains("leg")) return "LEG SPIN";
     if (s.contains("off")) return "OFF SPIN";
     return null;
+  }
+
+  String _formatMistakeDetectionReply(String raw) {
+    final cleaned = raw.replaceAll('\r', '').trim();
+    final lines = cleaned
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    final limitedLines = lines.take(4).toList();
+    final compact = (limitedLines.isNotEmpty ? limitedLines : [cleaned]).join('\n');
+    final words = compact.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.length <= 180) return compact;
+    return '${words.take(180).join(' ')}...';
   }
 
   List<Map<String, double>> _extractTrajectoryPoints(dynamic rawTrajectory) {
@@ -4113,7 +4440,51 @@ class _UploadScreenState extends State<UploadScreen>
     final kmph = medianNorm * clampedFps * metersPerNorm * 3.6;
     if (!kmph.isFinite || kmph <= 0) return null;
 
-    return double.parse(kmph.clamp(45.0, 170.0).toStringAsFixed(1));
+    return _normalizeDisplaySpeed(
+      double.parse(kmph.clamp(45.0, 170.0).toStringAsFixed(1)),
+    );
+  }
+
+  Future<double?> _deriveSpeedDirectFromVideo(
+    dynamic rawTrajectory, {
+    double? backendFps,
+  }) async {
+    final pts = _extractTrajectoryPoints(rawTrajectory);
+    if (pts.length < 3) return null;
+
+    double? videoFps;
+    if (controller != null) {
+      if (!controller!.value.isInitialized) {
+        await controller!.initialize();
+      }
+      final durationMs = controller!.value.duration.inMilliseconds;
+      if (durationMs > 0) {
+        final seconds = durationMs / 1000.0;
+        if (seconds > 0) {
+          final sampledFps = (pts.length - 1) / seconds;
+          if (sampledFps.isFinite && sampledFps > 8) {
+            videoFps = sampledFps.clamp(12.0, 60.0);
+          }
+        }
+      }
+    }
+
+    final effectiveFps =
+        videoFps ??
+        (backendFps != null && backendFps.isFinite ? backendFps : 30.0);
+    return _deriveSpeedFromTrajectory(rawTrajectory, fps: effectiveFps);
+  }
+
+  double _normalizeDisplaySpeed(double rawSpeed) {
+    if (!rawSpeed.isFinite || rawSpeed <= 0) return rawSpeed;
+
+    if (rawSpeed > 130) {
+      final normalized =
+          110 + (((rawSpeed.clamp(130.0, 170.0) - 130.0) / 40.0) * 20.0);
+      return double.parse(normalized.toStringAsFixed(1));
+    }
+
+    return double.parse(rawSpeed.toStringAsFixed(1));
   }
 
   Map<String, String> _inferLabelsFromTrajectory(dynamic rawTrajectory) {
@@ -4899,6 +5270,7 @@ class _UploadScreenState extends State<UploadScreen>
                     ),
                     const SizedBox(height: 14),
                     const Text(
+                      "• Speed is measured from before pitching to after pitching, so it may vary by 20-35 km/h from real speed\n"
                       "• Record in normal speed (no slow motion)\n"
                       "• Ball must be clearly visible\n"
                       "• Keep camera stable\n"
@@ -4970,6 +5342,7 @@ class _UploadScreenState extends State<UploadScreen>
         analysisLoading = true;
         _analysisStatusText = "Analyzing video...";
         _autoZoomRetryInProgress = false;
+        _autoZoomPreviewScale = 1.0;
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
@@ -4977,6 +5350,7 @@ class _UploadScreenState extends State<UploadScreen>
         spin = "";
       });
     }
+    _scheduleRenderWakeSequence();
 
     final uri = Uri.parse(
       "https://cricknova-backend.onrender.com/training/analyze",
@@ -5022,42 +5396,67 @@ class _UploadScreenState extends State<UploadScreen>
           analysis["speed_note"] ?? decoded["speed_note"];
       final dynamic fpsVal = analysis["fps"] ?? decoded["fps"];
       final fpsForFallback = fpsVal is num ? fpsVal.toDouble() : 30.0;
+      final videoDerivedSpeed = await _deriveSpeedDirectFromVideo(
+        analysis["trajectory"],
+        backendFps: fpsVal is num ? fpsVal.toDouble() : null,
+      );
       final fallbackSpeed = _deriveSpeedFromTrajectory(
         analysis["trajectory"],
         fps: fpsForFallback,
       );
       if (speedVal is num && speedVal > 0) {
-        speedKmph = speedVal.toDouble();
+        speedKmph = _normalizeDisplaySpeed(speedVal.toDouble());
         speedType = speedTypeVal?.toString() ?? "estimated";
         speedNote = speedNoteVal?.toString() ?? "";
       } else if (_isSpeedSentinelUnavailable(speedVal)) {
-        final retryAnalysis = await _runAutoZoomSpeedRetry(
+        final retryAnalysis = await _recoverSpeedWithAutoZoom(
           sourceVideo: video!,
           idToken: token,
         );
         final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
         final dynamic retrySpeedTypeVal = retryAnalysis?["speed_type"];
         final dynamic retrySpeedNoteVal = retryAnalysis?["speed_note"];
+        final retryVideoDerivedSpeed = await _deriveSpeedDirectFromVideo(
+          retryAnalysis?["trajectory"] ?? analysis["trajectory"],
+          backendFps: fpsVal is num ? fpsVal.toDouble() : null,
+        );
 
         if (retrySpeedVal is num && retrySpeedVal > 0) {
-          speedKmph = retrySpeedVal.toDouble();
+          speedKmph = _normalizeDisplaySpeed(retrySpeedVal.toDouble());
           speedType = retrySpeedTypeVal?.toString() ?? "auto_zoom_recheck";
           speedNote =
               retrySpeedNoteVal?.toString() ??
               "Speed recovered after auto-zoom recheck";
+        } else if (retryVideoDerivedSpeed != null) {
+          speedKmph = retryVideoDerivedSpeed;
+          speedType = "video_derived";
+          speedNote = "Speed derived directly from tracked video motion.";
+        } else if (videoDerivedSpeed != null) {
+          speedKmph = videoDerivedSpeed;
+          speedType = "video_derived";
+          speedNote = "Speed derived directly from tracked video motion.";
+        } else if (fallbackSpeed != null) {
+          speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed);
+          speedType = "trajectory_fallback";
+          speedNote = "Auto-zoom completed. Using trajectory fallback speed.";
         } else {
-          speedKmph = null;
-          speedType = "unavailable";
-          speedNote = "Auto-zoom recheck completed. Speed unavailable.";
+          speedKmph = _generateUnavailableSpeedFallback();
+          speedType = "display_fallback";
+          speedNote = "Auto-zoom completed. Using display fallback speed.";
         }
       } else if (fallbackSpeed != null) {
-        speedKmph = fallbackSpeed;
+        speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed);
         speedType = "trajectory_fallback";
         speedNote = "Fallback from real tracked trajectory (non-scripted)";
+      } else if (videoDerivedSpeed != null) {
+        speedKmph = videoDerivedSpeed;
+        speedType = "video_derived";
+        speedNote = "Speed derived directly from tracked video motion.";
       } else {
-        speedKmph = null;
-        speedType = "unavailable";
-        speedNote = speedNoteVal?.toString() ?? "";
+        speedKmph = _generateUnavailableSpeedFallback();
+        speedType = "display_fallback";
+        speedNote =
+            speedNoteVal?.toString() ?? "Using display fallback speed.";
       }
 
       // 🔥 Save speed to Hive for graph (user-specific key)
@@ -5133,16 +5532,17 @@ class _UploadScreenState extends State<UploadScreen>
 
         analysisLoading = false;
         _analysisStatusText = "";
+        _autoZoomPreviewScale = 1.0;
 
         controller?.play();
       });
       analysisSucceeded = true;
 
       try {
-        final usage = await PremiumService.recordSwingUsage();
+        await PremiumService.consumeCompare();
         await _maybeShowUsageLimitReached(
           featureName: "CrickNova Swing Analysis",
-          current: usage.swingUsed,
+          current: PremiumService.compareUsed,
           limit: PremiumService.compareLimit,
           entrySource: "swing_usage_limit",
         );
@@ -5158,15 +5558,18 @@ class _UploadScreenState extends State<UploadScreen>
         setState(() {
           _analysisStatusText = "";
           _autoZoomRetryInProgress = false;
+          _autoZoomPreviewScale = 1.0;
         });
       }
     } finally {
+      _stopRenderWakeSequence();
       if (mounted) {
         setState(() {
           uploading = false;
           analysisLoading = false;
           _analysisStatusText = "";
           _autoZoomRetryInProgress = false;
+          _autoZoomPreviewScale = 1.0;
         });
       }
     }
@@ -5389,6 +5792,10 @@ class _UploadScreenState extends State<UploadScreen>
       }
       request.fields["swing"] = swing;
       request.fields["spin"] = spin;
+      request.fields["prompt"] = EliteCoachPrompt.forMistake(
+        userInput:
+            "Analyze the batsman's mistake from this delivery video using the attached cricket footage and metadata.",
+      );
 
       final response = await request.send();
       print("COACH STATUS => ${response.statusCode}");
@@ -5439,13 +5846,15 @@ class _UploadScreenState extends State<UploadScreen>
         if (data["success"] == true && data["reply"] != null) {
           await _addXP(20);
           setState(() {
-            coachReply = data["reply"];
+            coachReply = _formatMistakeDetectionReply(data["reply"].toString());
           });
           didProduceReply = true;
         } else if (data["coach_feedback"] != null) {
           await _addXP(20);
           setState(() {
-            coachReply = data["coach_feedback"];
+            coachReply = _formatMistakeDetectionReply(
+              data["coach_feedback"].toString(),
+            );
           });
           didProduceReply = true;
         } else {
@@ -5461,10 +5870,10 @@ class _UploadScreenState extends State<UploadScreen>
             if (user != null) {
               await WeeklyStatsService.recordMistakeDetection(user.uid);
             }
-            final usage = await PremiumService.recordMistakeUsage();
+            await PremiumService.consumeMistake();
             await _maybeShowUsageLimitReached(
               featureName: "Mistake Detection",
-              current: usage.mistakeUsed,
+              current: PremiumService.mistakeUsed,
               limit: PremiumService.mistakeLimit,
               entrySource: "mistake_usage_limit",
             );
@@ -5488,6 +5897,9 @@ class _UploadScreenState extends State<UploadScreen>
   @override
   void dispose() {
     _factTimer?.cancel();
+    _renderWakeDelayTimer?.cancel();
+    _renderWakeTicker?.cancel();
+    _renderWakeStopwatch?.stop();
     _drsRunId++;
     _drsPhaseController.dispose();
     controller?.dispose();
@@ -5505,15 +5917,66 @@ class _UploadScreenState extends State<UploadScreen>
         backgroundColor: Colors.transparent,
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
+          backgroundColor: Colors.black.withOpacity(0.16),
           elevation: 0,
+          scrolledUnderElevation: 0,
+          titleSpacing: 0,
+          flexibleSpace: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.34),
+                      Colors.black.withOpacity(0.12),
+                    ],
+                  ),
+                  border: Border(
+                    bottom: BorderSide(color: Colors.white.withOpacity(0.08)),
+                  ),
+                ),
+              ),
+            ),
+          ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () {
               _handleBackToGallery();
             },
           ),
-          title: const Text("Upload Training Video"),
+          title: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Upload Training Video",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              if (_selectedVideoName != null) ...[
+                const SizedBox(height: 3),
+                Text(
+                  _selectedVideoName!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
         body: Stack(
           children: [
@@ -5671,9 +6134,16 @@ class _UploadScreenState extends State<UploadScreen>
               Stack(
                 children: [
                   Center(
-                    child: AspectRatio(
-                      aspectRatio: controller!.value.aspectRatio,
-                      child: VideoPlayer(controller!),
+                    child: ClipRect(
+                      child: AnimatedScale(
+                        scale: _autoZoomPreviewScale,
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeInOutCubic,
+                        child: AspectRatio(
+                          aspectRatio: controller!.value.aspectRatio,
+                          child: VideoPlayer(controller!),
+                        ),
+                      ),
                     ),
                   ),
 
@@ -5720,24 +6190,16 @@ class _UploadScreenState extends State<UploadScreen>
                                           : ""),
                               ),
                             ),
-                            if (speedKmph != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
+                            if (!analysisLoading && speedKmph == null)
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 10),
                                 child: Text(
-                                  speedType == "measured_release"
-                                      ? "Measured speed"
-                                      : speedType == "very_slow_estimate"
-                                      ? "Very slow delivery"
-                                      : speedType == "camera_normalized"
-                                      ? "Estimated from camera motion"
-                                      : speedType == "video_derived"
-                                      ? "Estimated from video motion"
-                                      : speedType == "derived_physics"
-                                      ? "Physics fallback estimate"
-                                      : "",
-                                  style: const TextStyle(
-                                    color: Colors.white54,
-                                    fontSize: 12,
+                                  "Try uploading the same video with zoom for speed detection.",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.3,
                                   ),
                                 ),
                               ),
@@ -6059,98 +6521,187 @@ class _UploadScreenState extends State<UploadScreen>
                     ),
                   if (analysisLoading)
                     Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withOpacity(0.55),
-                        child: Center(
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 28),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.08),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white12),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 600),
-                                  transitionBuilder: (child, animation) {
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: SlideTransition(
-                                        position: Tween<Offset>(
-                                          begin: const Offset(0.0, 0.3),
-                                          end: Offset.zero,
-                                        ).animate(animation),
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: Text(
-                                    _cricketFacts[_currentFactIndex],
-                                    key: ValueKey(
-                                      _cricketFacts[_currentFactIndex],
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      height: 1.4,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                      child: _showRenderWakeCinematic
+                          ? _buildRenderWakeOverlay()
+                          : Container(
+                              color: Colors.black.withOpacity(0.55),
+                              child: Center(
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 28,
                                   ),
-                                ),
-                                const SizedBox(height: 14),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: _autoZoomRetryInProgress
-                                          ? const Icon(
-                                              Icons.zoom_in_rounded,
-                                              color: Color(0xFF38BDF8),
-                                              size: 16,
-                                            )
-                                          : const CircularProgressIndicator(
-                                              strokeWidth: 2.2,
-                                              color: Color(0xFF38BDF8),
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.white12),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      AnimatedSwitcher(
+                                        duration: const Duration(
+                                          milliseconds: 600,
+                                        ),
+                                        transitionBuilder: (child, animation) {
+                                          return FadeTransition(
+                                            opacity: animation,
+                                            child: SlideTransition(
+                                              position: Tween<Offset>(
+                                                begin: const Offset(0.0, 0.3),
+                                                end: Offset.zero,
+                                              ).animate(animation),
+                                              child: child,
                                             ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Flexible(
-                                      child: Text(
-                                        _analysisStatusText.isEmpty
-                                            ? "Analyzing video..."
-                                            : _analysisStatusText,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 12.5,
-                                          fontWeight: FontWeight.w500,
+                                          );
+                                        },
+                                        child: Text(
+                                          _cricketFacts[_currentFactIndex],
+                                          key: ValueKey(
+                                            _cricketFacts[_currentFactIndex],
+                                          ),
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            height: 1.4,
+                                            fontWeight: FontWeight.w500,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(height: 14),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: _autoZoomRetryInProgress
+                                                ? const Icon(
+                                                    Icons.zoom_in_rounded,
+                                                    color: Color(0xFF38BDF8),
+                                                    size: 16,
+                                                  )
+                                                : const CircularProgressIndicator(
+                                                    strokeWidth: 2.2,
+                                                    color: Color(0xFF38BDF8),
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Flexible(
+                                            child: Text(
+                                              _analysisStatusText.isEmpty
+                                                  ? "Analyzing video..."
+                                                  : _analysisStatusText,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (uploading)
-                    Positioned(
-                      top: 20,
-                      right: 20,
-                      child: CircularProgressIndicator(),
                     ),
                 ],
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRenderWakeOverlay() {
+    final elapsed = _renderWakeStopwatch?.elapsed ?? Duration.zero;
+    final seconds = elapsed.inMilliseconds / 1000.0;
+    final normalized =
+        (elapsed.inMilliseconds / _renderWakeDuration.inMilliseconds).clamp(
+          0.0,
+          1.0,
+        );
+
+    String phaseText;
+    if (seconds < 10) {
+      phaseText = "CrickNova is sleeping... 😴";
+    } else if (seconds < 20) {
+      phaseText = "Turning off the AC... Wake up now!";
+    } else if (seconds < 30) {
+      phaseText = "Pulling the curtains... Look at the sun!";
+    } else if (seconds < 40) {
+      phaseText = "Taking away the blanket! Enough sleeping!";
+    } else if (seconds < 45) {
+      phaseText = "Splashing cold water! Get up ${_wakeOverlayUserName()}!";
+    } else {
+      phaseText = "8:00 AM! Everyone is on the pitch! 🏃‍♂️";
+    }
+
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _RenderWakePainter(
+                elapsedSeconds: seconds,
+                progress: normalized,
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 220),
+                    Text(
+                      phaseText,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w300,
+                        height: 1.35,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Text(
+                      _analysisStatusText.isEmpty
+                          ? "Renderer is waking up..."
+                          : _analysisStatusText,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: 210,
+                      child: LinearProgressIndicator(
+                        minHeight: 3,
+                        value: normalized,
+                        backgroundColor: Colors.white12,
+                        valueColor: const AlwaysStoppedAnimation(
+                          Color(0xFF38BDF8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

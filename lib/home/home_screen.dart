@@ -1,15 +1,18 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
 import '../premium/elite_status_screen.dart';
 import '../upload/upload_screen.dart';
 import '../compare/analyse_yourself_screen.dart';
 import '../premium/premium_expired_screen.dart';
+import '../navigation/main_navigation.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -20,21 +23,24 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   int totalUploadedSessions = 0;
   List<double> speedHistory = [];
   double _cachedTopSpeed = 0.0;
   bool _lastPremiumState = PremiumService.isPremiumActive;
+  bool _showEliteWelcomeHeader = false;
 
   final PageController _statsPageController = PageController(
     viewportFraction: 0.9,
   );
   Timer? _statsTimer;
-  Timer? _quickStatsSyncTimer;
   bool _quickStatsSyncInProgress = false;
   StreamSubscription? _statsBoxSub;
   StreamSubscription? _speedBoxSub;
   int _currentStatsPage = 0;
+  late final AnimationController _eliteHeaderController;
+  late final AnimationController _diamondController;
+  late final AnimationController _pulseController;
 
   @override
   void didChangeDependencies() {
@@ -44,9 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onPremiumChanged() {
     if (!mounted) return;
     final next = PremiumService.isPremiumActive;
-    if (next == _lastPremiumState) return;
+    final premiumStateChanged = next != _lastPremiumState;
     _lastPremiumState = next;
-    _saveQuickStatsToHive();
+    unawaited(_saveQuickStatsToHive());
+    if (premiumStateChanged) {
+      _checkExpiryPopup();
+    }
     setState(() {});
   }
 
@@ -54,6 +63,18 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(_lifeCycleObserver);
+    _eliteHeaderController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
+    _diamondController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 5200),
+    )..repeat();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1900),
+    )..repeat(reverse: true);
 
     PremiumService.premiumNotifier.addListener(_onPremiumChanged);
     PremiumService.premiumNotifier.addListener(_checkExpiryPopup);
@@ -62,10 +83,24 @@ class _HomeScreenState extends State<HomeScreen> {
       _checkExpiryPopup();
     });
 
-    _startStatsAutoSlide();
-    _startQuickStatsSync();
+    MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
+    if (_isHomeTabVisible) {
+      _startStatsAutoSlide();
+    }
     _initRealtimeQuickStatsListeners();
     _bootstrapAuthAndData();
+    _prepareEliteWelcomeHeader();
+  }
+
+  bool get _isHomeTabVisible => MainNavigation.activeTabNotifier.value == 0;
+
+  void _handleTabVisibilityChange() {
+    if (_isHomeTabVisible) {
+      _startStatsAutoSlide();
+      unawaited(_syncQuickStats());
+      return;
+    }
+    _statsTimer?.cancel();
   }
 
   late final WidgetsBindingObserver _lifeCycleObserver = _HomeLifecycleObserver(
@@ -94,6 +129,33 @@ class _HomeScreenState extends State<HomeScreen> {
     await _saveQuickStatsToHive();
     if (!mounted) return;
     setState(() {});
+  }
+
+  String _eliteHeaderSeenKey(String uid) => 'home_elite_header_seen_$uid';
+
+  Future<void> _prepareEliteWelcomeHeader() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final createdAt = user.metadata.creationTime;
+    final lastSignInAt = user.metadata.lastSignInTime;
+    final isBrandNew =
+        createdAt != null &&
+        lastSignInAt != null &&
+        lastSignInAt.difference(createdAt).abs() <=
+            const Duration(minutes: 2);
+
+    if (!isBrandNew) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final alreadySeen = prefs.getBool(_eliteHeaderSeenKey(user.uid)) ?? false;
+    if (alreadySeen || !mounted) return;
+
+    await prefs.setBool(_eliteHeaderSeenKey(user.uid), true);
+    setState(() {
+      _showEliteWelcomeHeader = true;
+    });
+    _eliteHeaderController.forward(from: 0);
   }
 
   String _currentUid() => FirebaseAuth.instance.currentUser?.uid ?? "guest";
@@ -232,13 +294,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _startQuickStatsSync() {
-    _quickStatsSyncTimer?.cancel();
-    _quickStatsSyncTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _syncQuickStats();
-    });
-  }
-
   Future<void> _syncQuickStats() async {
     if (!mounted || _quickStatsSyncInProgress) return;
     _quickStatsSyncInProgress = true;
@@ -337,8 +392,13 @@ class _HomeScreenState extends State<HomeScreen> {
           RefreshIndicator(
             color: const Color(0xFF00FF88),
             backgroundColor: const Color(0xFF0F172A),
+            notificationPredicate: (notification) {
+              return PremiumService.isPremiumActive &&
+                  notification.depth == 0;
+            },
             onRefresh: () async {
-              await PremiumService.restoreOnLaunch();
+              if (!PremiumService.isPremiumActive) return;
+              await PremiumService.refresh();
               await _bootstrapAuthAndData();
 
               if (mounted) {
@@ -352,8 +412,16 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               children: [
                 Container(
-                  padding: const EdgeInsets.fromLTRB(20, 60, 20, 28),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    60,
+                    20,
+                    _showEliteWelcomeHeader ? 34 : 32,
+                  ),
                   width: double.infinity,
+                  constraints: BoxConstraints(
+                    minHeight: _showEliteWelcomeHeader ? 290 : 220,
+                  ),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -363,6 +431,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.06),
                     ),
                     borderRadius: const BorderRadius.vertical(
                       bottom: Radius.circular(28),
@@ -379,23 +450,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        "Welcome back, ${widget.userName}",
-                        style: GoogleFonts.poppins(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        "Ready for today’s cricket analysis?",
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: Colors.white.withValues(alpha: 0.64),
-                        ),
-                      ),
+                      _premiumWelcomeHeader(isEliteWelcome: _showEliteWelcomeHeader),
                       const SizedBox(height: 14),
                       if (!PremiumService.isLoaded)
                         _checkingPlanBadge()
@@ -928,6 +983,228 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _premiumWelcomeHeader({required bool isEliteWelcome}) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _eliteHeaderController,
+        _diamondController,
+        _pulseController,
+      ]),
+      builder: (context, _) {
+        final progress = isEliteWelcome ? _eliteHeaderController.value : 1.0;
+        final welcomeOpacity = isEliteWelcome
+            ? ((_eliteHeaderController.value - 0.05) / 0.20).clamp(0.0, 1.0)
+            : 1.0;
+        final eliteSlide = isEliteWelcome
+            ? Curves.easeOutCubic.transform(
+                ((_eliteHeaderController.value - 0.18) / 0.34).clamp(0.0, 1.0),
+              )
+            : 1.0;
+        final lineProgress = isEliteWelcome
+            ? Curves.easeOutCubic.transform(
+                ((_eliteHeaderController.value - 0.36) / 0.22).clamp(0.0, 1.0),
+              )
+            : 1.0;
+        final pulse = 0.82 + (_pulseController.value * 0.18);
+        final lineOne = "Welcome";
+        final lineTwo = isEliteWelcome ? "to the Elite," : "back,";
+        final subtitle = isEliteWelcome
+            ? "Your elite cricket AI system is ready."
+            : "Ready for today’s cricket analysis?";
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(0xFF000000),
+                        Color(0xFF07101E),
+                        Color(0xFF000000),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _EliteStadiumBackdropPainter(
+                      opacity: 0.42 * progress,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 10,
+                top: 4,
+                child: Opacity(
+                  opacity: 0.5 * progress,
+                  child: Transform.rotate(
+                    angle: _diamondController.value * math.pi * 2,
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..rotateY(
+                          math.sin(_diamondController.value * math.pi * 2) *
+                              0.65,
+                        ),
+                      child: const Icon(
+                        Icons.diamond_outlined,
+                        color: Color(0xFFF0D9A4),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 24, 14, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Opacity(
+                      opacity: welcomeOpacity,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) {
+                          return const LinearGradient(
+                            colors: [Color(0xFFF7E7CE), Color(0xFFE6C86A)],
+                          ).createShader(bounds);
+                        },
+                        child: Text(
+                          lineOne,
+                          style: GoogleFonts.playfairDisplay(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            height: 1.0,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Transform.translate(
+                      offset: Offset(22 * (1 - eliteSlide), 0),
+                      child: Opacity(
+                        opacity: eliteSlide,
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              right: -8,
+                              top: 6,
+                              child: Opacity(
+                                opacity: 1 - eliteSlide,
+                                child: Container(
+                                  width: 44,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        const Color(
+                                          0xFFF7E7CE,
+                                        ).withValues(alpha: 0.0),
+                                        const Color(
+                                          0xFFF7E7CE,
+                                        ).withValues(alpha: 0.5),
+                                        const Color(
+                                          0xFFD4AF37,
+                                        ).withValues(alpha: 0.0),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            ShaderMask(
+                              shaderCallback: (bounds) {
+                                return const LinearGradient(
+                                  colors: [Color(0xFFF7E7CE), Color(0xFFE6C86A)],
+                                ).createShader(bounds);
+                              },
+                              child: Text(
+                                lineTwo,
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: 160 * lineProgress,
+                        height: 1.5,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFD4AF37), Color(0xFFF7E7CE)],
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(
+                                0xFFD4AF37,
+                              ).withValues(alpha: 0.28),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      widget.userName,
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color.lerp(
+                          const Color(0xFFEAF6FF),
+                          Colors.white,
+                          pulse,
+                        ),
+                        shadows: [
+                          Shadow(
+                            color: const Color(
+                              0xFF1E90FF,
+                            ).withValues(alpha: 0.22 * pulse),
+                            blurRadius: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withValues(alpha: 0.72),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _eliteNameBadge() {
     return EliteStatusHeroBadge(onTap: _openEliteStatusScreen);
   }
@@ -1000,14 +1277,86 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _statsTimer?.cancel();
-    _quickStatsSyncTimer?.cancel();
+    MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
     _statsBoxSub?.cancel();
     _speedBoxSub?.cancel();
     _statsPageController.dispose();
+    _eliteHeaderController.dispose();
+    _diamondController.dispose();
+    _pulseController.dispose();
     WidgetsBinding.instance.removeObserver(_lifeCycleObserver);
     PremiumService.premiumNotifier.removeListener(_onPremiumChanged);
     PremiumService.premiumNotifier.removeListener(_checkExpiryPopup);
     super.dispose();
+  }
+}
+
+class _EliteStadiumBackdropPainter extends CustomPainter {
+  final double opacity;
+
+  _EliteStadiumBackdropPainter({required this.opacity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (opacity <= 0) return;
+
+    final floodPaint = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0x44A8CFFF), Color(0x00000000)],
+      ).createShader(
+        Rect.fromCircle(
+          center: Offset(size.width * 0.22, size.height * 0.06),
+          radius: size.width * 0.35,
+        ),
+      )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26);
+    canvas.drawCircle(
+      Offset(size.width * 0.22, size.height * 0.06),
+      size.width * 0.22,
+      floodPaint..color = const Color(0x66A8CFFF).withValues(alpha: opacity),
+    );
+    canvas.drawCircle(
+      Offset(size.width * 0.82, size.height * 0.09),
+      size.width * 0.18,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0x3399C7FF), Color(0x00000000)],
+        ).createShader(
+          Rect.fromCircle(
+            center: Offset(size.width * 0.82, size.height * 0.09),
+            radius: size.width * 0.28,
+          ),
+        )
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24),
+    );
+
+    final fieldArc = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3
+      ..color = const Color(0xFF8FB9E8).withValues(alpha: opacity * 0.28)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+    final rect = Rect.fromLTWH(
+      -size.width * 0.12,
+      size.height * 0.52,
+      size.width * 1.24,
+      size.height * 0.70,
+    );
+    canvas.drawArc(rect, math.pi, math.pi, false, fieldArc);
+
+    final railPaint = Paint()
+      ..color = const Color(0xFFB5D8FF).withValues(alpha: opacity * 0.12)
+      ..strokeWidth = 2
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawLine(
+      Offset(size.width * 0.08, size.height * 0.46),
+      Offset(size.width * 0.92, size.height * 0.38),
+      railPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _EliteStadiumBackdropPainter oldDelegate) {
+    return oldDelegate.opacity != opacity;
   }
 }
 
