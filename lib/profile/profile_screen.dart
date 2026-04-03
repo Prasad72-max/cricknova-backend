@@ -12,10 +12,13 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:in_app_review/in_app_review.dart';
+import 'package:provider/provider.dart';
 import '../premium/premium_screen.dart';
 import '../auth/login_screen.dart';
+import '../navigation/main_navigation.dart';
 import '../services/pricing_location_service.dart';
 import '../services/premium_service.dart';
+import '../services/subscription_provider.dart';
 import 'faq_screen.dart';
 import 'legal_info_screen.dart';
 
@@ -67,11 +70,7 @@ class _SubscriptionHub extends StatelessWidget {
       price: 'INR 499',
       region: 'Domestic',
       icon: Icons.workspace_premium_outlined,
-      features: [
-        'AI Ball Tracking',
-        'RPM Analysis',
-        'Pro Coaching Insights',
-      ],
+      features: ['AI Ball Tracking', 'RPM Analysis', 'Pro Coaching Insights'],
     ),
     _SubscriptionPlanSpec(
       planId: 'IN_1999',
@@ -112,11 +111,7 @@ class _SubscriptionHub extends StatelessWidget {
       price: '\$59.99',
       region: 'Global',
       icon: Icons.workspace_premium_outlined,
-      features: [
-        'AI Ball Tracking',
-        'RPM Analysis',
-        'Pro Coaching Insights',
-      ],
+      features: ['AI Ball Tracking', 'RPM Analysis', 'Pro Coaching Insights'],
     ),
     _SubscriptionPlanSpec(
       planId: 'INTL_ULTRA',
@@ -158,10 +153,7 @@ class _SubscriptionHub extends StatelessWidget {
               children: [
                 _ActiveSubscriptionCard(plan: currentPlan),
                 const SizedBox(height: 16),
-                _SectionLabel(
-                  title: visibleTitle,
-                  subtitle: visibleSubtitle,
-                ),
+                _SectionLabel(title: visibleTitle, subtitle: visibleSubtitle),
                 const SizedBox(height: 10),
                 _PlanRail(
                   plans: visiblePlans,
@@ -224,8 +216,8 @@ class _ActiveSubscriptionCard extends StatelessWidget {
     final renewalLabel = remaining == null
         ? 'Renewal not synced'
         : remaining.isNegative
-            ? 'Expired'
-            : '${remaining.inDays}d ${remaining.inHours % 24}h left';
+        ? 'Expired'
+        : '${remaining.inDays}d ${remaining.inHours % 24}h left';
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
@@ -236,10 +228,7 @@ class _ActiveSubscriptionCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: const Color(0x80D4A84F),
-              width: 1.1,
-            ),
+            border: Border.all(color: const Color(0x80D4A84F), width: 1.1),
             boxShadow: [
               BoxShadow(
                 color: const Color(0x33D4A84F),
@@ -273,11 +262,7 @@ class _ActiveSubscriptionCard extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Icon(
-                    plan.icon,
-                    color: const Color(0xFFF2D08B),
-                    size: 20,
-                  ),
+                  Icon(plan.icon, color: const Color(0xFFF2D08B), size: 20),
                 ],
               ),
               const SizedBox(height: 14),
@@ -361,8 +346,8 @@ class _PlanRail extends StatelessWidget {
                   color: selected
                       ? const Color(0xFF3B82F6)
                       : plan.recommended
-                          ? const Color(0x66D4A84F)
-                          : const Color(0x22FFFFFF),
+                      ? const Color(0x66D4A84F)
+                      : const Color(0x22FFFFFF),
                 ),
                 boxShadow: plan.recommended
                     ? [
@@ -562,7 +547,9 @@ class _PlanComparisonSheet extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  currentPlanId == plan.planId ? 'Current plan' : 'View Checkout',
+                  currentPlanId == plan.planId
+                      ? 'Current plan'
+                      : 'View Checkout',
                   style: GoogleFonts.inter(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -685,6 +672,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool _showRatingDetails = false;
   int _selectedRating = 0;
   late final TextEditingController _reviewController;
+  bool _profileAnimationsActive = false;
 
   Future<Box> _getStatsBox(String uid) async {
     final boxName = "local_stats_$uid";
@@ -713,11 +701,49 @@ class _ProfileScreenState extends State<ProfileScreen>
       text:
           "CrickNova AI is very good and accurate. It helped me improve my bowling speed and swing.",
     );
+    MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
+    if (_isProfileTabVisible) {
+      _resumeProfileAnimations();
+    } else {
+      _pauseProfileAnimations();
+    }
     loadProfileData();
+  }
+
+  bool get _isProfileTabVisible =>
+      MainNavigation.activeTabNotifier.value ==
+      (PremiumService.isPremiumActive ? 3 : 4);
+
+  void _handleTabVisibilityChange() {
+    if (_isProfileTabVisible) {
+      _resumeProfileAnimations();
+      return;
+    }
+    _pauseProfileAnimations();
+  }
+
+  void _resumeProfileAnimations() {
+    if (_profileAnimationsActive) return;
+    _profileAnimationsActive = true;
+    if (!_supportPulseController.isAnimating) {
+      _supportPulseController.repeat(reverse: true);
+    }
+    if (!_xpShimmerController.isAnimating) {
+      _xpShimmerController.repeat();
+    }
+  }
+
+  void _pauseProfileAnimations() {
+    if (!_profileAnimationsActive) return;
+    _profileAnimationsActive = false;
+    _supportPulseController.stop();
+    _xpShimmerController.stop();
   }
 
   @override
   void dispose() {
+    _pauseProfileAnimations();
+    MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
     _supportPulseController.dispose();
     _xpShimmerController.dispose();
     nameController.dispose();
@@ -859,6 +885,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
+  void _openSubscriptionHub() {
+    context.read<SubscriptionProvider>().fetchProducts();
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 180),
+        reverseTransitionDuration: const Duration(milliseconds: 140),
+        pageBuilder: (_, animation, __) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: const PremiumScreen(entrySource: "profile"),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openRating() async {
     try {
       final review = InAppReview.instance;
@@ -884,6 +924,266 @@ class _ProfileScreenState extends State<ProfileScreen>
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
+  }
+
+  Future<void> _confirmRemoveAccount() async {
+    final bool? shouldDelete = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0E131B),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.redAccent.withValues(alpha: 0.28),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.redAccent.withValues(alpha: 0.12),
+                  blurRadius: 28,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.delete_forever_rounded,
+                    color: Colors.redAccent,
+                    size: 26,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  "Are you sure?",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "This will permanently delete your CrickNova AI account and all associated user data. This action cannot be undone.",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.16),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          "Cancel",
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: const Text(
+                          "Delete",
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (shouldDelete != true || !mounted) return;
+    await _removeAccount();
+  }
+
+  Future<void> _removeAccount() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Please log in again to remove account.")),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final uid = user.uid;
+      await user.delete();
+      await _deleteFirestoreUserData(uid);
+
+      try {
+        await _googleSignIn.signOut();
+        await _googleSignIn.disconnect();
+      } catch (_) {}
+
+      if (!mounted) return;
+      navigator.pop();
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+      navigator.pop();
+      final bool needsRecentLogin =
+          error.code == 'requires-recent-login' ||
+          error.code == 'credential-too-old-login-again';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            needsRecentLogin
+                ? "For security, please log in again and then retry removing your account."
+                : (error.message?.isNotEmpty == true
+                      ? error.message!
+                      : "Unable to remove account right now. Please try again."),
+          ),
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error.code == 'permission-denied'
+                ? "Some Firestore data could not be removed from this device. Please log in again and retry."
+                : (error.message?.isNotEmpty == true
+                      ? error.message!
+                      : "Unable to remove account right now. Please try again."),
+          ),
+        ),
+      );
+    } catch (error) {
+      debugPrint("REMOVE_ACCOUNT ERROR => $error");
+      if (!mounted) return;
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            "Unable to remove account right now. ${error.toString()}",
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteFirestoreUserData(String uid) async {
+    final firestore = FirebaseFirestore.instance;
+
+    await _runCleanupStep(
+      'support_chat_messages',
+      () => _deleteCollectionQuery(
+        firestore.collection('support_chats').doc(uid).collection('messages'),
+      ),
+    );
+    await _runCleanupStep(
+      'support_chat_doc',
+      () => firestore.collection('support_chats').doc(uid).delete(),
+    );
+    await _runCleanupStep(
+      'premium_device_bindings',
+      () => firestore.collection('premium_device_bindings').doc(uid).delete(),
+    );
+    await _runCleanupStep(
+      'subscriptions',
+      () => firestore.collection('subscriptions').doc(uid).delete(),
+    );
+    await _runCleanupStep(
+      'users',
+      () => firestore.collection('users').doc(uid).delete(),
+    );
+    await _runCleanupStep(
+      'claims',
+      () => _deleteCollectionQuery(
+        firestore.collection('claims').where('userId', isEqualTo: uid),
+      ),
+    );
+    await _runCleanupStep(
+      'security_logs',
+      () => _deleteCollectionQuery(
+        firestore.collection('security_logs').where('userId', isEqualTo: uid),
+      ),
+    );
+  }
+
+  Future<void> _deleteCollectionQuery(Query<Map<String, dynamic>> query) async {
+    while (true) {
+      final snapshot = await query.limit(25).get();
+      if (snapshot.docs.isEmpty) {
+        return;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (snapshot.docs.length < 25) {
+        return;
+      }
+    }
+  }
+
+  Future<void> _runCleanupStep(
+    String label,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+    } catch (error) {
+      debugPrint('REMOVE_ACCOUNT CLEANUP [$label] => $error');
+    }
   }
 
   @override
@@ -960,12 +1260,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           fit: BoxFit.cover,
                                           errorBuilder:
                                               (context, error, stackTrace) {
-                                            return const Icon(
-                                              Icons.person,
-                                              size: 86,
-                                              color: Colors.white,
-                                            );
-                                          },
+                                                return const Icon(
+                                                  Icons.person,
+                                                  size: 86,
+                                                  color: Colors.white,
+                                                );
+                                              },
                                         )
                                       : const Icon(
                                           Icons.person,
@@ -1515,16 +1815,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     size: 18,
                     color: Color(0xFF3B82F6),
                   ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const PremiumScreen(
-                          entrySource: "profile",
-                        ),
-                      ),
-                    );
-                  },
+                  onTap: _openSubscriptionHub,
                 ),
               ),
 
@@ -1753,9 +2044,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ),
                       onTap: () {
                         Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const FaqScreen(),
-                          ),
+                          MaterialPageRoute(builder: (_) => const FaqScreen()),
                         );
                       },
                     ),
@@ -1793,76 +2082,108 @@ class _ProfileScreenState extends State<ProfileScreen>
               // LOG OUT
               cardContainer(
                 title: "Account",
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.logout, color: Color(0xFFEF4444)),
-                  title: const Text(
-                    "Log Out",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 18,
-                    color: Color(0xFF3B82F6),
-                  ),
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        backgroundColor: const Color(0xFF11151C),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        title: const Text(
-                          "Log Out",
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        content: const Text(
-                          "Are you sure you want to log out?",
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text(
-                              "Go Back",
-                              style: TextStyle(color: Color(0xFF3B82F6)),
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.logout,
+                        color: Color(0xFFEF4444),
+                      ),
+                      title: const Text(
+                        "Log Out",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 18,
+                        color: Color(0xFF3B82F6),
+                      ),
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            backgroundColor: const Color(0xFF11151C),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
                             ),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFEF4444),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            onPressed: () async {
-                              Navigator.pop(context);
-                              try {
-                                await FirebaseAuth.instance.signOut();
-                                await _googleSignIn.signOut();
-                                await _googleSignIn.disconnect();
-                              } catch (_) {}
-
-                              if (!mounted) return;
-
-                              Navigator.pushAndRemoveUntil(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginScreen(),
-                                ),
-                                (route) => false,
-                              );
-                            },
-                            child: const Text(
-                              "Yes, Log Out",
+                            title: const Text(
+                              "Log Out",
                               style: TextStyle(color: Colors.white),
                             ),
+                            content: const Text(
+                              "Are you sure you want to log out?",
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text(
+                                  "Go Back",
+                                  style: TextStyle(color: Color(0xFF3B82F6)),
+                                ),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEF4444),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  try {
+                                    await FirebaseAuth.instance.signOut();
+                                    await _googleSignIn.signOut();
+                                    await _googleSignIn.disconnect();
+                                  } catch (_) {}
+
+                                  if (!mounted) return;
+
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LoginScreen(),
+                                    ),
+                                    (route) => false,
+                                  );
+                                },
+                                child: const Text(
+                                  "Yes, Log Out",
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        );
+                      },
+                    ),
+                    const Divider(color: Colors.white12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Colors.redAccent,
                       ),
-                    );
-                  },
+                      title: const Text(
+                        "Remove My Account",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        "Permanently delete your account and user data",
+                        style: GoogleFonts.inter(
+                          color: Colors.white54,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 18,
+                        color: Colors.redAccent,
+                      ),
+                      onTap: _confirmRemoveAccount,
+                    ),
+                  ],
                 ),
               ),
 
@@ -2607,7 +2928,7 @@ class _PremiumFeatureTile extends StatelessWidget {
                       ),
                     ),
                   ),
-              ),
+                ),
             ],
           ),
         ),

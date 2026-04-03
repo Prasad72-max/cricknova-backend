@@ -51,7 +51,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
         .where((line) => line.isNotEmpty)
         .toList();
     final compact = (lines.isNotEmpty ? lines : [cleaned]).join('\n');
-    final words = compact.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final words = compact
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
     if (words.length <= 280) return compact;
     return '${words.take(280).join(' ')}...';
   }
@@ -65,7 +68,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
     _loadResolvedUserName();
 
     Future.microtask(() async {
-      await PremiumService.restoreOnLaunch();
+      if (!PremiumService.isLoaded) {
+        await PremiumService.restoreOnLaunch();
+      }
       if (mounted) setState(() {});
     });
     PremiumService.premiumNotifier.addListener(_onPremiumChanged);
@@ -108,6 +113,17 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
   }
 
+  Future<void> _awardAiCoachXp() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final box = await Hive.openBox("local_stats_${user.uid}");
+    final int currentXp = box.get('xp', defaultValue: 0);
+    final int newXp = currentXp + 10;
+    await box.put('xp', newXp);
+    debugPrint("XP UPDATED (AI COACH) => +10 | TOTAL => $newXp");
+  }
+
   Future<void> _loadResolvedUserName() async {
     final user = FirebaseAuth.instance.currentUser;
     String nextName = "Player";
@@ -117,7 +133,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
         final profileName = box.get("profileName") as String?;
         if (profileName != null && profileName.trim().isNotEmpty) {
           nextName = profileName.trim();
-        } else if (user.displayName != null && user.displayName!.trim().isNotEmpty) {
+        } else if (user.displayName != null &&
+            user.displayName!.trim().isNotEmpty) {
           nextName = user.displayName!.trim().split(" ").first;
         } else if ((user.email ?? "").contains("@")) {
           nextName = user.email!.split("@").first;
@@ -303,6 +320,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
             "No reply received from AI.";
 
         await _chatProvider.addCoachMessage(_formatCoachReply(coachText));
+        await _awardAiCoachXp();
         await PremiumService.consumeChat();
         _scheduleScrollToBottomRobust(animated: true);
       } else {
@@ -330,23 +348,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
       return;
     } finally {
-      // 🔥 Universal XP reward (AI attempt — success or fail)
-      try {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) {
-          final uid = user.uid;
-          final box = await Hive.openBox("local_stats_$uid");
-
-          int currentXp = box.get('xp', defaultValue: 0);
-          int newXp = currentXp + 500000; // 🔥 5 Lakh XP Boost
-
-          await box.put('xp', newXp);
-
-          debugPrint("🔥 +5 LAKH XP ADDED → TOTAL: $newXp");
-        }
-      } catch (e) {
-        debugPrint("XP update failed: $e");
-      }
       if (mounted) {
         loading = false;
         setState(() {});

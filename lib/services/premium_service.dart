@@ -61,7 +61,7 @@ class PremiumService {
   /// 🔥 CALL THIS ON APP START (main.dart)
   /// 🔁 BACKWARD-COMPAT (used by login_screen.dart)
   static Future<void> syncFromFirestore(String uid) async {
-    await loadPremiumFromUid(uid);
+    await _runSingleLoad(uid);
   }
 
   /// 🌐 Sync premium from backend API (used after Razorpay / PayPal success)
@@ -221,6 +221,15 @@ class PremiumService {
         case "IN_1999":
           await _cache(firestorePremium, planId, 5000, 150, 150);
           break;
+        case "INTL_MONTHLY":
+          await _cache(firestorePremium, planId, 200, 20, 0);
+          break;
+        case "INTL_6M":
+          await _cache(firestorePremium, planId, 1200, 30, 0);
+          break;
+        case "INTL_YEARLY":
+          await _cache(firestorePremium, planId, 1800, 50, 50);
+          break;
         case "INT_ULTRA":
         case "INTL_ULTRA":
         case "ULTRA":
@@ -243,10 +252,7 @@ class PremiumService {
     }
   }
 
-  static Future<void> _runSingleLoad(
-    String uid, {
-    bool force = false,
-  }) async {
+  static Future<void> _runSingleLoad(String uid, {bool force = false}) async {
     if (!force && isLoaded && _lastLoadedUid == uid) {
       return;
     }
@@ -284,6 +290,10 @@ class PremiumService {
     if (cachedCompareLimit != null) compareLimit = cachedCompareLimit;
 
     debugPrint("💾 Premium restored from cache: $isPremium ($plan)");
+    isLoaded = cachedPremium != null || cachedPlan != null;
+    if (isLoaded) {
+      premiumNotifier.notifyListeners();
+    }
 
     final user = FirebaseAuth.instance.currentUser;
 
@@ -455,6 +465,62 @@ class PremiumService {
     // ❌ DO NOT reset usage here
   }
 
+  static ({int chat, int mistake, int compare}) _limitsForPlan(String planId) {
+    switch (planId) {
+      case "IN_99":
+        return (chat: 200, mistake: 15, compare: 0);
+      case "IN_299":
+        return (chat: 1200, mistake: 30, compare: 0);
+      case "IN_499":
+        return (chat: 3000, mistake: 60, compare: 50);
+      case "IN_1999":
+        return (chat: 5000, mistake: 150, compare: 150);
+      case "INTL_MONTHLY":
+        return (chat: 200, mistake: 20, compare: 0);
+      case "INTL_6M":
+        return (chat: 1200, mistake: 30, compare: 0);
+      case "INTL_YEARLY":
+        return (chat: 1800, mistake: 50, compare: 50);
+      case "INT_ULTRA":
+      case "INTL_ULTRA":
+      case "ULTRA":
+        return (chat: 7000, mistake: 150, compare: 150);
+      default:
+        return (chat: 0, mistake: 0, compare: 0);
+    }
+  }
+
+  static Future<void> updateStatus(
+    bool premium, {
+    String planId = "FREE",
+  }) async {
+    final limits = premium
+        ? _limitsForPlan(planId)
+        : (chat: 0, mistake: 0, compare: 0);
+    await _cache(
+      premium,
+      premium ? planId : "FREE",
+      limits.chat,
+      limits.mistake,
+      limits.compare,
+    );
+    isLoaded = true;
+    premiumNotifier.notifyListeners();
+  }
+
+  /// Lets external billing flows reuse the app's existing premium state.
+  static Future<void> applyExternalPremiumState({
+    required bool premium,
+    String planId = "FREE",
+    int chatLimit = 0,
+    int mistakeLimit = 0,
+    int compareLimit = 0,
+  }) async {
+    await _cache(premium, planId, chatLimit, mistakeLimit, compareLimit);
+    isLoaded = true;
+    premiumNotifier.notifyListeners();
+  }
+
   // -----------------------------
   // ACCESS GUARDS (SINGLE TRUTH)
   // -----------------------------
@@ -478,8 +544,7 @@ class PremiumService {
   }
 
   static bool canCompare() {
-    if (!isLoaded) return true;
-    return isPremiumActive && compareUsed < compareLimit;
+    return true;
   }
 
   static bool get isElite {
@@ -554,28 +619,11 @@ class PremiumService {
   // COMPARE HELPERS
   // -----------------------------
   static Future<int> getCompareLimit() async {
-    if (!isPremium) return 0;
-    return compareLimit - compareUsed;
+    return 999999;
   }
 
   static Future<void> consumeCompare() async {
-    if (!canCompare()) return;
-    compareUsed++;
-    _usageDirty = true;
-    _lastLocalUsageUpdate = DateTime.now();
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      FirebaseFirestore.instance
-          .collection("subscriptions")
-          .doc(user.uid)
-          .update({
-            "compare_used": FieldValue.increment(1),
-            "updatedAt": FieldValue.serverTimestamp(),
-          });
-    }
-    await _incrementMonthlyUsage(_UsageType.swing);
-    await syncAfterUsage();
+    return;
   }
 
   // -----------------------------
@@ -604,14 +652,8 @@ class PremiumService {
     MonthlyUsage usage,
   ) async {
     final box = await Hive.openBox(_usageHiveBoxName);
-    await box.put(
-      _usageHiveSwingKey(uid, usage.monthKey),
-      usage.swingUsed,
-    );
-    await box.put(
-      _usageHiveMistakeKey(uid, usage.monthKey),
-      usage.mistakeUsed,
-    );
+    await box.put(_usageHiveSwingKey(uid, usage.monthKey), usage.swingUsed);
+    await box.put(_usageHiveMistakeKey(uid, usage.monthKey), usage.mistakeUsed);
   }
 
   static Future<MonthlyUsage> _readMonthlyUsageFromHive(
@@ -641,21 +683,25 @@ class PremiumService {
     StreamSubscription<BoxEvent>? sub;
     Timer? monthTimer;
     var currentKey = initialKey;
-    Hive.openBox(_usageHiveBoxName).then((box) async {
-      if (controller.isClosed) return;
-      controller.add(await _readMonthlyUsageFromHive(user.uid, currentKey));
-
-      sub?.cancel();
-      sub = box.watch().listen((event) async {
-        final swingKey = _usageHiveSwingKey(user.uid, currentKey);
-        final mistakeKey = _usageHiveMistakeKey(user.uid, currentKey);
-        if (event.key == swingKey || event.key == mistakeKey) {
+    Hive.openBox(_usageHiveBoxName)
+        .then((box) async {
+          if (controller.isClosed) return;
           controller.add(await _readMonthlyUsageFromHive(user.uid, currentKey));
-        }
-      }, onError: controller.addError);
-    }).catchError((error, stackTrace) {
-      controller.addError(error, stackTrace);
-    });
+
+          sub?.cancel();
+          sub = box.watch().listen((event) async {
+            final swingKey = _usageHiveSwingKey(user.uid, currentKey);
+            final mistakeKey = _usageHiveMistakeKey(user.uid, currentKey);
+            if (event.key == swingKey || event.key == mistakeKey) {
+              controller.add(
+                await _readMonthlyUsageFromHive(user.uid, currentKey),
+              );
+            }
+          }, onError: controller.addError);
+        })
+        .catchError((error, stackTrace) {
+          controller.addError(error, stackTrace);
+        });
 
     monthTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       final newKey = _usageMonthKey();

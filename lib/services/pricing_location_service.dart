@@ -7,7 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum PricingRegion { india, global }
 
 class PricingLocationService {
-  static const _endpoint = 'http://ip-api.com/json';
+  static const List<String> _endpoints = <String>[
+    'https://ipwho.is/',
+    'https://ipapi.co/json/',
+  ];
   static const _pricingModeKey = 'pricingMode';
   static const _countryCodeKey = 'pricingCountryCode';
   static bool _bootstrapped = false;
@@ -48,29 +51,40 @@ class PricingLocationService {
     final localClient = client ?? http.Client();
 
     try {
-      final response = await localClient
-          .get(Uri.parse(_endpoint))
-          .timeout(timeout);
+      for (final endpoint in _endpoints) {
+        final response = await localClient
+            .get(Uri.parse(endpoint))
+            .timeout(timeout);
 
-      if (response.statusCode == 200) {
+        if (response.statusCode != 200) {
+          continue;
+        }
+
         final decoded = jsonDecode(response.body);
-        if (decoded is Map<String, dynamic>) {
-          final countryCode =
-              decoded['countryCode']?.toString().toUpperCase();
-          if (countryCode != null && countryCode.isNotEmpty) {
-            return countryCode == 'IN'
-                ? PricingRegion.india
-                : PricingRegion.global;
-          }
+        if (decoded is! Map<String, dynamic>) {
+          continue;
+        }
+
+        final String? countryCode = _extractCountryCode(decoded);
+        if (countryCode != null && countryCode.isNotEmpty) {
+          debugPrint('🌍 Pricing region via IP => $countryCode');
+          return countryCode == 'IN'
+              ? PricingRegion.india
+              : PricingRegion.global;
         }
       }
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('❌ Pricing IP detection failed: $error');
+    } finally {
+      if (client == null) {
+        localClient.close();
+      }
+    }
 
     final localeCountry = _deviceLocaleCountryCode();
     if (localeCountry != null && localeCountry.isNotEmpty) {
-      return localeCountry == 'IN'
-          ? PricingRegion.india
-          : PricingRegion.global;
+      debugPrint('📱 Pricing region via locale => $localeCountry');
+      return localeCountry == 'IN' ? PricingRegion.india : PricingRegion.global;
     }
 
     return _cachedOrGlobal();
@@ -126,5 +140,25 @@ class PricingLocationService {
     } catch (_) {
       return null;
     }
+  }
+
+  static String? _extractCountryCode(Map<String, dynamic> payload) {
+    final List<dynamic> candidates = <dynamic>[
+      payload['countryCode'],
+      payload['country_code'],
+      payload['country'],
+    ];
+
+    for (final dynamic candidate in candidates) {
+      final String? normalized = candidate?.toString().trim().toUpperCase();
+      if (normalized == null || normalized.isEmpty) {
+        continue;
+      }
+      if (normalized.length == 2) {
+        return normalized;
+      }
+    }
+
+    return null;
   }
 }

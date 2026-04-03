@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -12,6 +15,12 @@ configurations.all {
     }
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.cricknova.ai"
     compileSdk = flutter.compileSdkVersion
@@ -20,11 +29,30 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            val keyAliasValue = keystoreProperties.getProperty("keyAlias")
+                ?: error("Missing 'keyAlias' in android/key.properties")
+            val keyPasswordValue = keystoreProperties.getProperty("keyPassword")
+                ?: error("Missing 'keyPassword' in android/key.properties")
+            val storeFileValue = keystoreProperties.getProperty("storeFile")
+                ?: error("Missing 'storeFile' in android/key.properties")
+            val storePasswordValue = keystoreProperties.getProperty("storePassword")
+                ?: error("Missing 'storePassword' in android/key.properties")
+
+            keyAlias = keyAliasValue
+            keyPassword = keyPasswordValue
+            storeFile = file(storeFileValue)
+            storePassword = storePasswordValue
         }
     }
 
@@ -41,14 +69,20 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     implementation(platform("com.google.firebase:firebase-bom:34.7.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-analytics")

@@ -115,6 +115,24 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
                   );
                 }
 
+                if (snapshot.hasError) {
+                  final errorText = snapshot.error.toString();
+                  final message = errorText.contains('permission-denied') ||
+                          errorText.contains('PERMISSION_DENIED')
+                      ? 'Support chat access is not available yet. Please refresh after Firestore rules are published.'
+                      : 'Unable to load support chat right now. Please try again shortly.';
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(color: Colors.white70),
+                      ),
+                    ),
+                  );
+                }
+
                 final docs = snapshot.data?.docs ?? [];
                 if (docs.isEmpty) {
                   return Center(

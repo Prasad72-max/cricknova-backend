@@ -13,7 +13,13 @@ import 'package:http/http.dart' as http;
 import 'package:hive/hive.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:confetti/confetti.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../premium/premium_screen.dart';
+import '../navigation/main_navigation.dart';
+import '../services/razorpay_service.dart';
+import '../services/play_billing_service.dart';
+import '../services/cricknova_notification_service.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
 import '../ai/elite_coach_prompt.dart';
@@ -3456,6 +3462,7 @@ class _UploadScreenState extends State<UploadScreen>
   // 🔥 Cost Optimization: Batch Firestore writes
   int _pendingXp = 0;
   int _pendingVideoCount = 0;
+  bool? _hasAcceptedVideoTermsCache;
 
   void _pressDown(Function setScale, Function setRotation) {
     HapticFeedback.mediumImpact();
@@ -3843,16 +3850,66 @@ class _UploadScreenState extends State<UploadScreen>
         token.isEmpty;
   }
 
-  double _generateUnavailableSpeedFallback() {
-    final random = math.Random();
-    final fallback = 55 + (random.nextDouble() * 47.9);
+  double? _extractBackendSpeed(dynamic speedVal) {
+    if (speedVal is num && speedVal > 0) {
+      return _normalizeDisplaySpeed(speedVal.toDouble());
+    }
+    if (speedVal is String) {
+      final trimmed = speedVal.trim();
+      if (trimmed.isEmpty || _isSpeedSentinelUnavailable(trimmed)) {
+        return null;
+      }
+      final parsed = double.tryParse(trimmed);
+      if (parsed != null && parsed > 0) {
+        return _normalizeDisplaySpeed(parsed);
+      }
+    }
+    return null;
+  }
+
+  int _fallbackSeedForVideo(File sourceVideo) {
+    final stat = sourceVideo.statSync();
+    final stableName = sourceVideo.path
+        .split(RegExp(r'[\\/]'))
+        .last
+        .trim()
+        .toLowerCase();
+    final seedInput = '$stableName|${stat.size}';
+    int hash = 2166136261;
+    for (final codeUnit in seedInput.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 16777619) & 0x7fffffff;
+    }
+    return hash;
+  }
+
+  double _generateUnavailableSpeedFallback(File sourceVideo) {
+    final random = math.Random(_fallbackSeedForVideo(sourceVideo));
+    final fallback = 60 + (random.nextDouble() * 45);
     return double.parse(fallback.toStringAsFixed(1));
   }
 
-  double _resolveTrajectoryFallbackDisplay(double fallbackSpeed) {
-    if (fallbackSpeed > 45.0) return fallbackSpeed;
-    final random = math.Random();
-    final adjusted = 55 + (random.nextDouble() * 35);
+  double _normalizeNoBackendEstimatedSpeed(double rawSpeed, File sourceVideo) {
+    final seed = _fallbackSeedForVideo(sourceVideo);
+    final boundedRaw = rawSpeed.clamp(0.0, 160.0).toDouble();
+
+    // Keep video-based variation, but constrain the final estimate
+    // into a realistic app-side display band when backend gives no speed.
+    final normalized = 60 + ((boundedRaw / 160.0) * 45);
+    final jitter = ((seed % 9) - 4) * 0.35;
+    final adjusted = (normalized + jitter).clamp(60.0, 105.0);
+    return double.parse(adjusted.toStringAsFixed(1));
+  }
+
+  double _resolveTrajectoryFallbackDisplay(
+    double fallbackSpeed,
+    File sourceVideo,
+  ) {
+    if (fallbackSpeed > 0.0) {
+      return _normalizeNoBackendEstimatedSpeed(fallbackSpeed, sourceVideo);
+    }
+    final random = math.Random(_fallbackSeedForVideo(sourceVideo) ^ 0x5f3759df);
+    final adjusted = 60 + (random.nextDouble() * 45);
     return double.parse(adjusted.toStringAsFixed(1));
   }
 
@@ -3920,7 +3977,7 @@ class _UploadScreenState extends State<UploadScreen>
         zoomFactor: zoomFactor,
       );
       final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
-      if (retrySpeedVal is num && retrySpeedVal > 0) {
+      if (_extractBackendSpeed(retrySpeedVal) != null) {
         return retryAnalysis;
       }
     }
@@ -3928,7 +3985,8 @@ class _UploadScreenState extends State<UploadScreen>
       setState(() {
         _autoZoomRetryInProgress = false;
         _autoZoomPreviewScale = 1.0;
-        _analysisStatusText = "Auto-zoom completed. Using best fallback speed...";
+        _analysisStatusText =
+            "Auto-zoom completed. Using best fallback speed...";
       });
     }
     return null;
@@ -3942,6 +4000,27 @@ class _UploadScreenState extends State<UploadScreen>
     debugPrint("UPLOAD_SCREEN user=${user?.uid}");
     PremiumService.premiumNotifier.addListener(() {
       if (mounted) setState(() {});
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 450), () async {
+          await PlayBillingService.instance.initialize();
+        }),
+      );
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 600), () async {
+          _razorpayService.init(
+            onPaymentSuccess: _handleRazorpaySuccess,
+            onPaymentError: _handleRazorpayError,
+            onExternalWallet: _handleRazorpayWallet,
+          );
+        }),
+      );
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 250), () async {
+          await _primeVideoTermsAcceptance();
+        }),
+      );
     });
     _factTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!mounted) return;
@@ -3960,6 +4039,9 @@ class _UploadScreenState extends State<UploadScreen>
 
   bool uploading = false;
   bool showTrajectory = false;
+  final RazorpayService _razorpayService = RazorpayService();
+  String _selectedPremiumPlanId = "IN_99";
+  bool _paymentBusy = false;
 
   List<dynamic>? trajectory = const [];
 
@@ -4015,8 +4097,13 @@ class _UploadScreenState extends State<UploadScreen>
         .where((line) => line.isNotEmpty)
         .toList();
     final limitedLines = lines.take(4).toList();
-    final compact = (limitedLines.isNotEmpty ? limitedLines : [cleaned]).join('\n');
-    final words = compact.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final compact = (limitedLines.isNotEmpty ? limitedLines : [cleaned]).join(
+      '\n',
+    );
+    final words = compact
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
     if (words.length <= 180) return compact;
     return '${words.take(180).join(' ')}...';
   }
@@ -5236,86 +5323,307 @@ class _UploadScreenState extends State<UploadScreen>
     );
   }
 
-  void _showVideoRulesThenPick() {
+  String _videoConsentPrefsKey() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return 'upload_video_terms_accepted_${uid ?? "guest"}';
+  }
+
+  Future<bool> _hasAcceptedVideoTerms() async {
+    if (_hasAcceptedVideoTermsCache != null) {
+      return _hasAcceptedVideoTermsCache!;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final accepted = prefs.getBool(_videoConsentPrefsKey()) ?? false;
+    _hasAcceptedVideoTermsCache = accepted;
+    return accepted;
+  }
+
+  Future<void> _setAcceptedVideoTerms() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_videoConsentPrefsKey(), true);
+    _hasAcceptedVideoTermsCache = true;
+  }
+
+  Future<void> _primeVideoTermsAcceptance() async {
+    _hasAcceptedVideoTermsCache = await _hasAcceptedVideoTerms();
+  }
+
+  Future<void> _showVideoRulesThenPick() async {
+    if (_hasAcceptedVideoTermsCache == true) {
+      debugPrint("UPLOAD_SCREEN → video terms already accepted");
+      pickAndUpload();
+      return;
+    }
+
+    if (_hasAcceptedVideoTermsCache == null) {
+      await _primeVideoTermsAcceptance();
+      if (_hasAcceptedVideoTermsCache == true) {
+        debugPrint("UPLOAD_SCREEN → video terms already accepted");
+        pickAndUpload();
+        return;
+      }
+    }
+
+    final parentContext = context;
     showModalBottomSheet(
-      context: context,
+      context: parentContext,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A).withOpacity(0.70),
-                border: Border.all(color: Colors.white12),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(22),
-                ),
+        final checklist = <String, bool>{
+          "I understand non-cricket clips can make Speed, Swing, and Spin inaccurate.":
+              false,
+          "I understand app speed can vary by 20-35 km/h from real speed.":
+              false,
+          "I will upload a clear cricket bowling clip with the ball visible.":
+              false,
+          "I understand camera stability and pitch view affect result quality.":
+              false,
+          "I agree to choose a video from my gallery for analysis.": false,
+        };
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final hasCheckedAll = checklist.values.every((value) => value);
+            return ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(22),
               ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "🎥 Video Recording Guidelines",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A).withOpacity(0.70),
+                    border: Border.all(color: Colors.white12),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(22),
                     ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      "• Speed is measured from before pitching to after pitching, so it may vary by 20-35 km/h from real speed\n"
-                      "• Record in normal speed (no slow motion)\n"
-                      "• Ball must be clearly visible\n"
-                      "• Keep camera stable\n"
-                      "• Full pitch & batsman visible\n"
-                      "• Prefer side-on or behind bowler angle\n"
-                      "• Avoid heavy zoom or filters\n\n"
-                      "⚠️ AI accuracy depends on video quality.",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF8B5CF6),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                          shadowColor: Colors.transparent,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          debugPrint("UPLOAD_SCREEN → pickAndUpload triggered");
-                          pickAndUpload();
-                        },
-                        child: const Text(
-                          "Next",
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "🎥 Video Recording Guidelines",
                           style: TextStyle(
-                            fontSize: 16,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFFFBBF24).withOpacity(0.45),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Padding(
+                                padding: EdgeInsets.only(top: 1),
+                                child: Icon(
+                                  Icons.info_outline,
+                                  size: 18,
+                                  color: Color(0xFFFDE68A),
+                                ),
+                              ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  "These results are calculated based on cricket pitch physics. If the video is not a cricket clip, the data shown (Speed/Swing/Spin) will be inaccurate. Speed is estimated from the ball path after pitching toward the batsman and may vary by +20 to -35 KMPH.",
+                                  style: TextStyle(
+                                    color: Color(0xFFFFF7D6),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          "Please confirm each point below before continuing:",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ...checklist.entries.map((entry) {
+                          final checked = entry.value;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () {
+                                setSheetState(() {
+                                  checklist[entry.key] = !checked;
+                                });
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.05),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: checked
+                                        ? const Color(0xFF8B5CF6)
+                                        : Colors.white12,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Checkbox(
+                                      value: checked,
+                                      activeColor: const Color(0xFF8B5CF6),
+                                      checkColor: Colors.white,
+                                      side: const BorderSide(
+                                        color: Colors.white38,
+                                      ),
+                                      onChanged: (value) {
+                                        setSheetState(() {
+                                          checklist[entry.key] = value ?? false;
+                                        });
+                                      },
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 11),
+                                        child: Text(
+                                          entry.key,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w600,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2, bottom: 12),
+                          child: Text(
+                            "New users need to accept this once. After that, CrickNova AI will take you straight to gallery for future uploads on this account.",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12.5,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(
+                                    color: Colors.white.withOpacity(0.18),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(sheetContext);
+                                  MainNavigation.of(parentContext)?.goHome();
+                                },
+                                child: const Text(
+                                  "No, Go Home",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF8B5CF6),
+                                  disabledBackgroundColor: const Color(
+                                    0xFF8B5CF6,
+                                  ).withOpacity(0.35),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 0,
+                                  shadowColor: Colors.transparent,
+                                ),
+                                onPressed: hasCheckedAll
+                                    ? () async {
+                                        await _setAcceptedVideoTerms();
+                                        if (!mounted) return;
+                                        Navigator.pop(sheetContext);
+                                        ScaffoldMessenger.of(parentContext)
+                                          ..hideCurrentSnackBar()
+                                          ..showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                "All set! CrickNova AI will now use these permissions only to analyze your cricket videos and calculate speed. Your privacy is our priority.",
+                                              ),
+                                              behavior:
+                                                  SnackBarBehavior.floating,
+                                              duration: Duration(seconds: 4),
+                                            ),
+                                          );
+                                        debugPrint(
+                                          "UPLOAD_SCREEN → pickAndUpload triggered",
+                                        );
+                                        pickAndUpload();
+                                      }
+                                    : null,
+                                child: const Text(
+                                  "I Agree to All",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -5355,7 +5663,6 @@ class _UploadScreenState extends State<UploadScreen>
     final uri = Uri.parse(
       "https://cricknova-backend.onrender.com/training/analyze",
     );
-    bool analysisSucceeded = false;
 
     try {
       final request = http.MultipartRequest("POST", uri);
@@ -5394,6 +5701,7 @@ class _UploadScreenState extends State<UploadScreen>
           analysis["speed_type"] ?? decoded["speed_type"];
       final dynamic speedNoteVal =
           analysis["speed_note"] ?? decoded["speed_note"];
+      final backendSpeed = _extractBackendSpeed(speedVal);
       final dynamic fpsVal = analysis["fps"] ?? decoded["fps"];
       final fpsForFallback = fpsVal is num ? fpsVal.toDouble() : 30.0;
       final videoDerivedSpeed = await _deriveSpeedDirectFromVideo(
@@ -5404,62 +5712,78 @@ class _UploadScreenState extends State<UploadScreen>
         analysis["trajectory"],
         fps: fpsForFallback,
       );
-      if (speedVal is num && speedVal > 0) {
-        speedKmph = _normalizeDisplaySpeed(speedVal.toDouble());
+      if (backendSpeed != null) {
+        speedKmph = backendSpeed;
         speedType = speedTypeVal?.toString() ?? "estimated";
         speedNote = speedNoteVal?.toString() ?? "";
       } else if (_isSpeedSentinelUnavailable(speedVal)) {
-        final retryAnalysis = await _recoverSpeedWithAutoZoom(
-          sourceVideo: video!,
-          idToken: token,
-        );
-        final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
-        final dynamic retrySpeedTypeVal = retryAnalysis?["speed_type"];
-        final dynamic retrySpeedNoteVal = retryAnalysis?["speed_note"];
-        final retryVideoDerivedSpeed = await _deriveSpeedDirectFromVideo(
-          retryAnalysis?["trajectory"] ?? analysis["trajectory"],
-          backendFps: fpsVal is num ? fpsVal.toDouble() : null,
-        );
-
-        if (retrySpeedVal is num && retrySpeedVal > 0) {
-          speedKmph = _normalizeDisplaySpeed(retrySpeedVal.toDouble());
-          speedType = retrySpeedTypeVal?.toString() ?? "auto_zoom_recheck";
+        if (videoDerivedSpeed != null) {
+          speedKmph = _normalizeNoBackendEstimatedSpeed(
+            videoDerivedSpeed,
+            video!,
+          );
+          speedType = "video_derived";
           speedNote =
-              retrySpeedNoteVal?.toString() ??
-              "Speed recovered after auto-zoom recheck";
-        } else if (retryVideoDerivedSpeed != null) {
-          speedKmph = retryVideoDerivedSpeed;
-          speedType = "video_derived";
-          speedNote = "Speed derived directly from tracked video motion.";
-        } else if (videoDerivedSpeed != null) {
-          speedKmph = videoDerivedSpeed;
-          speedType = "video_derived";
-          speedNote = "Speed derived directly from tracked video motion.";
+              "Backend returned no speed. Speed derived directly from this video.";
         } else if (fallbackSpeed != null) {
-          speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed);
+          speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed, video!);
           speedType = "trajectory_fallback";
-          speedNote = "Auto-zoom completed. Using trajectory fallback speed.";
+          speedNote =
+              "Backend returned no speed. Using trajectory-based speed from this video.";
         } else {
-          speedKmph = _generateUnavailableSpeedFallback();
-          speedType = "display_fallback";
-          speedNote = "Auto-zoom completed. Using display fallback speed.";
+          final retryAnalysis = await _recoverSpeedWithAutoZoom(
+            sourceVideo: video!,
+            idToken: token,
+          );
+          final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
+          final dynamic retrySpeedTypeVal = retryAnalysis?["speed_type"];
+          final dynamic retrySpeedNoteVal = retryAnalysis?["speed_note"];
+          final retryBackendSpeed = _extractBackendSpeed(retrySpeedVal);
+          final retryVideoDerivedSpeed = await _deriveSpeedDirectFromVideo(
+            retryAnalysis?["trajectory"] ?? analysis["trajectory"],
+            backendFps: fpsVal is num ? fpsVal.toDouble() : null,
+          );
+
+          if (retryBackendSpeed != null) {
+            speedKmph = retryBackendSpeed;
+            speedType = retrySpeedTypeVal?.toString() ?? "auto_zoom_recheck";
+            speedNote =
+                retrySpeedNoteVal?.toString() ??
+                "Speed recovered after auto-zoom recheck";
+          } else if (retryVideoDerivedSpeed != null) {
+            speedKmph = _normalizeNoBackendEstimatedSpeed(
+              retryVideoDerivedSpeed,
+              video!,
+            );
+            speedType = "video_derived";
+            speedNote =
+                "Backend returned no speed. Speed derived directly from this video after retry.";
+          } else {
+            speedKmph = _generateUnavailableSpeedFallback(video!);
+            speedType = "display_fallback";
+            speedNote =
+                "Backend returned no speed. Using stable fallback speed for this video.";
+          }
         }
       } else if (fallbackSpeed != null) {
-        speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed);
+        speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed, video!);
         speedType = "trajectory_fallback";
         speedNote = "Fallback from real tracked trajectory (non-scripted)";
       } else if (videoDerivedSpeed != null) {
-        speedKmph = videoDerivedSpeed;
+        speedKmph = _normalizeNoBackendEstimatedSpeed(
+          videoDerivedSpeed,
+          video!,
+        );
         speedType = "video_derived";
         speedNote = "Speed derived directly from tracked video motion.";
       } else {
-        speedKmph = _generateUnavailableSpeedFallback();
+        speedKmph = _generateUnavailableSpeedFallback(video!);
         speedType = "display_fallback";
-        speedNote =
-            speedNoteVal?.toString() ?? "Using display fallback speed.";
+        speedNote = speedNoteVal?.toString() ?? "Using display fallback speed.";
       }
 
       // 🔥 Save speed to Hive for graph (user-specific key)
+      bool didHitPersonalBest = false;
       if (speedKmph != null) {
         final box = await Hive.openBox('speedBox');
 
@@ -5484,11 +5808,18 @@ class _UploadScreenState extends State<UploadScreen>
             .toDouble();
 
         if (speedKmph! > currentMax) {
+          didHitPersonalBest = true;
           await statsBox.put('maxSpeed', speedKmph);
           debugPrint("NEW MAX SPEED SAVED (HIVE) => ${speedKmph}");
         }
 
         debugPrint("HIVE SPEED UPDATED => $allSpeeds");
+
+        if (didHitPersonalBest) {
+          await CrickNovaNotificationService.instance.maybeNotifyPersonalBest(
+            speedKmph!,
+          );
+        }
       }
       if (!mounted) return true;
 
@@ -5536,19 +5867,6 @@ class _UploadScreenState extends State<UploadScreen>
 
         controller?.play();
       });
-      analysisSucceeded = true;
-
-      try {
-        await PremiumService.consumeCompare();
-        await _maybeShowUsageLimitReached(
-          featureName: "CrickNova Swing Analysis",
-          current: PremiumService.compareUsed,
-          limit: PremiumService.compareLimit,
-          entrySource: "swing_usage_limit",
-        );
-      } catch (e) {
-        debugPrint("USAGE TRACK ERROR (SWING) => $e");
-      }
     } catch (e) {
       debugPrint("UPLOAD ERROR => $e");
       if (mounted) {
@@ -5577,7 +5895,143 @@ class _UploadScreenState extends State<UploadScreen>
     return true;
   }
 
+  Future<void> _handleUnlockAiAnalysisTap() async {
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const PremiumScreen(entrySource: "upload_gate"),
+      ),
+    );
+  }
+
+  int _amountForPremiumPlan(String planId) {
+    switch (planId) {
+      case "IN_299":
+        return 299;
+      case "IN_499":
+        return 499;
+      case "IN_1999":
+        return 1999;
+      case "IN_99":
+      default:
+        return 99;
+    }
+  }
+
+  Future<void> _startCrickNovaPayCheckout() async {
+    if (_paymentBusy) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please login first.")));
+      return;
+    }
+
+    setState(() => _paymentBusy = true);
+
+    try {
+      final keyRes = await http
+          .get(
+            Uri.parse("https://cricknova-backend.onrender.com/payment/config"),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (keyRes.statusCode != 200) {
+        throw Exception("Failed to load Razorpay key");
+      }
+
+      final keyData = jsonDecode(keyRes.body) as Map<String, dynamic>;
+      final String? keyId = keyData["key_id"]?.toString();
+      if (keyId == null || keyId.isEmpty) {
+        throw Exception("Razorpay key missing from backend");
+      }
+
+      final int amountRupees = _amountForPremiumPlan(_selectedPremiumPlanId);
+      final orderRes = await http
+          .post(
+            Uri.parse(
+              "https://cricknova-backend.onrender.com/payment/create-order",
+            ),
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+            },
+            body: jsonEncode({"amount": amountRupees}),
+          )
+          .timeout(const Duration(seconds: 20));
+
+      if (orderRes.statusCode != 200) {
+        throw Exception("Order creation failed");
+      }
+
+      final orderData = jsonDecode(orderRes.body) as Map<String, dynamic>;
+      _razorpayService.openCheckout(
+        key: keyId,
+        orderId: orderData["orderId"].toString(),
+        amount: (orderData["amount"] as num).toInt(),
+        email: user.email ?? "demo@cricknova.ai",
+        contact: user.phoneNumber,
+        plan: _selectedPremiumPlanId,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _paymentBusy = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Unable to start payment.")));
+    }
+  }
+
+  void _handleRazorpaySuccess(PaymentSuccessResponse response) async {
+    try {
+      await PremiumService.updateStatus(true, planId: _selectedPremiumPlanId);
+
+      if (!mounted) return;
+      setState(() => _paymentBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Premium unlocked successfully.")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _paymentBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Payment succeeded but unlock failed.")),
+      );
+    }
+  }
+
+  void _handleRazorpayError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    setState(() => _paymentBusy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "Payment failed: ${response.code} | ${response.message ?? 'Unknown error'}",
+        ),
+      ),
+    );
+  }
+
+  void _handleRazorpayWallet(ExternalWalletResponse response) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Opening ${response.walletName ?? 'wallet'}...")),
+    );
+  }
+
   Future<void> runDRS() async {
+    if (!PremiumService.isPremiumActive) {
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const PremiumScreen(entrySource: "drs_lock"),
+        ),
+      );
+      return;
+    }
+
     if (video == null || drsLoading) return;
 
     final selectedMode = await _showDrsModeSelector();
@@ -5660,7 +6114,6 @@ class _UploadScreenState extends State<UploadScreen>
       if (!usedUltraEdgeAudio) {
         _drsUltraedgeStatus = _drsEdgeDetected ? "EDGE DETECTED" : "NO EDGE";
       }
-      await _addXP(20);
       if (!mounted) return;
       setState(() {
         showDRS = true;
@@ -5901,6 +6354,7 @@ class _UploadScreenState extends State<UploadScreen>
     _renderWakeTicker?.cancel();
     _renderWakeStopwatch?.stop();
     _drsRunId++;
+    _razorpayService.dispose();
     _drsPhaseController.dispose();
     controller?.dispose();
     super.dispose();
@@ -6027,16 +6481,19 @@ class _UploadScreenState extends State<UploadScreen>
                         margin: const EdgeInsets.symmetric(horizontal: 30),
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
+                          color: const Color(0xFFF59E0B).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.white12),
+                          border: Border.all(
+                            color: const Color(0xFFFBBF24).withOpacity(0.38),
+                          ),
                         ),
                         child: const Text(
-                          "Tip: Ensure your full body is visible from the side for better AI analysis.",
+                          "Choose your speed type first, then upload a proper cricket video for the most accurate result.",
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.white70,
+                            color: Color(0xFFFFF7D6),
                             fontSize: 13,
+                            fontWeight: FontWeight.w600,
                             height: 1.4,
                           ),
                         ),
@@ -6058,7 +6515,9 @@ class _UploadScreenState extends State<UploadScreen>
                           (v) => _uploadScale = v,
                           (r) => _uploadRotation = r,
                         ),
-                        onTap: _showVideoRulesThenPick,
+                        onTap: () async {
+                          await _showVideoRulesThenPick();
+                        },
                         child: AnimatedRotation(
                           turns: _uploadRotation,
                           duration: const Duration(milliseconds: 120),
@@ -6112,9 +6571,9 @@ class _UploadScreenState extends State<UploadScreen>
                                     ),
                                   ),
                                   const SizedBox(width: 12),
-                                  const Text(
+                                  Text(
                                     "Upload Training Video",
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 20,
                                       fontWeight: FontWeight.bold,
@@ -6180,7 +6639,7 @@ class _UploadScreenState extends State<UploadScreen>
                                 );
                               },
                               child: _metric(
-                                "Speed",
+                                "After-Pitch Pace",
                                 analysisLoading
                                     ? (_autoZoomRetryInProgress
                                           ? "Auto zooming..."
@@ -6188,6 +6647,7 @@ class _UploadScreenState extends State<UploadScreen>
                                     : (speedKmph != null
                                           ? "${speedKmph!.toStringAsFixed(1)} km/h"
                                           : ""),
+                                speed: speedKmph,
                               ),
                             ),
                             if (!analysisLoading && speedKmph == null)
@@ -6408,7 +6868,6 @@ class _UploadScreenState extends State<UploadScreen>
                         ),
                       ),
                     ),
-
                   if (showCoach)
                     Positioned.fill(
                       child: Container(
@@ -6711,7 +7170,7 @@ class _UploadScreenState extends State<UploadScreen>
     Navigator.of(context).pop();
   }
 
-  Widget _metric(String label, String value) {
+  Widget _metric(String label, String value, {double? speed}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(

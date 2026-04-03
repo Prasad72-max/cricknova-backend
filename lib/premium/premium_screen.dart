@@ -9,10 +9,12 @@ import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
+import '../services/subscription_provider.dart';
 import '../navigation/main_navigation.dart';
 
 Future<void> showPremiumSuccessScreen(
@@ -103,7 +105,10 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
               ? 0.94
               : 0.94 +
                     (Curves.elasticOut.transform(
-                          ((_entryController.value - 0.75) / 0.25).clamp(0.0, 1.0),
+                          ((_entryController.value - 0.75) / 0.25).clamp(
+                            0.0,
+                            1.0,
+                          ),
                         ) *
                         0.06);
           return Stack(
@@ -155,11 +160,15 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                               end: Alignment.bottomRight,
                             ),
                             border: Border.all(
-                              color: const Color(0xFF1E90FF).withValues(alpha: 0.34),
+                              color: const Color(
+                                0xFF1E90FF,
+                              ).withValues(alpha: 0.34),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF1E90FF).withValues(alpha: 0.14),
+                                color: const Color(
+                                  0xFF1E90FF,
+                                ).withValues(alpha: 0.14),
                                 blurRadius: 36,
                                 spreadRadius: 1,
                               ),
@@ -181,7 +190,9 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                         center: const Alignment(0, -0.8),
                                         radius: 1.25,
                                         colors: [
-                                          const Color(0xFF1E90FF).withValues(alpha: 0.17 * pulse),
+                                          const Color(
+                                            0xFF1E90FF,
+                                          ).withValues(alpha: 0.17 * pulse),
                                           Colors.transparent,
                                         ],
                                       ),
@@ -212,8 +223,12 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                             shape: BoxShape.circle,
                                             gradient: RadialGradient(
                                               colors: [
-                                                const Color(0xFF1E90FF).withValues(alpha: 0.22),
-                                                const Color(0xFF1E90FF).withValues(alpha: 0.04),
+                                                const Color(
+                                                  0xFF1E90FF,
+                                                ).withValues(alpha: 0.22),
+                                                const Color(
+                                                  0xFF1E90FF,
+                                                ).withValues(alpha: 0.04),
                                                 Colors.transparent,
                                               ],
                                             ),
@@ -226,18 +241,27 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                             shape: BoxShape.circle,
                                             gradient: LinearGradient(
                                               colors: [
-                                                Colors.white.withValues(alpha: 0.13),
-                                                const Color(0xFF1B2430).withValues(alpha: 0.95),
+                                                Colors.white.withValues(
+                                                  alpha: 0.13,
+                                                ),
+                                                const Color(
+                                                  0xFF1B2430,
+                                                ).withValues(alpha: 0.95),
                                               ],
                                               begin: Alignment.topLeft,
                                               end: Alignment.bottomRight,
                                             ),
                                             border: Border.all(
-                                              color: const Color(0xFF1E90FF).withValues(alpha: 0.46),
+                                              color: const Color(
+                                                0xFF1E90FF,
+                                              ).withValues(alpha: 0.46),
                                             ),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: const Color(0xFF1E90FF).withValues(alpha: 0.18 * pulse),
+                                                color: const Color(0xFF1E90FF)
+                                                    .withValues(
+                                                      alpha: 0.18 * pulse,
+                                                    ),
                                                 blurRadius: 28,
                                               ),
                                             ],
@@ -272,7 +296,9 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                       "Your personal AI cricket coach starts now",
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: const Color(0xFFC0CAD8).withValues(alpha: 0.92),
+                                        color: const Color(
+                                          0xFFC0CAD8,
+                                        ).withValues(alpha: 0.92),
                                         fontSize: 14.5,
                                         height: 1.45,
                                         fontWeight: FontWeight.w500,
@@ -310,12 +336,14 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                             shadowColor: Colors.transparent,
                                             padding: EdgeInsets.zero,
                                             shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(18),
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
                                             ),
                                           ),
                                           child: Ink(
                                             decoration: BoxDecoration(
-                                              borderRadius: BorderRadius.circular(18),
+                                              borderRadius:
+                                                  BorderRadius.circular(18),
                                               gradient: const LinearGradient(
                                                 colors: [
                                                   Color(0xFF36A2FF),
@@ -325,14 +353,18 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                               ),
                                               boxShadow: [
                                                 BoxShadow(
-                                                  color: const Color(0xFF1E90FF).withValues(alpha: 0.34),
+                                                  color: const Color(
+                                                    0xFF1E90FF,
+                                                  ).withValues(alpha: 0.34),
                                                   blurRadius: 24,
                                                   spreadRadius: 1,
                                                 ),
                                               ],
                                             ),
                                             child: const Padding(
-                                              padding: EdgeInsets.symmetric(vertical: 16),
+                                              padding: EdgeInsets.symmetric(
+                                                vertical: 16,
+                                              ),
                                               child: Center(
                                                 child: Text(
                                                   "Start Training 🚀",
@@ -381,10 +413,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
     );
   }
 
-  Widget _featureTile({
-    required _WelcomeFeature feature,
-    required int index,
-  }) {
+  Widget _featureTile({required _WelcomeFeature feature, required int index}) {
     final start = 0.18 + (index * 0.10);
     final end = (start + 0.22).clamp(0.0, 1.0);
     final reveal = Curves.easeOutCubic.transform(
@@ -467,9 +496,9 @@ class _WelcomeParticlesPainter extends CustomPainter {
       final phase = drift + (i * 0.11);
       final dy = math.sin(phase * math.pi * 2) * 8;
       final radius = 1.8 + (i.isEven ? 0.8 : 0.0);
-      paint.color = const Color(0xFF6DB6FF).withValues(
-        alpha: opacity * (i.isEven ? 0.75 : 0.46),
-      );
+      paint.color = const Color(
+        0xFF6DB6FF,
+      ).withValues(alpha: opacity * (i.isEven ? 0.75 : 0.46));
       canvas.drawCircle(points[i] + Offset(0, dy), radius, paint);
     }
   }
@@ -535,10 +564,7 @@ class _FreePlanDetailsScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           "Free Plan",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
         ),
       ),
       body: Padding(
@@ -775,8 +801,8 @@ class PayPalWebViewScreen extends StatelessWidget {
 
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
-  late bool isIndia;
-  bool _isRegionLoading = false;
+  late PricingRegion _resolvedPricingRegion;
+  bool _isRegionLoading = true;
   static const bool isPayPalSandbox = true; // set false when going live
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
 
@@ -796,7 +822,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   @override
   void initState() {
     super.initState();
-    isIndia = PricingLocationService.isIndia;
+    _resolvedPricingRegion = PricingLocationService.currentRegion;
     _razorpay = Razorpay();
     debugPrint("Razorpay initialized");
 
@@ -805,7 +831,9 @@ class _PremiumScreenState extends State<PremiumScreen>
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
 
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-    PricingLocationService.regionNotifier.addListener(_handlePricingRegionChange);
+    PricingLocationService.regionNotifier.addListener(
+      _handlePricingRegionChange,
+    );
     PremiumService.premiumNotifier.addListener(_handlePremiumStateChange);
     MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
     _loadShimmerPreference();
@@ -825,26 +853,24 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   Future<void> _resolvePricingRegion() async {
+    PricingRegion resolvedRegion = PricingLocationService.currentRegion;
     try {
-      final region = await PricingLocationService.refreshPricingRegion(
+      resolvedRegion = await PricingLocationService.refreshPricingRegion(
         timeout: const Duration(seconds: 5),
       );
-      if (!mounted) return;
-      setState(() {
-        isIndia = region == PricingRegion.india;
-      });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        isIndia = PricingLocationService.isIndia;
-      });
+      resolvedRegion = PricingLocationService.currentRegion;
     }
+
+    if (!mounted) return;
+    setState(() {
+      _resolvedPricingRegion = resolvedRegion;
+      _isRegionLoading = false;
+    });
   }
 
   void _handlePricingRegionChange() {
-    final nextIsIndia = PricingLocationService.isIndia;
-    if (nextIsIndia == isIndia || !mounted) return;
-    setState(() => isIndia = nextIsIndia);
+    unawaited(_resolvePricingRegion());
   }
 
   Future<void> _loadShimmerPreference() async {
@@ -1278,7 +1304,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       case "INTL_6M":
         return "6 Months • \$49.99";
       case "INTL_YEARLY":
-        return "Yearly • \$59.99";
+        return "Yearly • \$69.99";
       case "INTL_ULTRA":
       case "INT_ULTRA":
       case "ULTRA":
@@ -1303,11 +1329,11 @@ class _PremiumScreenState extends State<PremiumScreen>
       case "INTL_6M":
         return price == "\$49.99";
       case "INTL_YEARLY":
-        return price == "\$59.99" || price == "\$69.99";
+        return price == "\$69.99";
       case "INTL_ULTRA":
       case "INT_ULTRA":
       case "ULTRA":
-        return price == "\$159.99";
+        return price == "\$159.99" || price == "\$169.99";
       default:
         return false;
     }
@@ -1356,8 +1382,9 @@ class _PremiumScreenState extends State<PremiumScreen>
         ),
         boxShadow: [
           BoxShadow(
-            color: (isActive ? const Color(0xFFFFD700) : const Color(0xFF38BDF8))
-                .withValues(alpha: 0.18),
+            color:
+                (isActive ? const Color(0xFFFFD700) : const Color(0xFF38BDF8))
+                    .withValues(alpha: 0.18),
             blurRadius: 24,
             spreadRadius: 1,
           ),
@@ -1369,7 +1396,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: isActive
                       ? const Color(0xFFFFD700).withValues(alpha: 0.16)
@@ -1384,8 +1414,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                 child: Text(
                   isActive ? "CURRENT PLAN" : "NO ACTIVE PLAN",
                   style: TextStyle(
-                    color:
-                        isActive ? const Color(0xFFFFD700) : Colors.white70,
+                    color: isActive ? const Color(0xFFFFD700) : Colors.white70,
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.8,
@@ -1395,8 +1424,7 @@ class _PremiumScreenState extends State<PremiumScreen>
               const Spacer(),
               Icon(
                 isActive ? Icons.workspace_premium : Icons.lock_outline_rounded,
-                color:
-                    isActive ? const Color(0xFFFFD700) : Colors.white54,
+                color: isActive ? const Color(0xFFFFD700) : Colors.white54,
                 size: 20,
               ),
             ],
@@ -1434,9 +1462,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         borderRadius: BorderRadius.circular(22),
         onTap: () {
           Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const _FreePlanDetailsScreen(),
-            ),
+            MaterialPageRoute(builder: (_) => const _FreePlanDetailsScreen()),
           );
         },
         child: card,
@@ -1445,6 +1471,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   void onMethodSelected(String method) {
+    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
     final price = _lastPlanPrice;
     if (price == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1464,22 +1491,78 @@ class _PremiumScreenState extends State<PremiumScreen>
       return;
     }
     if (method == "google_play") {
-      if (isIndia == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Google Play payment coming soon")),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Redirecting via secure checkout")),
-        );
-        _startPayPalCheckout(price);
-      }
+      _startGooglePlayCheckout();
     }
   }
 
+  String? _selectedGooglePlayBasePlanId() {
+    switch (_lastPlanPrice) {
+      case "₹99":
+      case "\$29.99":
+        return SubscriptionProvider.monthlyPlanId;
+      case "₹299":
+      case "\$49.99":
+        return SubscriptionProvider.sixMonthPlanId;
+      case "₹499":
+      case "\$69.99":
+        return SubscriptionProvider.oneYearPlanId;
+      case "₹1999":
+      case "\$159.99":
+        return SubscriptionProvider.oneYearElitePlanId;
+      default:
+        return null;
+    }
+  }
+
+  Future<void> _startGooglePlayCheckout() async {
+    final String? basePlanId = _selectedGooglePlayBasePlanId();
+    if (basePlanId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Google Play plan not found for this card. Please use one of the mapped plans: ₹99, ₹299, ₹499, ₹1999, \$29.99, \$49.99, \$69.99, or \$159.99.",
+          ),
+        ),
+      );
+      return;
+    }
+
+    final SubscriptionProvider subscriptionProvider = context
+        .read<SubscriptionProvider>();
+    await subscriptionProvider.fetchProducts();
+    final GooglePlaySubscriptionPlan? selectedPlan = subscriptionProvider
+        .planForBasePlanId(basePlanId);
+
+    if (selectedPlan == null) {
+      if (!mounted) return;
+      final String message =
+          subscriptionProvider.lastError ??
+          "This Google Play plan is not available right now.";
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
+
+    final bool launched = await subscriptionProvider.purchasePlan(selectedPlan);
+    if (!mounted) return;
+
+    if (launched) {
+      return;
+    }
+
+    final String message =
+        subscriptionProvider.lastError ??
+        "Unable to start Google Play billing right now.";
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> showPaymentMethodSelector(BuildContext context) async {
+    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
     final directPayTitle = isIndia
-        ? "CrickNova Pay (UPI / Cards)"
+        ? "Pay via CrickNova Pay (UPI)"
         : "International Checkout";
     final directPaySubtitle = isIndia
         ? "Pay directly via Razorpay"
@@ -1532,26 +1615,29 @@ class _PremiumScreenState extends State<PremiumScreen>
                   ),
                   const SizedBox(height: 14),
                   _paymentMethodTile(
-                    title: directPayTitle,
-                    subtitle: directPaySubtitle,
-                    leading: Icons.account_balance_wallet_rounded,
-                    leadingColor: const Color(0xFFFFD700),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      onMethodSelected("cricknova_pay");
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  _paymentMethodTile(
-                    title: "Google Play",
-                    subtitle: "Use your Play Store balance or saved cards",
-                    leading: Icons.play_arrow_rounded,
+                    title: "Pay with Play Store Billing",
+                    subtitle:
+                        "Use Google Play subscriptions, cards, or Play balance",
+                    leading: Icons.play_circle_fill_rounded,
                     leadingColor: const Color(0xFF38BDF8),
                     onTap: () {
                       Navigator.pop(sheetContext);
                       onMethodSelected("google_play");
                     },
                   ),
+                  if (isIndia != true) ...[
+                    const SizedBox(height: 10),
+                    _paymentMethodTile(
+                      title: directPayTitle,
+                      subtitle: directPaySubtitle,
+                      leading: Icons.account_balance_wallet_rounded,
+                      leadingColor: const Color(0xFFFFD700),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        onMethodSelected("cricknova_pay");
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1621,9 +1707,12 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   @override
   Widget build(BuildContext context) {
+    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String? sourceFromArgs = args?['source'] as String?;
+    final bool isAnalyseEntry =
+        sourceFromArgs == "analyse" || widget.entrySource == "analyse";
     if (!_showPremiumShimmer && PremiumService.isPremiumActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _enablePremiumShimmer();
@@ -1662,31 +1751,28 @@ class _PremiumScreenState extends State<PremiumScreen>
       body: Stack(
         children: [
           const Positioned.fill(child: _StadiumLightBackdrop()),
-          if (_isRegionLoading)
-            const Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: Colors.white,
-                ),
-              ),
-            )
-          else
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                children: [
-                  _currentPlanOverviewCard(),
-                  if (isIndia == true)
-                    ...((sourceFromArgs ?? widget.entrySource) == "analyse"
-                        ? indiaCompareOnlyPlans()
-                        : indiaPlans()),
-                  if (isIndia == false) ...internationalPlans(),
-                ],
-              ),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                if (_isRegionLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: LinearProgressIndicator(
+                      minHeight: 2.5,
+                      color: Colors.white70,
+                      backgroundColor: Colors.white12,
+                    ),
+                  ),
+                _currentPlanOverviewCard(),
+                ...(isIndia
+                    ? (isAnalyseEntry ? indiaCompareOnlyPlans() : indiaPlans())
+                    : (isAnalyseEntry
+                          ? internationalCompareOnlyPlans()
+                          : internationalPlans())),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -1993,7 +2079,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       const SizedBox(height: 20),
       sexyPlanCard(
         title: "ULTRA INTERNATIONAL",
-        price: "\$159.99",
+        price: "\$169.99",
         tag: "Unlimited Analysis 🚀",
         glowColor: Colors.redAccent,
         features: [
@@ -2039,166 +2125,175 @@ class _PremiumScreenState extends State<PremiumScreen>
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-        Container(
-          margin: const EdgeInsets.only(top: 18, bottom: 22),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: cardGradient,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: isCurrentPlan
-                  ? const Color(0xFFFFD700).withValues(alpha: 0.9)
-                  : isMostPopular
-                  ? const Color(0xFFBA78FF).withValues(alpha: 0.88)
-                  : Colors.white.withValues(alpha: 0.12),
-              width: isCurrentPlan ? 1.5 : 1.1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (isCurrentPlan
-                        ? const Color(0xFFFFD700)
-                        : (isMostPopular ? const Color(0xFF8F4BFF) : glowColor))
-                    .withValues(
-                      alpha: isCurrentPlan ? 0.34 : (isMostPopular ? 0.55 : 0.35),
-                    ),
-                blurRadius: 28,
-                spreadRadius: 1,
+          Container(
+            margin: const EdgeInsets.only(top: 18, bottom: 22),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: cardGradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              if (isMostPopular)
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: isCurrentPlan
+                    ? const Color(0xFFFFD700).withValues(alpha: 0.9)
+                    : isMostPopular
+                    ? const Color(0xFFBA78FF).withValues(alpha: 0.88)
+                    : Colors.white.withValues(alpha: 0.12),
+                width: isCurrentPlan ? 1.5 : 1.1,
+              ),
+              boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2D4BFF).withValues(alpha: 0.45),
-                  blurRadius: 40,
-                  spreadRadius: 2,
-                ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 6),
-              Text(
-                title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                price,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  shadows: [
-                    Shadow(
-                      color:
-                          (isMostPopular ? const Color(0xFF9A2BFF) : glowColor)
-                              .withValues(alpha: 0.75),
-                      blurRadius: 16,
-                    ),
-                    Shadow(
-                      color:
-                          (isMostPopular ? const Color(0xFF2D4BFF) : glowColor)
-                              .withValues(alpha: 0.45),
-                      blurRadius: 26,
-                    ),
-                  ],
-                ),
-              ),
-              if (price == "\$159.99")
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    "Less than \$0.45 per day",
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              if (price == "₹1999")
-                const Padding(
-                  padding: EdgeInsets.only(top: 4),
-                  child: Text(
-                    "Less than ₹5 per day",
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              const Text(
-                "Features Included:",
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 10),
-              for (String f in features)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _featureTick(
-                        tint: isMostPopular
-                            ? const Color(0xFFAF74FF)
-                            : glowColor,
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          f,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
+                  color:
+                      (isCurrentPlan
+                              ? const Color(0xFFFFD700)
+                              : (isMostPopular
+                                    ? const Color(0xFF8F4BFF)
+                                    : glowColor))
+                          .withValues(
+                            alpha: isCurrentPlan
+                                ? 0.34
+                                : (isMostPopular ? 0.55 : 0.35),
                           ),
-                        ),
+                  blurRadius: 28,
+                  spreadRadius: 1,
+                ),
+                if (isMostPopular)
+                  BoxShadow(
+                    color: const Color(0xFF2D4BFF).withValues(alpha: 0.45),
+                    blurRadius: 40,
+                    spreadRadius: 2,
+                  ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 6),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  price,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    shadows: [
+                      Shadow(
+                        color:
+                            (isMostPopular
+                                    ? const Color(0xFF9A2BFF)
+                                    : glowColor)
+                                .withValues(alpha: 0.75),
+                        blurRadius: 16,
+                      ),
+                      Shadow(
+                        color:
+                            (isMostPopular
+                                    ? const Color(0xFF2D4BFF)
+                                    : glowColor)
+                                .withValues(alpha: 0.45),
+                        blurRadius: 26,
                       ),
                     ],
                   ),
                 ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () async {
-                  if (_isPaying) return;
+                if (price == "\$159.99")
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      "Less than \$0.45 per day",
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                if (price == "₹1999")
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      "Less than ₹5 per day",
+                      style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                const Text(
+                  "Features Included:",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (String f in features)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _featureTick(
+                          tint: isMostPopular
+                              ? const Color(0xFFAF74FF)
+                              : glowColor,
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            f,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: () async {
+                    if (_isPaying) return;
 
-                  HapticFeedback.mediumImpact();
+                    HapticFeedback.mediumImpact();
 
-                  setState(() {
-                    _animatingPlan = price;
-                  });
+                    setState(() {
+                      _animatingPlan = price;
+                    });
 
-                  _lastPlanTitle = title;
-                  _lastPlanPrice = price;
+                    _lastPlanTitle = title;
+                    _lastPlanPrice = price;
 
-                  if (!mounted) return;
+                    if (!mounted) return;
 
-                  await showPaymentMethodSelector(context);
+                    await showPaymentMethodSelector(context);
 
-                  setState(() {
-                    _animatingPlan = null;
-                  });
-                },
-                child: AnimatedScale(
-                  scale: _animatingPlan == price ? 0.94 : 1.0,
-                  duration: const Duration(milliseconds: 160),
-                  curve: Curves.easeOut,
-                child: AnimatedOpacity(
-                    opacity: _animatingPlan == price ? 0.85 : 1.0,
+                    setState(() {
+                      _animatingPlan = null;
+                    });
+                  },
+                  child: AnimatedScale(
+                    scale: _animatingPlan == price ? 0.94 : 1.0,
                     duration: const Duration(milliseconds: 160),
-                    child: Container(
+                    curve: Curves.easeOut,
+                    child: AnimatedOpacity(
+                      opacity: _animatingPlan == price ? 0.85 : 1.0,
+                      duration: const Duration(milliseconds: 160),
+                      child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
@@ -2248,114 +2343,116 @@ class _PremiumScreenState extends State<PremiumScreen>
                                   ),
                                 ),
                         ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (tag != null)
-          Positioned(
-            top: 0,
-            left: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: isMostPopular
-                    ? const LinearGradient(
-                        colors: [Color(0xFFD776FF), Color(0xFF5F5DFF)],
-                      )
-                    : tag.contains("Elite")
-                    ? const LinearGradient(
-                        colors: [Color(0xFFFFD700), Color(0xFFE6A800)],
-                      )
-                    : tag.contains("Best")
-                    ? const LinearGradient(
-                        colors: [Color(0xFF2563EB), Color(0xFF38BDF8)],
-                      )
-                    : const LinearGradient(
-                        colors: [Color(0xFF1E293B), Color(0xFF334155)],
                       ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: (isMostPopular ? const Color(0xFF9A2BFF) : glowColor)
-                        .withValues(alpha: 0.5),
-                    blurRadius: 18,
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  if (tag.contains("Elite"))
-                    const Icon(
-                      Icons.workspace_premium,
-                      color: Color(0xFFFFD700),
-                      size: 18,
-                    ),
-                  if (tag.contains("Elite")) const SizedBox(width: 6),
-                  Text(
-                    tag,
-                    style: TextStyle(
-                      color: tag.contains("Elite")
-                          ? Colors.black
-                          : Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        if (isCurrentPlan)
-          Positioned(
-            top: 0,
-            right: 20,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFFE28A), Color(0xFFFFB300)],
+          if (tag != null)
+            Positioned(
+              top: 0,
+              left: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
                 ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFFFD700).withValues(alpha: 0.34),
-                    blurRadius: 16,
+                decoration: BoxDecoration(
+                  gradient: isMostPopular
+                      ? const LinearGradient(
+                          colors: [Color(0xFFD776FF), Color(0xFF5F5DFF)],
+                        )
+                      : tag.contains("Elite")
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFFD700), Color(0xFFE6A800)],
+                        )
+                      : tag.contains("Best")
+                      ? const LinearGradient(
+                          colors: [Color(0xFF2563EB), Color(0xFF38BDF8)],
+                        )
+                      : const LinearGradient(
+                          colors: [Color(0xFF1E293B), Color(0xFF334155)],
+                        ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          (isMostPopular ? const Color(0xFF9A2BFF) : glowColor)
+                              .withValues(alpha: 0.5),
+                      blurRadius: 18,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    if (tag.contains("Elite"))
+                      const Icon(
+                        Icons.workspace_premium,
+                        color: Color(0xFFFFD700),
+                        size: 18,
+                      ),
+                    if (tag.contains("Elite")) const SizedBox(width: 6),
+                    Text(
+                      tag,
+                      style: TextStyle(
+                        color: tag.contains("Elite")
+                            ? Colors.black
+                            : Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (isCurrentPlan)
+            Positioned(
+              top: 0,
+              right: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFE28A), Color(0xFFFFB300)],
                   ),
-                ],
-              ),
-              child: const Text(
-                "ACTIVE",
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
-                  letterSpacing: 0.6,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.34),
+                      blurRadius: 16,
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  "ACTIVE",
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                    letterSpacing: 0.6,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _featureTick({
-    required Color tint,
-  }) {
+  Widget _featureTick({required Color tint}) {
     return Container(
       width: 20,
       height: 20,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: [
-            tint.withValues(alpha: 0.95),
-            tint.withValues(alpha: 0.62),
-          ],
+          colors: [tint.withValues(alpha: 0.95), tint.withValues(alpha: 0.62)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

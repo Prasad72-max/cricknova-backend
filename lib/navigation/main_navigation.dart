@@ -12,13 +12,18 @@ import '../services/weekly_stats_service.dart';
 import 'dart:async';
 import '../insights/insights_screen.dart';
 
+abstract class MainNavigationController {
+  void setTab(int index);
+  void goHome();
+}
+
 class MainNavigation extends StatefulWidget {
   final String userName;
   static final ValueNotifier<int> activeTabNotifier = ValueNotifier<int>(0);
 
   const MainNavigation({super.key, required this.userName});
 
-  static _MainNavigationState? of(BuildContext context) {
+  static MainNavigationController? of(BuildContext context) {
     return context.findAncestorStateOfType<_MainNavigationState>();
   }
 
@@ -27,13 +32,17 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver
+    implements MainNavigationController {
   int _index = 0;
   String userName = "Player";
   late List<Widget?> _screenCache;
+  late bool _lastPremiumActive;
+  late int _lastKnownTabCount;
   DateTime? _activeSince;
   Timer? _minuteTimer;
 
+  @override
   void goHome() {
     if (_index != 0) {
       setState(() {
@@ -43,8 +52,12 @@ class _MainNavigationState extends State<MainNavigation>
     }
   }
 
+  @override
   void setTab(int index) {
     if (!mounted) return;
+    if (_screenCache[index] == null) {
+      _screenCache[index] = _buildScreenAt(index);
+    }
     setState(() {
       _index = index;
     });
@@ -56,19 +69,35 @@ class _MainNavigationState extends State<MainNavigation>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     PremiumService.premiumNotifier.addListener(_handlePremiumStateChanged);
+    _lastPremiumActive = PremiumService.isPremiumActive;
+    _lastKnownTabCount = _tabCount();
     _activeSince = DateTime.now();
     _startMinuteTimer();
-    _screenCache = List<Widget?>.filled(_tabCount(), null);
+    _screenCache = List<Widget?>.filled(_lastKnownTabCount, null);
     _screenCache[_index] = _buildScreenAt(_index);
     MainNavigation.activeTabNotifier.value = _index;
-    _bootstrapSession();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_bootstrapSession());
+    });
   }
 
   void _handlePremiumStateChanged() {
     if (!mounted) return;
-    final maxIndex = _tabCount() - 1;
+    final bool premiumChanged =
+        PremiumService.isPremiumActive != _lastPremiumActive;
+    final int nextTabCount = _tabCount();
+    final bool tabCountChanged = nextTabCount != _lastKnownTabCount;
+
+    if (!premiumChanged && !tabCountChanged) {
+      _evaluatePremiumAlerts();
+      return;
+    }
+
+    _lastPremiumActive = PremiumService.isPremiumActive;
+    _lastKnownTabCount = nextTabCount;
+    final maxIndex = nextTabCount - 1;
     setState(() {
-      _screenCache = List<Widget?>.filled(_tabCount(), null);
+      _screenCache = List<Widget?>.filled(nextTabCount, null);
       if (_index > maxIndex) {
         _index = maxIndex;
       }
@@ -129,18 +158,17 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   Future<void> _bootstrapSession() async {
-    // 🔐 Ensure Firebase auth & ID token are ready
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      await user.getIdToken(true);
-      await WeeklyStatsService.recordAppOpen(user.uid);
+      unawaited(user.getIdToken());
+      unawaited(WeeklyStatsService.recordAppOpen(user.uid));
     }
 
     await loadUser();
-
-    if (!mounted) return;
-    setState(() {});
-    _evaluatePremiumAlerts();
+    Future<void>.delayed(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      unawaited(_evaluatePremiumAlerts());
+    });
   }
 
   @override
@@ -164,12 +192,17 @@ class _MainNavigationState extends State<MainNavigation>
       final prefs = await SharedPreferences.getInstance();
       name = prefs.getString("profileName");
     }
+    final String nextUserName = (name != null && name.trim().isNotEmpty)
+        ? name.trim()
+        : widget.userName;
+    if (nextUserName == userName) {
+      return;
+    }
     setState(() {
-      userName = (name != null && name.trim().isNotEmpty)
-          ? name.trim()
-          : widget.userName;
-      _screenCache = List<Widget?>.filled(_tabCount(), null);
-      _screenCache[_index] = _buildScreenAt(_index);
+      userName = nextUserName;
+      if (_screenCache.isNotEmpty) {
+        _screenCache[0] = _buildScreenAt(0);
+      }
     });
   }
 
@@ -238,13 +271,6 @@ class _MainNavigationState extends State<MainNavigation>
       featureLabel: 'Mistake Detection',
       remaining: PremiumService.mistakeLimit - PremiumService.mistakeUsed,
       total: PremiumService.mistakeLimit,
-    );
-
-    await maybeShowUsageAlert(
-      featureKey: 'compare',
-      featureLabel: 'Compare Analysis',
-      remaining: PremiumService.compareLimit - PremiumService.compareUsed,
-      total: PremiumService.compareLimit,
     );
 
     final expiry = PremiumService.expiryDate;
@@ -416,9 +442,8 @@ class _MainNavigationState extends State<MainNavigation>
         children: List<Widget>.generate(
           _tabCount(),
           (i) => i == _index || _screenCache[i] != null
-              ? TickerMode(
-                  enabled: i == _index,
-                  child: _screenAt(i),
+              ? RepaintBoundary(
+                  child: TickerMode(enabled: i == _index, child: _screenAt(i)),
                 )
               : const SizedBox.shrink(),
         ),

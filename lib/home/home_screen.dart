@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/cricknova_notification_service.dart';
 import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
 import '../premium/elite_status_screen.dart';
@@ -29,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   double _cachedTopSpeed = 0.0;
   bool _lastPremiumState = PremiumService.isPremiumActive;
   bool _showEliteWelcomeHeader = false;
+  bool _notificationPromptStarted = false;
 
   final PageController _statsPageController = PageController(
     viewportFraction: 0.9,
@@ -41,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final AnimationController _eliteHeaderController;
   late final AnimationController _diamondController;
   late final AnimationController _pulseController;
+  bool _homeAnimationsActive = false;
 
   @override
   void didChangeDependencies() {
@@ -55,8 +58,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     unawaited(_saveQuickStatsToHive());
     if (premiumStateChanged) {
       _checkExpiryPopup();
+      setState(() {});
+      return;
     }
-    setState(() {});
+
+    if (_isHomeTabVisible) {
+      final bool membershipDisplayChanged = _quickStats.any(
+        (_QuickStatData stat) =>
+            stat.metric == "Membership" &&
+            stat.value != (PremiumService.isPremiumActive ? "Elite" : "Free"),
+      );
+      if (membershipDisplayChanged) {
+        setState(() {});
+      }
+    }
   }
 
   @override
@@ -86,10 +101,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
     if (_isHomeTabVisible) {
       _startStatsAutoSlide();
+      _resumeHomeAnimations();
     }
-    _initRealtimeQuickStatsListeners();
-    _bootstrapAuthAndData();
-    _prepareEliteWelcomeHeader();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initRealtimeQuickStatsListeners());
+      unawaited(_prepareInitialHomeState());
+      unawaited(_prepareEliteWelcomeHeader());
+      unawaited(_maybeHandleNotificationOptIn());
+    });
   }
 
   bool get _isHomeTabVisible => MainNavigation.activeTabNotifier.value == 0;
@@ -97,38 +116,149 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _handleTabVisibilityChange() {
     if (_isHomeTabVisible) {
       _startStatsAutoSlide();
+      _resumeHomeAnimations();
       unawaited(_syncQuickStats());
       return;
     }
     _statsTimer?.cancel();
+    _pauseHomeAnimations();
+  }
+
+  void _resumeHomeAnimations() {
+    if (_homeAnimationsActive) return;
+    _homeAnimationsActive = true;
+    if (!_diamondController.isAnimating) {
+      _diamondController.repeat();
+    }
+    if (!_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    }
+  }
+
+  void _pauseHomeAnimations() {
+    if (!_homeAnimationsActive) return;
+    _homeAnimationsActive = false;
+    _diamondController.stop();
+    _pulseController.stop();
   }
 
   late final WidgetsBindingObserver _lifeCycleObserver = _HomeLifecycleObserver(
     onResumed: _syncQuickStats,
   );
 
-  Future<void> _bootstrapAuthAndData() async {
+  Future<void> _prepareInitialHomeState() async {
     await _loadQuickStatsFromHive();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
+    unawaited(_bootstrapAuthAndData());
+  }
 
+  Future<void> _bootstrapAuthAndData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final String? token = await user.getIdToken(true);
+      final String? token = await user.getIdToken();
       if (token != null && token.isNotEmpty) {
         // Token refresh succeeded.
       } else {
         debugPrint("⚠️ HOME SCREEN: Firebase token is null or empty");
       }
 
-      await PremiumService.restoreOnLaunch();
+      if (!PremiumService.isLoaded) {
+        await PremiumService.restoreOnLaunch();
+      }
+      await CrickNovaNotificationService.instance.handleAppOpened(user.uid);
       _checkExpiryPopup();
     }
 
-    await loadSpeedHistory();
-    await loadTrainingVideos();
+    await Future.wait<void>([loadSpeedHistory(), loadTrainingVideos()]);
     await _saveQuickStatsToHive();
     if (!mounted) return;
     setState(() {});
+  }
+
+  Future<void> _maybeHandleNotificationOptIn() async {
+    if (_notificationPromptStarted) return;
+    _notificationPromptStarted = true;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final notificationService = CrickNovaNotificationService.instance;
+    await notificationService.handleAppOpened(user.uid);
+
+    final shouldPrompt = await notificationService.shouldPromptForOptIn(
+      user.uid,
+    );
+    if (!shouldPrompt || !mounted || !_isHomeTabVisible) {
+      return;
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 650));
+    if (!mounted || !_isHomeTabVisible) return;
+
+    final allow = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0B1220),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Text(
+            'Allow CrickNova Notifications?',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            'Let CrickNova AI send playful match-day nudges, analysis-complete alerts, and personal-best hype moments. No spam. Just smart cricket reminders.',
+            style: GoogleFonts.poppins(color: Colors.white70, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Not Now',
+                style: GoogleFonts.poppins(color: Colors.white60),
+              ),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+              ),
+              child: Text(
+                'Allow',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted) return;
+
+    if (allow == true) {
+      final granted = await notificationService.enableForUser(user.uid);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            granted
+                ? 'CrickNova notifications are on. The banter begins now.'
+                : 'Notifications are still blocked on this device. You can enable them later in settings.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    await notificationService.disableForUser(user.uid);
   }
 
   String _eliteHeaderSeenKey(String uid) => 'home_elite_header_seen_$uid';
@@ -142,8 +272,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final isBrandNew =
         createdAt != null &&
         lastSignInAt != null &&
-        lastSignInAt.difference(createdAt).abs() <=
-            const Duration(minutes: 2);
+        lastSignInAt.difference(createdAt).abs() <= const Duration(minutes: 2);
 
     if (!isBrandNew) return;
 
@@ -393,8 +522,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             color: const Color(0xFF00FF88),
             backgroundColor: const Color(0xFF0F172A),
             notificationPredicate: (notification) {
-              return PremiumService.isPremiumActive &&
-                  notification.depth == 0;
+              return PremiumService.isPremiumActive && notification.depth == 0;
             },
             onRefresh: () async {
               if (!PremiumService.isPremiumActive) return;
@@ -450,7 +578,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _premiumWelcomeHeader(isEliteWelcome: _showEliteWelcomeHeader),
+                      _premiumWelcomeHeader(
+                        isEliteWelcome: _showEliteWelcomeHeader,
+                      ),
                       const SizedBox(height: 14),
                       if (!PremiumService.isLoaded)
                         _checkingPlanBadge()
@@ -650,14 +780,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   used: PremiumService.mistakeUsed,
                                   total: PremiumService.mistakeLimit,
                                 ),
-                                if (PremiumService.compareLimit > 0) ...[
-                                  const SizedBox(height: 10),
-                                  _usageRow(
-                                    label: "Analyse Yourself",
-                                    used: PremiumService.compareUsed,
-                                    total: PremiumService.compareLimit,
-                                  ),
-                                ],
                               ],
                             ),
                           ),
@@ -1125,7 +1247,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ShaderMask(
                               shaderCallback: (bounds) {
                                 return const LinearGradient(
-                                  colors: [Color(0xFFF7E7CE), Color(0xFFE6C86A)],
+                                  colors: [
+                                    Color(0xFFF7E7CE),
+                                    Color(0xFFE6C86A),
+                                  ],
                                 ).createShader(bounds);
                               },
                               child: Text(
@@ -1277,6 +1402,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   void dispose() {
     _statsTimer?.cancel();
+    _pauseHomeAnimations();
     MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
     _statsBoxSub?.cancel();
     _speedBoxSub?.cancel();
@@ -1301,14 +1427,15 @@ class _EliteStadiumBackdropPainter extends CustomPainter {
     if (opacity <= 0) return;
 
     final floodPaint = Paint()
-      ..shader = const RadialGradient(
-        colors: [Color(0x44A8CFFF), Color(0x00000000)],
-      ).createShader(
-        Rect.fromCircle(
-          center: Offset(size.width * 0.22, size.height * 0.06),
-          radius: size.width * 0.35,
-        ),
-      )
+      ..shader =
+          const RadialGradient(
+            colors: [Color(0x44A8CFFF), Color(0x00000000)],
+          ).createShader(
+            Rect.fromCircle(
+              center: Offset(size.width * 0.22, size.height * 0.06),
+              radius: size.width * 0.35,
+            ),
+          )
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26);
     canvas.drawCircle(
       Offset(size.width * 0.22, size.height * 0.06),
@@ -1319,14 +1446,15 @@ class _EliteStadiumBackdropPainter extends CustomPainter {
       Offset(size.width * 0.82, size.height * 0.09),
       size.width * 0.18,
       Paint()
-        ..shader = const RadialGradient(
-          colors: [Color(0x3399C7FF), Color(0x00000000)],
-        ).createShader(
-          Rect.fromCircle(
-            center: Offset(size.width * 0.82, size.height * 0.09),
-            radius: size.width * 0.28,
-          ),
-        )
+        ..shader =
+            const RadialGradient(
+              colors: [Color(0x3399C7FF), Color(0x00000000)],
+            ).createShader(
+              Rect.fromCircle(
+                center: Offset(size.width * 0.82, size.height * 0.09),
+                radius: size.width * 0.28,
+              ),
+            )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24),
     );
 

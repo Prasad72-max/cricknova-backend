@@ -283,7 +283,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
         final box = await Hive.openBox("local_stats_$uid");
 
         int currentXp = box.get('xp', defaultValue: 0);
-        int newXp = currentXp + 30; // Compare XP reward
+        int newXp = currentXp + 40; // Compare XP reward
 
         await box.put('xp', newXp);
 

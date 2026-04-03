@@ -44,6 +44,17 @@ service cloud.firestore {
       allow read, update, delete: if false;
     }
 
+    // Premium support chat (each user can access only their own thread)
+    match /support_chats/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null
+                           && request.auth.uid == userId;
+      }
+    }
+
     // Bat orders (allow any authenticated user)
     match /bat_orders/{docId} {
       allow read, write: if request.auth != null;

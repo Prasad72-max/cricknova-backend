@@ -15,10 +15,14 @@ class RazorpayService {
   }) {
     _razorpay = Razorpay();
 
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (PaymentSuccessResponse response) {
+    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (
+      PaymentSuccessResponse response,
+    ) {
       _checkoutInProgress = false;
       debugPrint("✅ Razorpay payment success: ${response.paymentId}");
-      debugPrint("🧾 orderId=${response.orderId}, signature=${response.signature}");
+      debugPrint(
+        "🧾 orderId=${response.orderId}, signature=${response.signature}",
+      );
 
       () async {
         try {
@@ -35,16 +39,21 @@ class RazorpayService {
           debugPrint("❌ Premium verification failed: $e");
           onPaymentError(
             PaymentFailureResponse(
-              code: -1,
-              message: "Premium activation failed. Please contact support.",
+              -1,
+              "Premium activation failed. Please contact support.",
+              null,
             ),
           );
         }
       }();
     });
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (PaymentFailureResponse response) {
+    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (
+      PaymentFailureResponse response,
+    ) {
       _checkoutInProgress = false;
-      debugPrint("❌ Razorpay payment error: code=${response.code}, message=${response.message}");
+      debugPrint(
+        "❌ Razorpay payment error: code=${response.code}, message=${response.message}",
+      );
       onPaymentError(response);
     });
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, onExternalWallet);
@@ -63,25 +72,18 @@ class RazorpayService {
     final Map<String, Object> options = {
       "key": key, // Pass the key dynamically
       "order_id": orderId,
+
       /// amount must already be in paise (backend-controlled)
       "amount": amount,
       "currency": "INR",
       "name": "CrickNova AI",
       "description": "Premium Subscription",
 
-      "prefill": {
-        "email": email,
-        if (contact != null) "contact": contact,
-      },
+      "prefill": {"email": email, if (contact != null) "contact": contact},
 
-      "retry": {
-        "enabled": true,
-        "max_count": 1,
-      },
+      "retry": {"enabled": true, "max_count": 1},
 
-      "theme": {
-        "color": "#00A8FF",
-      },
+      "theme": {"color": "#00A8FF"},
     };
 
     debugPrint("🚀 Razorpay options → $options");
