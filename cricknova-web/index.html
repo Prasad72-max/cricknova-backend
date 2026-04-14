@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CrickNova AI – Where Cricket Meets Intelligence</title>
+  <meta name="description" content="CrickNova AI is a next‑generation cricket analytics platform delivering speed, swing, spin and performance insights using artificial intelligence." />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Poppins', sans-serif;
+      background: radial-gradient(1200px 600px at top, #0f2027, #000000 70%);
+      color: #ffffff;
+    }
+
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #000000, #0a1a2f, #000000);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 30% 20%, rgba(0,255,255,0.15), transparent 40%),
+                  radial-gradient(circle at 70% 60%, rgba(138,43,226,0.18), transparent 45%);
+    }
+
+    .hero-content {
+      position: relative;
+      max-width: 700px;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #00f2ff, #8a2be2);
+      color: #000;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 3.5rem;
+      margin: 10px 0;
+      background: linear-gradient(90deg, #00f2ff, #8a2be2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      font-size: 1.3rem;
+      opacity: 0.9;
+    }
+
+    .subtext {
+      margin-top: 16px;
+      color: #cfd8dc;
+      line-height: 1.6;
+    }
+
+    .hero-buttons {
+      margin-top: 32px;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+    }
+
+    button.primary {
+      padding: 14px 28px;
+      border-radius: 30px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      background: linear-gradient(90deg, #00f2ff, #8a2be2);
+      color: #000;
+      box-shadow: 0 0 25px rgba(0,242,255,0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(0,242,255,0.7);
+    }
+
+    button.secondary {
+      padding: 14px 28px;
+      border-radius: 30px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.4);
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .section {
+      padding: 80px 20px;
+      max-width: 1100px;
+      margin: auto;
+    }
+
+    .pricing-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      padding: 30px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 0 30px rgba(0,0,0,0.6);
+    }
+
+    .highlight-card {
+      box-shadow: 0 0 40px rgba(138,43,226,0.5);
+      border: 1px solid rgba(138,43,226,0.6);
+    }
+
+    footer {
+      text-align: center;
+      padding: 30px;
+      font-size: 0.9rem;
+      color: #aaa;
+    }
+  </style>
+</head>
+
+<body>
+
+<header class="hero">
+  <div class="overlay"></div>
+  <div class="hero-content">
+    <span class="badge">AI Powered Cricket</span>
+    <h1>CrickNova AI</h1>
+    <p class="tagline">Where Cricket Meets Intelligence</p>
+    <p class="subtext">
+      CrickNova AI is a subscription-based cricket performance analysis platform.
+      We provide AI-powered coaching, video analysis, mistake detection and performance insights
+      for cricketers, coaches and academies through paid digital services.
+    </p>
+    <div class="hero-buttons">
+      <button class="primary" onclick="scrollToFeatures()">Get Started</button>
+      <button class="secondary" onclick="scrollToFeatures()">See Features</button>
+    </div>
+  </div>
+</header>
+
+<section id="features" class="section">
+  <h2>Why CrickNova AI</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <h3>Ball Intelligence</h3>
+      <p>AI estimates speed, swing, spin and trajectory directly from match videos.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Upload & Analyze</h3>
+      <p>Upload any cricket video and receive instant, actionable analysis.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Mistake Detection</h3>
+      <p>Identify technical flaws, timing issues and improvement areas.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Match‑Ready AI</h3>
+      <p>Designed for real games — no special setup or equipment needed.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section dark">
+  <h2>Built for Real Cricketers</h2>
+  <p class="center-text">
+    CrickNova AI works in real match conditions and practice sessions — designed for players,
+    coaches and academies worldwide.
+  </p>
+</section>
+
+<section class="section highlight">
+  <h2>Why Players Love CrickNova</h2>
+  <p class="center-text">
+    Unlike traditional systems, CrickNova AI works with real match footage.
+    Train smarter, play harder, improve faster.
+  </p>
+</section>
+
+<section id="pricing" class="section pricing">
+  <h2>Pricing Preview</h2>
+  <p class="center-text">
+    Simple, affordable plans designed for every cricketer — from street cricket to professional matches.
+  </p>
+
+  <div class="pricing-grid">
+    <!-- INDIA -->
+    <div class="pricing-card">
+      <h3>India 🇮🇳</h3>
+      <ul>
+        <li><strong>₹99 / month</strong> – 15 Mistake Analyses, 200 AI Chats</li>
+        <li><strong>₹299 / 6 months</strong> – 30 Mistakes, 1200 AI Chats</li>
+        <li><strong>₹499 / year</strong> – 60 Mistakes, 3000AI Chats</li>
+        <li><strong>₹1999 Elite / year</strong> – 200 Mistakes/month, 20000Chats/month, 200 Video Compare</li>
+      </ul>
+    </div>
+
+    <!-- INTERNATIONAL -->
+    <div class="pricing-card highlight-card">
+      <h3>International 🌍</h3>
+      <ul>
+        <li><strong>$29.99 / month</strong> – 15 Mistake Analyses, 200 AI Chats</li>
+        <li><strong>$39.99 / 6 months</strong> – 30 Mistakes, 1200 AI Chats</li>
+        <li><strong>$59.99 / year</strong> – 60Mistakes, 3000AI Chats</li>
+        <li><strong>$1499.99 Elite / year</strong> – 200 Mistakes/month, 20000 Chats/month, 200 Video Compare</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="center-text small">
+    Full pricing and subscriptions available inside the app.
+  </p>
+</section>
+
+<section id="contact" class="section">
+  <h2>Contact Us</h2>
+  <p>Email: <strong>dukareprasad33@gmail.com</strong></p>
+  <p>Phone: <strong>+917821871163</strong></p>
+  <p>Location: <strong>Pune, Maharashtra, India</strong></p>
+</section>
+
+<section class="section">
+  <h2>Payments & Subscriptions</h2>
+  <p>
+    CrickNova AI offers paid digital subscriptions for accessing premium features.
+    All payments are processed securely using third-party payment gateways such as PayU.
+  </p>
+</section>
+
+<footer>
+  <p>
+    <a href="terms.html">Terms & Conditions</a> |
+    <a href="privacy.html">Privacy Policy</a> |
+    <a href="refund.html">Refund Policy</a> |
+  </p>
+  <p style="margin-top:10px; color:#b0c4de;">
+    This website is owned and operated by CrickNova AI, India.
+  </p>
+  <p>© 2026 CrickNova AI. All rights reserved.</p>
+  <p style="margin-top:8px; color:#cfd8dc; font-weight:500;">
+    Founder: <strong>Urmila Dattatreya Dukare</strong>
+  </p>
+  <p style="margin-top:6px; color:#9fb3c8; font-size:0.85rem; line-height:1.5;">
+    Registered Address:<br/>
+    S.no 10/11 Pardeshi Building, Sukhsagar Nagar,<br/>
+    Katraj, Pune‑46, Maharashtra – 411046
+  </p>
+</footer>
+
+</script>
+<script>
+  function scrollToFeatures() {
+    const el = document.getElementById("features");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    }
+  }
+</script>
+<script src="script.js"></script>
+</body>
+</html>

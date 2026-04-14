@@ -1,0 +1,5 @@
+train: datasets/cricket/images/train
+val: datasets/cricket/images/val
+
+nc: 1
+names: ["ball"]

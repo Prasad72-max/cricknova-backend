@@ -1,0 +1,7 @@
+# FILE: cricknova_engine/data/ball_dataset.yaml
+
+train: ball_dataset/train/images
+val: ball_dataset/val/images
+
+nc: 1
+names: ["ball"]

@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "public": "cricknova-web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}
