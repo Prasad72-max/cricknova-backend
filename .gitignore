@@ -103,4 +103,5 @@ runs/
 .env
 serviceAccountKey.json
 firebase_service_account.json
-secrets/firebase_service_account.json
+secrets/firebase_service_account.jsonvenv/
+__pycache__/
