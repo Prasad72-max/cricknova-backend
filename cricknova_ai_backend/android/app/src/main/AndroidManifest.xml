@@ -14,10 +14,6 @@
             <data android:scheme="http" />
         </intent>
 
-        <!-- PayPal official app -->
-        <package android:name="com.paypal.android.p2pmobile" />
-        <package android:name="com.paypal.android.app" />
-
     </queries>
 
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -44,28 +40,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-
-                <data
-                    android:scheme="cricknova"
-                    android:host="paypal-success"/>
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW"/>
-
-                <category android:name="android.intent.category.DEFAULT"/>
-                <category android:name="android.intent.category.BROWSABLE"/>
-
-                <data
-                    android:scheme="cricknova"
-                    android:host="paypal-cancel"/>
             </intent-filter>
 
         </activity>

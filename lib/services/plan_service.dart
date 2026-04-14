@@ -11,7 +11,7 @@ class PlanService {
   }
 
   // -----------------------------
-  // PAYMENT SOURCE (PAYPAL / PLAY)
+  // PAYMENT SOURCE (DIRECT / PLAY)
   // -----------------------------
   static Future<void> setPremium(bool value) async {
     // ⚠️ WARNING: This should ONLY be called after backend verification
@@ -44,6 +44,7 @@ class PlanService {
 
   static Future<void> setPaymentSource(String source) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setString("paymentSource", source);
   }
 
   static Future<String?> getPaymentSource() async {

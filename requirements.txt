@@ -9,4 +9,3 @@ google-generativeai
 google-cloud-firestore
 firebase-admin
 gunicorn
-paypalcheckoutsdk

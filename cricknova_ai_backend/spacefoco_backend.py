@@ -5,7 +5,9 @@ import time
 import tempfile
 from datetime import datetime, timezone
 print("💤😡💀")
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Ensure the repo root (the directory containing this file) is on sys.path.
+# Using the parent-of-parent can point outside the deployed repo on Render.
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
@@ -17,7 +19,6 @@ app = FastAPI(title="CrickNova AI Backend")
 def alive():
     return {
         "alive": True,
-        "paypal": True,
         "file": "spacefoco_backend.py"
     }
 from fastapi import UploadFile, File, HTTPException, Request, Form
@@ -33,7 +34,6 @@ from pydantic import BaseModel
 from fastapi import Body
 from dotenv import load_dotenv
 load_dotenv()
-from cricknova_ai_backend.paypal_service import router as paypal_router
 
 try:
     from subscriptions_store import get_current_user
@@ -44,12 +44,7 @@ except ImportError:
         if authorization.lower().startswith("bearer "):
             return authorization.split(" ", 1)[1]
         return authorization
-PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID")
-PAYPAL_MODE = os.getenv("PAYPAL_MODE", "sandbox")
 import razorpay
-# --- PayPal SDK imports ---
-from paypalcheckoutsdk.core import PayPalHttpClient, SandboxEnvironment, LiveEnvironment
-from paypalcheckoutsdk.orders import OrdersCreateRequest, OrdersCaptureRequest
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
 razorpay_client = None
@@ -62,22 +57,6 @@ def razorpay_ready():
 
 
 
-
-# --- PayPal client lazy getter ---
-def get_paypal_client():
-    client_id = os.getenv("PAYPAL_CLIENT_ID")
-    secret = os.getenv("PAYPAL_SECRET")
-    mode = os.getenv("PAYPAL_MODE", "sandbox")
-
-    if not client_id or not secret:
-        return None
-
-    env = (
-        LiveEnvironment(client_id=client_id, client_secret=secret)
-        if mode == "live"
-        else SandboxEnvironment(client_id=client_id, client_secret=secret)
-    )
-    return PayPalHttpClient(env)
 
 from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
 import time
@@ -148,115 +127,6 @@ def subscription_is_active_relaxed(sub):
 def build_trajectory(ball_positions, frame_width, frame_height):
     return []
 
-
-# -----------------------------
-# PAYPAL ROUTER (REGISTER)
-# -----------------------------
-app.include_router(paypal_router)
-# -----------------------------
-# PAYPAL MODELS (MUST LOAD BEFORE ROUTES)
-# -----------------------------
-class PayPalCreateOrderRequest(BaseModel):
-    amount_usd: float
-    plan: str
-    user_id: str
-
-class PayPalCaptureRequest(BaseModel):
-    order_id: str
-    user_id: str
-    plan: str
-
-# =============================
-# PAYPAL ROUTES (EARLY LOAD)
-# =============================
-
-@app.get("/paypal/__test", tags=["PayPal"])
-def __paypal_test():
-    return {"paypal": "visible"}
-
-@app.get("/paypal/config", tags=["PayPal"])
-def paypal_config():
-    if not PAYPAL_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="PayPal not configured")
-    return {
-        "enabled": True,
-        "mode": PAYPAL_MODE
-    }
-
-@app.post("/paypal/create-order", tags=["PayPal"])
-async def paypal_create_order(req: PayPalCreateOrderRequest):
-    paypal_client = get_paypal_client()
-    if not paypal_client:
-        raise HTTPException(status_code=500, detail="PayPal not configured")
-
-    request_obj = OrdersCreateRequest()
-    request_obj.prefer("return=representation")
-    request_obj.request_body({
-        "intent": "CAPTURE",
-        "purchase_units": [{
-            "amount": {
-                "currency_code": "USD",
-                "value": f"{req.amount_usd:.2f}"
-            }
-        }],
-        "application_context": {
-            "brand_name": "CrickNova AI",
-            "user_action": "PAY_NOW",
-            "return_url": "https://cricknova.app/paypal-success",
-            "cancel_url": "https://cricknova.app/paypal-cancel"
-        }
-    })
-
-    response = paypal_client.execute(request_obj)
-    approval_url = None
-    for link in response.result.links:
-        if link.rel == "approve":
-            approval_url = link.href
-            break
-
-    if not approval_url:
-        raise HTTPException(status_code=500, detail="Approval URL not found")
-
-    return {
-        "success": True,
-        "order_id": response.result.id,
-        "id": response.result.id,
-        "approval_url": approval_url,
-        "approvalUrl": approval_url,
-        "links": [link.__dict__ for link in response.result.links]
-    }
-
-@app.post("/paypal/capture", tags=["PayPal"])
-async def paypal_capture(req: PayPalCaptureRequest):
-    paypal_client = get_paypal_client()
-    if not paypal_client:
-        raise HTTPException(status_code=500, detail="PayPal not configured")
-
-    request_obj = OrdersCaptureRequest(req.order_id)
-    response = paypal_client.execute(request_obj)
-    if response.result.status != "COMPLETED":
-        raise HTTPException(status_code=400, detail="Payment not completed")
-
-    from subscriptions_store import create_or_update_subscription, get_subscription
-
-    capture_id = response.result.purchase_units[0].payments.captures[0].id
-
-    create_or_update_subscription(
-        user_id=req.user_id,
-        plan=req.plan,
-        payment_id=capture_id,
-        order_id=req.order_id
-    )
-
-    sub = get_subscription(req.user_id)
-
-    return {
-        "status": "success",
-        "premium": True,
-        "plan": sub.get("plan"),
-        "limits": sub.get("limits"),
-        "expiry": sub.get("expiry").isoformat() if sub.get("expiry") else None
-    }
 
 # -----------------------------
 # USER SUBSCRIPTION ROUTES

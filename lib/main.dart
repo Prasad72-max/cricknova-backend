@@ -103,18 +103,6 @@ class _MyAppState extends State<MyApp> {
 
   Future<void> _handleDeepLink(Uri uri) async {
     debugPrint("🔥 Deep link received: $uri");
-
-    if (uri.scheme == 'cricknova' && uri.host == 'paypal-success') {
-      debugPrint("✅ PayPal success detected");
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await PremiumService.syncFromBackend(user.uid);
-      }
-    }
-
-    if (uri.scheme == 'cricknova' && uri.host == 'paypal-cancel') {
-      debugPrint("❌ PayPal cancelled by user");
-    }
   }
 
   @override

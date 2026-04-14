@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:webview_flutter/webview_flutter.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
@@ -725,85 +724,10 @@ class PremiumScreen extends StatefulWidget {
   State<PremiumScreen> createState() => _PremiumScreenState();
 }
 
-class PayPalWebViewScreen extends StatelessWidget {
-  final String approvalUrl;
-  final String orderId;
-  final String planId;
-
-  const PayPalWebViewScreen({
-    super.key,
-    required this.approvalUrl,
-    required this.orderId,
-    required this.planId,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("PayPal Checkout")),
-      body: WebViewWidget(
-        controller: WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..setNavigationDelegate(
-            NavigationDelegate(
-              onNavigationRequest: (nav) async {
-                if (nav.url.contains("paypal-success")) {
-                  await _capture(context);
-                  return NavigationDecision.prevent;
-                }
-                if (nav.url.contains("paypal-cancel")) {
-                  Navigator.pop(context);
-                  return NavigationDecision.prevent;
-                }
-                return NavigationDecision.navigate;
-              },
-            ),
-          )
-          ..loadRequest(Uri.parse(approvalUrl)),
-      ),
-    );
-  }
-
-  Future<void> _capture(BuildContext context) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final String? idToken = await user.getIdToken();
-    if (idToken == null || idToken.isEmpty) return;
-
-    final res = await http.post(
-      Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "authorization": "Bearer $idToken",
-      },
-      body: jsonEncode({"order_id": orderId, "plan": planId}),
-    );
-
-    final data = jsonDecode(res.body);
-
-    if (res.statusCode == 200 && data["status"] == "success") {
-      await PremiumService.syncFromBackend(user.uid);
-      await PremiumService.refresh();
-      PremiumService.premiumNotifier.notifyListeners();
-      if (!context.mounted) return;
-      Navigator.pop(context, true);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool("premium_shimmer", true);
-      await showPremiumSuccessScreen(
-        context,
-        userName: user.displayName ?? "Player",
-      );
-    }
-  }
-}
-
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   late PricingRegion _resolvedPricingRegion;
   bool _isRegionLoading = true;
-  static const bool isPayPalSandbox = true; // set false when going live
   // 🔐 TEMP: Simulated user subscription state (replace with backend later)
 
   late Razorpay _razorpay;
@@ -812,7 +736,6 @@ class _PremiumScreenState extends State<PremiumScreen>
   String? _payingPlan;
 
   // Track selected plan
-  String? _lastPlanTitle;
   String? _lastPlanPrice;
 
   String? _animatingPlan;
@@ -1107,176 +1030,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     }
   }
 
-  Future<void> _startPayPalCheckout(String planId) async {
-    if (_isPaying) return;
-
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please login first")));
-      return;
-    }
-
-    try {
-      setState(() {
-        _isPaying = true;
-        _payingPlan = planId;
-      });
-
-      // Compute amount and planCode
-      double amount;
-      String planCode;
-
-      switch (planId) {
-        case "\$29.99":
-          amount = 29.99;
-          planCode = "INTL_MONTHLY";
-          break;
-        case "\$49.99":
-          amount = 49.99;
-          planCode = "INTL_6M";
-          break;
-        case "\$69.99":
-          amount = 69.99;
-          planCode = "INTL_YEARLY";
-          break;
-        case "\$169.99":
-          amount = 169.99;
-          planCode = "INTL_ULTRA";
-          break;
-        default:
-          throw Exception("Invalid PayPal plan");
-      }
-
-      // 1️⃣ Create PayPal order (backend) via POST
-      final String? idToken = await user.getIdToken();
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception("Firebase ID token missing");
-      }
-
-      final createRes = await http.post(
-        Uri.parse("https://cricknova-backend.onrender.com/paypal/create-order"),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "authorization": "Bearer $idToken",
-        },
-        body: jsonEncode({
-          "amount_usd": amount,
-          "plan": planCode,
-          "user_id": user.uid,
-        }),
-      );
-
-      if (createRes.statusCode != 200 && createRes.statusCode != 201) {
-        throw Exception("PayPal order creation failed");
-      }
-
-      final createData = jsonDecode(createRes.body);
-
-      debugPrint("🧾 PAYPAL CREATE RESPONSE = $createData");
-
-      final String orderId = createData["order_id"];
-
-      final String? approvalUrl =
-          createData["approval_url"] ?? createData["approvalUrl"];
-
-      if (approvalUrl == null || approvalUrl.isEmpty) {
-        debugPrint("❌ PayPal response invalid: $createData");
-        throw Exception("PayPal approval URL missing");
-      }
-
-      debugPrint("🔥 PAYPAL APPROVAL URL = $approvalUrl");
-
-      if (!mounted) return;
-
-      setState(() {
-        _isPaying = false;
-        _payingPlan = null;
-      });
-
-      // Always open PayPal inside in-app WebView
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PayPalWebViewScreen(
-            approvalUrl: approvalUrl,
-            orderId: orderId,
-            planId: planCode,
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Unable to open PayPal. Please try again."),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-        if (mounted) {
-          setState(() {
-            _isPaying = false;
-            _payingPlan = null;
-          });
-        }
-      }
-    }
-  }
-
-  Future<void> _confirmPayPalPayment({
-    required String orderId,
-    required String planId,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    try {
-      final String? idToken = await user.getIdToken();
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception("Firebase ID token missing");
-      }
-
-      final res = await http.post(
-        Uri.parse("https://cricknova-backend.onrender.com/paypal/capture"),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "authorization": "Bearer $idToken",
-        },
-        body: jsonEncode({"order_id": orderId, "plan": planId}),
-      );
-
-      final data = jsonDecode(res.body);
-
-      if (res.statusCode == 200 && data["status"] == "success") {
-        await PremiumService.syncFromBackend(user.uid);
-        if (!mounted) return;
-        setState(() {});
-        Navigator.pop(context, true);
-        await _enablePremiumShimmer();
-        await showPremiumSuccessScreen(
-          context,
-          userName: user.displayName ?? "Player",
-        );
-      } else {
-        throw Exception("Capture failed");
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Payment not completed on PayPal. If you haven't paid yet, please finish payment first.",
-          ),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } finally {
-      _isPaying = false;
-    }
-  }
-
   @override
   void dispose() {
     PricingLocationService.regionNotifier.removeListener(
@@ -1481,12 +1234,17 @@ class _PremiumScreenState extends State<PremiumScreen>
     }
     final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
     if (method == "cricknova_pay") {
-      if (isIndia == true) {
+      if (isIndia) {
         debugPrint("CrickNova payment for ₹${numeric.toInt()}");
         _startRazorpayCheckout(numeric.toInt());
       } else {
-        debugPrint("CrickNova PayPal payment for $price");
-        _startPayPalCheckout(price);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "International direct checkout is not available right now. Please use Google Play billing.",
+            ),
+          ),
+        );
       }
       return;
     }
@@ -1554,38 +1312,32 @@ class _PremiumScreenState extends State<PremiumScreen>
     final String message =
         subscriptionProvider.lastError ??
         "Unable to start Google Play billing right now.";
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        action: SnackBarAction(
-          label: "Use Direct Pay",
-          onPressed: () {
-            final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
-            if (_lastPlanPrice == null) return;
-            if (isIndia) {
+    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
+    final SnackBarAction? action = isIndia
+        ? SnackBarAction(
+            label: "Use Direct Pay",
+            onPressed: () {
+              if (_lastPlanPrice == null) return;
               final numeric = double.parse(
                 _lastPlanPrice!.replaceAll(RegExp(r'[^0-9.]'), ''),
               );
               _startRazorpayCheckout(numeric.toInt());
-            } else {
-              _startPayPalCheckout(_lastPlanPrice!);
-            }
-          },
-        ),
+            },
+          )
+        : null;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: action,
       ),
     );
   }
 
   Future<void> showPaymentMethodSelector(BuildContext context) async {
     final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
-    final directPayTitle = isIndia
-        ? "Pay via CrickNova Pay (UPI)"
-        : "International Checkout";
-    final directPaySubtitle = isIndia
-        ? "Pay directly via Razorpay"
-        : "Pay securely via PayPal";
+    final directPayTitle = "Pay via CrickNova Pay (UPI)";
+    final directPaySubtitle = "Pay directly via Razorpay";
 
     await showModalBottomSheet(
       context: context,
@@ -1644,7 +1396,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                       onMethodSelected("google_play");
                     },
                   ),
-                  if (isIndia != true) ...[
+                  if (isIndia) ...[
                     const SizedBox(height: 10),
                     _paymentMethodTile(
                       title: directPayTitle,
@@ -2294,7 +2046,6 @@ class _PremiumScreenState extends State<PremiumScreen>
                       _animatingPlan = price;
                     });
 
-                    _lastPlanTitle = title;
                     _lastPlanPrice = price;
 
                     if (!mounted) return;

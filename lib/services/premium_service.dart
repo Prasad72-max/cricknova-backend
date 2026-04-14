@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -72,7 +71,7 @@ class PremiumService {
     await _runSingleLoad(uid);
   }
 
-  /// 🌐 Sync premium from backend API (used after Razorpay / PayPal success)
+  /// 🌐 Sync premium from backend API (used after payment success)
   static Future<void> syncFromBackend(String uid) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -834,183 +833,6 @@ class PremiumService {
     // Intentionally empty: navigation is controlled by UI, not service
   }
 
-  // -----------------------------
-  // PAYPAL HELPERS
-  // -----------------------------
-  // -----------------------------
-  // PAYPAL CREATE + APPROVAL (INTL)
-  // -----------------------------
-  static Future<void> startPaypalPayment({
-    required double amount,
-    required String plan,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception("User not authenticated");
-    }
-    final String? idToken = await user.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception("USER_NOT_AUTHENTICATED");
-    }
-    final response = await http.post(
-      Uri.parse("${ApiConfig.baseUrl}/paypal/create-order"),
-      headers: {
-        "Content-Type": "application/json",
-        "authorization": "Bearer $idToken",
-      },
-      body: jsonEncode({
-        "amount_usd": amount,
-        "currency": "USD",
-        "plan": plan,
-        "user_id": user.uid,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception("Failed to create PayPal order");
-    }
-
-    final data = jsonDecode(response.body);
-    debugPrint("🧾 PayPal create-order response: $data");
-
-    // Support both common backend keys
-    String? approvalUrl;
-
-    if (data["approvalUrl"] != null) {
-      approvalUrl = data["approvalUrl"];
-    } else if (data["approval_url"] != null) {
-      approvalUrl = data["approval_url"];
-    } else if (data["links"] is List) {
-      try {
-        final approveLink = (data["links"] as List).firstWhere(
-          (e) => e["rel"] == "approve",
-        );
-        approvalUrl = approveLink["href"];
-      } catch (_) {
-        approvalUrl = null;
-      }
-    }
-
-    if (approvalUrl == null || approvalUrl.isEmpty) {
-      throw Exception("PayPal approval URL missing from backend response");
-    }
-
-    // Normalize URL (force https if backend sent http)
-    if (approvalUrl.startsWith("http://")) {
-      approvalUrl = approvalUrl.replaceFirst("http://", "https://");
-    }
-
-    // Open PayPal approval page in external browser
-    await openPayPalApprovalUrl(approvalUrl);
-  }
-
-  static Future<void> openPayPalApprovalUrl(String approvalUrl) async {
-    final uri = Uri.parse(approvalUrl);
-    debugPrint("🌍 Opening PayPal URL: $approvalUrl");
-
-    // First ensure the URL can be launched
-    final canLaunch = await canLaunchUrl(uri);
-    if (!canLaunch) {
-      throw Exception("No application available to open PayPal URL");
-    }
-
-    // Try opening in external browser first
-    bool opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-
-    // Fallback to platform default if external fails
-    if (!opened) {
-      opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
-    }
-
-    if (!opened) {
-      throw Exception(
-        "Unable to open PayPal. Please install or enable a browser.",
-      );
-    }
-  }
-
-  // -----------------------------
-  // PAYPAL CAPTURE (BACKEND VERIFY)
-  // -----------------------------
-  static Future<void> capturePaypalOrder({
-    required String orderId,
-    required String plan,
-    required String userId,
-  }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception("User not authenticated");
-    }
-    final String? idToken = await user.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception("USER_NOT_AUTHENTICATED");
-    }
-    final response = await http.post(
-      Uri.parse("${ApiConfig.baseUrl}/paypal/capture"),
-      headers: {
-        "Content-Type": "application/json",
-        "authorization": "Bearer $idToken",
-      },
-      body: jsonEncode({"order_id": orderId, "plan": plan, "user_id": userId}),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception("PayPal capture failed");
-    }
-
-    final data = jsonDecode(response.body);
-
-    // ✅ Sync premium from backend / Firestore
-    await syncFromBackend(userId);
-    // 🔥 Force instant UI update after PayPal payment
-    await refresh();
-
-    // 🔔 Notify UI immediately after PayPal payment
-    premiumNotifier.value = isPremium;
-    premiumNotifier.notifyListeners();
-  }
-
-  // -----------------------------
-  // PAYPAL RETURN HANDLER (DEEPLINK)
-  // -----------------------------
-  static Future<void> capturePaypalOrderFromReturn(String orderId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      throw Exception("User not logged in");
-    }
-    final String? idToken = await user.getIdToken();
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception("USER_NOT_AUTHENTICATED");
-    }
-
-    // Plan can be inferred later or passed via query if needed
-    // For now backend already knows plan from order mapping
-    final response = await http.post(
-      Uri.parse("${ApiConfig.baseUrl}/paypal/capture"),
-      headers: {
-        "Content-Type": "application/json",
-        "authorization": "Bearer $idToken",
-      },
-      body: jsonEncode({
-        "order_id": orderId,
-        "user_id": user.uid,
-        "plan": "INTL", // backend validates actual plan
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception("PayPal capture from return failed");
-    }
-
-    // 🔥 Sync premium state after successful capture
-    await syncFromBackend(user.uid);
-    // 🔥 Force instant UI update after PayPal return
-    await refresh();
-
-    // 🔔 Notify UI immediately after PayPal return
-    premiumNotifier.value = isPremium;
-    premiumNotifier.notifyListeners();
-  }
 }
 
 enum _UsageType { swing, mistake }
