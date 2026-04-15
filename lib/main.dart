@@ -25,12 +25,23 @@ Future<void> main() async {
     crickNovaFirebaseMessagingBackgroundHandler,
   );
 
+  // Keep Hive ready before any screen tries to open chat/session boxes.
   await Hive.initFlutter();
   await PricingLocationService.primeFromCache();
-  await CrickNovaNotificationService.instance.initialize();
-  await CrickNovaMarketingNotificationService.instance.initialize();
 
   runApp(const MyApp());
+
+  // Warm up non-critical services after first frame to reduce cold-start jank.
+  unawaited(_warmStartup());
+}
+
+Future<void> _warmStartup() async {
+  try {
+    await CrickNovaNotificationService.instance.initialize();
+  } catch (_) {}
+  try {
+    await CrickNovaMarketingNotificationService.instance.initialize();
+  } catch (_) {}
 }
 
 class MyApp extends StatefulWidget {

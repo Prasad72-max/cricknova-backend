@@ -487,6 +487,7 @@ class SubscriptionProvider extends ChangeNotifier {
       'chat_used': 0,
       'mistake_used': 0,
       'compare_used': 0,
+      'used': {'chat': 0, 'mistake': 0, 'compare': 0},
       'expiry': Timestamp.fromDate(expiryDate),
       'started_at': Timestamp.fromDate(now),
       'source': 'google_play',
@@ -654,13 +655,13 @@ class SubscriptionProvider extends ChangeNotifier {
       case monthlyPlanId:
         return isIndiaPlan
             ? (chat: 200, mistake: 15, compare: 0)
-            : (chat: 200, mistake: 20, compare: 0);
+            : (chat: 200, mistake: 15, compare: 0);
       case sixMonthPlanId:
         return (chat: 1200, mistake: 30, compare: 0);
       case oneYearPlanId:
         return isIndiaPlan
-            ? (chat: 3000, mistake: 60, compare: 50)
-            : (chat: 1800, mistake: 50, compare: 50);
+            ? (chat: 3000, mistake: 60, compare: 60)
+            : (chat: 3000, mistake: 60, compare: 60);
       case oneYearElitePlanId:
         return isIndiaPlan
             ? (chat: 5000, mistake: 150, compare: 150)

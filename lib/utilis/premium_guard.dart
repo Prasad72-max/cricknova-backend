@@ -11,15 +11,19 @@ class PremiumGuard {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return false;
 
+    if (!PremiumService.isLoaded) {
+      await PremiumService.restoreOnLaunch();
+    }
+
     final hasAccess =
-        await PremiumService.hasValidPlan(allowedPlans);
+        PremiumService.isPremiumActive &&
+        allowedPlans.contains(PremiumService.plan);
 
     if (!hasAccess) {
+      if (!context.mounted) return false;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => const PremiumScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const PremiumScreen()),
       );
       return false;
     }

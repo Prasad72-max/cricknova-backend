@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:hive/hive.dart';
@@ -44,59 +45,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
   String _resolvedUserName = "Player";
 
   String _formatCoachReply(String raw) {
-    final cleaned = raw.replaceAll('\r', '').trim();
-    final lines = cleaned
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
-    // Don't truncate AI output; UI already renders 4 points.
-    return (lines.isNotEmpty ? lines : [cleaned]).join('\n');
-  }
-
-  _ParsedFourPoints _parseFourPoints(String raw) {
-    final cleaned = raw.replaceAll('\r', '').trim();
-    if (cleaned.isEmpty) return const _ParsedFourPoints.empty();
-
-    // Prefer line-based parsing first.
-    final lines = cleaned
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
-
-    final points = <String>[];
-    final linePattern = RegExp(r'^\s*(\d)\s*[\]\).\:-]\s*(.+)$');
-    for (final line in lines) {
-      final m = linePattern.firstMatch(line);
-      if (m != null) {
-        points.add(m.group(2)!.trim());
-      }
-    }
-
-    // If everything came back in one paragraph, try to split on 1] 2] 3] 4]
-    if (points.length < 4) {
-      final inlinePattern = RegExp(r'(\d)\s*[\]\).\:-]\s*');
-      final splits = cleaned.split(inlinePattern);
-      // split() with capturing groups yields: [prefix, digit, text, digit, text...]
-      if (splits.length >= 9) {
-        final extracted = <String>[];
-        for (int i = 2; i < splits.length; i += 2) {
-          final text = splits[i].trim();
-          if (text.isNotEmpty) extracted.add(text);
-        }
-        if (extracted.isNotEmpty) {
-          points
-            ..clear()
-            ..addAll(extracted);
-        }
-      }
-    }
-
-    if (points.length >= 4) {
-      return _ParsedFourPoints(points: points.take(4).toList(), fallback: null);
-    }
-    return _ParsedFourPoints(points: const [], fallback: cleaned);
+    return raw.replaceAll('\r', '').trim();
   }
 
   @override
@@ -460,25 +409,40 @@ class _AICoachScreenState extends State<AICoachScreen> {
     bool isUser = msg["role"] == "user";
     final content = (msg["content"] ?? msg["text"] ?? "").toString();
 
+    Future<void> copy() async {
+      await Clipboard.setData(ClipboardData(text: content));
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Copied to clipboard")));
+    }
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-        padding: const EdgeInsets.all(14),
-        constraints: const BoxConstraints(maxWidth: 320),
-        decoration: BoxDecoration(
-          color: isUser ? const Color(0xFF1E293B) : const Color(0xFF111827),
-          borderRadius: BorderRadius.circular(18),
-          border: isUser
-              ? null
-              : Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+      child: GestureDetector(
+        onLongPress: copy,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+          padding: const EdgeInsets.all(14),
+          constraints: const BoxConstraints(maxWidth: 320),
+          decoration: BoxDecoration(
+            color: isUser ? const Color(0xFF1E293B) : const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(18),
+            border: isUser
+                ? null
+                : Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+          ),
+          child: isUser
+              ? Text(content, style: const TextStyle(color: Colors.white))
+              : SelectableText(
+                  content,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.45,
+                  ),
+                ),
         ),
-        child: isUser
-            ? Text(content, style: const TextStyle(color: Colors.white))
-            : _CoachFourPointsView(
-                raw: content,
-                parsed: _parseFourPoints(content),
-              ),
       ),
     );
   }
@@ -823,11 +787,19 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                   ],
                                 ),
                               )
-                            : ListView.builder(
-                                controller: _scrollController,
-                                itemCount: provider.messages.length,
-                                itemBuilder: (_, i) =>
-                                    buildMessage(provider.messages[i]),
+                            : Builder(
+                                builder: (_) {
+                                  final messages =
+                                      List<Map<String, dynamic>>.from(
+                                        provider.messages,
+                                      );
+                                  return ListView.builder(
+                                    controller: _scrollController,
+                                    itemCount: messages.length,
+                                    itemBuilder: (_, i) =>
+                                        buildMessage(messages[i]),
+                                  );
+                                },
                               )),
                 ),
                 // Clean AI analyzing indicator
@@ -940,114 +912,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _ParsedFourPoints {
-  final List<String> points;
-  final String? fallback;
-
-  const _ParsedFourPoints({required this.points, required this.fallback});
-
-  const _ParsedFourPoints.empty() : points = const [], fallback = null;
-
-  bool get isStructured => points.length == 4;
-}
-
-class _CoachFourPointsView extends StatelessWidget {
-  final String raw;
-  final _ParsedFourPoints parsed;
-
-  const _CoachFourPointsView({required this.raw, required this.parsed});
-
-  @override
-  Widget build(BuildContext context) {
-    // If it's not the 4-point format (or it's a status line), keep it simple.
-    final lower = raw.toLowerCase();
-    final looksLikeStatus =
-        lower.contains("analyzing") ||
-        lower.contains("please try") ||
-        lower.contains("server error") ||
-        lower.contains("network error") ||
-        lower.contains("usage limit") ||
-        lower.contains("locked");
-
-    if (!parsed.isStructured || looksLikeStatus) {
-      return Text(
-        parsed.fallback ?? raw,
-        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (int i = 0; i < parsed.points.length; i++)
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: i == parsed.points.length - 1 ? 0 : 10,
-            ),
-            child: _CoachPointTile(index: i + 1, text: parsed.points[i]),
-          ),
-      ],
-    );
-  }
-}
-
-class _CoachPointTile extends StatelessWidget {
-  final int index;
-  final String text;
-
-  const _CoachPointTile({required this.index, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 26,
-            height: 26,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFF38BDF8).withOpacity(0.16),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: const Color(0xFF38BDF8).withOpacity(0.40),
-              ),
-            ),
-            child: Text(
-              "$index]",
-              style: const TextStyle(
-                color: Color(0xFFBAE6FD),
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                height: 1.35,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

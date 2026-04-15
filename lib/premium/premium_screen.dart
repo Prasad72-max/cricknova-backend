@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
-import 'dart:developer';
-import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:async';
-import 'package:http/http.dart' as http;
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -728,12 +724,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   late PricingRegion _resolvedPricingRegion;
   bool _isRegionLoading = true;
-  // 🔐 TEMP: Simulated user subscription state (replace with backend later)
-
-  late Razorpay _razorpay;
-  String? _razorpayKey;
-  bool _isPaying = false;
-  String? _payingPlan;
 
   // Track selected plan
   String? _lastPlanPrice;
@@ -741,19 +731,27 @@ class _PremiumScreenState extends State<PremiumScreen>
   String? _animatingPlan;
   bool _showPremiumShimmer = false;
   Timer? _countdownTimer;
+  final ScrollController _scrollController = ScrollController();
+
+  bool _pendingPlayBillingSuccessPopup = false;
+  bool _wasPremium = false;
+
+  final Map<String, GlobalKey> _planKeys = <String, GlobalKey>{
+    "₹99": GlobalKey(),
+    "₹299": GlobalKey(),
+    "₹499": GlobalKey(),
+    "₹1999": GlobalKey(),
+    "\$29.99": GlobalKey(),
+    "\$49.99": GlobalKey(),
+    "\$69.99": GlobalKey(),
+    "\$169.99": GlobalKey(),
+  };
 
   @override
   void initState() {
     super.initState();
     _resolvedPricingRegion = PricingLocationService.currentRegion;
-    _razorpay = Razorpay();
-    debugPrint("Razorpay initialized");
-
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
+    _wasPremium = PremiumService.isPremiumActive;
     PricingLocationService.regionNotifier.addListener(
       _handlePricingRegionChange,
     );
@@ -761,7 +759,6 @@ class _PremiumScreenState extends State<PremiumScreen>
     MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
     _loadShimmerPreference();
     _startCountdownTicker();
-    unawaited(_prefetchRazorpayKey());
     unawaited(_resolvePricingRegion());
   }
 
@@ -772,7 +769,12 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   void _handleTabVisibilityChange() {
-    _startCountdownTicker();
+    if (_isPremiumTabVisible) {
+      _startCountdownTicker();
+      return;
+    }
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
   }
 
   Future<void> _resolvePricingRegion() async {
@@ -812,14 +814,30 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   void _handlePremiumStateChange() {
     if (!mounted) return;
+    final bool isPremium = PremiumService.isPremiumActive;
     setState(() {});
     _startCountdownTicker();
+
+    if (_pendingPlayBillingSuccessPopup && !_wasPremium && isPremium) {
+      _pendingPlayBillingSuccessPopup = false;
+      unawaited(_showSuccessPopup());
+    }
+    _wasPremium = isPremium;
+  }
+
+  Future<void> _showSuccessPopup() async {
+    final displayName = FirebaseAuth.instance.currentUser?.displayName?.trim();
+    final userName = (displayName != null && displayName.isNotEmpty)
+        ? displayName
+        : "Player";
+    if (!mounted) return;
+    await showPremiumSuccessScreen(context, userName: userName);
   }
 
   void _startCountdownTicker() {
     _countdownTimer?.cancel();
     if (PremiumService.expiryDate == null || !_isPremiumTabVisible) return;
-    _countdownTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       if (PremiumService.expiryDate == null || !_isPremiumTabVisible) {
         _countdownTimer?.cancel();
@@ -827,207 +845,6 @@ class _PremiumScreenState extends State<PremiumScreen>
       }
       setState(() {});
     });
-  }
-
-  Future<void> _prefetchRazorpayKey() async {
-    try {
-      final res = await http
-          .get(
-            Uri.parse("https://cricknova-backend.onrender.com/payment/config"),
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
-        _razorpayKey = data['key_id'];
-        debugPrint("⚡ Razorpay key prefetched");
-      }
-    } catch (e) {
-      debugPrint("⚠️ Razorpay key prefetch failed");
-    }
-  }
-
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    try {
-      final planCode = _lastPlanPrice == "₹99"
-          ? "IN_99"
-          : _lastPlanPrice == "₹299"
-          ? "IN_299"
-          : _lastPlanPrice == "₹499"
-          ? "IN_499"
-          : _lastPlanPrice == "₹1999"
-          ? "IN_1999"
-          : null;
-      if (planCode == null) {
-        throw Exception("Invalid plan selected");
-      }
-
-      final user = FirebaseAuth.instance.currentUser!;
-      final String? idToken = await user.getIdToken();
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception("Firebase ID token missing");
-      }
-
-      // Show SnackBar indicating premium activation
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            duration: Duration(seconds: 5),
-            backgroundColor: Colors.black,
-            content: Text(
-              "Premium Activated 🎉\n"
-              "Your payment was successful.\n"
-              "Welcome to CrickNova Elite.",
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-        );
-      }
-
-      final verifyRes = await http.post(
-        Uri.parse(
-          "https://cricknova-backend.onrender.com/payment/verify-payment",
-        ),
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "authorization": "Bearer $idToken",
-        },
-        body: jsonEncode({
-          "razorpay_order_id": response.orderId,
-          "razorpay_payment_id": response.paymentId,
-          "razorpay_signature": response.signature,
-          "plan": planCode,
-        }),
-      );
-
-      final data = jsonDecode(verifyRes.body);
-
-      if (verifyRes.statusCode == 200 && data["success"] == true) {
-        await PremiumService.syncFromBackend(user.uid);
-        await PremiumService.refresh();
-        PremiumService.premiumNotifier.notifyListeners();
-        if (!mounted) return;
-        setState(() {});
-        Navigator.pop(context, true);
-        await _enablePremiumShimmer();
-        await showPremiumSuccessScreen(
-          context,
-          userName: user.displayName ?? "Player",
-        );
-      } else {
-        _isPaying = false;
-        throw Exception("Payment verification failed");
-      }
-    } catch (e) {
-      debugPrint("❌ Payment verify exception: $e");
-    }
-    _isPaying = false;
-  }
-
-  void _handlePaymentError(PaymentFailureResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Payment failed: ${response.code} | ${response.message}"),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
-    debugPrint(
-      "❌ Razorpay error => code=${response.code}, message=${response.message}",
-    );
-    _isPaying = false;
-  }
-
-  void _handleExternalWallet(ExternalWalletResponse response) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Opening ${response.walletName}…"),
-        backgroundColor: Colors.blueAccent,
-      ),
-    );
-  }
-
-  Future<void> _startRazorpayCheckout(int amountRupees) async {
-    if (_isPaying) return;
-
-    try {
-      if (_razorpayKey == null) {
-        final keyRes = await http
-            .get(
-              Uri.parse(
-                "https://cricknova-backend.onrender.com/payment/config",
-              ),
-            )
-            .timeout(const Duration(seconds: 15));
-
-        if (keyRes.statusCode != 200) {
-          throw Exception("Failed to load Razorpay key");
-        }
-
-        final keyData = jsonDecode(keyRes.body);
-        _razorpayKey = keyData['key_id'];
-
-        if (_razorpayKey == null || _razorpayKey!.isEmpty) {
-          throw Exception("Razorpay key missing from backend");
-        }
-      }
-
-      final res = await http
-          .post(
-            Uri.parse(
-              "https://cricknova-backend.onrender.com/payment/create-order",
-            ),
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-            },
-            body: jsonEncode({"amount": amountRupees}),
-          )
-          .timeout(const Duration(seconds: 20));
-
-      if (res.statusCode != 200) {
-        throw Exception("Order creation failed");
-      }
-
-      final data = jsonDecode(res.body);
-
-      final options = {
-        'key': _razorpayKey,
-        'order_id': data['orderId'],
-        'amount': data['amount'],
-        'currency': data['currency'] ?? 'INR',
-        'name': 'CrickNova AI',
-        'description': 'Premium Subscription',
-        'prefill': {
-          'email':
-              FirebaseAuth.instance.currentUser?.email ?? 'demo@cricknova.ai',
-        },
-        'method': {
-          'upi': true,
-          'card': true,
-          'netbanking': true,
-          'wallet': true,
-        },
-        'modal': {'confirm_close': true},
-        'theme': {'color': '#00A8FF'},
-        'retry': {'enabled': true, 'max_count': 1},
-      };
-
-      _isPaying = true;
-      _razorpay.open(options);
-    } catch (e, st) {
-      log("❌ Payment start failed", error: e, stackTrace: st);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Unable to start payment"),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    } finally {
-      // Do not reset _isPaying here; let handlers do it
-    }
   }
 
   @override
@@ -1038,7 +855,7 @@ class _PremiumScreenState extends State<PremiumScreen>
     PremiumService.premiumNotifier.removeListener(_handlePremiumStateChange);
     MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
     _countdownTimer?.cancel();
-    _razorpay.clear();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -1207,7 +1024,16 @@ class _PremiumScreenState extends State<PremiumScreen>
       ),
     );
 
-    if (isActive) return card;
+    if (isActive) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: _scrollToCurrentPlanCard,
+          child: card,
+        ),
+      );
+    }
 
     return Material(
       color: Colors.transparent,
@@ -1223,34 +1049,120 @@ class _PremiumScreenState extends State<PremiumScreen>
     );
   }
 
-  void onMethodSelected(String method) {
-    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
-    final price = _lastPlanPrice;
-    if (price == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please choose a plan first.")),
-      );
-      return;
+  void _scrollToCurrentPlanCard() {
+    final String? price = _priceLabelForCurrentPlan();
+    if (price == null) return;
+    final targetContext = _planKeys[price]?.currentContext;
+    if (targetContext == null) return;
+    Scrollable.ensureVisible(
+      targetContext,
+      alignment: 0.08,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  String? _priceLabelForCurrentPlan() {
+    switch (PremiumService.plan) {
+      case "IN_99":
+        return "₹99";
+      case "IN_299":
+        return "₹299";
+      case "IN_499":
+        return "₹499";
+      case "IN_1999":
+        return "₹1999";
+      case "INTL_MONTHLY":
+        return "\$29.99";
+      case "INTL_6M":
+        return "\$49.99";
+      case "INTL_YEARLY":
+        return "\$69.99";
+      case "INTL_ULTRA":
+      case "INT_ULTRA":
+      case "ULTRA":
+        return "\$169.99";
+      default:
+        return null;
     }
-    final numeric = double.parse(price.replaceAll(RegExp(r'[^0-9.]'), ''));
-    if (method == "cricknova_pay") {
-      if (isIndia) {
-        debugPrint("CrickNova payment for ₹${numeric.toInt()}");
-        _startRazorpayCheckout(numeric.toInt());
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "International direct checkout is not available right now. Please use Google Play billing.",
+  }
+
+  Future<void> _showPlayBillingSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0B1220).withValues(alpha: 0.92),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(26),
+                ),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  const Text(
+                    "Pay with Play Store Billing",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    "Google Play will handle billing, renewals, and cancellations.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.play_circle_fill_rounded),
+                      label: const Text(
+                        "Continue",
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        backgroundColor: const Color(0xFF38BDF8),
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(sheetContext);
+                        _pendingPlayBillingSuccessPopup = true;
+                        await _startGooglePlayCheckout();
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
-      }
-      return;
-    }
-    if (method == "google_play") {
-      _startGooglePlayCheckout();
-    }
+      },
+    );
   }
 
   String? _selectedGooglePlayBasePlanId() {
@@ -1312,168 +1224,9 @@ class _PremiumScreenState extends State<PremiumScreen>
     final String message =
         subscriptionProvider.lastError ??
         "Unable to start Google Play billing right now.";
-    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
-    final SnackBarAction? action = isIndia
-        ? SnackBarAction(
-            label: "Use Direct Pay",
-            onPressed: () {
-              if (_lastPlanPrice == null) return;
-              final numeric = double.parse(
-                _lastPlanPrice!.replaceAll(RegExp(r'[^0-9.]'), ''),
-              );
-              _startRazorpayCheckout(numeric.toInt());
-            },
-          )
-        : null;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        action: action,
-      ),
-    );
-  }
-
-  Future<void> showPaymentMethodSelector(BuildContext context) async {
-    final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
-    final directPayTitle = "Pay via CrickNova Pay (UPI)";
-    final directPaySubtitle = "Pay directly via Razorpay";
-
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: false,
-      builder: (sheetContext) {
-        return ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0B1220).withValues(alpha: 0.9),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(26),
-                ),
-                border: Border.all(color: Colors.white12),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black45,
-                    blurRadius: 24,
-                    offset: Offset(0, -8),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                  const Text(
-                    "Choose Payment Method",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _paymentMethodTile(
-                    title: "Pay with Play Store Billing",
-                    subtitle:
-                        "Use Google Play subscriptions, cards, or Play balance",
-                    leading: Icons.play_circle_fill_rounded,
-                    leadingColor: const Color(0xFF38BDF8),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      onMethodSelected("google_play");
-                    },
-                  ),
-                  if (isIndia) ...[
-                    const SizedBox(height: 10),
-                    _paymentMethodTile(
-                      title: directPayTitle,
-                      subtitle: directPaySubtitle,
-                      leading: Icons.account_balance_wallet_rounded,
-                      leadingColor: const Color(0xFFFFD700),
-                      onTap: () {
-                        Navigator.pop(sheetContext);
-                        onMethodSelected("cricknova_pay");
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _paymentMethodTile({
-    required String title,
-    required String subtitle,
-    required IconData leading,
-    required Color leadingColor,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.04),
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(leading, color: leadingColor, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.white54, size: 22),
-            ],
-          ),
-        ),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -1523,6 +1276,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         children: [
           const Positioned.fill(child: _StadiumLightBackdrop()),
           SingleChildScrollView(
+            controller: _scrollController,
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
@@ -1595,130 +1349,152 @@ class _PremiumScreenState extends State<PremiumScreen>
   // ---------------- INDIA PLANS ----------------
   List<Widget> indiaPlans() {
     return [
-      sexyPlanCard(
-        title: "Monthly",
-        price: "₹99",
-        tag: "Starter ⚡",
-        glowColor: Colors.blueAccent,
-        features: [
-          "200 AI Chats",
-          "15 Mistake Detection",
-          "Basic Speed Detection",
-          "Basic Swing Detection",
-          "Basic Spin Detection",
-          "Basic DRS Decision System",
-          "Basic UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["₹99"],
+        child: sexyPlanCard(
+          title: "Monthly",
+          price: "₹99",
+          tag: "Starter ⚡",
+          glowColor: Colors.blueAccent,
+          features: [
+            "200 AI Chats",
+            "15 Mistake Detection",
+            "Basic Speed Detection",
+            "Basic Swing Detection",
+            "Basic Spin Detection",
+            "Basic DRS Decision System",
+            "Basic UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "6 Months",
-        price: "₹299",
-        tag: "Most Popular 🔥",
-        glowColor: Colors.purpleAccent,
-        features: [
-          "1,200 AI Chats",
-          "30 Mistake Detection",
-          "Enhanced Speed Detection",
-          "Enhanced Swing Detection",
-          "Enhanced Spin Detection",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Enhanced DRS Decision System",
-          "Enhanced UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["₹299"],
+        child: sexyPlanCard(
+          title: "6 Months",
+          price: "₹299",
+          tag: "Most Popular 🔥",
+          glowColor: Colors.purpleAccent,
+          features: [
+            "1,200 AI Chats",
+            "30 Mistake Detection",
+            "Enhanced Speed Detection",
+            "Enhanced Swing Detection",
+            "Enhanced Spin Detection",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Enhanced DRS Decision System",
+            "Enhanced UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "Yearly",
-        price: "₹499",
-        tag: "Best Value 💎",
-        glowColor: Colors.greenAccent,
-        features: [
-          "3,000 AI Chats",
-          "60 Mistake Detection",
-          "Advanced Speed Detection",
-          "Advanced Swing Detection",
-          "Advanced Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Advanced DRS Decision System",
-          "Advanced UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["₹499"],
+        child: sexyPlanCard(
+          title: "Yearly",
+          price: "₹499",
+          tag: "Best Value 💎",
+          glowColor: Colors.greenAccent,
+          features: [
+            "3,000 AI Chats",
+            "60 Mistake Detection",
+            "50 Analyse Yourself Batting/Bowling ",
+            "Advanced Speed Detection",
+            "Advanced Swing Detection",
+            "Advanced Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Advanced DRS Decision System",
+            "Advanced UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "ULTRA PRO",
-        price: "₹1999",
-        tag: "Elite Access 👑",
-        glowColor: Colors.redAccent,
-        features: [
-          "5,000 AI Chats",
-          "150 Mistake Detection",
-          "Pro Speed Detection",
-          "Pro Swing Detection",
-          "Pro Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Special Gifts",
-          "Pro DRS Decision System",
-          "Pro UltraEdge Detection",
-          "Priority AI",
-        ],
+      KeyedSubtree(
+        key: _planKeys["₹1999"],
+        child: sexyPlanCard(
+          title: "ULTRA PRO",
+          price: "₹1999",
+          tag: "Elite Access 👑",
+          glowColor: Colors.redAccent,
+          features: [
+            "5,000 AI Chats",
+            "150 Mistake Detection",
+            "150 Analyse Yourself Batting/Bowling",
+            "Pro Speed Detection",
+            "Pro Swing Detection",
+            "Pro Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Special Gifts",
+            "Pro DRS Decision System",
+            "Pro UltraEdge Detection",
+            "Priority AI",
+          ],
+        ),
       ),
     ];
   }
 
   List<Widget> indiaCompareOnlyPlans() {
     return [
-      sexyPlanCard(
-        title: "Yearly",
-        price: "₹499",
-        tag: "Analyse Pro 🎯",
-        glowColor: Colors.greenAccent,
-        features: [
-          "3,000 AI Chats",
-          "60 Mistake Detection",
-          "Advanced Speed Detection",
-          "Advanced Swing Detection",
-          "Advanced Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Advanced DRS Decision System",
-          "Advanced UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["₹499"],
+        child: sexyPlanCard(
+          title: "Yearly",
+          price: "₹499",
+          tag: "Analyse Pro 🎯",
+          glowColor: Colors.greenAccent,
+          features: [
+            "3,000 AI Chats",
+            "60 Mistake Detection",
+            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
+            "Advanced Speed Detection",
+            "Advanced Swing Detection",
+            "Advanced Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Advanced DRS Decision System",
+            "Advanced UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "ULTRA PRO",
-        price: "₹1999",
-        tag: "Unlimited Analysis 🚀",
-        glowColor: Colors.redAccent,
-        features: [
-          "5,000 AI Chats",
-          "150 Mistake Detection",
-          "Pro Speed Detection",
-          "Pro Swing Detection",
-          "Pro Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Special Gifts",
-          "Pro DRS Decision System",
-          "Pro UltraEdge Detection",
-          "Priority AI",
-        ],
+      KeyedSubtree(
+        key: _planKeys["₹1999"],
+        child: sexyPlanCard(
+          title: "ULTRA PRO",
+          price: "₹1999",
+          tag: "Unlimited Analysis 🚀",
+          glowColor: Colors.redAccent,
+          features: [
+            "5,000 AI Chats",
+            "150 Mistake Detection",
+            "Analyse Yourself Batting/",
+            "Pro Speed Detection",
+            "Pro Swing Detection",
+            "Pro Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Special Gifts",
+            "Pro DRS Decision System",
+            "Pro UltraEdge Detection",
+            "Priority AI",
+          ],
+        ),
       ),
     ];
   }
@@ -1726,83 +1502,97 @@ class _PremiumScreenState extends State<PremiumScreen>
   // ---------------- INTERNATIONAL PLANS ----------------
   List<Widget> internationalPlans() {
     return [
-      sexyPlanCard(
-        title: "Monthly",
-        price: "\$29.99",
-        tag: "Starter Pass ⚡",
-        glowColor: Colors.blueAccent,
-        features: [
-          "200 AI Chats",
-          "20 Mistake Detection",
-          "Basic Speed Detection",
-          "Basic Swing Detection",
-          "Basic Spin Detection",
-          "Basic DRS Decision System",
-          "Basic UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["\$29.99"],
+        child: sexyPlanCard(
+          title: "Monthly",
+          price: "\$29.99",
+          tag: "Starter Pass ⚡",
+          glowColor: Colors.blueAccent,
+          features: [
+            "200 AI Chats",
+            "15 Mistake Detection",
+            "Basic Speed Detection",
+            "Basic Swing Detection",
+            "Basic Spin Detection",
+            "Basic DRS Decision System",
+            "Basic UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "6 Months",
-        price: "\$49.99",
-        tag: "Most Popular 🔥",
-        glowColor: Colors.purpleAccent,
-        features: [
-          "1,200 AI Chats",
-          "30 Mistake Detection",
-          "Enhanced Speed Detection",
-          "Enhanced Swing Detection",
-          "Enhanced Spin Detection",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Enhanced DRS Decision System",
-          "Enhanced UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["\$49.99"],
+        child: sexyPlanCard(
+          title: "6 Months",
+          price: "\$49.99",
+          tag: "Most Popular 🔥",
+          glowColor: Colors.purpleAccent,
+          features: [
+            "1,200 AI Chats",
+            "30 Mistake Detection",
+            "Enhanced Speed Detection",
+            "Enhanced Swing Detection",
+            "Enhanced Spin Detection",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Enhanced DRS Decision System",
+            "Enhanced UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "Yearly",
-        price: "\$69.99",
-        tag: "Best Deal 💰",
-        glowColor: Colors.greenAccent,
-        features: [
-          "1,800 AI Chats",
-          "50 Mistake Detection",
-          "Advanced Speed Detection",
-          "Advanced Swing Detection",
-          "Advanced Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Advanced DRS Decision System",
-          "Advanced UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["\$69.99"],
+        child: sexyPlanCard(
+          title: "Yearly",
+          price: "\$69.99",
+          tag: "Best Deal 💰",
+          glowColor: Colors.greenAccent,
+          features: [
+            "3,000 AI Chats",
+            "60 Mistake Detection",
+            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
+            "Advanced Speed Detection",
+            "Advanced Swing Detection",
+            "Advanced Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Advanced DRS Decision System",
+            "Advanced UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "ULTRA INTERNATIONAL",
-        price: "\$169.99",
-        tag: "Elite International 🌍",
-        glowColor: Colors.redAccent,
-        features: [
-          "7000 AI Chats",
-          "150 Diff Analyse",
-          "150 Mistake Detection",
-          "Pro Speed Detection",
-          "Pro Swing Detection",
-          "Pro Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Special Gifts",
-          "Pro DRS Decision System",
-          "Pro UltraEdge Detection",
-          "Priority AI",
-        ],
+      KeyedSubtree(
+        key: _planKeys["\$169.99"],
+        child: sexyPlanCard(
+          title: "ULTRA INTERNATIONAL",
+          price: "\$169.99",
+          tag: "Elite International 🌍",
+          glowColor: Colors.redAccent,
+          features: [
+            "7,000 AI Chats",
+            "150 Diff Analyse",
+            "150 Mistake Detection",
+            "Analyse Yourself Batting/Bowling (150 Vid Compare)",
+            "Pro Speed Detection",
+            "Pro Swing Detection",
+            "Pro Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Special Gifts",
+            "Pro DRS Decision System",
+            "Pro UltraEdge Detection",
+            "Priority AI",
+          ],
+        ),
       ),
     ];
   }
@@ -1827,49 +1617,57 @@ class _PremiumScreenState extends State<PremiumScreen>
         ],
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "Yearly",
-        price: "\$69.99",
-        tag: "Best Value 💎",
-        glowColor: Colors.greenAccent,
-        features: [
-          "1,800 AI Chats",
-          "50 Mistake Detection",
-          "Advanced Speed Detection",
-          "Advanced Swing Detection",
-          "Advanced Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Advanced DRS Decision System",
-          "Advanced UltraEdge Detection",
-        ],
+      KeyedSubtree(
+        key: _planKeys["\$69.99"],
+        child: sexyPlanCard(
+          title: "Yearly",
+          price: "\$69.99",
+          tag: "Best Value 💎",
+          glowColor: Colors.greenAccent,
+          features: [
+            "3,000 AI Chats",
+            "60 Mistake Detection",
+            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
+            "Advanced Speed Detection",
+            "Advanced Swing Detection",
+            "Advanced Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Advanced DRS Decision System",
+            "Advanced UltraEdge Detection",
+          ],
+        ),
       ),
       const SizedBox(height: 20),
-      sexyPlanCard(
-        title: "ULTRA INTERNATIONAL",
-        price: "\$169.99",
-        tag: "Unlimited Analysis 🚀",
-        glowColor: Colors.redAccent,
-        features: [
-          "7000 AI Chats",
-          "150 Diff Analyse",
-          "150 Mistake Detection",
-          "Pro Speed Detection",
-          "Pro Swing Detection",
-          "Pro Spin Detection",
-          "Speed Graph",
-          "Accuracy Graph",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Speed Certificates",
-          "Special Gifts",
-          "Pro DRS Decision System",
-          "Pro UltraEdge Detection",
-          "Priority AI",
-        ],
+      KeyedSubtree(
+        key: _planKeys["\$169.99"],
+        child: sexyPlanCard(
+          title: "ULTRA INTERNATIONAL",
+          price: "\$169.99",
+          tag: "Unlimited Analysis 🚀",
+          glowColor: Colors.redAccent,
+          features: [
+            "7,000 AI Chats",
+            "150 Diff Analyse",
+            "150 Mistake Detection",
+            "Analyse Yourself Batting/Bowling (150 Vid Compare)",
+            "Pro Speed Detection",
+            "Pro Swing Detection",
+            "Pro Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Special Gifts",
+            "Pro DRS Decision System",
+            "Pro UltraEdge Detection",
+            "Priority AI",
+          ],
+        ),
       ),
     ];
   }
@@ -2038,8 +1836,6 @@ class _PremiumScreenState extends State<PremiumScreen>
                 const SizedBox(height: 16),
                 GestureDetector(
                   onTap: () async {
-                    if (_isPaying) return;
-
                     HapticFeedback.mediumImpact();
 
                     setState(() {
@@ -2050,7 +1846,7 @@ class _PremiumScreenState extends State<PremiumScreen>
 
                     if (!mounted) return;
 
-                    await showPaymentMethodSelector(context);
+                    await _showPlayBillingSheet();
 
                     setState(() {
                       _animatingPlan = null;
@@ -2095,23 +1891,14 @@ class _PremiumScreenState extends State<PremiumScreen>
                           ],
                         ),
                         child: Center(
-                          child: (_payingPlan == price)
-                              ? const SizedBox(
-                                  height: 22,
-                                  width: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Text(
-                                  isCurrentPlan ? "CURRENT PLAN" : "BUY NOW",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                          child: Text(
+                            isCurrentPlan ? "CURRENT PLAN" : "BUY NOW",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -2235,188 +2022,6 @@ class _PremiumScreenState extends State<PremiumScreen>
         ],
       ),
       child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
-    );
-  }
-
-  // --- Payment Option Selector Dialog ---
-  Future<void> _showPaymentOptionDialog({
-    required String price,
-    required VoidCallback onCrickNova,
-    required VoidCallback onGooglePlay,
-  }) async {
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (_) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Title
-              const Text(
-                "Choose how to check out",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Choose who will manage all aspects of your purchase.",
-                style: TextStyle(color: Colors.white54, fontSize: 14),
-              ),
-              const SizedBox(height: 22),
-
-              // 🟢 CrickNova Option (Recommended)
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  onCrickNova();
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF020A1F),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.greenAccent, width: 1.2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.greenAccent.withOpacity(0.25),
-                        blurRadius: 20,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.sports_cricket,
-                        color: Colors.greenAccent,
-                        size: 36,
-                      ),
-                      const SizedBox(width: 16),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Text(
-                                  "CrickNova",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.greenAccent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Text(
-                                    "Recommended",
-                                    style: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              "AI Cricket Intelligence",
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white38,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 18),
-
-              // 🔵 Google Play Option (Trusted)
-              GestureDetector(
-                onTap: () {
-                  Navigator.pop(context);
-                  onGooglePlay();
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF020A1F),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.play_circle_fill,
-                        color: Colors.blueAccent,
-                        size: 36,
-                      ),
-                      const SizedBox(width: 16),
-                      Flexible(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              "Google Play",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              "Fast • Secure • Trusted",
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white38,
-                        size: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 

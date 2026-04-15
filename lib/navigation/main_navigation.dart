@@ -41,6 +41,7 @@ class _MainNavigationState extends State<MainNavigation>
   late int _lastKnownTabCount;
   DateTime? _activeSince;
   Timer? _minuteTimer;
+  int _screenWarmupGeneration = 0;
 
   @override
   void goHome() {
@@ -77,6 +78,7 @@ class _MainNavigationState extends State<MainNavigation>
     _screenCache[_index] = _buildScreenAt(_index);
     MainNavigation.activeTabNotifier.value = _index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduleBackgroundScreenWarmup();
       unawaited(_bootstrapSession());
     });
   }
@@ -104,6 +106,7 @@ class _MainNavigationState extends State<MainNavigation>
       _screenCache[_index] = _buildScreenAt(_index);
     });
     MainNavigation.activeTabNotifier.value = _index;
+    _scheduleBackgroundScreenWarmup();
     _evaluatePremiumAlerts();
   }
 
@@ -171,8 +174,25 @@ class _MainNavigationState extends State<MainNavigation>
     });
   }
 
+  void _scheduleBackgroundScreenWarmup() {
+    final int generation = ++_screenWarmupGeneration;
+    final indexes = List<int>.generate(_tabCount(), (i) => i)..remove(_index);
+
+    for (var offset = 0; offset < indexes.length; offset++) {
+      final tabIndex = indexes[offset];
+      Future<void>.delayed(Duration(milliseconds: 450 + (offset * 350)), () {
+        if (!mounted || generation != _screenWarmupGeneration) return;
+        if (_screenCache[tabIndex] != null) return;
+        setState(() {
+          _screenCache[tabIndex] = _buildScreenAt(tabIndex);
+        });
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _screenWarmupGeneration++;
     WidgetsBinding.instance.removeObserver(this);
     PremiumService.premiumNotifier.removeListener(_handlePremiumStateChanged);
     _stopMinuteTimer();

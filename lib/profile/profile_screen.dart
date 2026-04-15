@@ -70,7 +70,13 @@ class _SubscriptionHub extends StatelessWidget {
       price: 'INR 499',
       region: 'Domestic',
       icon: Icons.workspace_premium_outlined,
-      features: ['AI Ball Tracking', 'RPM Analysis', 'Pro Coaching Insights'],
+      features: [
+        'AI Ball Tracking',
+        'RPM Analysis',
+        'CrickNova Bowling Analysis',
+        'Analyse Yourself Batting/Bowling (60 Vid Compare)',
+        'Pro Coaching Insights',
+      ],
     ),
     _SubscriptionPlanSpec(
       planId: 'IN_1999',
@@ -81,6 +87,8 @@ class _SubscriptionHub extends StatelessWidget {
       features: [
         'AI Ball Tracking',
         'RPM Analysis',
+        'CrickNova Bowling Analysis',
+        'Analyse Yourself Batting/Bowling (150 Vid Compare)',
         'Pro Coaching Insights',
         'Elite DRS Tools',
       ],
@@ -111,7 +119,13 @@ class _SubscriptionHub extends StatelessWidget {
       price: '\$69.99',
       region: 'Global',
       icon: Icons.workspace_premium_outlined,
-      features: ['AI Ball Tracking', 'RPM Analysis', 'Pro Coaching Insights'],
+      features: [
+        'AI Ball Tracking',
+        'RPM Analysis',
+        'CrickNova Bowling Analysis',
+        'Analyse Yourself Batting/Bowling (60 Vid Compare)',
+        'Pro Coaching Insights',
+      ],
     ),
     _SubscriptionPlanSpec(
       planId: 'INTL_ULTRA',
@@ -122,6 +136,8 @@ class _SubscriptionHub extends StatelessWidget {
       features: [
         'AI Ball Tracking',
         'RPM Analysis',
+        'CrickNova Bowling Analysis',
+        'Analyse Yourself Batting/Bowling (150 Vid Compare)',
         'Pro Coaching Insights',
         'Elite DRS Tools',
       ],
@@ -450,6 +466,16 @@ class _PlanComparisonSheet extends StatelessWidget {
     final rows = [
       ('AI Ball Tracking', true),
       ('RPM Analysis', plan.features.contains('RPM Analysis')),
+      (
+        'CrickNova Bowling Analysis',
+        plan.features.contains('CrickNova Bowling Analysis'),
+      ),
+      (
+        'Analyse Yourself Batting/Bowling',
+        plan.features.any(
+          (feature) => feature.contains('Analyse Yourself Batting/Bowling'),
+        ),
+      ),
       (
         'Pro Coaching Insights',
         plan.features.contains('Pro Coaching Insights'),

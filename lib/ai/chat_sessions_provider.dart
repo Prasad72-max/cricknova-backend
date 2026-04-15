@@ -46,6 +46,14 @@ class ChatSessionsProvider extends ChangeNotifier {
   List<Map<String, dynamic>> messages = [];
   List<Map<String, dynamic>> _sessionStore = [];
 
+  static const int _maxMessagesPerChat = 20; // 10 chats (user+coach)
+
+  void _trimMessagesInPlace() {
+    if (messages.length <= _maxMessagesPerChat) return;
+    final overflow = messages.length - _maxMessagesPerChat;
+    messages.removeRange(0, overflow);
+  }
+
   void init() {
     _uid = _auth.currentUser?.uid;
     _loadSessions();
@@ -77,10 +85,10 @@ class ChatSessionsProvider extends ChangeNotifier {
     }
 
     _box = await Hive.openBox("chat_sessions_${_uid!}");
-    final raw =
-        (_box!.get("sessions") as List?)?.cast<Map>() ?? const <Map>[];
-    _sessionStore =
-        raw.map((e) => Map<String, dynamic>.from(e)).toList(growable: true);
+    final raw = (_box!.get("sessions") as List?)?.cast<Map>() ?? const <Map>[];
+    _sessionStore = raw
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList(growable: true);
     _rebuildSessions();
     loadingList = false;
     notifyListeners();
@@ -98,8 +106,7 @@ class ChatSessionsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final session =
-          _sessionStore.firstWhere((e) => e["chat_id"] == chatId);
+      final session = _sessionStore.firstWhere((e) => e["chat_id"] == chatId);
       currentChatId = chatId;
       messages = _normalizeMessages(session["messages"]);
     } catch (_) {
@@ -142,6 +149,7 @@ class ChatSessionsProvider extends ChangeNotifier {
     }
 
     messages.add(message);
+    _trimMessagesInPlace();
     notifyListeners();
     await _updateMessages();
   }
@@ -150,14 +158,14 @@ class ChatSessionsProvider extends ChangeNotifier {
     if (_uid == null || currentChatId == null) return;
     final message = {"role": "coach", "content": text};
     messages.add(message);
+    _trimMessagesInPlace();
     notifyListeners();
     await _updateMessages();
   }
 
   Future<void> _updateMessages() async {
     if (_uid == null || currentChatId == null) return;
-    final idx =
-        _sessionStore.indexWhere((e) => e["chat_id"] == currentChatId);
+    final idx = _sessionStore.indexWhere((e) => e["chat_id"] == currentChatId);
     if (idx == -1) return;
     _sessionStore[idx]["messages"] = List<Map<String, dynamic>>.from(messages);
     _sessionStore[idx]["timestamp"] = DateTime.now().millisecondsSinceEpoch;
@@ -183,8 +191,9 @@ class ChatSessionsProvider extends ChangeNotifier {
   }
 
   void _rebuildSessions() {
-    sessions =
-        _sessionStore.map((e) => ChatSession.fromMap(e)).toList(growable: false);
+    sessions = _sessionStore
+        .map((e) => ChatSession.fromMap(e))
+        .toList(growable: false);
     sessions.sort((a, b) {
       final at = a.timestamp?.millisecondsSinceEpoch ?? 0;
       final bt = b.timestamp?.millisecondsSinceEpoch ?? 0;

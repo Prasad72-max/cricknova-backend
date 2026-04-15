@@ -234,19 +234,19 @@ class PremiumService {
           await _cache(firestorePremium, planId, 1200, 30, 0);
           break;
         case "IN_499":
-          await _cache(firestorePremium, planId, 3000, 60, 50);
+          await _cache(firestorePremium, planId, 3000, 60, 60);
           break;
         case "IN_1999":
           await _cache(firestorePremium, planId, 5000, 150, 150);
           break;
         case "INTL_MONTHLY":
-          await _cache(firestorePremium, planId, 200, 20, 0);
+          await _cache(firestorePremium, planId, 200, 15, 0);
           break;
         case "INTL_6M":
           await _cache(firestorePremium, planId, 1200, 30, 0);
           break;
         case "INTL_YEARLY":
-          await _cache(firestorePremium, planId, 1800, 50, 50);
+          await _cache(firestorePremium, planId, 3000, 60, 60);
           break;
         case "INT_ULTRA":
         case "INTL_ULTRA":
@@ -378,10 +378,21 @@ class PremiumService {
           "chatLimit": chatLimit,
           "mistakeLimit": mistakeLimit,
           "diffLimit": diffLimit,
+          "chat_used": 0,
+          "mistake_used": 0,
+          "compare_used": 0,
+          "used": {"chat": 0, "mistake": 0, "compare": 0},
           "updatedAt": FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
-    await _cache(true, planId, chatLimit, mistakeLimit, diffLimit);
+    await _cache(
+      true,
+      planId,
+      chatLimit,
+      mistakeLimit,
+      diffLimit,
+      resetUsage: true,
+    );
   }
 
   /// 🔐 ACTIVATE PREMIUM AFTER SUCCESSFUL PAYMENT (USED BY premium_screen.dart)
@@ -462,8 +473,9 @@ class PremiumService {
     String planId,
     int chat,
     int mistake,
-    int compare,
-  ) async {
+    int compare, {
+    bool resetUsage = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
 
     // Persist limits
@@ -481,6 +493,10 @@ class PremiumService {
     chatLimit = chat;
     mistakeLimit = mistake;
     compareLimit = compare;
+
+    if (resetUsage) {
+      _resetUsageState();
+    }
   }
 
   // -----------------------------
@@ -505,15 +521,15 @@ class PremiumService {
       case "IN_299":
         return (chat: 1200, mistake: 30, compare: 0);
       case "IN_499":
-        return (chat: 3000, mistake: 60, compare: 50);
+        return (chat: 3000, mistake: 60, compare: 60);
       case "IN_1999":
         return (chat: 5000, mistake: 150, compare: 150);
       case "INTL_MONTHLY":
-        return (chat: 200, mistake: 20, compare: 0);
+        return (chat: 200, mistake: 15, compare: 0);
       case "INTL_6M":
         return (chat: 1200, mistake: 30, compare: 0);
       case "INTL_YEARLY":
-        return (chat: 1800, mistake: 50, compare: 50);
+        return (chat: 3000, mistake: 60, compare: 60);
       case "INT_ULTRA":
       case "INTL_ULTRA":
       case "ULTRA":
@@ -536,6 +552,7 @@ class PremiumService {
       limits.chat,
       limits.mistake,
       limits.compare,
+      resetUsage: premium,
     );
     isLoaded = true;
     premiumNotifier.notifyListeners();
@@ -549,7 +566,14 @@ class PremiumService {
     int mistakeLimit = 0,
     int compareLimit = 0,
   }) async {
-    await _cache(premium, planId, chatLimit, mistakeLimit, compareLimit);
+    await _cache(
+      premium,
+      planId,
+      chatLimit,
+      mistakeLimit,
+      compareLimit,
+      resetUsage: premium,
+    );
     isLoaded = true;
     premiumNotifier.notifyListeners();
   }
@@ -591,13 +615,9 @@ class PremiumService {
   static bool get hasBowlingAnalysisAccess {
     if (!isLoaded) return false;
     if (!isPremium) return false;
-    final current = plan.toUpperCase();
-    return current == "IN_499" ||
-        current == "IN_1999" ||
-        current == "INTL_YEARLY" ||
-        current == "INTL_ULTRA" ||
-        current == "INT_ULTRA" ||
-        current == "ULTRA";
+    // Bowling Analysis screen is visible for any premium tier.
+    // Individual features (Compare) are gated via hasCompareAccess.
+    return true;
   }
 
   static bool get isElite {
@@ -832,7 +852,6 @@ class PremiumService {
   }) {
     // Intentionally empty: navigation is controlled by UI, not service
   }
-
 }
 
 enum _UsageType { swing, mistake }
