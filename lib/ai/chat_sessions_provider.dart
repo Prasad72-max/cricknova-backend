@@ -184,6 +184,20 @@ class ChatSessionsProvider extends ChangeNotifier {
     return out;
   }
 
+  List<Map<String, String>> recentMessagesForApi({int maxItems = 8}) {
+    if (messages.isEmpty) return const <Map<String, String>>[];
+    final start = messages.length > maxItems ? messages.length - maxItems : 0;
+    return messages
+        .sublist(start)
+        .map((item) {
+          return <String, String>{
+            "role": (item["role"] ?? "user").toString(),
+            "content": (item["content"] ?? item["text"] ?? "").toString(),
+          };
+        })
+        .toList(growable: false);
+  }
+
   Future<void> _persistSessions() async {
     if (_box == null) return;
     await _box!.put("sessions", _sessionStore);

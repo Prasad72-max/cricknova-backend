@@ -48,6 +48,59 @@ class _AICoachScreenState extends State<AICoachScreen> {
     return raw.replaceAll('\r', '').trim();
   }
 
+  _CoachReplyParts _parseCoachReplyParts(String raw) {
+    final cleaned = raw.replaceAll('\r', '').trim();
+    if (cleaned.isEmpty) {
+      return const _CoachReplyParts(points: [], fallback: "");
+    }
+
+    final lines = cleaned
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+
+    final numberedPattern = RegExp(r'^\s*(\d+)\s*[\]\).\:-]\s*(.+)$');
+    final bulletPattern = RegExp(r'^\s*[-*•]\s*(.+)$');
+    final points = <String>[];
+
+    for (final line in lines) {
+      final numbered = numberedPattern.firstMatch(line);
+      if (numbered != null) {
+        points.add(numbered.group(2)!.trim());
+        continue;
+      }
+
+      final bulleted = bulletPattern.firstMatch(line);
+      if (bulleted != null) {
+        points.add(bulleted.group(1)!.trim());
+      }
+    }
+
+    if (points.length >= 2) {
+      return _CoachReplyParts(points: points.take(4).toList(), fallback: null);
+    }
+
+    if (lines.length >= 2 && lines.length <= 4) {
+      return _CoachReplyParts(points: lines, fallback: null);
+    }
+
+    final sentenceSplit = cleaned
+        .split(RegExp(r'(?<=[.!?])\s+'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    if (sentenceSplit.length >= 2) {
+      return _CoachReplyParts(
+        points: sentenceSplit.take(4).toList(),
+        fallback: null,
+      );
+    }
+
+    return _CoachReplyParts(points: const [], fallback: cleaned);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -271,8 +324,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
             },
             body: jsonEncode({
               "user_id": user.uid,
-              // Send the raw user question. Backend enforces the strict 4-point format.
               "message": userMessage,
+              "history": _chatProvider.recentMessagesForApi(),
             }),
           )
           .timeout(const Duration(seconds: 60));
@@ -434,13 +487,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
           ),
           child: isUser
               ? Text(content, style: const TextStyle(color: Colors.white))
-              : SelectableText(
-                  content,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    height: 1.45,
-                  ),
+              : _CoachReplyView(
+                  raw: content,
+                  parsed: _parseCoachReplyParts(content),
                 ),
         ),
       ),
@@ -912,6 +961,136 @@ class _AICoachScreenState extends State<AICoachScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _CoachReplyParts {
+  final List<String> points;
+  final String? fallback;
+
+  const _CoachReplyParts({required this.points, required this.fallback});
+
+  bool get hasPoints => points.isNotEmpty;
+}
+
+class _CoachReplyView extends StatelessWidget {
+  final String raw;
+  final _CoachReplyParts parsed;
+
+  const _CoachReplyView({required this.raw, required this.parsed});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!parsed.hasPoints) {
+      return SelectableText(
+        parsed.fallback ?? raw,
+        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.45),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.28),
+            ),
+          ),
+          child: const Text(
+            "Coach Notes",
+            style: TextStyle(
+              color: Color(0xFFBAE6FD),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        for (int i = 0; i < parsed.points.length; i++)
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: i == parsed.points.length - 1 ? 0 : 10,
+            ),
+            child: _CoachPointTile(index: i + 1, text: parsed.points[i]),
+          ),
+      ],
+    );
+  }
+}
+
+class _CoachPointTile extends StatelessWidget {
+  final int index;
+  final String text;
+
+  const _CoachPointTile({required this.index, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.07),
+            Colors.white.withValues(alpha: 0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF38BDF8).withValues(alpha: 0.28),
+                  const Color(0xFF1D4ED8).withValues(alpha: 0.18),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.34),
+              ),
+            ),
+            child: Text(
+              "$index",
+              style: const TextStyle(
+                color: Color(0xFFBAE6FD),
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: SelectableText(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14.5,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

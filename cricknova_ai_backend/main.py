@@ -660,6 +660,7 @@ Mention one mistake and one improvement.
 # -----------------------------
 class CoachChatRequest(BaseModel):
     message: str | None = None
+    history: list[dict] | None = None
 
 @app.post("/coach/chat")
 async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
@@ -668,6 +669,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     message = (req.message or "").strip()
+    history = req.history or []
 
     if not message:
         return {
@@ -722,6 +724,19 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             )
             return {"status": "success", "reply": reply_text}
 
+        history_lines = []
+        for item in history[-8:]:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "user")).strip().lower()
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            prefix = "User" if role == "user" else "Coach"
+            history_lines.append(f"{prefix}: {content}")
+
+        history_block = "\n".join(history_lines).strip()
+
         prompt = f'''
 You are CrickNova Coach, a real cricket coach powered by Gemini.
 
@@ -740,6 +755,11 @@ Rules:
 - No fake video analysis if no clip context is provided.
 - No unnecessary headings unless they help the answer.
 - Keep the answer concise, but answer the exact question asked.
+- Use the recent chat history only to maintain continuity for follow-up questions like "give tips", "why", or "what next".
+- If the new question changes topic, answer the new topic directly.
+
+Recent chat history:
+{history_block if history_block else "No previous chat context."}
 
 User question:
 {message}

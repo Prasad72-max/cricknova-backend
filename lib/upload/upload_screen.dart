@@ -3655,10 +3655,47 @@ class _CoachReplyView extends StatelessWidget {
       );
     }
 
-    final displayText = raw.replaceAll('\r', '').trim();
-    return Text(
-      displayText,
-      style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+    final parsedJson = _tryParseCoachJson(raw);
+    final points = parsedJson != null
+        ? _jsonToPoints(parsedJson)
+        : _structuredToPoints(parsed);
+
+    if (points.isEmpty) {
+      return SelectableText(
+        raw.replaceAll('\r', '').trim(),
+        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.28),
+            ),
+          ),
+          child: Text(
+            parsed.rating != null ? "AI Report" : "Coach Notes",
+            style: const TextStyle(
+              color: Color(0xFFBAE6FD),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        for (int i = 0; i < points.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == points.length - 1 ? 0 : 10),
+            child: _CoachPointTile(index: i + 1, text: points[i]),
+          ),
+      ],
     );
   }
 }
@@ -3673,28 +3710,42 @@ class _CoachPointTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.07),
+            Colors.white.withValues(alpha: 0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 26,
-            height: 26,
+            width: 28,
+            height: 28,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: const Color(0xFF38BDF8).withOpacity(0.16),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF38BDF8).withValues(alpha: 0.28),
+                  const Color(0xFF1D4ED8).withValues(alpha: 0.18),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
-                color: const Color(0xFF38BDF8).withOpacity(0.40),
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.34),
               ),
             ),
             child: Text(
-              "$index]",
+              "$index",
               style: const TextStyle(
                 color: Color(0xFFBAE6FD),
                 fontWeight: FontWeight.w900,
@@ -3704,12 +3755,12 @@ class _CoachPointTile extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: SelectableText(
               text,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 16,
-                height: 1.35,
+                fontSize: 14.5,
+                height: 1.4,
                 fontWeight: FontWeight.w600,
               ),
             ),

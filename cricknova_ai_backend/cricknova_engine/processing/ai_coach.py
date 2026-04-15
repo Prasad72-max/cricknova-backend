@@ -41,6 +41,7 @@ ALLOW_FREE_AI = os.getenv("ALLOW_FREE_AI", "false").lower() == "true"
 class CoachRequest(BaseModel):
     user_id: str | None = None
     message: str | None = None
+    history: list[dict] | None = None
     role: str = "player"
 
 # -----------------------------
@@ -180,6 +181,19 @@ async def ai_coach(req: CoachRequest, request: Request):
     limit_info = check_chat_limit(user_id)
 
     try:
+        history_lines = []
+        for item in (req.history or [])[-8:]:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "user")).strip().lower()
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            prefix = "User" if role == "user" else "Coach"
+            history_lines.append(f"{prefix}: {content}")
+
+        history_block = "\n".join(history_lines).strip()
+
         prompt = f"""
 You are an elite professional cricket coach.
 
@@ -198,6 +212,11 @@ Rules:
 - No fake clip analysis if no clip context is provided.
 - No unnecessary headings.
 - Keep it realistic like a real coach.
+- Use recent chat history only to keep continuity for follow-up questions like "give tips", "what next", or "why".
+- If the latest user question changes topic, answer the latest topic directly.
+
+Recent chat history:
+{history_block if history_block else "No previous chat context."}
 
 Situation / Question:
 {req.message}
