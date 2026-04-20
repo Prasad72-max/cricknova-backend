@@ -711,10 +711,18 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
         )
 
         if looks_like_raw_prompt:
+            is_bowling_prompt = "bowling" in msg_lower and "batting-only" not in msg_lower
+            coach_role = "bowling" if is_bowling_prompt else "batting"
+            discipline_rules = (
+                "Give bowling-only mistake feedback. Focus on run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. Never provide batting mistakes or batting drills."
+                if is_bowling_prompt
+                else "Give batting-only mistake feedback. Focus on stance, head position, balance, bat path, timing, shot control, and batting footwork. Never provide bowling mistakes or bowling drills."
+            )
             reply_text = generate_text(
                 system_instruction=(
-                    "You are CrickNova batting coach. "
+                    f"You are CrickNova {coach_role} coach. "
                     "Analyze only the provided clip context. "
+                    f"{discipline_rules} "
                     "Be direct, honest, and unscripted. "
                     "Avoid repeated generic lines."
                 ),
@@ -792,6 +800,7 @@ async def ai_coach_diff(
     left: UploadFile = File(...),
     right: UploadFile = File(...),
     prompt: str | None = Form(None),
+    discipline: str | None = Form(None),
 ):
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
@@ -876,9 +885,32 @@ Do not give rating/score.
 Keep the full reply under 260 words and avoid generic wording.
 """
 
+        discipline_text = (discipline or "").strip().lower()
+        if discipline_text not in ("batting", "bowling"):
+            prompt_lower = base_prompt.lower()
+            discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
+
+        if discipline_text == "bowling":
+            system_instruction = (
+                "You are CrickNova bowling coach. "
+                "Give bowling-only comparison and bowling drills only. "
+                "Focus on run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. "
+                "Never provide batting analysis, batting mistakes, or batting drills. "
+                "Make the response clip-specific and avoid repeating generic lines."
+            )
+        else:
+            system_instruction = (
+                "You are CrickNova batting coach. "
+                "Give batting-only comparison and batting drills only. "
+                "Focus on stance, head position, balance, bat path, timing, shot control, and batting footwork. "
+                "Never provide bowling analysis, bowling mistakes, or bowling drills. "
+                "Make the response clip-specific and avoid repeating generic lines."
+            )
+
         final_prompt = (
             base_prompt
             + f"\n\nINTERNAL_CONTEXT (do not mention): "
+              f"discipline={discipline_text} "
               f"v1_name={(left.filename or 'left.mp4')} "
               f"v2_name={(right.filename or 'right.mp4')} "
               f"v1_sig={trajectory_signature(left_positions)} "
@@ -886,12 +918,7 @@ Keep the full reply under 260 words and avoid generic wording.
         )
 
         diff_text = generate_text(
-            system_instruction=(
-                "You are CrickNova batting coach. "
-                "Give batting-only comparison and batting drills only. "
-                "Never provide bowling analysis. "
-                "Make the response clip-specific and avoid repeating generic lines."
-            ),
+            system_instruction=system_instruction,
             user_prompt=final_prompt,
             max_output_tokens=260,
             temperature=0.6,

@@ -150,9 +150,11 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
       "pathPoints": points,
       "pitchingText": confidence >= 0.35 ? "In Line" : "Outside Off",
       "impactText": confidence >= 0.55 ? "In Line" : "Outside",
-      "wicketsText": decisionText == "OUT" ? "Hitting" : "Missing",
+      "wicketsText": decisionText == "OUT" && confidence >= 0.55
+          ? "Hitting"
+          : "Missing",
       "wicketTarget": "Middle",
-      "wicketsHitting": decisionText == "OUT",
+      "wicketsHitting": decisionText == "OUT" && confidence >= 0.55,
     };
   }
 
@@ -204,7 +206,12 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
   final dMid = (projectedAtStumpsX - stumpCenterX).abs();
   final dLeg = (projectedAtStumpsX - legStumpX).abs();
   final minD = math.min(dOff, math.min(dMid, dLeg));
-  final wicketsHitting = decisionText == "OUT";
+  final legalPitch = pitchingText != "Outside Leg";
+  final legalImpact = impactText == "In Line";
+  final projectionHitting = minD <= stumpRadius;
+  final decisionHit = decisionText == "OUT" && confidence >= 0.55;
+  final wicketsHitting =
+      legalPitch && legalImpact && (projectionHitting || decisionHit);
 
   String wicketTarget;
   if (dOff <= dMid && dOff <= dLeg) {
@@ -3775,6 +3782,9 @@ class _UploadScreenState extends State<UploadScreen>
     with TickerProviderStateMixin {
   bool get _isBowlingMode => widget.bowlingMode;
   String get _analysisDiscipline => _isBowlingMode ? "bowling" : "batting";
+  String get _disciplineGuard => _isBowlingMode
+      ? "Bowling-only: identify bowling mistakes using run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. Never give batting mistakes, bat path, shot, stance, or batting footwork advice."
+      : "Batting-only: identify batting mistakes using stance, head position, balance, bat path, timing, shot control, and batting footwork. Never give bowling mistakes, run-up, release point, seam/wrist, line/length, or bowling advice.";
   String get _analysisTitle =>
       _isBowlingMode ? "Upload Bowling Video" : "Upload Training Video";
 
@@ -5046,6 +5056,23 @@ class _UploadScreenState extends State<UploadScreen>
     return {"swing": swingLabel, "spin": spinLabel};
   }
 
+  bool _isLbwOutFromGeometry(
+    _DrsTrackingGeometry geometry, {
+    required double confidence,
+    required bool backendBallTracking,
+  }) {
+    final pitching = geometry.pitchingText.toLowerCase();
+    final impact = geometry.impactText.toLowerCase();
+    final wickets = geometry.wicketsText.toLowerCase();
+    final legalPitch = !pitching.contains("outside leg");
+    final legalImpact = !impact.contains("outside");
+    final hitting =
+        geometry.wicketsHitting ||
+        wickets.contains("hitting") ||
+        (backendBallTracking && confidence >= 0.58);
+    return legalPitch && legalImpact && hitting && confidence >= 0.45;
+  }
+
   _DrsTrackingGeometry _buildDrsGeometry({
     required String decisionText,
     required double confidence,
@@ -5064,11 +5091,11 @@ class _UploadScreenState extends State<UploadScreen>
             .toList(growable: false),
         pitchingText: confidence >= 0.35 ? "In Line" : "Outside Off",
         impactText: confidence >= 0.55 ? "In Line" : "Outside",
-        wicketsText: decisionText == "OUT"
+        wicketsText: decisionText == "OUT" && confidence >= 0.55
             ? "Hitting"
             : (confidence >= 0.45 ? "Umpires Call" : "Missing"),
         wicketTarget: "Middle",
-        wicketsHitting: decisionText == "OUT",
+        wicketsHitting: decisionText == "OUT" && confidence >= 0.55,
       );
     }
 
@@ -5117,7 +5144,11 @@ class _UploadScreenState extends State<UploadScreen>
     final dLeg = (projectedAtStumpsX - legStumpX).abs();
     final minD = math.min(dOff, math.min(dMid, dLeg));
     final projectionHitting = minD <= stumpRadius;
-    final wicketsHitting = decisionText == "OUT" || projectionHitting;
+    final legalPitch = pitchingText != "Outside Leg";
+    final legalImpact = impactText == "In Line";
+    final decisionHit = decisionText == "OUT" && confidence >= 0.55;
+    final wicketsHitting =
+        legalPitch && legalImpact && (projectionHitting || decisionHit);
 
     String wicketTarget;
     if (dOff <= dMid && dOff <= dLeg) {
@@ -5270,14 +5301,16 @@ class _UploadScreenState extends State<UploadScreen>
     _drsWickets = (drs["wickets_text"] as String?) ?? _drsGeometry.wicketsText;
     _drsWicketTarget =
         (drs["wicket_target"] as String?) ?? _drsGeometry.wicketTarget;
-    final backendHitStumps =
-        drs["ball_tracking"] == true ||
-        _drsWickets.toLowerCase().contains("hitting") ||
-        _drsGeometry.wicketsHitting;
+    final backendBallTracking = drs["ball_tracking"] == true;
+    final backendHitStumps = _isLbwOutFromGeometry(
+      _drsGeometry,
+      confidence: confidence,
+      backendBallTracking: backendBallTracking,
+    );
     if (backendHitStumps) {
       _drsWickets = "Hitting";
     }
-    _drsOut = decisionText == "OUT" || backendHitStumps;
+    _drsOut = backendHitStumps;
     _drsOriginalDecision = decisionText == "OUT" ? "OUT" : "NOT OUT";
 
     final trajectoryPoints = _extractTrajectoryPoints(trajectory);
@@ -5815,6 +5848,7 @@ class _UploadScreenState extends State<UploadScreen>
       }
     }
 
+    if (!mounted) return;
     final parentContext = context;
     showModalBottomSheet(
       context: parentContext,
@@ -5824,8 +5858,7 @@ class _UploadScreenState extends State<UploadScreen>
         final checklist = <String, bool>{
           "I understand non-cricket clips can make Speed, Swing, and Spin inaccurate.":
               false,
-          "I understand app speed can vary by 20-35 km/h from real speed.":
-              false,
+          "I understand app speed can vary from real speed.": false,
           "I will upload a clear cricket bowling clip with the ball visible.":
               false,
           "I understand camera stability and pitch view affect result quality.":
@@ -5835,240 +5868,301 @@ class _UploadScreenState extends State<UploadScreen>
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
             final hasCheckedAll = checklist.values.every((value) => value);
-            return ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(22),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A).withOpacity(0.70),
-                    border: Border.all(color: Colors.white12),
+            final mediaQuery = MediaQuery.of(sheetContext);
+            final bottomPadding =
+                mediaQuery.viewInsets.bottom + mediaQuery.padding.bottom;
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomPadding),
+                child: FractionallySizedBox(
+                  heightFactor: 0.9,
+                  alignment: Alignment.bottomCenter,
+                  child: ClipRRect(
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(22),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "🎥 Video Recording Guidelines",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A).withOpacity(0.70),
+                          border: Border.all(color: Colors.white12),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(22),
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withOpacity(0.14),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: const Color(0xFFFBBF24).withOpacity(0.45),
-                            ),
-                          ),
-                          child: Row(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Padding(
-                                padding: EdgeInsets.only(top: 1),
-                                child: Icon(
-                                  Icons.info_outline,
-                                  size: 18,
-                                  color: Color(0xFFFDE68A),
-                                ),
-                              ),
-                              SizedBox(width: 10),
+                            children: [
                               Expanded(
-                                child: Text(
-                                  "These results are calculated based on cricket pitch physics. If the video is not a cricket clip, the data shown (Speed/Swing/Spin) will be inaccurate. Speed is estimated from the ball path after pitching toward the batsman and may vary by +20 to -35 KMPH.",
-                                  style: TextStyle(
-                                    color: Color(0xFFFFF7D6),
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.45,
+                                child: SingleChildScrollView(
+                                  physics: const BouncingScrollPhysics(),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "🎥 Video Recording Guidelines",
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 14),
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 12,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFFF59E0B,
+                                          ).withOpacity(0.14),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          border: Border.all(
+                                            color: const Color(
+                                              0xFFFBBF24,
+                                            ).withOpacity(0.45),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: const [
+                                            Padding(
+                                              padding: EdgeInsets.only(top: 1),
+                                              child: Icon(
+                                                Icons.info_outline,
+                                                size: 18,
+                                                color: Color(0xFFFDE68A),
+                                              ),
+                                            ),
+                                            SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                "These results are calculated based on cricket pitch physics. If the video is not a cricket clip, the data shown (Speed/Swing/Spin) will be inaccurate. Speed is estimated from the ball path after pitching toward the batsman and may vary from real speed.",
+                                                style: TextStyle(
+                                                  color: Color(0xFFFFF7D6),
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  height: 1.45,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        "Please confirm each point below before continuing:",
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 14,
+                                          height: 1.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ...checklist.entries.map((entry) {
+                                        final checked = entry.value;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(
+                                              14,
+                                            ),
+                                            onTap: () {
+                                              setSheetState(() {
+                                                checklist[entry.key] = !checked;
+                                              });
+                                            },
+                                            child: Container(
+                                              width: double.infinity,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                    vertical: 10,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withOpacity(
+                                                  0.05,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
+                                                border: Border.all(
+                                                  color: checked
+                                                      ? const Color(0xFF8B5CF6)
+                                                      : Colors.white12,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Checkbox(
+                                                    value: checked,
+                                                    activeColor: const Color(
+                                                      0xFF8B5CF6,
+                                                    ),
+                                                    checkColor: Colors.white,
+                                                    side: const BorderSide(
+                                                      color: Colors.white38,
+                                                    ),
+                                                    onChanged: (value) {
+                                                      setSheetState(() {
+                                                        checklist[entry.key] =
+                                                            value ?? false;
+                                                      });
+                                                    },
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 11,
+                                                          ),
+                                                      child: Text(
+                                                        entry.key,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 13.5,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          height: 1.35,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                      const Padding(
+                                        padding: EdgeInsets.only(
+                                          top: 2,
+                                          bottom: 12,
+                                        ),
+                                        child: Text(
+                                          "New users need to accept this once. After that, CrickNova AI will take you straight to gallery for future uploads on this account.",
+                                          style: TextStyle(
+                                            color: Colors.white54,
+                                            fontSize: 12.5,
+                                            height: 1.45,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
+                              ),
+                              const SizedBox(height: 18),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        side: BorderSide(
+                                          color: Colors.white.withOpacity(0.18),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: () {
+                                        Navigator.pop(sheetContext);
+                                        MainNavigation.of(
+                                          parentContext,
+                                        )?.goHome();
+                                      },
+                                      child: const Text(
+                                        "No, Go Home",
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF8B5CF6,
+                                        ),
+                                        disabledBackgroundColor: const Color(
+                                          0xFF8B5CF6,
+                                        ).withOpacity(0.35),
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                        ),
+                                        elevation: 0,
+                                        shadowColor: Colors.transparent,
+                                      ),
+                                      onPressed: hasCheckedAll
+                                          ? () async {
+                                              await _setAcceptedVideoTerms();
+                                              if (!mounted) return;
+                                              Navigator.pop(sheetContext);
+                                              ScaffoldMessenger.of(
+                                                  parentContext,
+                                                )
+                                                ..hideCurrentSnackBar()
+                                                ..showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      "All set! CrickNova AI will now use these permissions only to analyze your cricket videos and calculate speed. Your privacy is our priority.",
+                                                    ),
+                                                    behavior: SnackBarBehavior
+                                                        .floating,
+                                                    duration: Duration(
+                                                      seconds: 4,
+                                                    ),
+                                                  ),
+                                                );
+                                              debugPrint(
+                                                "UPLOAD_SCREEN → pickAndUpload triggered",
+                                              );
+                                              pickAndUpload();
+                                            }
+                                          : null,
+                                      child: const Text(
+                                        "I Agree to All",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "Please confirm each point below before continuing:",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ...checklist.entries.map((entry) {
-                          final checked = entry.value;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () {
-                                setSheetState(() {
-                                  checklist[entry.key] = !checked;
-                                });
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: checked
-                                        ? const Color(0xFF8B5CF6)
-                                        : Colors.white12,
-                                  ),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Checkbox(
-                                      value: checked,
-                                      activeColor: const Color(0xFF8B5CF6),
-                                      checkColor: Colors.white,
-                                      side: const BorderSide(
-                                        color: Colors.white38,
-                                      ),
-                                      onChanged: (value) {
-                                        setSheetState(() {
-                                          checklist[entry.key] = value ?? false;
-                                        });
-                                      },
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(top: 11),
-                                        child: Text(
-                                          entry.key,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 13.5,
-                                            fontWeight: FontWeight.w600,
-                                            height: 1.35,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        const Padding(
-                          padding: EdgeInsets.only(top: 2, bottom: 12),
-                          child: Text(
-                            "New users need to accept this once. After that, CrickNova AI will take you straight to gallery for future uploads on this account.",
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12.5,
-                              height: 1.45,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                    color: Colors.white.withOpacity(0.18),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                onPressed: () {
-                                  Navigator.pop(sheetContext);
-                                  MainNavigation.of(parentContext)?.goHome();
-                                },
-                                child: const Text(
-                                  "No, Go Home",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF8B5CF6),
-                                  disabledBackgroundColor: const Color(
-                                    0xFF8B5CF6,
-                                  ).withOpacity(0.35),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: 0,
-                                  shadowColor: Colors.transparent,
-                                ),
-                                onPressed: hasCheckedAll
-                                    ? () async {
-                                        await _setAcceptedVideoTerms();
-                                        if (!mounted) return;
-                                        Navigator.pop(sheetContext);
-                                        ScaffoldMessenger.of(parentContext)
-                                          ..hideCurrentSnackBar()
-                                          ..showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                "All set! CrickNova AI will now use these permissions only to analyze your cricket videos and calculate speed. Your privacy is our priority.",
-                                              ),
-                                              behavior:
-                                                  SnackBarBehavior.floating,
-                                              duration: Duration(seconds: 4),
-                                            ),
-                                          );
-                                        debugPrint(
-                                          "UPLOAD_SCREEN → pickAndUpload triggered",
-                                        );
-                                        pickAndUpload();
-                                      }
-                                    : null,
-                                child: const Text(
-                                  "I Agree to All",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -6475,16 +6569,6 @@ class _UploadScreenState extends State<UploadScreen>
     if (!PremiumService.isLoaded) {
       await PremiumService.restoreOnLaunch();
     }
-    if (!PremiumService.isPremiumActive) {
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const PremiumScreen(entrySource: "drs_lock"),
-        ),
-      );
-      return;
-    }
-
     if (video == null || drsLoading) return;
 
     final selectedMode = await _showDrsModeSelector();
@@ -6876,6 +6960,7 @@ Note: ${speedNote.trim().isEmpty ? "none" : speedNote.trim()}
 
 Coaching task: check THIS clip and return only $_analysisDiscipline coaching:
 Analyze THIS $_analysisDiscipline clip context only.
+$_disciplineGuard
 Give direct $_analysisDiscipline coaching in natural text (no fixed headings/template).
 Tell the main mistake, how to fix it, and one drill.
 Do not give any rating/score.
@@ -7176,7 +7261,7 @@ Do not add intro or conclusion.
                                 );
                               },
                               child: _metric(
-                                "After-Pitch Pace",
+                                "After Pitching Pace",
                                 _speedPanelValue,
                                 speed: speedKmph,
                               ),

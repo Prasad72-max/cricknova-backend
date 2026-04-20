@@ -26,6 +26,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     with TickerProviderStateMixin {
   bool get _isBowlingMode => widget.bowlingMode;
   String get _analysisDiscipline => _isBowlingMode ? "bowling" : "batting";
+  String get _disciplineGuard => _isBowlingMode
+      ? "Bowling-only: talk about run-up, gather, front-foot landing, wrist/seam, release point, line/length, follow-through, and bowling drills. Never give batting mistakes, bat path, shot, stance, or batting footwork feedback."
+      : "Batting-only: talk about stance, head position, balance, bat path, timing, shot control, and batting drills. Never give bowling mistakes, run-up, release point, seam/wrist, line/length, or bowling feedback.";
 
   File? leftVideo;
   File? rightVideo;
@@ -542,11 +545,13 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
         await http.MultipartFile.fromPath("right", rightVideo!.path),
       );
       request.fields["user_id"] = user.uid;
+      request.fields["discipline"] = _analysisDiscipline;
       request.fields["prompt"] =
           """
 You are CrickNova $_analysisDiscipline coach.
 
 Compare these two $_analysisDiscipline clips honestly in natural coaching language.
+$_disciplineGuard
 Do not force Video 2 to look better than Video 1.
 Keep it clip-specific and direct (no fixed headings/template).
 Tell:

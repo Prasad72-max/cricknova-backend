@@ -60,6 +60,20 @@ class SubscriptionProvider extends ChangeNotifier {
   String? get activeBasePlanId => _activeBasePlanId;
   String? get lastError => _lastError;
 
+  void _ensurePurchaseSubscription() {
+    _purchaseSubscription ??= _inAppPurchase.purchaseStream.listen(
+      _handlePurchaseUpdates,
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('purchaseStream error: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        _isPurchasePending = false;
+        _setError(
+          'Google Play purchase updates are unavailable right now. Please try again.',
+        );
+      },
+    );
+  }
+
   Future<void> initialize() async {
     if (_initialized) {
       return;
@@ -67,17 +81,7 @@ class SubscriptionProvider extends ChangeNotifier {
 
     _setLoading(true);
     try {
-      _purchaseSubscription = _inAppPurchase.purchaseStream.listen(
-        _handlePurchaseUpdates,
-        onError: (Object error, StackTrace stackTrace) {
-          debugPrint('purchaseStream error: $error');
-          debugPrintStack(stackTrace: stackTrace);
-          _isPurchasePending = false;
-          _setError(
-            'Google Play purchase updates are unavailable right now. Please try again.',
-          );
-        },
-      );
+      _ensurePurchaseSubscription();
 
       await syncPremiumFromFirestore();
       await fetchProducts();
@@ -137,6 +141,7 @@ class SubscriptionProvider extends ChangeNotifier {
   }
 
   Future<void> fetchProducts() async {
+    _ensurePurchaseSubscription();
     _setLoading(true);
     try {
       _clearError(notify: false);
@@ -211,6 +216,7 @@ class SubscriptionProvider extends ChangeNotifier {
   }
 
   Future<bool> purchasePlan(GooglePlaySubscriptionPlan plan) async {
+    _ensurePurchaseSubscription();
     _clearError();
     try {
       await fetchProducts();
@@ -283,6 +289,7 @@ class SubscriptionProvider extends ChangeNotifier {
   }
 
   Future<void> restorePurchases() async {
+    _ensurePurchaseSubscription();
     try {
       if (!_isStoreAvailable) {
         return;

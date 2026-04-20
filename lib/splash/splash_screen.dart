@@ -40,8 +40,6 @@ class _SplashScreenState extends State<SplashScreen>
       _checkingVpn = true;
     });
 
-    await Future.delayed(const Duration(milliseconds: 250));
-
     final vpnActive = await VpnGuard.isVpnActive();
     if (!mounted) return;
     if (vpnActive) {

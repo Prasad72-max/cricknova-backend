@@ -60,6 +60,7 @@ class _MyAppState extends State<MyApp> {
 
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
+  StreamSubscription<User?>? _authSub;
 
   void setTheme(ThemeMode mode) {
     setState(() {
@@ -70,11 +71,17 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_bootstrapNonCriticalStartup());
+    });
+  }
+
+  Future<void> _bootstrapNonCriticalStartup() async {
     unawaited(
       PricingLocationService.bootstrap(timeout: const Duration(seconds: 5)),
     );
-    unawaited(PlayBillingService.instance.initialize());
-    FirebaseAuth.instance.authStateChanges().listen((user) async {
+
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
       if (user == null) {
         debugPrint("⚠️ AUTH: transient null ignored");
         return;
@@ -94,7 +101,10 @@ class _MyAppState extends State<MyApp> {
         debugPrint("❌ Premium refresh failed: $e");
       }
     });
-    _initAppLinks();
+
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    unawaited(PlayBillingService.instance.initialize());
+    unawaited(_initAppLinks());
   }
 
   Future<void> _initAppLinks() async {
@@ -118,6 +128,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _linkSub?.cancel();
     super.dispose();
   }
@@ -125,7 +136,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<SubscriptionProvider>(
-      create: (_) => SubscriptionProvider()..initialize(),
+      create: (_) => SubscriptionProvider(),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         themeMode: _themeMode,

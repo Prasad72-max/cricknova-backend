@@ -169,7 +169,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (mounted) {
       setState(() {});
     }
-    unawaited(_bootstrapAuthAndData());
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted || !_isHomeTabVisible) return;
+      unawaited(_bootstrapAuthAndData());
+    });
   }
 
   Future<void> _loadGreetingState() async {
@@ -222,17 +225,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Future<void> _bootstrapAuthAndData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final String? token = await user.getIdToken();
-      if (token != null && token.isNotEmpty) {
-        // Token refresh succeeded.
-      } else {
-        debugPrint("⚠️ HOME SCREEN: Firebase token is null or empty");
-      }
-
       if (!PremiumService.isLoaded) {
         await PremiumService.restoreOnLaunch();
       }
-      await CrickNovaNotificationService.instance.handleAppOpened(user.uid);
       _checkExpiryPopup();
     }
 
@@ -248,6 +243,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+
+    await Future<void>.delayed(const Duration(milliseconds: 1400));
+    if (!mounted || !_isHomeTabVisible) {
+      return;
+    }
 
     final notificationService = CrickNovaNotificationService.instance;
     await notificationService.handleAppOpened(user.uid);

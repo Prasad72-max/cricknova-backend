@@ -1399,7 +1399,7 @@ class _PremiumScreenState extends State<PremiumScreen>
           features: [
             "3,000 AI Chats",
             "60 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
+            "60 Analyse Yourself Batting/Bowling",
             "Advanced Speed Detection",
             "Advanced Swing Detection",
             "Advanced Spin Detection",
