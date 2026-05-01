@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../security/vpn_guard.dart';
 
 enum PricingRegion { india, global }
 
@@ -14,6 +17,8 @@ class PricingLocationService {
   static const _pricingModeKey = 'pricingMode';
   static const _countryCodeKey = 'pricingCountryCode';
   static bool _bootstrapped = false;
+  static bool _refreshInFlight = false;
+  static Timer? _autoRefreshTimer;
 
   static final ValueNotifier<PricingRegion> regionNotifier = ValueNotifier(
     PricingRegion.global,
@@ -29,10 +34,16 @@ class PricingLocationService {
     if (_bootstrapped) return;
     _bootstrapped = true;
     await refreshPricingRegion(timeout: timeout, client: client);
+    _startAutoRefresh(timeout: timeout);
   }
 
   static Future<void> primeFromCache() async {
     final prefs = await SharedPreferences.getInstance();
+    if (await VpnGuard.isVpnActive()) {
+      _setRegion(PricingRegion.global);
+      return;
+    }
+
     final cachedMode = prefs.getString(_pricingModeKey);
     final cachedCountry = prefs.getString(_countryCodeKey)?.toUpperCase();
 
@@ -48,6 +59,11 @@ class PricingLocationService {
     Duration timeout = const Duration(seconds: 5),
     http.Client? client,
   }) async {
+    if (await VpnGuard.isVpnActive()) {
+      debugPrint('🌎 VPN detected -> forcing global pricing (USD)');
+      return PricingRegion.global;
+    }
+
     final localClient = client ?? http.Client();
 
     try {
@@ -94,15 +110,35 @@ class PricingLocationService {
     Duration timeout = const Duration(seconds: 5),
     http.Client? client,
   }) async {
-    final region = await detectPricingRegion(timeout: timeout, client: client);
-    await _persistRegion(region);
-    _setRegion(region);
-    debugPrint(
-      region == PricingRegion.india
-          ? '🇮🇳 PRICING MODE SET => INR'
-          : '🌎 PRICING MODE SET => USD',
-    );
-    return region;
+    if (_refreshInFlight) {
+      return currentRegion;
+    }
+    _refreshInFlight = true;
+    try {
+      final region = await detectPricingRegion(
+        timeout: timeout,
+        client: client,
+      );
+      await _persistRegion(region);
+      _setRegion(region);
+      debugPrint(
+        region == PricingRegion.india
+            ? '🇮🇳 PRICING MODE SET => INR'
+            : '🌎 PRICING MODE SET => USD',
+      );
+      return region;
+    } finally {
+      _refreshInFlight = false;
+    }
+  }
+
+  static void _startAutoRefresh({
+    Duration timeout = const Duration(seconds: 5),
+  }) {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      unawaited(refreshPricingRegion(timeout: timeout));
+    });
   }
 
   static void _setRegion(PricingRegion region) {

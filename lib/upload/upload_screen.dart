@@ -1,3 +1,4 @@
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
@@ -7,6 +8,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'cricket_facts_data.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:http/http.dart' as http;
@@ -15,6 +17,9 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:confetti/confetti.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
+import '../analysis/analysis_queue_store.dart';
+import '../models/pending_video.dart';
 import '../premium/premium_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/razorpay_service.dart';
@@ -546,199 +551,75 @@ class _BatBallPainter extends CustomPainter {
   }
 }
 
-class _RenderWakePainter extends CustomPainter {
-  final double elapsedSeconds;
-  final double progress;
+class _AnalysisPulsePainter extends CustomPainter {
+  final double pulse;
 
-  _RenderWakePainter({required this.elapsedSeconds, required this.progress});
+  _AnalysisPulsePainter({required this.pulse});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width * 0.5, size.height * 0.38);
-    final logoSize = math.min(size.width, size.height) * 0.18;
-    final logoRect = Rect.fromCenter(
-      center: center,
-      width: logoSize * 1.6,
-      height: logoSize * 1.05,
+    final center = Offset(size.width / 2, size.height / 2);
+    final baseRadius = math.min(size.width, size.height) * 0.28;
+    final shell = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0x6600C2FF),
+          const Color(0x2200C2FF),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: baseRadius * 1.8));
+    canvas.drawCircle(center, baseRadius * 1.7, shell);
+
+    for (int i = 0; i < 3; i++) {
+      final ringT = ((pulse + (i * 0.22)) % 1.0);
+      final ringRadius = baseRadius * (0.95 + (ringT * 1.05));
+      final ringAlpha = (1 - ringT).clamp(0.0, 1.0) * 0.32;
+      final ring = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = const Color(0xFF00C2FF).withValues(alpha: ringAlpha);
+      canvas.drawCircle(center, ringRadius, ring);
+    }
+
+    final orbitRadius = baseRadius * 1.2;
+    final orbitAngle = pulse * math.pi * 2;
+    final orbitDot = Offset(
+      center.dx + (math.cos(orbitAngle) * orbitRadius),
+      center.dy + (math.sin(orbitAngle) * orbitRadius),
     );
+    final orbitPaint = Paint()
+      ..shader = const RadialGradient(
+        colors: [Color(0xFF00FF9D), Color(0x0000FF9D)],
+      ).createShader(Rect.fromCircle(center: orbitDot, radius: 14));
+    canvas.drawCircle(orbitDot, 14, orbitPaint);
+    canvas.drawCircle(orbitDot, 4, Paint()..color = const Color(0xFF00FF9D));
 
-    final bg = Paint()..color = Colors.black;
-    canvas.drawRect(Offset.zero & size, bg);
+    final coreRect = Rect.fromCircle(center: center, radius: baseRadius * 0.82);
+    final core = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF16324A), Color(0xFF0D141D)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(coreRect);
+    canvas.drawCircle(center, baseRadius * 0.82, core);
 
-    if (elapsedSeconds < 10) {
-      final pulse =
-          0.2 + (0.15 * (0.5 + 0.5 * math.sin(progress * math.pi * 10)));
-      final glow = Paint()
-        ..shader = RadialGradient(
-          colors: [
-            const Color(0xFF38BDF8).withValues(alpha: pulse),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromCircle(center: center, radius: logoSize * 1.4));
-      canvas.drawCircle(center, logoSize * 1.4, glow);
-    }
-
-    if (elapsedSeconds >= 10 && elapsedSeconds < 20) {
-      final cut = Paint()
-        ..color = const Color(0xFF38BDF8).withValues(alpha: 0.06);
-      canvas.drawRect(Offset.zero & size, cut);
-    }
-
-    if (elapsedSeconds >= 20 && elapsedSeconds < 30) {
-      final slashX =
-          size.width * (((elapsedSeconds - 20) / 10).clamp(0.0, 1.0));
-      final slash = Paint()
-        ..shader = LinearGradient(
-          colors: [
-            Colors.transparent,
-            Colors.white.withValues(alpha: 0.85),
-            Colors.transparent,
-          ],
-        ).createShader(Rect.fromLTWH(slashX - 80, 0, 160, size.height));
-      canvas.drawRect(Rect.fromLTWH(slashX - 80, 0, 160, size.height), slash);
-    }
-
-    if (elapsedSeconds >= 30 && elapsedSeconds < 40) {
-      final flicker = (((elapsedSeconds - 30) * 7).floor().isEven) ? 0.0 : 0.08;
-      final flickerPaint = Paint()
-        ..color = Colors.white.withValues(alpha: flicker);
-      canvas.drawRect(Offset.zero & size, flickerPaint);
-    }
-
-    if (elapsedSeconds >= 40 && elapsedSeconds < 45) {
-      final dropletPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.2)
-        ..style = PaintingStyle.fill;
-      for (int i = 0; i < 18; i++) {
-        final x = ((i * 37) % 100) / 100 * size.width;
-        final y =
-            size.height * 0.18 +
-            ((((elapsedSeconds - 40) * 0.32) + i * 0.07) % 1.0) *
-                size.height *
-                0.5;
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(x, y),
-            width: 8 + (i % 3) * 4,
-            height: 14 + (i % 4) * 5,
-          ),
-          dropletPaint,
-        );
-      }
-    }
-
-    if (elapsedSeconds >= 45) {
-      final linePaint = Paint()
-        ..color = const Color(0xFF38BDF8).withValues(alpha: 0.65)
-        ..strokeWidth = 2;
-      for (int i = 0; i < 6; i++) {
-        final y = center.dy - 70 + (i * 26);
-        canvas.drawLine(
-          Offset(center.dx + 90, y),
-          Offset(size.width - 24, y),
-          linePaint,
-        );
-      }
-
-      final metricStyle = TextStyle(
-        color: Colors.white.withValues(alpha: 0.9),
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-      );
-      final metrics = [
-        ("155 km/h", Offset(center.dx + 98, center.dy - 76)),
-        ("3.2 Swing", Offset(center.dx + 98, center.dy - 20)),
-        ("2400 RPM", Offset(center.dx + 98, center.dy + 36)),
-      ];
-      for (final item in metrics) {
-        final tp = TextPainter(
-          text: TextSpan(text: item.$1, style: metricStyle),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        tp.paint(canvas, item.$2);
-      }
-    }
-
-    final logoProgress = (elapsedSeconds / 50).clamp(0.0, 1.0);
-    final shake = elapsedSeconds >= 30 && elapsedSeconds < 40
-        ? math.sin(elapsedSeconds * 15) * 4
-        : 0.0;
-    final spinTurns = elapsedSeconds >= 45 ? ((elapsedSeconds - 45) * 40) : 0.0;
-    canvas.save();
-    canvas.translate(center.dx + shake, center.dy + shake * 0.3);
-    if (spinTurns != 0) {
-      canvas.rotate(spinTurns);
-    }
-    canvas.translate(-(center.dx + shake), -(center.dy + shake * 0.3));
-
-    final fade = (logoProgress * 1.4).clamp(0.0, 1.0);
-    final logoPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.92 * fade);
-    if (elapsedSeconds < 20) {
-      logoPaint.color = const Color(0xFF9FDBFF).withValues(alpha: 0.7 * fade);
-    } else if (elapsedSeconds < 30) {
-      logoPaint.color = Colors.white.withValues(alpha: 0.98 * fade);
-    } else if (elapsedSeconds >= 45) {
-      logoPaint.color = const Color(0xFF38BDF8).withValues(alpha: fade);
-    }
-
-    final cPath = Path()
-      ..moveTo(
-        logoRect.left + logoRect.width * 0.32,
-        logoRect.top + logoRect.height * 0.08,
-      )
-      ..quadraticBezierTo(
-        logoRect.left,
-        logoRect.top + logoRect.height * 0.18,
-        logoRect.left,
-        logoRect.center.dy,
-      )
-      ..quadraticBezierTo(
-        logoRect.left,
-        logoRect.bottom - logoRect.height * 0.18,
-        logoRect.left + logoRect.width * 0.32,
-        logoRect.bottom - logoRect.height * 0.08,
-      );
-    final cStroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..color = logoPaint.color;
-    canvas.drawPath(cPath, cStroke);
-
-    final nPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = logoPaint.color;
-    final nPath = Path()
-      ..moveTo(logoRect.center.dx - 4, logoRect.bottom - logoRect.height * 0.08)
-      ..lineTo(logoRect.center.dx - 4, logoRect.top + logoRect.height * 0.08)
-      ..lineTo(
-        logoRect.center.dx + logoRect.width * 0.2,
-        logoRect.bottom - logoRect.height * 0.08,
-      )
-      ..lineTo(
-        logoRect.center.dx + logoRect.width * 0.2,
-        logoRect.top + logoRect.height * 0.08,
-      );
-    canvas.drawPath(nPath, nPaint);
-    canvas.restore();
-
-    if (progress > 0.985) {
-      final flash = Paint()
-        ..color = Colors.white.withValues(
-          alpha: ((progress - 0.985) / 0.015).clamp(0.0, 1.0),
-        );
-      canvas.drawRect(Offset.zero & size, flash);
-    }
+    final seam = Paint()
+      ..color = Colors.white.withValues(alpha: 0.82)
+      ..strokeWidth = 2.2
+      ..style = PaintingStyle.stroke;
+    canvas.drawArc(
+      coreRect.deflate(baseRadius * 0.18),
+      -1.05,
+      2.1,
+      false,
+      seam,
+    );
+    canvas.drawArc(coreRect.deflate(baseRadius * 0.18), 2.1, 2.1, false, seam);
   }
 
   @override
-  bool shouldRepaint(covariant _RenderWakePainter oldDelegate) {
-    return oldDelegate.elapsedSeconds != elapsedSeconds ||
-        oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _AnalysisPulsePainter oldDelegate) {
+    return oldDelegate.pulse != pulse;
   }
 }
 
@@ -3979,69 +3860,27 @@ class _UploadScreenState extends State<UploadScreen>
   String swing = "";
   String spin = "";
   bool analysisLoading = false;
-  bool _showRenderWakeCinematic = false;
-  Timer? _renderWakeDelayTimer;
-  Timer? _renderWakeTicker;
-  Stopwatch? _renderWakeStopwatch;
-  // Only treat long waits as a probable Render cold start.
-  static const Duration _renderWakeThreshold = Duration(seconds: 14);
-  static const Duration _renderWakeDuration = Duration(seconds: 60);
-
-  // 🧠 Rotating Cricket Facts
-  final List<String> _cricketFacts = [
-    "Did you know? Sachin Tendulkar's bat weighed around 3.2 lbs!",
-    "Fun Fact: The first-ever international cricket match was USA vs Canada in 1844.",
-    "Elite Tip: A stable head position is the secret to 90% of successful shots.",
-    "Fast Fact: Shoaib Akhtar bowled the fastest delivery ever recorded at 161.3 km/h.",
-    "Cricket Insight: Yorkers are most effective in the last 4 overs of a T20 match.",
-    "Did you know? Muttiah Muralitharan has 800 Test wickets.",
-    "Elite Tip: Watch the seam position to read swing early.",
-    "Fun Fact: MS Dhoni has the fastest stumping record at 0.08 seconds.",
-    "Cricket Insight: Wrist position defines swing direction.",
-    "Did you know? Don Bradman averaged 99.94 in Test cricket.",
-    "Elite Tip: Strong core muscles improve bowling speed.",
-    "Fun Fact: The longest Test match lasted 12 days in 1939.",
-    "Cricket Insight: Backlift height influences shot power.",
-    "Did you know? Lasith Malinga took 4 wickets in 4 balls twice.",
-    "Elite Tip: Landing foot alignment controls bowling direction.",
-    "Fun Fact: India won the 1983 World Cup as underdogs.",
-    "Cricket Insight: Reverse swing starts when the ball gets rough.",
-    "Did you know? AB de Villiers scored the fastest ODI 100 in 31 balls.",
-    "Elite Tip: Keep your elbow high during drives.",
-    "Fun Fact: Chris Gayle scored the first T20I century.",
-    "Cricket Insight: Consistency beats raw pace.",
-    "Did you know? Jacques Kallis scored 10,000+ runs and took 250+ wickets.",
-    "Elite Tip: Follow through fully to avoid injuries.",
-    "Fun Fact: The Ashes started in 1882.",
-    "Cricket Insight: Balance at release improves accuracy.",
-    "Did you know? Virat Kohli has 70+ international centuries.",
-    "Elite Tip: Soft hands help in defensive shots.",
-    "Fun Fact: An over once had 8 balls in some countries.",
-    "Cricket Insight: Length is more important than speed.",
-    "Did you know? Kumar Sangakkara scored four consecutive ODI hundreds in a World Cup.",
-    "Elite Tip: Focus on rhythm, not just power.",
-    "Fun Fact: Cricket was once played in the Olympics in 1900.",
-    "Cricket Insight: Bat speed generates boundary power.",
-    "Did you know? Wasim Akram took two hat-tricks in ODIs.",
-    "Elite Tip: Keep your eyes level while batting.",
-    "Fun Fact: The highest Test total is 952/6 declared.",
-    "Cricket Insight: Short run-up can improve control.",
-    "Did you know? Ben Stokes played one of the greatest innings in 2019 Ashes.",
-    "Elite Tip: Grip pressure affects spin turn.",
-    "Fun Fact: The pink ball is used in day-night Tests.",
-    "Cricket Insight: Field placement defines bowling strategy.",
-    "Did you know? Rohit Sharma has three ODI double centuries.",
-    "Elite Tip: Practice under pressure situations.",
-    "Fun Fact: The first Cricket World Cup was in 1975.",
-    "Cricket Insight: Seam upright means better swing.",
-    "Did you know? Glenn McGrath took 563 Test wickets.",
-    "Elite Tip: Mental strength wins close matches.",
-    "Fun Fact: Brendon McCullum scored 158 in the first IPL match.",
-    "Cricket Insight: Footwork is the foundation of batting.",
-    "Elite Tip: Recovery and sleep boost performance.",
+  final List<String> _analysisMicrocopy = const [
+    "Tracking ball speed...",
+    "Reading motion patterns...",
+    "Optimizing accuracy...",
+    "Preparing your insights...",
+    "Almost done...",
   ];
-  int _currentFactIndex = 0;
-  Timer? _factTimer;
+  late final AnimationController _analysisPulseController;
+  late final AnimationController _analysisGlowController;
+  Timer? _analysisMicrocopyTimer;
+  Timer? _analysisLongWaitTimer;
+  Timer? _analysisUploadSuccessTimer;
+  int _analysisCopyIndex = 0;
+  bool _showUploadSuccessState = false;
+  bool _showLongWaitHandoff = false;
+  String? _analysisJobId;
+  String? _analysisJobStartedAt;
+  bool _analysisQueued = false;
+  static const Duration _cachedAnalysisResultDelay = Duration(seconds: 4);
+  // If result doesn't arrive fast, hand off to background + queue.
+  static const Duration _analysisHandoffDelay = Duration(seconds: 12);
 
   String spinStrength = "NONE";
   double spinTurnDeg = 0.0;
@@ -4058,44 +3897,232 @@ class _UploadScreenState extends State<UploadScreen>
     debugPrint("TOTAL VIDEOS UPDATED (HIVE) => $updated");
   }
 
-  void _scheduleRenderWakeSequence() {
-    _renderWakeDelayTimer?.cancel();
-    _renderWakeTicker?.cancel();
-    _renderWakeStopwatch?.stop();
-    _renderWakeStopwatch = null;
-    _showRenderWakeCinematic = false;
+  void _startAnalysisExperience() {
+    _analysisMicrocopyTimer?.cancel();
+    _analysisLongWaitTimer?.cancel();
+    _analysisUploadSuccessTimer?.cancel();
 
-    _renderWakeDelayTimer = Timer(_renderWakeThreshold, () {
+    _analysisCopyIndex = 0;
+    _analysisJobId = 'analysis_${DateTime.now().millisecondsSinceEpoch}';
+    _analysisJobStartedAt = DateTime.now().toUtc().toIso8601String();
+    _analysisQueued = false;
+    _showLongWaitHandoff = false;
+    _showUploadSuccessState = true;
+    _analysisStatusText = "Tracking ball speed...";
+
+    _analysisPulseController.repeat();
+    _analysisGlowController.repeat(reverse: true);
+
+    _analysisUploadSuccessTimer = Timer(const Duration(milliseconds: 1200), () {
       if (!mounted || !analysisLoading) return;
-      _renderWakeStopwatch = Stopwatch()..start();
       setState(() {
-        _showRenderWakeCinematic = true;
+        _showUploadSuccessState = false;
       });
-      _renderWakeTicker?.cancel();
-      _renderWakeTicker = Timer.periodic(const Duration(milliseconds: 100), (
-        _,
-      ) {
-        if (!mounted || !_showRenderWakeCinematic) return;
-        if ((_renderWakeStopwatch?.elapsed ?? Duration.zero) >=
-            _renderWakeDuration) {
-          _renderWakeTicker?.cancel();
-        }
-        setState(() {});
+    });
+
+    _analysisMicrocopyTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!mounted || !analysisLoading) return;
+      setState(() {
+        _analysisCopyIndex =
+            (_analysisCopyIndex + 1) % _analysisMicrocopy.length;
+        _analysisStatusText = _analysisMicrocopy[_analysisCopyIndex];
       });
+    });
+
+    _analysisLongWaitTimer = Timer(_analysisHandoffDelay, () async {
+      if (!analysisLoading) return;
+
+      final pending = await _queueCurrentVideoForBackgroundAnalysis(
+        status: 'pending',
+      );
+      if (pending == null) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('analysis_two_min_timer_started_${pending.id}', true);
+      await CrickNovaNotificationService.instance.scheduleAnalysisCheckReminder(
+        resultJobId: pending.id,
+      );
+
+      if (PremiumService.isElite && _analysisJobId != null) {
+        _analysisQueued = true;
+        await AnalysisQueueStore.upsertJob({
+          'id': _analysisJobId,
+          'title': video == null
+              ? 'Training Video'
+              : video!.path.split(RegExp(r'[\\/]')).last,
+          'discipline': _analysisDiscipline,
+          'status': 'processing',
+          'localFilePath': video?.path,
+          'startedAt':
+              _analysisJobStartedAt ?? DateTime.now().toUtc().toIso8601String(),
+        });
+      }
+      if (!mounted || !analysisLoading) return;
+      setState(() {
+        _showLongWaitHandoff = true;
+        _analysisStatusText = "CrickNova is analyzing your video...";
+      });
+
+      final popupShownKey = 'analysis_handoff_popup_shown_${pending.id}';
+      final popupAlreadyShown = prefs.getBool(popupShownKey) ?? false;
+      if (!popupAlreadyShown) {
+        await prefs.setBool(popupShownKey, true);
+        _showClassyHandoffPopup();
+      }
+
+      // Wait for the user to see the popup briefly before redirecting
+      await Future.delayed(const Duration(seconds: 4));
+
+      if (mounted && analysisLoading) {
+        unawaited(
+          _leaveDuringAnalysis(openAnalysisTab: false),
+        ); // Redirect to Home
+      }
     });
   }
 
-  void _stopRenderWakeSequence() {
-    _renderWakeDelayTimer?.cancel();
-    _renderWakeTicker?.cancel();
-    _renderWakeStopwatch?.stop();
-    _renderWakeStopwatch = null;
+  void _stopAnalysisExperience() {
+    _analysisMicrocopyTimer?.cancel();
+    _analysisLongWaitTimer?.cancel();
+    _analysisUploadSuccessTimer?.cancel();
+    _analysisPulseController.stop();
+    _analysisGlowController.stop();
+    _analysisPulseController.value = 0;
+    _analysisGlowController.value = 0;
+    _showUploadSuccessState = false;
+    _showLongWaitHandoff = false;
+  }
+
+  Future<PendingVideo?> _queueCurrentVideoForBackgroundAnalysis({
+    required String status,
+  }) async {
+    final source = video;
+    final path = source?.path ?? '';
+    if (path.isEmpty) return null;
+
+    final id =
+        _analysisJobId ?? 'analysis_${DateTime.now().millisecondsSinceEpoch}';
+    final box = Hive.box<PendingVideo>('pending_videos');
+    final existing = box.get(id);
+    final pending =
+        existing ??
+        PendingVideo(
+          id: id,
+          localFilePath: path,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          status: status,
+        );
+    pending.status = status;
+    await box.put(pending.id, pending);
+
+    await AnalysisQueueStore.upsertJob({
+      'id': pending.id,
+      'title': path.split(RegExp(r'[\\/]')).last,
+      'discipline': _analysisDiscipline,
+      'status': 'processing',
+      'localFilePath': path,
+      'startedAt':
+          _analysisJobStartedAt ?? DateTime.now().toUtc().toIso8601String(),
+    });
+    return pending;
+  }
+
+  void _showClassyHandoffPopup() {
     if (!mounted) return;
-    if (_showRenderWakeCinematic) {
-      setState(() {
-        _showRenderWakeCinematic = false;
-      });
-    }
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withOpacity(0.9),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(
+                color: const Color(0xFF38BDF8).withOpacity(0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF00C2FF).withOpacity(0.2),
+                  blurRadius: 40,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF38BDF8).withOpacity(0.1),
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Color(0xFF38BDF8),
+                      size: 40,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  "CrickNova is analyzing",
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Check it after 2 min. Your video is saved, so you will not need to upload it again.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.7),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Ink(
+                      width: double.infinity,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0EA5E9), Color(0xFF2563EB)],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        child: Text(
+                          "Got it",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _addXP(int amount) async {
@@ -4367,12 +4394,14 @@ class _UploadScreenState extends State<UploadScreen>
         }),
       );
     });
-    _factTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (!mounted) return;
-      setState(() {
-        _currentFactIndex = (_currentFactIndex + 1) % _cricketFacts.length;
-      });
-    });
+    _analysisPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    );
+    _analysisGlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
     _drsPhaseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -4381,6 +4410,19 @@ class _UploadScreenState extends State<UploadScreen>
 
   File? video;
   VideoPlayerController? controller;
+
+  void _pauseUploadedVideoAtEnd() {
+    final activeController = controller;
+    if (activeController == null || !activeController.value.isInitialized) {
+      return;
+    }
+
+    final value = activeController.value;
+    if (value.duration == Duration.zero) return;
+    if (value.position >= value.duration - const Duration(milliseconds: 120)) {
+      activeController.pause();
+    }
+  }
 
   bool uploading = false;
   bool showTrajectory = false;
@@ -5036,7 +5078,27 @@ class _UploadScreenState extends State<UploadScreen>
   }
 
   Map<String, String> _inferLabelsFromTrajectory(dynamic rawTrajectory) {
-    final pts = _extractTrajectoryPoints(rawTrajectory);
+    final ptsRaw = _extractTrajectoryPoints(rawTrajectory);
+    if (ptsRaw.isEmpty) {
+      return {"swing": "INSWING", "spin": "OFF SPIN"};
+    }
+
+    // Match backend behavior: fix horizontal camera mirroring before inference.
+    double minX = 1.0;
+    double maxX = 0.0;
+    for (final p in ptsRaw) {
+      final x = p["x"] ?? 0.5;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+    }
+    final pts = ptsRaw
+        .map(
+          (p) => {
+            "x": (maxX - ((p["x"] ?? 0.5) - minX)).clamp(0.0, 1.0),
+            "y": (p["y"] ?? 0.5).clamp(0.0, 1.0),
+          },
+        )
+        .toList(growable: false);
     if (pts.length < 2) {
       return {"swing": "INSWING", "spin": "OFF SPIN"};
     }
@@ -5045,13 +5107,45 @@ class _UploadScreenState extends State<UploadScreen>
     final pivot = bounce <= 0
         ? (pts.length ~/ 2)
         : bounce.clamp(1, pts.length - 2);
-    final preDx = pts[pivot]["x"]! - pts.first["x"]!;
-    final postDx = pts.last["x"]! - pts[pivot]["x"]!;
-    final curveDx = postDx - preDx;
 
-    // Derive from observed trajectory (video points), not fixed assumptions.
-    final swingLabel = preDx >= 0 ? "OUTSWING" : "INSWING";
-    final spinLabel = curveDx >= 0 ? "LEG SPIN" : "OFF SPIN";
+    double slopeForX(int start, int end) {
+      final n = (end - start + 1);
+      if (n <= 1) return 0.0;
+      double sumT = 0.0;
+      double sumX = 0.0;
+      double sumTT = 0.0;
+      double sumTX = 0.0;
+      for (int i = 0; i < n; i++) {
+        final t = i.toDouble();
+        final x = pts[start + i]["x"] ?? 0.5;
+        sumT += t;
+        sumX += x;
+        sumTT += (t * t);
+        sumTX += (t * x);
+      }
+      final denom = (n * sumTT) - (sumT * sumT);
+      if (denom.abs() < 1e-9) return 0.0;
+      return ((n * sumTX) - (sumT * sumX)) / denom;
+    }
+
+    final preStart = 0;
+    final preEnd = pivot;
+    final postStart = pivot;
+    final postEnd = pts.length - 1;
+
+    final preSlope = slopeForX(preStart, preEnd);
+    final postSlope = slopeForX(postStart, postEnd);
+    final curve = postSlope - preSlope;
+
+    const eps = 0.0008;
+    final overallDx = (pts.last["x"] ?? 0.5) - (pts.first["x"] ?? 0.5);
+
+    final swingLabel = (preSlope.abs() < eps ? overallDx : preSlope) >= 0.0
+        ? "OUTSWING"
+        : "INSWING";
+
+    final spinSignal = curve.abs() < eps ? postSlope : curve;
+    final spinLabel = spinSignal >= 0.0 ? "LEG SPIN" : "OFF SPIN";
 
     return {"swing": swingLabel, "spin": spinLabel};
   }
@@ -5822,6 +5916,24 @@ class _UploadScreenState extends State<UploadScreen>
     return accepted;
   }
 
+  String _currentFact = CricketFacts.facts[0];
+  Timer? _factTimer;
+
+  void _startFactCycling() {
+    _factTimer?.cancel();
+    int index = 0;
+    _factTimer = Timer.periodic(const Duration(milliseconds: 2500), (timer) {
+      if (mounted && analysisLoading) {
+        setState(() {
+          index = (index + 1) % CricketFacts.facts.length;
+          _currentFact = CricketFacts.facts[index];
+        });
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
   Future<void> _setAcceptedVideoTerms() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_videoConsentPrefsKey(), true);
@@ -6181,29 +6293,63 @@ class _UploadScreenState extends State<UploadScreen>
     final picked = await picker.pickVideo(source: ImageSource.gallery);
     if (picked == null) return false;
 
-    video = File(picked.path);
+    final pickedFile = File(picked.path);
+    video = await _copyVideoToAnalysisStorage(pickedFile);
 
+    controller?.removeListener(_pauseUploadedVideoAtEnd);
     controller?.dispose();
     controller = VideoPlayerController.file(video!)
       ..initialize().then((_) {
-        if (mounted) setState(() {});
+        if (mounted) {
+          setState(() {});
+          // Video autoplay removed on pick; it will play once when results arrive.
+          controller!.setLooping(false);
+          controller!.addListener(_pauseUploadedVideoAtEnd);
+        }
       });
 
     if (mounted) {
       setState(() {
         uploading = true;
         analysisLoading = true;
-        _analysisStatusText = "Analyzing video...";
+        _analysisStatusText = "Tracking ball speed...";
         _autoZoomRetryInProgress = false;
         _autoZoomPreviewScale = 1.0;
         showTrajectory = false;
         showDRS = false;
         drsResult = null;
         swing = "";
-        spin = "";
       });
     }
-    _scheduleRenderWakeSequence();
+    _startAnalysisExperience();
+    _startFactCycling();
+
+    final analysisStartTime = DateTime.now();
+
+    // 🔥 Check for cached results first (Same video = Same output)
+    final cacheBox = Hive.box('analysis_cache');
+    final cacheKey = _fallbackSeedForVideo(video!).toString();
+    final cachedData = cacheBox.get(cacheKey);
+
+    if (cachedData != null && cachedData is Map) {
+      debugPrint("CACHE HIT for $cacheKey");
+      final analysis = Map<String, dynamic>.from(cachedData);
+
+      // Keep repeated uploads feeling intentional instead of flashing instantly.
+      final elapsed = DateTime.now()
+          .difference(analysisStartTime)
+          .inMilliseconds;
+      if (elapsed < _cachedAnalysisResultDelay.inMilliseconds) {
+        await Future.delayed(
+          Duration(
+            milliseconds: _cachedAnalysisResultDelay.inMilliseconds - elapsed,
+          ),
+        );
+      }
+
+      await _applyAnalysisResult(analysis);
+      return true;
+    }
 
     final uri = Uri.parse(
       "https://cricknova-backend.onrender.com/training/analyze",
@@ -6217,9 +6363,8 @@ class _UploadScreenState extends State<UploadScreen>
       if (user == null) throw Exception("USER_NOT_AUTHENTICATED");
 
       final token = await user.getIdToken(true);
-      if (token == null || token.isEmpty) {
+      if (token == null || token.isEmpty)
         throw Exception("USER_NOT_AUTHENTICATED");
-      }
 
       request.headers["Authorization"] = "Bearer $token";
       _applyEliteHeaders(request);
@@ -6228,27 +6373,103 @@ class _UploadScreenState extends State<UploadScreen>
       final response = await request.send().timeout(
         const Duration(seconds: 40),
       );
+      if (_showLongWaitHandoff) return false;
 
       final respStr = await response.stream.bytesToString();
       debugPrint("UPLOAD RESPONSE ${response.statusCode} => $respStr");
 
-      if (response.statusCode != 200) {
-        throw Exception("UPLOAD_FAILED");
-      }
-      // ✅ Increment total uploaded videos (only on successful analysis)
+      if (response.statusCode != 200) throw Exception("UPLOAD_FAILED");
+
       await _incrementTotalVideos();
 
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
-      final dynamic speedVal = analysis["speed_kmph"] ?? decoded["speed_kmph"];
-      final dynamic speedTypeVal =
-          analysis["speed_type"] ?? decoded["speed_type"];
-      final dynamic speedNoteVal =
-          analysis["speed_note"] ?? decoded["speed_note"];
+      // 🔥 Cache for identical future uploads
+      await cacheBox.put(cacheKey, analysis);
+
+      // Keep the first result transition consistent with cached uploads.
+      final elapsed = DateTime.now()
+          .difference(analysisStartTime)
+          .inMilliseconds;
+      if (elapsed < _cachedAnalysisResultDelay.inMilliseconds) {
+        await Future.delayed(
+          Duration(
+            milliseconds: _cachedAnalysisResultDelay.inMilliseconds - elapsed,
+          ),
+        );
+      }
+
+      await _applyAnalysisResult(analysis);
+      return true;
+    } catch (e) {
+      debugPrint("UPLOAD ERROR: $e");
+      if (!_showLongWaitHandoff && analysisLoading) {
+        final pending = await _queueCurrentVideoForBackgroundAnalysis(
+          status: 'pending',
+        );
+        if (pending != null) {
+          await CrickNovaNotificationService.instance
+              .scheduleAnalysisCheckReminder(resultJobId: pending.id);
+          if (mounted) {
+            setState(() {
+              _showLongWaitHandoff = true;
+              _analysisStatusText = "CrickNova is analyzing your video...";
+            });
+            _showClassyHandoffPopup();
+            unawaited(
+              Future<void>.delayed(const Duration(seconds: 4), () async {
+                if (mounted && analysisLoading) {
+                  await _leaveDuringAnalysis(openAnalysisTab: false);
+                }
+              }),
+            );
+          }
+        }
+      }
+      if (!_showLongWaitHandoff && mounted) {
+        setState(() {
+          analysisLoading = false;
+          uploading = false;
+        });
+      }
+      return false;
+    }
+  }
+
+  Future<File> _copyVideoToAnalysisStorage(File source) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final dir = Directory('${docs.path}/cricknova_training_videos');
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final rawName = source.path.split(RegExp(r'[\\/]')).last;
+      final cleanName = rawName
+          .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_')
+          .replaceAll(RegExp(r'_+'), '_');
+      final extMatch = RegExp(r'\.[A-Za-z0-9]+$').firstMatch(cleanName);
+      final ext = extMatch?.group(0) ?? '.mp4';
+      final base = cleanName.replaceFirst(RegExp(r'\.[A-Za-z0-9]+$'), '');
+      final target = File(
+        '${dir.path}/${DateTime.now().millisecondsSinceEpoch}_${base.isEmpty ? "training_video" : base}$ext',
+      );
+      return await source.copy(target.path);
+    } catch (e) {
+      debugPrint("VIDEO COPY FALLBACK: $e");
+      return source;
+    }
+  }
+
+  Future<void> _applyAnalysisResult(Map<String, dynamic> analysis) async {
+    try {
+      final dynamic speedVal = analysis["speed_kmph"];
+      final dynamic speedTypeVal = analysis["speed_type"];
+      final dynamic speedNoteVal = analysis["speed_note"];
       final backendSpeed = _extractBackendSpeed(speedVal);
-      final dynamic fpsVal = analysis["fps"] ?? decoded["fps"];
+      final dynamic fpsVal = analysis["fps"];
       final fpsForFallback = fpsVal is num ? fpsVal.toDouble() : 30.0;
+
       final videoDerivedSpeed = await _deriveSpeedDirectFromVideo(
         analysis["trajectory"],
         backendFps: fpsVal is num ? fpsVal.toDouble() : null,
@@ -6257,6 +6478,7 @@ class _UploadScreenState extends State<UploadScreen>
         analysis["trajectory"],
         fps: fpsForFallback,
       );
+
       if (backendSpeed != null) {
         speedKmph = backendSpeed;
         speedType = speedTypeVal?.toString() ?? "estimated";
@@ -6268,175 +6490,124 @@ class _UploadScreenState extends State<UploadScreen>
             video!,
           );
           speedType = "video_derived";
-          speedNote =
-              "Backend returned no speed. Speed derived directly from this video.";
         } else if (fallbackSpeed != null) {
           speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed, video!);
           speedType = "trajectory_fallback";
-          speedNote =
-              "Backend returned no speed. Using trajectory-based speed from this video.";
         } else {
-          final retryAnalysis = await _recoverSpeedWithAutoZoom(
-            sourceVideo: video!,
-            idToken: token,
-          );
-          final dynamic retrySpeedVal = retryAnalysis?["speed_kmph"];
-          final dynamic retrySpeedTypeVal = retryAnalysis?["speed_type"];
-          final dynamic retrySpeedNoteVal = retryAnalysis?["speed_note"];
-          final retryBackendSpeed = _extractBackendSpeed(retrySpeedVal);
-          final retryVideoDerivedSpeed = await _deriveSpeedDirectFromVideo(
-            retryAnalysis?["trajectory"] ?? analysis["trajectory"],
-            backendFps: fpsVal is num ? fpsVal.toDouble() : null,
-          );
-
-          if (retryBackendSpeed != null) {
-            speedKmph = retryBackendSpeed;
-            speedType = retrySpeedTypeVal?.toString() ?? "auto_zoom_recheck";
-            speedNote =
-                retrySpeedNoteVal?.toString() ??
-                "Speed recovered after auto-zoom recheck";
-          } else if (retryVideoDerivedSpeed != null) {
-            speedKmph = _normalizeNoBackendEstimatedSpeed(
-              retryVideoDerivedSpeed,
-              video!,
-            );
-            speedType = "video_derived";
-            speedNote =
-                "Backend returned no speed. Speed derived directly from this video after retry.";
-          } else {
-            speedKmph = _generateUnavailableSpeedFallback(video!);
-            speedType = "display_fallback";
-            speedNote =
-                "Backend returned no speed. Using stable fallback speed for this video.";
-          }
+          speedKmph = _generateUnavailableSpeedFallback(video!);
+          speedType = "display_fallback";
         }
       } else if (fallbackSpeed != null) {
         speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed, video!);
         speedType = "trajectory_fallback";
-        speedNote = "Fallback from real tracked trajectory (non-scripted)";
-      } else if (videoDerivedSpeed != null) {
-        speedKmph = _normalizeNoBackendEstimatedSpeed(
-          videoDerivedSpeed,
-          video!,
-        );
-        speedType = "video_derived";
-        speedNote = "Speed derived directly from tracked video motion.";
       } else {
         speedKmph = _generateUnavailableSpeedFallback(video!);
         speedType = "display_fallback";
-        speedNote = speedNoteVal?.toString() ?? "Using display fallback speed.";
       }
 
-      // 🔥 Save speed to Hive for graph (user-specific key)
-      bool didHitPersonalBest = false;
+      // Save to Stats
       if (speedKmph != null) {
         final box = await Hive.openBox('speedBox');
-
-        final user = FirebaseAuth.instance.currentUser;
-        final uid = user?.uid ?? "guest";
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
         final key = 'allSpeeds_$uid';
-
         final stored = box.get(key) as List?;
-        List<double> allSpeeds = [];
-
-        if (stored != null) {
-          allSpeeds = stored.map((e) => (e as num).toDouble()).toList();
-        }
-
+        List<double> allSpeeds = stored == null
+            ? []
+            : stored.map((e) => (e as num).toDouble()).toList();
         allSpeeds.add(speedKmph!);
-
         await box.put(key, allSpeeds);
 
-        // 🔥 Save MAX SPEED to Hive (user-specific for profile screen)
         final statsBox = await Hive.openBox("local_stats_$uid");
         double currentMax = (statsBox.get('maxSpeed', defaultValue: 0) as num)
             .toDouble();
-
         if (speedKmph! > currentMax) {
-          didHitPersonalBest = true;
           await statsBox.put('maxSpeed', speedKmph);
-          debugPrint("NEW MAX SPEED SAVED (HIVE) => ${speedKmph}");
-        }
-
-        debugPrint("HIVE SPEED UPDATED => $allSpeeds");
-
-        if (didHitPersonalBest) {
           await CrickNovaNotificationService.instance.maybeNotifyPersonalBest(
             speedKmph!,
           );
         }
       }
-      if (!mounted) return true;
 
       final inferred = _inferLabelsFromTrajectory(analysis["trajectory"]);
       final rawSwing = analysis["swing"];
-      final backendSwing = rawSwing is String && rawSwing.trim().isNotEmpty
-          ? _normalizeSwingLabel(rawSwing)
-          : null;
-      final resolvedSwing = inferred["swing"] ?? backendSwing ?? "INSWING";
-      setState(() {
-        // -------- SWING (Direct Backend Value) --------
-        swing = resolvedSwing;
-
-        // -------- SPIN (Direct Backend Value) --------
-        final rawSpin = analysis["spin"];
-        final inferredSpin = inferred["spin"];
-        final backendSpin = rawSpin is String && rawSpin.trim().isNotEmpty
-            ? _normalizeSpinLabel(rawSpin)
-            : null;
-        spin = inferredSpin ?? backendSpin ?? "OFF SPIN";
-
-        // -------- SPIN STRENGTH & TURN (BACKEND: NUMERIC STRENGTH 0–1) --------
-        final rawStrength = analysis["spin_strength"];
-        if (rawStrength is num) {
-          // Backend now returns numeric strength (0–1)
-          spinStrength = "${(rawStrength * 100).toStringAsFixed(0)}%";
-        } else if (rawStrength is String && rawStrength.isNotEmpty) {
-          spinStrength = rawStrength.toUpperCase();
+      if (rawSwing is String && rawSwing.trim().isNotEmpty) {
+        final lower = rawSwing.trim().toLowerCase();
+        if (lower.contains("out")) {
+          swing = "OUTSWING";
+        } else if (lower.contains("in")) {
+          swing = "INSWING";
         } else {
-          spinStrength = "0%";
+          swing = inferred["swing"] ?? "INSWING";
         }
+      } else {
+        swing = inferred["swing"] ?? "INSWING";
+      }
 
-        // Spin turn degree no longer shown in UI
-        spinTurnDeg = 0.0;
+      final rawSpin = analysis["spin"];
+      if (rawSpin is String && rawSpin.trim().isNotEmpty) {
+        final lower = rawSpin.trim().toLowerCase();
+        if (lower.contains("leg")) {
+          spin = "LEG SPIN";
+        } else if (lower.contains("off")) {
+          spin = "OFF SPIN";
+        } else {
+          spin = inferred["spin"] ?? "OFF SPIN";
+        }
+      } else {
+        spin = inferred["spin"] ?? "OFF SPIN";
+      }
 
-        trajectory = analysis["trajectory"] is List
-            ? List<dynamic>.from(analysis["trajectory"])
-            : const [];
-        showTrajectory = false;
+      final rawStrength = analysis["spin_strength"];
+      spinStrength = rawStrength is num
+          ? "${(rawStrength * 100).toStringAsFixed(0)}%"
+          : "0%";
 
-        analysisLoading = false;
-        _analysisStatusText = "";
-        _autoZoomPreviewScale = 1.0;
-
-        controller?.play();
-      });
-    } catch (e) {
-      debugPrint("UPLOAD ERROR => $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Analysis failed. Please try again.")),
-        );
         setState(() {
-          _analysisStatusText = "";
-          _autoZoomRetryInProgress = false;
-          _autoZoomPreviewScale = 1.0;
+          analysisLoading = false;
+          uploading = false;
+          showTrajectory = true;
+          showDRS = true;
+          drsResult = analysis["drs"];
+          trajectory = analysis["trajectory"] is List
+              ? List<dynamic>.from(analysis["trajectory"])
+              : const [];
+          _stopAnalysisExperience();
+          controller?.play();
         });
       }
+
+      // If this was a background handoff that finished, update the queue
+      if (_analysisJobId != null) {
+        final resolvedSpeedLabel = speedKmph == null
+            ? "Unavailable"
+            : "${speedKmph!.toStringAsFixed(1)} km/h";
+        await AnalysisQueueStore.upsertJob({
+          'id': _analysisJobId,
+          'title': video?.path.split(RegExp(r'[\\/]')).last ?? 'Training Video',
+          'discipline': _analysisDiscipline,
+          'status': 'ready',
+          'localFilePath': video?.path,
+          'speedLabel': resolvedSpeedLabel,
+          'swing': swing,
+          'spin': spin,
+          'resultData': analysis,
+        });
+        await CrickNovaNotificationService.instance.maybeNotifyAnalysisComplete(
+          resultJobId: _analysisJobId,
+        );
+      }
+    } catch (e) {
+      debugPrint("Error applying analysis: $e");
     } finally {
-      _stopRenderWakeSequence();
+      _stopAnalysisExperience();
       if (mounted) {
         setState(() {
-          uploading = false;
-          analysisLoading = false;
-          _analysisStatusText = "";
           _autoZoomRetryInProgress = false;
           _autoZoomPreviewScale = 1.0;
         });
       }
     }
-    // Review prompt removed (manual rating only).
-    return true;
   }
 
   Future<void> _handleUnlockAiAnalysisTap() async {
@@ -6971,13 +7142,15 @@ Do not add intro or conclusion.
 
   @override
   void dispose() {
-    _factTimer?.cancel();
-    _renderWakeDelayTimer?.cancel();
-    _renderWakeTicker?.cancel();
-    _renderWakeStopwatch?.stop();
+    _analysisMicrocopyTimer?.cancel();
+    _analysisLongWaitTimer?.cancel();
+    _analysisUploadSuccessTimer?.cancel();
+    _analysisPulseController.dispose();
+    _analysisGlowController.dispose();
     _drsRunId++;
     _razorpayService.dispose();
     _drsPhaseController.dispose();
+    controller?.removeListener(_pauseUploadedVideoAtEnd);
     controller?.dispose();
     super.dispose();
   }
@@ -7214,6 +7387,7 @@ Do not add intro or conclusion.
             else
               Stack(
                 children: [
+                  // Video player
                   Center(
                     child: ClipRect(
                       child: AnimatedScale(
@@ -7228,260 +7402,277 @@ Do not add intro or conclusion.
                     ),
                   ),
 
-                  // LEFT SIDEBAR
-                  if (!showDRS)
+                  // LEFT SIDEBAR (Result Panel) - always visible, dimmed while loading
+                  if (!drsLoading)
                     Positioned(
                       left: 0,
                       top: 100,
-                      child: Container(
-                        width: 150,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
-                          borderRadius: const BorderRadius.only(
-                            topRight: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 500),
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.3),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _metric(
-                                "After Pitching Pace",
-                                _speedPanelValue,
-                                speed: speedKmph,
+                      child: Opacity(
+                        opacity: analysisLoading ? 0.5 : 1.0,
+                        child: AbsorbPointer(
+                          absorbing: analysisLoading,
+                          child: Container(
+                            width: 150,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.55),
+                              borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(16),
+                                bottomRight: Radius.circular(16),
                               ),
                             ),
-                            if (!analysisLoading && speedKmph == null)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 10),
-                                child: Text(
-                                  "Try uploading the same video with zoom for speed detection.",
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    height: 1.3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 500),
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0, 0.3),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: _metric(
+                                    "After Pitching Pace",
+                                    _speedPanelValue,
+                                    speed: speedKmph,
                                   ),
                                 ),
-                              ),
-                            const SizedBox(height: 10),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 500),
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.3),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _metric(
-                                "Swing",
-                                analysisLoading
-                                    ? "Analyzing..."
-                                    : (swing.isNotEmpty ? swing : "----"),
-                              ),
-                            ),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 500),
-                              transitionBuilder: (child, animation) {
-                                return FadeTransition(
-                                  opacity: animation,
-                                  child: SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(0, 0.3),
-                                      end: Offset.zero,
-                                    ).animate(animation),
-                                    child: child,
-                                  ),
-                                );
-                              },
-                              child: _metric(
-                                "Spin",
-                                analysisLoading
-                                    ? "Analyzing..."
-                                    : (spin.isNotEmpty ? spin : "----"),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            GestureDetector(
-                              onTapDown: (_) => _pressDown(
-                                (v) => _drsScale = v,
-                                (r) => _drsRotation = r,
-                              ),
-                              onTapUp: (_) => _pressUp(
-                                (v) => _drsScale = v,
-                                (r) => _drsRotation = r,
-                              ),
-                              onTapCancel: () => _pressUp(
-                                (v) => _drsScale = v,
-                                (r) => _drsRotation = r,
-                              ),
-                              onTap: drsLoading ? null : runDRS,
-                              child: AnimatedRotation(
-                                turns: _drsRotation,
-                                duration: const Duration(milliseconds: 120),
-                                child: AnimatedScale(
-                                  scale: _drsScale,
-                                  duration: const Duration(milliseconds: 120),
-                                  curve: Curves.easeOutBack,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Colors.redAccent,
-                                          Colors.deepOrange,
-                                        ],
+                                if (!analysisLoading && speedKmph == null)
+                                  const Padding(
+                                    padding: EdgeInsets.only(bottom: 10),
+                                    child: Text(
+                                      "Try uploading the same video with zoom for speed detection.",
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.3,
                                       ),
-                                      borderRadius: BorderRadius.circular(14),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.redAccent.withOpacity(
-                                            0.6,
-                                          ),
-                                          blurRadius: 18,
-                                          spreadRadius: 1,
-                                        ),
-                                      ],
                                     ),
-                                    child: Center(
-                                      child: drsLoading
-                                          ? const SizedBox(
-                                              height: 18,
-                                              width: 18,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white,
-                                              ),
-                                            )
-                                          : const Text(
-                                              "DRS",
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
+                                  ),
+                                const SizedBox(height: 10),
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 500),
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0, 0.3),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: _metric(
+                                    "Swing",
+                                    analysisLoading
+                                        ? "Analyzing..."
+                                        : (swing.isNotEmpty ? swing : "----"),
+                                  ),
+                                ),
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 500),
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SlideTransition(
+                                        position: Tween<Offset>(
+                                          begin: const Offset(0, 0.3),
+                                          end: Offset.zero,
+                                        ).animate(animation),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: _metric(
+                                    "Spin",
+                                    analysisLoading
+                                        ? "Analyzing..."
+                                        : (spin.isNotEmpty ? spin : "----"),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                GestureDetector(
+                                  onTapDown: (_) => _pressDown(
+                                    (v) => _drsScale = v,
+                                    (r) => _drsRotation = r,
+                                  ),
+                                  onTapUp: (_) => _pressUp(
+                                    (v) => _drsScale = v,
+                                    (r) => _drsRotation = r,
+                                  ),
+                                  onTapCancel: () => _pressUp(
+                                    (v) => _drsScale = v,
+                                    (r) => _drsRotation = r,
+                                  ),
+                                  onTap: drsLoading ? null : runDRS,
+                                  child: AnimatedRotation(
+                                    turns: _drsRotation,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: AnimatedScale(
+                                      scale: _drsScale,
+                                      duration: const Duration(
+                                        milliseconds: 120,
+                                      ),
+                                      curve: Curves.easeOutBack,
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Colors.redAccent,
+                                              Colors.deepOrange,
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.redAccent
+                                                  .withOpacity(0.6),
+                                              blurRadius: 18,
+                                              spreadRadius: 1,
                                             ),
+                                          ],
+                                        ),
+                                        child: Center(
+                                          child: drsLoading
+                                              ? const SizedBox(
+                                                  height: 18,
+                                                  width: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
+                                                )
+                                              : const Text(
+                                                  "DRS",
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            GestureDetector(
-                              onTapDown: (_) => _pressDown(
-                                (v) => _coachScale = v,
-                                (r) => _coachRotation = r,
-                              ),
-                              onTapUp: (_) => _pressUp(
-                                (v) => _coachScale = v,
-                                (r) => _coachRotation = r,
-                              ),
-                              onTapCancel: () => _pressUp(
-                                (v) => _coachScale = v,
-                                (r) => _coachRotation = r,
-                              ),
-                              onTap: () async {
-                                if (!PremiumService.isPremiumActive) {
-                                  if (!mounted) return;
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const PremiumScreen(
-                                        entrySource: "mistake_lock",
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                setState(() {
-                                  showCoach = true;
-                                  coachReply =
-                                      "This may take 1–2 minutes...\nPlease keep the app open ⏳";
-                                });
-
-                                await Future.delayed(
-                                  const Duration(seconds: 6),
-                                );
-                                if (!mounted) return;
-
-                                setState(() {
-                                  coachReply =
-                                      "Analyzing your $_analysisDiscipline... 🏏";
-                                });
-
-                                await runCoach();
-                              },
-                              child: AnimatedRotation(
-                                turns: _coachRotation,
-                                duration: const Duration(milliseconds: 120),
-                                child: AnimatedScale(
-                                  scale: _coachScale,
-                                  duration: const Duration(milliseconds: 120),
-                                  curve: Curves.easeOutBack,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Colors.blueAccent,
-                                          Colors.cyan,
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(14),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.blueAccent.withOpacity(
-                                            0.6,
+                                const SizedBox(height: 10),
+                                GestureDetector(
+                                  onTapDown: (_) => _pressDown(
+                                    (v) => _coachScale = v,
+                                    (r) => _coachRotation = r,
+                                  ),
+                                  onTapUp: (_) => _pressUp(
+                                    (v) => _coachScale = v,
+                                    (r) => _coachRotation = r,
+                                  ),
+                                  onTapCancel: () => _pressUp(
+                                    (v) => _coachScale = v,
+                                    (r) => _coachRotation = r,
+                                  ),
+                                  onTap: () async {
+                                    if (!PremiumService.isPremiumActive) {
+                                      if (!mounted) return;
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => const PremiumScreen(
+                                            entrySource: "mistake_lock",
                                           ),
-                                          blurRadius: 18,
-                                          spreadRadius: 1,
                                         ),
-                                      ],
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        "COACH",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                                      );
+                                      return;
+                                    }
+
+                                    setState(() {
+                                      showCoach = true;
+                                      coachReply =
+                                          "This may take 1–2 minutes...\nPlease keep the app open ⏳";
+                                    });
+
+                                    await Future.delayed(
+                                      const Duration(seconds: 6),
+                                    );
+                                    if (!mounted) return;
+
+                                    setState(() {
+                                      coachReply =
+                                          "Analyzing your $_analysisDiscipline... 🏏";
+                                    });
+
+                                    await runCoach();
+                                  },
+                                  child: AnimatedRotation(
+                                    turns: _coachRotation,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: AnimatedScale(
+                                      scale: _coachScale,
+                                      duration: const Duration(
+                                        milliseconds: 120,
+                                      ),
+                                      curve: Curves.easeOutBack,
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Colors.blueAccent,
+                                              Colors.cyan,
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.blueAccent
+                                                  .withOpacity(0.6),
+                                              blurRadius: 18,
+                                              spreadRadius: 1,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Center(
+                                          child: Text(
+                                            "COACH",
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -7668,95 +7859,7 @@ Do not add intro or conclusion.
                       ),
                     ),
                   if (analysisLoading)
-                    Positioned.fill(
-                      child: _showRenderWakeCinematic
-                          ? _buildRenderWakeOverlay()
-                          : Container(
-                              color: Colors.black.withOpacity(0.55),
-                              child: Center(
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 28,
-                                  ),
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Colors.white12),
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      AnimatedSwitcher(
-                                        duration: const Duration(
-                                          milliseconds: 600,
-                                        ),
-                                        transitionBuilder: (child, animation) {
-                                          return FadeTransition(
-                                            opacity: animation,
-                                            child: SlideTransition(
-                                              position: Tween<Offset>(
-                                                begin: const Offset(0.0, 0.3),
-                                                end: Offset.zero,
-                                              ).animate(animation),
-                                              child: child,
-                                            ),
-                                          );
-                                        },
-                                        child: Text(
-                                          _cricketFacts[_currentFactIndex],
-                                          key: ValueKey(
-                                            _cricketFacts[_currentFactIndex],
-                                          ),
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 15,
-                                            height: 1.4,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 14),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          SizedBox(
-                                            width: 16,
-                                            height: 16,
-                                            child: _autoZoomRetryInProgress
-                                                ? const Icon(
-                                                    Icons.zoom_in_rounded,
-                                                    color: Color(0xFF38BDF8),
-                                                    size: 16,
-                                                  )
-                                                : const CircularProgressIndicator(
-                                                    strokeWidth: 2.2,
-                                                    color: Color(0xFF38BDF8),
-                                                  ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Flexible(
-                                            child: Text(
-                                              _analysisStatusText.isEmpty
-                                                  ? "Analyzing video..."
-                                                  : _analysisStatusText,
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12.5,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                    ),
+                    Positioned.fill(child: _buildAnalysisOverlay()),
                 ],
               ),
           ],
@@ -7765,91 +7868,467 @@ Do not add intro or conclusion.
     );
   }
 
-  Widget _buildRenderWakeOverlay() {
-    final elapsed = _renderWakeStopwatch?.elapsed ?? Duration.zero;
-    final seconds = elapsed.inMilliseconds / 1000.0;
-    final normalized =
-        (elapsed.inMilliseconds / _renderWakeDuration.inMilliseconds).clamp(
-          0.0,
-          1.0,
-        );
+  Future<void> _leaveDuringAnalysis({required bool openAnalysisTab}) async {
+    HapticFeedback.mediumImpact();
+    _stopAnalysisExperience();
+    if (!mounted) return;
+    final targetIndex = openAnalysisTab && PremiumService.isElite ? 2 : 0;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => MainNavigation(
+          userName: _wakeOverlayUserName(),
+          initialIndex: targetIndex,
+        ),
+      ),
+      (route) => false,
+    );
+  }
 
-    String phaseText;
-    if (seconds < 10) {
-      phaseText = "CrickNova is sleeping... 😴";
-    } else if (seconds < 20) {
-      phaseText = "Turning off the AC... Wake up now!";
-    } else if (seconds < 30) {
-      phaseText = "Pulling the curtains... Look at the sun!";
-    } else if (seconds < 40) {
-      phaseText = "Taking away the blanket! Enough sleeping!";
-    } else if (seconds < 45) {
-      phaseText = "Splashing cold water! Get up ${_wakeOverlayUserName()}!";
-    } else {
-      phaseText = "8:00 AM! Everyone is on the pitch! 🏃‍♂️";
+  Widget _buildAnalysisOverlay() {
+    if (!_showLongWaitHandoff || !PremiumService.isElite) {
+      return _buildCompactAnalysisOverlay();
     }
 
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _RenderWakePainter(
-                elapsedSeconds: seconds,
-                progress: normalized,
-              ),
+    final activeStatus = _analysisStatusText.isEmpty
+        ? "Preparing your insights..."
+        : _analysisStatusText;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        _analysisPulseController,
+        _analysisGlowController,
+      ]),
+      builder: (context, child) {
+        final pulse = Curves.easeInOut.transform(
+          _analysisPulseController.value,
+        );
+        final glow = Curves.easeInOut.transform(_analysisGlowController.value);
+        final tilt = (pulse - 0.5) * 0.22;
+
+        return Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Color.lerp(
+                  const Color(0xFF0B0F14),
+                  const Color(0xFF112032),
+                  0.18 + (0.12 * glow),
+                )!,
+                Color.lerp(
+                  const Color(0xFF05070B),
+                  const Color(0xFF0B1C29),
+                  0.10 + (0.10 * pulse),
+                )!,
+              ],
+              begin: Alignment(-1 + (tilt * 2), -1),
+              end: Alignment(1, 1 - tilt),
             ),
           ),
-          SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 220),
-                    Text(
-                      phaseText,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w300,
-                        height: 1.35,
-                        letterSpacing: 0.3,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: 0.55,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: Alignment(0, -0.25 + (tilt * 0.8)),
+                          radius: 1.05,
+                          colors: [
+                            const Color(0x2600C2FF),
+                            const Color(0x1400FF9D),
+                            Colors.transparent,
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 22),
-                    Text(
+                  ),
+                ),
+              ),
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
+                    ),
+                    child: Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF121821).withOpacity(0.78),
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.10),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(
+                              0xFF00C2FF,
+                            ).withOpacity(0.14 + (0.12 * glow)),
+                            blurRadius: 36,
+                            spreadRadius: 2,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.34),
+                            blurRadius: 24,
+                            offset: const Offset(0, 16),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 300),
+                            child: !_showUploadSuccessState
+                                ? const SizedBox.shrink()
+                                : Container(
+                                    key: const ValueKey("upload_success"),
+                                    margin: const EdgeInsets.only(bottom: 18),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 9,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF00FF9D,
+                                      ).withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: const Color(
+                                          0xFF00FF9D,
+                                        ).withOpacity(0.40),
+                                      ),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle_rounded,
+                                          size: 16,
+                                          color: Color(0xFF00FF9D),
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          "Upload successful",
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                          ),
+                          SizedBox(
+                            width: 190,
+                            height: 190,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                CustomPaint(
+                                  size: const Size.square(190),
+                                  painter: _AnalysisPulsePainter(pulse: pulse),
+                                ),
+                                SizedBox(
+                                  width: 118,
+                                  height: 118,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 4,
+                                    value: null,
+                                    color: Color.lerp(
+                                      const Color(0xFF00C2FF),
+                                      const Color(0xFF00FF9D),
+                                      glow,
+                                    ),
+                                    backgroundColor: Colors.white12,
+                                  ),
+                                ),
+                                Container(
+                                  width: 78,
+                                  height: 78,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: const Color(0xFF0E151D),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.12),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.sports_cricket_rounded,
+                                    color: Colors.white,
+                                    size: 34,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            "Analyzing your video...",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 320),
+                            transitionBuilder: (child, animation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: SlideTransition(
+                                  position: Tween<Offset>(
+                                    begin: const Offset(0, 0.18),
+                                    end: Offset.zero,
+                                  ).animate(animation),
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              activeStatus,
+                              key: ValueKey(activeStatus),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Color(0xFF9ADFFF),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            "AI is working in the background so your next insight lands clean.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                              height: 1.45,
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          AnimatedOpacity(
+                            opacity: _showLongWaitHandoff ? 1 : 0,
+                            duration: const Duration(milliseconds: 320),
+                            child: IgnorePointer(
+                              ignoring: !_showLongWaitHandoff,
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.04),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.08),
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      "Analysis is taking a bit longer. We'll notify you when it's ready.",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13.5,
+                                        height: 1.45,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 14),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: () => _leaveDuringAnalysis(
+                                          openAnalysisTab: false,
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(
+                                            0xFF00C2FF,
+                                          ),
+                                          foregroundColor: Colors.black,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          "Continue exploring",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton(
+                                        onPressed: () => _leaveDuringAnalysis(
+                                          openAnalysisTab: true,
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.white,
+                                          side: BorderSide(
+                                            color: const Color(
+                                              0xFF00FF9D,
+                                            ).withOpacity(0.42),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 14,
+                                          ),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          "View in Analysis Tab",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCompactAnalysisOverlay() {
+    return Container(
+      color: Colors.black.withOpacity(0.55),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_showUploadSuccessState) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00FF9D).withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: const Color(0xFF00FF9D).withOpacity(0.32),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 15,
+                        color: Color(0xFF00FF9D),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        "Upload successful",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 46,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 800),
+                  child: Text(
+                    _currentFact,
+                    key: ValueKey(_currentFact),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      color: Colors.white.withOpacity(0.82),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                      fontStyle: FontStyle.italic,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: _autoZoomRetryInProgress
+                        ? const Icon(
+                            Icons.zoom_in_rounded,
+                            color: Color(0xFF38BDF8),
+                            size: 16,
+                          )
+                        : const CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Color(0xFF38BDF8),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
                       _analysisStatusText.isEmpty
-                          ? "Renderer is waking up..."
+                          ? "Analyzing video..."
                           : _analysisStatusText,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w400,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: 210,
-                      child: LinearProgressIndicator(
-                        minHeight: 3,
-                        value: normalized,
-                        backgroundColor: Colors.white12,
-                        valueColor: const AlwaysStoppedAnimation(
-                          Color(0xFF38BDF8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

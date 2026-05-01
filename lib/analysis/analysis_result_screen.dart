@@ -40,21 +40,139 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       }
     }
 
-    // ---------- SWING (Direct Backend Value) ----------
-    String swing = "Straight";
-
-    final rawSwing = src["swing"];
-    if (rawSwing is String && rawSwing.trim().isNotEmpty) {
-      swing = rawSwing.trim();
+    bool isBadToken(String s) {
+      final t = s.trim().toLowerCase();
+      return t.isEmpty ||
+          t == "none" ||
+          t == "unknown" ||
+          t == "unavailable" ||
+          t == "na" ||
+          t == "n/a" ||
+          t == "null" ||
+          t == "__" ||
+          t == "straight" ||
+          t == "no spin";
     }
 
-    // ---------- SPIN (Direct Backend Value) ----------
-    String spin = "No Spin";
-    String spinStrength = "";
+    List<Map<String, double>> sanitizeTrajectory(dynamic rawPoints) {
+      if (rawPoints is! List) return const [];
+      final pts = <Map<String, double>>[];
+      for (final e in rawPoints) {
+        if (e is! Map) continue;
+        final x = e["x"];
+        final y = e["y"];
+        if (x is! num || y is! num) continue;
+        pts.add({
+          "x": x.toDouble().clamp(0.0, 1.0),
+          "y": y.toDouble().clamp(0.0, 1.0),
+        });
+      }
+      return pts;
+    }
 
+    List<Map<String, double>> unmirrorTrajectoryX(
+      List<Map<String, double>> pts,
+    ) {
+      if (pts.isEmpty) return pts;
+      double minX = 1.0;
+      double maxX = 0.0;
+      for (final p in pts) {
+        final x = p["x"] ?? 0.5;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+      }
+      return pts
+          .map(
+            (p) => {
+              "x": (maxX - ((p["x"] ?? 0.5) - minX)).clamp(0.0, 1.0),
+              "y": (p["y"] ?? 0.5).clamp(0.0, 1.0),
+            },
+          )
+          .toList(growable: false);
+    }
+
+    int detectBounceIndex(List<Map<String, double>> pts) {
+      if (pts.length < 5) return -1;
+      int best = -1;
+      double bestY = -1;
+      for (int i = 2; i < pts.length - 2; i++) {
+        final y = pts[i]["y"] ?? 0.0;
+        if (y > bestY) {
+          bestY = y;
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    Map<String, String> inferLabels(dynamic rawTrajectory) {
+      final pts = unmirrorTrajectoryX(sanitizeTrajectory(rawTrajectory));
+      if (pts.length < 2) {
+        return {"swing": "INSWING", "spin": "OFF SPIN"};
+      }
+      final bounce = detectBounceIndex(pts);
+      final pivot = bounce <= 0
+          ? (pts.length ~/ 2)
+          : bounce.clamp(1, pts.length - 2);
+
+      double slopeForX(int start, int end) {
+        final n = (end - start + 1);
+        if (n <= 1) return 0.0;
+        double sumT = 0.0;
+        double sumX = 0.0;
+        double sumTT = 0.0;
+        double sumTX = 0.0;
+        for (int i = 0; i < n; i++) {
+          final t = i.toDouble();
+          final x = pts[start + i]["x"] ?? 0.5;
+          sumT += t;
+          sumX += x;
+          sumTT += (t * t);
+          sumTX += (t * x);
+        }
+        final denom = (n * sumTT) - (sumT * sumT);
+        if (denom.abs() < 1e-9) return 0.0;
+        return ((n * sumTX) - (sumT * sumX)) / denom;
+      }
+
+      final preSlope = slopeForX(0, pivot);
+      final postSlope = slopeForX(pivot, pts.length - 1);
+      final curve = postSlope - preSlope;
+      const eps = 0.0008;
+      final overallDx = (pts.last["x"] ?? 0.5) - (pts.first["x"] ?? 0.5);
+      final swingSignal = preSlope.abs() < eps ? overallDx : preSlope;
+      final spinSignal = curve.abs() < eps ? postSlope : curve;
+      return {
+        "swing": swingSignal >= 0 ? "OUTSWING" : "INSWING",
+        "spin": spinSignal >= 0 ? "LEG SPIN" : "OFF SPIN",
+      };
+    }
+
+    final inferred = inferLabels(src["trajectory"]);
+
+    // ---------- SWING ----------
+    String swing = inferred["swing"] ?? "INSWING";
+    final rawSwing = src["swing"];
+    if (rawSwing is String && !isBadToken(rawSwing)) {
+      final lower = rawSwing.trim().toLowerCase();
+      if (lower.contains("out")) {
+        swing = "OUTSWING";
+      } else if (lower.contains("in")) {
+        swing = "INSWING";
+      }
+    }
+
+    // ---------- SPIN ----------
+    String spin = inferred["spin"] ?? "OFF SPIN";
+    String spinStrength = "";
     final rawSpin = src["spin"];
-    if (rawSpin is String && rawSpin.trim().isNotEmpty) {
-      spin = rawSpin.trim();
+    if (rawSpin is String && !isBadToken(rawSpin)) {
+      final lower = rawSpin.trim().toLowerCase();
+      if (lower.contains("leg")) {
+        spin = "LEG SPIN";
+      } else if (lower.contains("off")) {
+        spin = "OFF SPIN";
+      }
     }
 
     final rawStrength = src["spin_strength"];

@@ -15,6 +15,8 @@ import '../upload/upload_screen.dart';
 import '../compare/analyse_yourself_screen.dart';
 import '../premium/premium_expired_screen.dart';
 import '../navigation/main_navigation.dart';
+import 'package:CrickNova_Ai/analysis/analyzing_videos_screen.dart';
+import 'package:CrickNova_Ai/models/pending_video.dart';
 import 'bowling_analyse_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -38,9 +40,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     viewportFraction: 0.9,
   );
   Timer? _statsTimer;
+  Timer? _analysisCountdownTicker;
   bool _quickStatsSyncInProgress = false;
   StreamSubscription? _statsBoxSub;
   StreamSubscription? _speedBoxSub;
+  StreamSubscription<BoxEvent>? _pendingVideosSub;
   int _currentStatsPage = 0;
   late final AnimationController _eliteHeaderController;
   late final AnimationController _diamondController;
@@ -48,6 +52,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _homeAnimationsActive = false;
   GreetingPayload _greeting = GreetingController.build("Player");
   Timer? _greetingTimer;
+  final Map<String, Timer> _analysisTwoMinuteTimers = {};
+  bool _analysisReminderSyncing = false;
+
+  static const Duration _analysisUploadReminderDelay = Duration(minutes: 2);
+  static const String _analysisTimerStartedPrefix =
+      'analysis_two_min_timer_started_';
+  static const String _analysisMessageShownPrefix =
+      'analysis_two_min_message_shown_';
 
   @override
   void didChangeDependencies() {
@@ -114,6 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
     if (_isHomeTabVisible) {
       _startStatsAutoSlide();
+      _startAnalysisCountdownTicker();
       _resumeHomeAnimations();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -122,7 +135,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       unawaited(_prepareEliteWelcomeHeader());
       unawaited(_maybeHandleNotificationOptIn());
       unawaited(_loadGreetingState());
+      unawaited(_syncAnalysisTwoMinuteReminders());
     });
+    _pendingVideosSub = Hive.box<PendingVideo>(
+      'pending_videos',
+    ).watch().listen((_) => unawaited(_syncAnalysisTwoMinuteReminders()));
     _scheduleGreetingRefresh();
   }
 
@@ -131,15 +148,139 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void _handleTabVisibilityChange() {
     if (_isHomeTabVisible) {
       _startStatsAutoSlide();
+      _startAnalysisCountdownTicker();
       _resumeHomeAnimations();
       _scheduleGreetingRefresh();
       _refreshGreeting();
       unawaited(_syncQuickStats());
+      unawaited(_syncAnalysisTwoMinuteReminders());
       return;
     }
     _statsTimer?.cancel();
+    _analysisCountdownTicker?.cancel();
+    _analysisCountdownTicker = null;
     _greetingTimer?.cancel();
     _pauseHomeAnimations();
+  }
+
+  void _startAnalysisCountdownTicker() {
+    if (_analysisCountdownTicker != null) return;
+    _analysisCountdownTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_isHomeTabVisible) return;
+      final hasActiveAnalysis = Hive.box<PendingVideo>('pending_videos').values
+          .any(
+            (video) => video.status == 'pending' || video.status == 'uploading',
+          );
+      if (hasActiveAnalysis) {
+        setState(() {});
+      }
+    });
+  }
+
+  String _analysisTimerStartedKey(String jobId) {
+    return '$_analysisTimerStartedPrefix$jobId';
+  }
+
+  String _analysisMessageShownKey(String jobId) {
+    return '$_analysisMessageShownPrefix$jobId';
+  }
+
+  DateTime _analysisReminderDueAt(PendingVideo video) {
+    return DateTime.fromMillisecondsSinceEpoch(
+      video.timestamp,
+    ).add(_analysisUploadReminderDelay);
+  }
+
+  Duration _analysisReminderRemaining(PendingVideo video) {
+    final remaining = _analysisReminderDueAt(video).difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  String _formatAnalysisReminder(Duration remaining) {
+    final totalSeconds = remaining.inSeconds
+        .clamp(0, _analysisUploadReminderDelay.inSeconds)
+        .toInt();
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _syncAnalysisTwoMinuteReminders() async {
+    if (_analysisReminderSyncing) return;
+    _analysisReminderSyncing = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final box = Hive.box<PendingVideo>('pending_videos');
+      final activeIds = <String>{};
+
+      for (final video in box.values) {
+        if (!(prefs.getBool(_analysisTimerStartedKey(video.id)) ?? false)) {
+          continue;
+        }
+        if (prefs.getBool(_analysisMessageShownKey(video.id)) ?? false) {
+          continue;
+        }
+        if (video.status == 'failed') {
+          await prefs.setBool(_analysisMessageShownKey(video.id), true);
+          continue;
+        }
+
+        activeIds.add(video.id);
+        if (_analysisTwoMinuteTimers.containsKey(video.id)) continue;
+
+        final remaining = _analysisReminderDueAt(
+          video,
+        ).difference(DateTime.now());
+        if (remaining.isNegative || remaining == Duration.zero) {
+          unawaited(_showAnalysisTwoMinuteMessage(video));
+        } else {
+          _analysisTwoMinuteTimers[video.id] = Timer(remaining, () {
+            _analysisTwoMinuteTimers.remove(video.id);
+            unawaited(_showAnalysisTwoMinuteMessage(video));
+          });
+        }
+      }
+
+      for (final entry in _analysisTwoMinuteTimers.entries.toList()) {
+        if (!activeIds.contains(entry.key)) {
+          entry.value.cancel();
+          _analysisTwoMinuteTimers.remove(entry.key);
+        }
+      }
+    } finally {
+      _analysisReminderSyncing = false;
+    }
+  }
+
+  Future<void> _showAnalysisTwoMinuteMessage(PendingVideo video) async {
+    if (!mounted || !_isHomeTabVisible) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final shownKey = _analysisMessageShownKey(video.id);
+    if (prefs.getBool(shownKey) ?? false) return;
+    await prefs.setBool(shownKey, true);
+
+    if (!mounted || !_isHomeTabVisible) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF0F172A),
+        duration: const Duration(seconds: 6),
+        content: Text(
+          '2 min complete. Upload another video now.',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        action: SnackBarAction(
+          label: 'Upload',
+          textColor: const Color(0xFF38BDF8),
+          onPressed: () {
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const UploadScreen()));
+          },
+        ),
+      ),
+    );
   }
 
   void _resumeHomeAnimations() {
@@ -803,6 +944,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
+
+                if (PremiumService.isElite) ...[
+                  const SizedBox(height: 24),
+                  _exclusiveTrainingVidSection(),
+                ],
 
                 const SizedBox(height: 50),
 
@@ -1540,14 +1686,353 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _exclusiveTrainingVidSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Exclusive Training Vid",
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  final nav = MainNavigation.of(context);
+                  if (nav != null) {
+                    nav.setTab(2); // Analysis Tab
+                  }
+                },
+                child: Text(
+                  "See All",
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF38BDF8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 160,
+          child: ValueListenableBuilder(
+            valueListenable: Hive.box<PendingVideo>(
+              'pending_videos',
+            ).listenable(),
+            builder: (context, Box<PendingVideo> box, _) {
+              final videos = box.values.toList().reversed.take(5).toList();
+
+              if (videos.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.video_library_outlined,
+                          color: Colors.white30,
+                          size: 32,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "No videos analyzed yet",
+                          style: GoogleFonts.poppins(
+                            color: Colors.white30,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: videos.length,
+                itemBuilder: (context, index) {
+                  final video = videos[index];
+                  final bool isReady = video.status == 'complete';
+                  final remaining = _analysisReminderRemaining(video);
+                  final statusText = isReady
+                      ? "Ready"
+                      : remaining == Duration.zero
+                      ? "2 min complete"
+                      : "Timer ${_formatAnalysisReminder(remaining)}";
+
+                  return GestureDetector(
+                    onTap: isReady
+                        ? () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    AnalysisResultScreen(jobId: video.id),
+                              ),
+                            );
+                          }
+                        : () => _showTrackingInProgressDialog(video),
+                    child: Container(
+                      width: 140,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF111827),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isReady
+                              ? const Color(0xFF00FF9D).withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.1),
+                        ),
+                        boxShadow: isReady
+                            ? [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF00FF9D,
+                                  ).withValues(alpha: 0.1),
+                                  blurRadius: 12,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : [],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20),
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    decoration: const BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color(0xFF1F2937),
+                                          Color(0xFF111827),
+                                        ],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.sports_cricket_rounded,
+                                    color: isReady
+                                        ? const Color(0xFF00FF9D)
+                                        : Colors.white24,
+                                    size: 40,
+                                  ),
+                                  if (!isReady)
+                                    const CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFF00C2FF),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  statusText,
+                                  style: GoogleFonts.poppins(
+                                    color: isReady
+                                        ? const Color(0xFF00FF9D)
+                                        : Colors.white60,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  video.localFilePath
+                                      .split(RegExp(r'[\\/]'))
+                                      .last,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showTrackingInProgressDialog(PendingVideo video) {
+    showDialog(
+      context: context,
+      builder: (context) => BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: Container(
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 400),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withOpacity(0.95),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        height: 200,
+                        width: double.infinity,
+                        color: Colors.black54,
+                        child: const Icon(
+                          Icons.videocam_outlined,
+                          color: Colors.white24,
+                          size: 60,
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 120,
+                        height: 120,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 3,
+                          color: Color(0xFF00C2FF),
+                        ),
+                      ),
+                      Column(
+                        children: [
+                          const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Color(0xFF00C2FF),
+                            size: 40,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            "TRACKING ACTIVE",
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF00C2FF),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Text(
+                        "AI Analysis in Progress",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "CrickNova is currently tracking trajectory, swing, and spin for ${video.localFilePath.split(RegExp(r'[\\/]')).last}.",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white60,
+                          fontSize: 14,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Center(
+                            child: Text(
+                              "Close",
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _statsTimer?.cancel();
+    _analysisCountdownTicker?.cancel();
+    for (final timer in _analysisTwoMinuteTimers.values) {
+      timer.cancel();
+    }
+    _analysisTwoMinuteTimers.clear();
     _greetingTimer?.cancel();
     _pauseHomeAnimations();
     MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
     _statsBoxSub?.cancel();
     _speedBoxSub?.cancel();
+    _pendingVideosSub?.cancel();
     _statsPageController.dispose();
     _eliteHeaderController.dispose();
     _diamondController.dispose();

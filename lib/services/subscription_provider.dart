@@ -3,21 +3,23 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'pricing_location_service.dart';
 import 'premium_service.dart';
 
-class SubscriptionProvider extends ChangeNotifier {
+class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
   SubscriptionProvider({
     InAppPurchase? inAppPurchase,
     FirebaseFirestore? firestore,
     FirebaseAuth? auth,
   }) : _inAppPurchase = inAppPurchase ?? InAppPurchase.instance,
        _firestore = firestore ?? FirebaseFirestore.instance,
-       _auth = auth ?? FirebaseAuth.instance;
+       _auth = auth ?? FirebaseAuth.instance {
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   static const String premiumProductId = 'cricknova_premium';
   static const String monthlyPlanId = 'monthly-plan';
@@ -40,9 +42,13 @@ class SubscriptionProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isPurchasePending = false;
   bool _isPremium = false;
+  String _billingState = 'FREE';
   int _aiLimit = 0;
   int _aiUsed = 0;
   DateTime? _expiryDate;
+  DateTime? _graceUntil;
+  DateTime? _holdUntil;
+  DateTime? _trialRevokeAt;
   String? _activeBasePlanId;
   String? _pendingSelectedBasePlanId;
   String? _lastError;
@@ -54,11 +60,28 @@ class SubscriptionProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isPurchasePending => _isPurchasePending;
   bool get isPremium => _isPremium;
+  String get billingState => _billingState;
+  bool get isInGracePeriod => _billingState == 'IN_GRACE_PERIOD';
+  bool get isAccountOnHold =>
+      _billingState == 'ACCOUNT_HOLD' || _billingState == 'PAST_DUE';
   int get aiLimit => _aiLimit;
   int get aiUsed => _aiUsed;
   DateTime? get expiryDate => _expiryDate;
+  DateTime? get graceUntil => _graceUntil;
+  DateTime? get holdUntil => _holdUntil;
+  DateTime? get trialRevokeAt => _trialRevokeAt;
   String? get activeBasePlanId => _activeBasePlanId;
   String? get lastError => _lastError;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!_isPurchasePending || _pendingSelectedBasePlanId == null) return;
+
+    _isPurchasePending = false;
+    _pendingSelectedBasePlanId = null;
+    notifyListeners();
+  }
 
   void _ensurePurchaseSubscription() {
     _purchaseSubscription ??= _inAppPurchase.purchaseStream.listen(
@@ -106,28 +129,66 @@ class SubscriptionProvider extends ChangeNotifier {
     }
 
     try {
-      final DocumentSnapshot<Map<String, dynamic>> snapshot = await _firestore
+      final DocumentSnapshot<Map<String, dynamic>> subscriptionSnapshot =
+          await _firestore
+              .collection('subscriptions')
+              .doc(user.uid)
+              .get(const GetOptions(source: Source.serverAndCache));
+      final DocumentSnapshot<Map<String, dynamic>> userSnapshot = await _firestore
           .collection('users')
           .doc(user.uid)
           .get(const GetOptions(source: Source.serverAndCache));
 
-      if (!snapshot.exists) {
+      if (!subscriptionSnapshot.exists && !userSnapshot.exists) {
         _resetPremiumState();
         return;
       }
 
-      final Map<String, dynamic> data = snapshot.data() ?? <String, dynamic>{};
+      final Map<String, dynamic> subscriptionData =
+          subscriptionSnapshot.data() ?? <String, dynamic>{};
+      final Map<String, dynamic> userData = userSnapshot.data() ?? <String, dynamic>{};
+      final Map<String, dynamic> data = <String, dynamic>{
+        ...userData,
+        ...subscriptionData,
+      };
       final DateTime? expiry = _parseExpiry(data['expiry']);
-      final int aiLimit = _asInt(data['ai_limit']);
-      final int aiUsed = _asInt(data['ai_used']);
+      final int aiLimit = _asInt(
+        data['ai_limit'] ?? data['chatLimit'] ?? data['chat_limit'],
+      );
+      final int aiUsed = _asInt(
+        data['ai_used'] ?? data['chat_used'] ?? data['aiUsed'],
+      );
       final String? planId = data['plan'] as String?;
+      final String billingState = _parseBillingState(data);
+      final bool onHold =
+          billingState == 'ACCOUNT_HOLD' || billingState == 'PAST_DUE';
+      final bool inGrace = billingState == 'IN_GRACE_PERIOD';
+      final DateTime? graceUntil = _parseDate(
+        data['grace_until'] ?? data['graceUntil'],
+      );
+      final DateTime? holdUntil = _parseDate(
+        data['hold_until'] ?? data['holdUntil'],
+      );
+      final DateTime? trialRevokeAt = _parseDate(
+        data['trial_revoke_at'] ?? data['trialRevokeAt'],
+      );
       final bool premium =
-          expiry != null && DateTime.now().isBefore(expiry) && aiUsed < aiLimit;
+          !onHold &&
+          (inGrace ||
+              (expiry != null &&
+                  DateTime.now().isBefore(expiry) &&
+                  aiUsed < aiLimit) ||
+              data['isPremium'] == true ||
+              data['premium'] == true);
 
       _expiryDate = expiry;
+      _graceUntil = graceUntil;
+      _holdUntil = holdUntil;
+      _trialRevokeAt = trialRevokeAt;
       _aiLimit = aiLimit;
       _aiUsed = aiUsed;
-      _activeBasePlanId = premium ? planId : null;
+      _billingState = billingState;
+      _activeBasePlanId = planId;
       _isPremium = premium;
       _clearError(notify: false);
       notifyListeners();
@@ -461,6 +522,8 @@ class SubscriptionProvider extends ChangeNotifier {
       'ai_limit': aiLimit,
       'ai_used': 0,
       'expiry': Timestamp.fromDate(expiryDate),
+      'subscription_state': 'ACTIVE',
+      'billing_state': 'ACTIVE',
       'source': 'google_play',
       'product_id': premiumProductId,
       'purchase_token': purchaseToken,
@@ -487,6 +550,8 @@ class SubscriptionProvider extends ChangeNotifier {
     await _firestore.collection('subscriptions').doc(user.uid).set({
       'isPremium': true,
       'premium': true,
+      'subscription_state': 'ACTIVE',
+      'billing_state': 'ACTIVE',
       'plan': premiumPlanId,
       'chatLimit': chatLimit,
       'mistakeLimit': mistakeLimit,
@@ -688,6 +753,29 @@ class SubscriptionProvider extends ChangeNotifier {
     return null;
   }
 
+  DateTime? _parseDate(dynamic rawValue) {
+    if (rawValue is Timestamp) {
+      return rawValue.toDate();
+    }
+    if (rawValue is String && rawValue.isNotEmpty) {
+      return DateTime.tryParse(rawValue);
+    }
+    if (rawValue is int) {
+      return DateTime.fromMillisecondsSinceEpoch(rawValue);
+    }
+    return null;
+  }
+
+  String _parseBillingState(Map<String, dynamic> data) {
+    final dynamic raw = data['subscription_state'] ??
+        data['billing_state'] ??
+        data['state'];
+    if (raw is String && raw.trim().isNotEmpty) {
+      return raw.trim().toUpperCase();
+    }
+    return 'FREE';
+  }
+
   int _asInt(dynamic value) {
     if (value is int) {
       return value;
@@ -733,9 +821,13 @@ class SubscriptionProvider extends ChangeNotifier {
 
   void _resetPremiumState() {
     _isPremium = false;
+    _billingState = 'FREE';
     _aiLimit = 0;
     _aiUsed = 0;
     _expiryDate = null;
+    _graceUntil = null;
+    _holdUntil = null;
+    _trialRevokeAt = null;
     _activeBasePlanId = null;
     notifyListeners();
   }
@@ -762,6 +854,7 @@ class SubscriptionProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _purchaseSubscription?.cancel();
     super.dispose();
   }

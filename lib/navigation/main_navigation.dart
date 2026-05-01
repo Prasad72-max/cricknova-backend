@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 
 import '../home/home_screen.dart';
 import '../ai/ai_coach_screen.dart';
+import '../analysis/analyzing_videos_screen.dart';
 import '../premium/premium_screen.dart';
 import '../profile/profile_screen.dart';
 import '../services/premium_service.dart';
@@ -19,9 +20,14 @@ abstract class MainNavigationController {
 
 class MainNavigation extends StatefulWidget {
   final String userName;
+  final int initialIndex;
   static final ValueNotifier<int> activeTabNotifier = ValueNotifier<int>(0);
 
-  const MainNavigation({super.key, required this.userName});
+  const MainNavigation({
+    super.key,
+    required this.userName,
+    this.initialIndex = 0,
+  });
 
   static MainNavigationController? of(BuildContext context) {
     return context.findAncestorStateOfType<_MainNavigationState>();
@@ -38,10 +44,11 @@ class _MainNavigationState extends State<MainNavigation>
   String userName = "Player";
   late List<Widget?> _screenCache;
   late bool _lastPremiumActive;
+  late String _lastBillingState;
+  late SubscriptionAccessState _lastAccessState;
   late int _lastKnownTabCount;
   DateTime? _activeSince;
   Timer? _minuteTimer;
-  int _screenWarmupGeneration = 0;
 
   @override
   void goHome() {
@@ -68,34 +75,53 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   void initState() {
     super.initState();
+    _index = widget.initialIndex;
     WidgetsBinding.instance.addObserver(this);
     PremiumService.premiumNotifier.addListener(_handlePremiumStateChanged);
     _lastPremiumActive = PremiumService.isPremiumActive;
+    _lastBillingState = PremiumService.billingState;
+    _lastAccessState = PremiumService.accessState;
     _lastKnownTabCount = _tabCount();
+    if (_index >= _lastKnownTabCount) {
+      _index = _lastKnownTabCount - 1;
+    }
     _activeSince = DateTime.now();
     _startMinuteTimer();
     _screenCache = List<Widget?>.filled(_lastKnownTabCount, null);
     _screenCache[_index] = _buildScreenAt(_index);
     MainNavigation.activeTabNotifier.value = _index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scheduleBackgroundScreenWarmup();
       unawaited(_bootstrapSession());
     });
+  }
+
+  bool get _hasEliteAnalysisTab => PremiumService.isElite;
+
+  int get _coachTabIndex => _hasEliteAnalysisTab ? 3 : 2;
+
+  int get _profileTabIndex {
+    if (_hasEliteAnalysisTab) return 4;
+    return PremiumService.isPremiumActive ? 3 : 4;
   }
 
   void _handlePremiumStateChanged() {
     if (!mounted) return;
     final bool premiumChanged =
         PremiumService.isPremiumActive != _lastPremiumActive;
+    final bool billingChanged =
+        PremiumService.billingState != _lastBillingState ||
+        PremiumService.accessState != _lastAccessState;
     final int nextTabCount = _tabCount();
     final bool tabCountChanged = nextTabCount != _lastKnownTabCount;
 
-    if (!premiumChanged && !tabCountChanged) {
+    if (!premiumChanged && !billingChanged && !tabCountChanged) {
       _evaluatePremiumAlerts();
       return;
     }
 
     _lastPremiumActive = PremiumService.isPremiumActive;
+    _lastBillingState = PremiumService.billingState;
+    _lastAccessState = PremiumService.accessState;
     _lastKnownTabCount = nextTabCount;
     final maxIndex = nextTabCount - 1;
     setState(() {
@@ -106,7 +132,6 @@ class _MainNavigationState extends State<MainNavigation>
       _screenCache[_index] = _buildScreenAt(_index);
     });
     MainNavigation.activeTabNotifier.value = _index;
-    _scheduleBackgroundScreenWarmup();
     _evaluatePremiumAlerts();
   }
 
@@ -174,25 +199,8 @@ class _MainNavigationState extends State<MainNavigation>
     });
   }
 
-  void _scheduleBackgroundScreenWarmup() {
-    final int generation = ++_screenWarmupGeneration;
-    final indexes = List<int>.generate(_tabCount(), (i) => i)..remove(_index);
-
-    for (var offset = 0; offset < indexes.length; offset++) {
-      final tabIndex = indexes[offset];
-      Future<void>.delayed(Duration(milliseconds: 450 + (offset * 350)), () {
-        if (!mounted || generation != _screenWarmupGeneration) return;
-        if (_screenCache[tabIndex] != null) return;
-        setState(() {
-          _screenCache[tabIndex] = _buildScreenAt(tabIndex);
-        });
-      });
-    }
-  }
-
   @override
   void dispose() {
-    _screenWarmupGeneration++;
     WidgetsBinding.instance.removeObserver(this);
     PremiumService.premiumNotifier.removeListener(_handlePremiumStateChanged);
     _stopMinuteTimer();
@@ -396,7 +404,10 @@ class _MainNavigationState extends State<MainNavigation>
     );
   }
 
-  int _tabCount() => PremiumService.isPremiumActive ? 4 : 5;
+  int _tabCount() {
+    if (_hasEliteAnalysisTab) return 5;
+    return PremiumService.isPremiumActive ? 4 : 5;
+  }
 
   Widget _buildScreenAt(int index) {
     if (index == 0) {
@@ -405,7 +416,10 @@ class _MainNavigationState extends State<MainNavigation>
     if (index == 1) {
       return const InsightsScreen(key: ValueKey("insights"));
     }
-    if (index == 2) {
+    if (_hasEliteAnalysisTab && index == 2) {
+      return const AnalyzingVideosScreen(key: ValueKey("analyzing_vid"));
+    }
+    if (index == _coachTabIndex) {
       return const AICoachScreen(key: ValueKey("coach"));
     }
     if (!PremiumService.isPremiumActive && index == 3) {
@@ -433,9 +447,14 @@ class _MainNavigationState extends State<MainNavigation>
         label: "Insights",
         icon: _navIcon(Icons.insights_outlined, 1),
       ),
+      if (_hasEliteAnalysisTab)
+        BottomNavigationBarItem(
+          label: "Analyzing Vid",
+          icon: _navIcon(Icons.video_collection_outlined, 2),
+        ),
       BottomNavigationBarItem(
         label: "CrickNova Coach",
-        icon: _navIcon(Icons.auto_awesome_outlined, 2),
+        icon: _navIcon(Icons.auto_awesome_outlined, _coachTabIndex),
       ),
     ];
     if (!PremiumService.isPremiumActive) {
@@ -449,10 +468,7 @@ class _MainNavigationState extends State<MainNavigation>
     navItems.add(
       BottomNavigationBarItem(
         label: "Profile",
-        icon: _navIcon(
-          Icons.person_outline,
-          PremiumService.isPremiumActive ? 3 : 4,
-        ),
+        icon: _navIcon(Icons.person_outline, _profileTabIndex),
       ),
     );
 

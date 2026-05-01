@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_player/video_player.dart';
 
 import '../navigation/main_navigation.dart';
 
@@ -68,13 +67,10 @@ class PostLoginWelcomeScreen extends StatefulWidget {
 }
 
 class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
-  VideoPlayerController? _videoController;
   final TextEditingController _nicknameController = TextEditingController();
-  bool _isReady = false;
-  bool _videoMissing = false;
-  bool _completed = false;
   bool _enteringApp = false;
   bool _identityComplete = false;
+  bool _welcomeShown = false;
   String _resolvedUserName = "Player";
 
   @override
@@ -88,64 +84,6 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) return "Player";
     return trimmed.split(RegExp(r'\s+')).first;
-  }
-
-  Future<void> _setupVideo() async {
-    final controller = await _buildVideoController();
-    if (!mounted) {
-      await controller?.dispose();
-      return;
-    }
-
-    if (controller == null) {
-      setState(() {
-        _videoMissing = true;
-        _isReady = true;
-      });
-      await _showWelcomePopup();
-      return;
-    }
-
-    _videoController = controller;
-    _videoController!.addListener(_onVideoProgress);
-
-    setState(() {
-      _isReady = true;
-    });
-
-    await _videoController!.play();
-  }
-
-  Future<VideoPlayerController?> _buildVideoController() async {
-    const candidates = <String>['assets/sign_in.mp4', 'asset/sign_in.mp4'];
-
-    for (final assetPath in candidates) {
-      final controller = VideoPlayerController.asset(assetPath);
-      try {
-        await controller.initialize();
-        controller.setLooping(false);
-        return controller;
-      } catch (_) {
-        await controller.dispose();
-      }
-    }
-
-    return null;
-  }
-
-  void _onVideoProgress() {
-    final controller = _videoController;
-    if (controller == null || !controller.value.isInitialized || _completed) {
-      return;
-    }
-
-    final position = controller.value.position;
-    final duration = controller.value.duration;
-
-    if (duration > Duration.zero && position >= duration) {
-      _completed = true;
-      _showWelcomePopup();
-    }
   }
 
   Future<void> _saveNicknameAndContinue() async {
@@ -164,17 +102,16 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
     setState(() {
       _resolvedUserName = nickname;
       _identityComplete = true;
-      _isReady = false;
-      _videoMissing = false;
     });
-    await _setupVideo();
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+    if (!mounted) return;
+    await _showWelcomePopup();
   }
 
   Future<void> _showWelcomePopup() async {
     if (!mounted) return;
-
-    await _videoController?.pause();
-    if (!mounted) return;
+    if (_welcomeShown) return;
+    _welcomeShown = true;
     HapticFeedback.selectionClick();
 
     await showGeneralDialog<void>(
@@ -199,29 +136,15 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
               begin: const Offset(0, 0.08),
               end: Offset.zero,
             ).animate(curved),
-            child: ScaleTransition(scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved), child: child),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.96, end: 1.0).animate(curved),
+              child: child,
+            ),
           ),
         );
       },
     );
-
-    await _releaseIntroVideo();
     await _enterApp();
-  }
-
-  Future<void> _releaseIntroVideo() async {
-    final controller = _videoController;
-    if (controller == null) return;
-    controller.removeListener(_onVideoProgress);
-    _videoController = null;
-    try {
-      await controller.pause();
-    } catch (_) {}
-    await controller.dispose();
-    if (!mounted) return;
-    setState(() {
-      _videoMissing = true;
-    });
   }
 
   Future<void> _enterApp() async {
@@ -245,15 +168,11 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
   @override
   void dispose() {
     _nicknameController.dispose();
-    _videoController?.removeListener(_onVideoProgress);
-    _videoController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = _videoController;
-
     if (_enteringApp) {
       return const Scaffold(
         backgroundColor: Colors.black,
@@ -273,34 +192,61 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: !_identityComplete
-            ? _buildIdentitySetup()
-            : Stack(
-                children: [
-                  Positioned.fill(
-                    child: _isReady
-                        ? _buildBody(controller)
-                        : const Center(child: CircularProgressIndicator()),
-                  ),
-                  if (_isReady && !_videoMissing && widget.showSkip)
-                    Positioned(
-                      top: 8,
-                      right: 12,
-                      child: TextButton(
-                        onPressed: () {
-                          if (_completed) return;
-                          _completed = true;
-                          _showWelcomePopup();
-                        },
-                        child: const Text(
-                          'Skip',
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ),
-                    ),
+        child: !_identityComplete ? _buildIdentitySetup() : _buildIntroHold(),
+      ),
+    );
+  }
+
+  Widget _buildIntroHold() {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFF0A0B0D),
+                  const Color(0xFF0A0B0D).withValues(alpha: 0.92),
                 ],
               ),
-      ),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Preparing your session…',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (widget.showSkip)
+          Positioned(
+            top: 8,
+            right: 12,
+            child: TextButton(
+              onPressed: _showWelcomePopup,
+              child: const Text(
+                'Skip',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -339,7 +285,9 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
                       shadows: hasName
                           ? [
                               Shadow(
-                                color: const Color(0xFFD4AF37).withValues(alpha: 0.22),
+                                color: const Color(
+                                  0xFFD4AF37,
+                                ).withValues(alpha: 0.22),
                                 blurRadius: 14,
                               ),
                             ]
@@ -347,17 +295,24 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
                     ),
                     cursorColor: const Color(0xFFD4AF37),
                     decoration: const InputDecoration(
-                      hintText: 'Enter your Nickname (e.g., Champ, Captain, Smithy)',
+                      hintText:
+                          'Enter your Nickname (e.g., Champ, Captain, Smithy)',
                       hintStyle: TextStyle(
                         color: Color(0xFF7E8995),
                         fontSize: 14,
                         fontWeight: FontWeight.w400,
                       ),
                       enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Color(0x44D4AF37), width: 1.2),
+                        borderSide: BorderSide(
+                          color: Color(0x44D4AF37),
+                          width: 1.2,
+                        ),
                       ),
                       focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: Color(0xFFD4AF37), width: 1.5),
+                        borderSide: BorderSide(
+                          color: Color(0xFFD4AF37),
+                          width: 1.5,
+                        ),
                       ),
                     ),
                     onChanged: (_) => setLocalState(() {}),
@@ -414,36 +369,6 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
       },
     );
   }
-
-  Widget _buildBody(VideoPlayerController? controller) {
-    if (_videoMissing) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'Intro video not found. Continuing...',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70, fontSize: 16),
-          ),
-        ),
-      );
-    }
-
-    if (controller == null || !controller.value.isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    return SizedBox.expand(
-      child: FittedBox(
-        fit: BoxFit.cover,
-        child: SizedBox(
-          width: controller.value.size.width,
-          height: controller.value.size.height,
-          child: VideoPlayer(controller),
-        ),
-      ),
-    );
-  }
 }
 
 class _EliteOnboardingWelcomeDialog extends StatefulWidget {
@@ -494,7 +419,9 @@ class _EliteOnboardingWelcomeDialogState
 
   @override
   Widget build(BuildContext context) {
-    final name = widget.userName.trim().isEmpty ? 'Player' : widget.userName.trim();
+    final name = widget.userName.trim().isEmpty
+        ? 'Player'
+        : widget.userName.trim();
 
     return AnimatedBuilder(
       animation: Listenable.merge([
@@ -508,7 +435,9 @@ class _EliteOnboardingWelcomeDialogState
         final logoReveal = Curves.easeOutCubic.transform(_segment(0.18, 0.40));
         final titleReveal = Curves.easeOutCubic.transform(_segment(0.38, 0.62));
         final nameReveal = Curves.easeOutCubic.transform(_segment(0.58, 0.80));
-        final subtitleReveal = Curves.easeOutCubic.transform(_segment(0.78, 0.96));
+        final subtitleReveal = Curves.easeOutCubic.transform(
+          _segment(0.78, 0.96),
+        );
 
         return Material(
           color: Colors.transparent,
@@ -517,13 +446,17 @@ class _EliteOnboardingWelcomeDialogState
               Positioned.fill(
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(color: const Color(0xFF0A0B0D).withValues(alpha: 0.88)),
+                  child: Container(
+                    color: const Color(0xFF0A0B0D).withValues(alpha: 0.88),
+                  ),
                 ),
               ),
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomPaint(
-                    painter: _LuxuryParticlePainter(progress: _floatController.value),
+                    painter: _LuxuryParticlePainter(
+                      progress: _floatController.value,
+                    ),
                   ),
                 ),
               ),
@@ -550,7 +483,9 @@ class _EliteOnboardingWelcomeDialogState
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFD4AF37).withValues(alpha: 0.10),
+                          color: const Color(
+                            0xFFD4AF37,
+                          ).withValues(alpha: 0.10),
                           blurRadius: 36,
                           spreadRadius: 2,
                         ),
@@ -588,8 +523,12 @@ class _EliteOnboardingWelcomeDialogState
                                       shape: BoxShape.circle,
                                       gradient: RadialGradient(
                                         colors: [
-                                          const Color(0xFFF7E7CE).withValues(alpha: 0.18),
-                                          const Color(0xFFD4AF37).withValues(alpha: 0.08),
+                                          const Color(
+                                            0xFFF7E7CE,
+                                          ).withValues(alpha: 0.18),
+                                          const Color(
+                                            0xFFD4AF37,
+                                          ).withValues(alpha: 0.08),
                                           Colors.transparent,
                                         ],
                                       ),
@@ -600,7 +539,10 @@ class _EliteOnboardingWelcomeDialogState
                                     child: ShaderMask(
                                       shaderCallback: (bounds) {
                                         return const LinearGradient(
-                                          colors: [Color(0xFFD4AF37), Color(0xFFF7E7CE)],
+                                          colors: [
+                                            Color(0xFFD4AF37),
+                                            Color(0xFFF7E7CE),
+                                          ],
                                           begin: Alignment.topLeft,
                                           end: Alignment.bottomRight,
                                         ).createShader(bounds);
@@ -650,7 +592,9 @@ class _EliteOnboardingWelcomeDialogState
                                   letterSpacing: 0.2,
                                   shadows: [
                                     Shadow(
-                                      color: const Color(0xFFD4AF37).withValues(alpha: 0.12 * breathe),
+                                      color: const Color(
+                                        0xFFD4AF37,
+                                      ).withValues(alpha: 0.12 * breathe),
                                       blurRadius: 18,
                                     ),
                                   ],
@@ -693,11 +637,16 @@ class _EliteOnboardingWelcomeDialogState
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(16),
                                     gradient: const LinearGradient(
-                                      colors: [Color(0xFFE4C46A), Color(0xFFB98A22)],
+                                      colors: [
+                                        Color(0xFFE4C46A),
+                                        Color(0xFFB98A22),
+                                      ],
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFFD4AF37).withValues(alpha: 0.18),
+                                        color: const Color(
+                                          0xFFD4AF37,
+                                        ).withValues(alpha: 0.18),
                                         blurRadius: 18,
                                         spreadRadius: 1,
                                       ),
@@ -753,10 +702,14 @@ class _LuxuryParticlePainter extends CustomPainter {
 
     for (var i = 0; i < points.length; i++) {
       final drift = ((progress + (i * 0.13)) % 1.0) - 0.5;
-      paint.color = const Color(0xFFF7E7CE).withValues(
-        alpha: i.isEven ? 0.14 : 0.08,
+      paint.color = const Color(
+        0xFFF7E7CE,
+      ).withValues(alpha: i.isEven ? 0.14 : 0.08);
+      canvas.drawCircle(
+        points[i] + Offset(0, drift * 18),
+        i.isEven ? 2.0 : 1.4,
+        paint,
       );
-      canvas.drawCircle(points[i] + Offset(0, drift * 18), i.isEven ? 2.0 : 1.4, paint);
     }
   }
 
@@ -781,11 +734,7 @@ class _LuxurySweepPainter extends CustomPainter {
     );
     final paint = Paint()
       ..shader = const LinearGradient(
-        colors: [
-          Color(0x00FFFFFF),
-          Color(0x22F7E7CE),
-          Color(0x00FFFFFF),
-        ],
+        colors: [Color(0x00FFFFFF), Color(0x22F7E7CE), Color(0x00FFFFFF)],
         begin: Alignment.centerLeft,
         end: Alignment.centerRight,
       ).createShader(sweep);

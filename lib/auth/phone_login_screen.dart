@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'post_login_welcome_screen.dart';
 import '../navigation/main_navigation.dart';
+import '../onboarding/cricknova_onboarding_store.dart';
+import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
 import '../services/premium_service.dart';
 
 class PhoneLoginScreen extends StatefulWidget {
@@ -94,26 +95,23 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     final userName = user.displayName?.trim().isNotEmpty == true
         ? user.displayName!.trim()
         : "Player";
-    final welcomeDecision = await PostLoginWelcomeScreen.shouldShowFor(
-      prefs: prefs,
-      user: user,
-      explicitIsNewUser: userCredential.additionalUserInfo?.isNewUser,
-    );
-    if (welcomeDecision.shouldShow) {
-      await PostLoginWelcomeScreen.markSeen(prefs, user.uid);
-    }
-
     if (!mounted) return;
 
+    await CricknovaOnboardingStore.promotePendingToUser(user.uid);
+    await CricknovaOnboardingStore.markCompleted(user.uid);
+    if (!mounted) return;
+    if (PremiumService.isPremiumActive) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => MainNavigation(userName: userName)),
+        (_) => false,
+      );
+      return;
+    }
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => welcomeDecision.shouldShow
-            ? PostLoginWelcomeScreen(
-                userName: userName,
-                showSkip: welcomeDecision.showSkip,
-              )
-            : MainNavigation(userName: userName),
+        builder: (_) => CricknovaPrePaywallFlowScreen(userName: userName),
       ),
       (_) => false,
     );

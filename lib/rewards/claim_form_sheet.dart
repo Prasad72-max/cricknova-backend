@@ -5,11 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
 
-enum ClaimRewardType {
-  jersey,
-  gloves,
-  fullKit,
-}
+enum ClaimRewardType { jersey, gloves, fullKit }
 
 Future<void> showClaimFormSheet({
   required BuildContext context,
@@ -20,19 +16,13 @@ Future<void> showClaimFormSheet({
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => ClaimFormSheet(
-      rewardType: rewardType,
-      sessionId: sessionId,
-    ),
+    builder: (_) =>
+        ClaimFormSheet(rewardType: rewardType, sessionId: sessionId),
   );
 }
 
 class ClaimFormSheet extends StatefulWidget {
-  const ClaimFormSheet({
-    super.key,
-    required this.rewardType,
-    this.sessionId,
-  });
+  const ClaimFormSheet({super.key, required this.rewardType, this.sessionId});
 
   final ClaimRewardType rewardType;
   final String? sessionId;
@@ -98,9 +88,9 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
     if (!_formKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please sign in to claim.")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please sign in to claim.")));
       return;
     }
 
@@ -135,10 +125,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
 
     try {
       await FirebaseFirestore.instance.collection("claims").add(doc);
-      await FirebaseFirestore.instance
-          .collection("users")
-          .doc(user.uid)
-          .set({
+      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
         "claims": {rewardKey: true},
         "isClaimed": true,
       }, SetOptions(merge: true));
@@ -161,9 +148,9 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to submit: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to submit: $e")));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -189,16 +176,17 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
             children: [
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [
-                      headerColor,
-                      headerColor.withOpacity(0.7),
-                    ],
+                    colors: [headerColor, headerColor.withOpacity(0.7)],
                   ),
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,16 +213,21 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
               ),
               Flexible(
                 child: SingleChildScrollView(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
                   child: Form(
                     key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _field("Name", _name),
-                        _field("Mobile Number", _mobile,
-                            keyboardType: TextInputType.phone),
+                        _field(
+                          "Mobile Number",
+                          _mobile,
+                          keyboardType: TextInputType.phone,
+                        ),
                         _field("Address", _address, maxLines: 3),
                         if (widget.rewardType == ClaimRewardType.jersey) ...[
                           _dropdown("Jersey Size", _jerseySize, [
@@ -271,7 +264,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                             "Profile Screenshot URL",
                             _screenshotUrl,
                             hint:
-                                "Paste link to profile screenshot (for 2M+ XP verification)",
+                                "Paste link to profile screenshot (for eligibility verification)",
                           ),
                           _dropdown("Helmet Size", _helmetSize, [
                             "Junior",
@@ -296,8 +289,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: headerColor,
                               foregroundColor: Colors.black,
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -353,7 +345,8 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
             borderSide: BorderSide.none,
           ),
         ),
-        validator: validator ??
+        validator:
+            validator ??
             (value) {
               if (value == null || value.trim().isEmpty) {
                 return "Required";

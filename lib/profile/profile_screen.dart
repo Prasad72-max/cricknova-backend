@@ -14,7 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:provider/provider.dart';
 import '../premium/premium_screen.dart';
-import '../auth/login_screen.dart';
+import '../onboarding/cricknova_onboarding_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/pricing_location_service.dart';
 import '../services/premium_service.dart';
@@ -41,6 +41,8 @@ class _SubscriptionPlanSpec {
   final List<String> features;
   final bool recommended;
 }
+
+const String _onboardingSeenOnceKey = 'cricknova_onboarding_seen_once';
 
 class _SubscriptionHub extends StatelessWidget {
   const _SubscriptionHub({required this.onUpgrade});
@@ -700,6 +702,11 @@ class _ProfileScreenState extends State<ProfileScreen>
   late final TextEditingController _reviewController;
   bool _profileAnimationsActive = false;
 
+  Future<void> _resetOnboardingForNextLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_onboardingSeenOnceKey);
+  }
+
   Future<Box> _getStatsBox(String uid) async {
     final boxName = "local_stats_$uid";
     if (_statsBox != null && _statsBox!.name == boxName) {
@@ -938,6 +945,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   void logoutUser() async {
     try {
+      await _resetOnboardingForNextLogin();
       await FirebaseAuth.instance.signOut();
       await _googleSignIn.signOut();
       await _googleSignIn.disconnect();
@@ -947,7 +955,12 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(
+        builder: (_) => CricknovaOnboardingScreen(
+          userName: _savedName ?? 'Player',
+          skipGetStarted: false,
+        ),
+      ),
       (route) => false,
     );
   }
@@ -1085,6 +1098,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       final uid = user.uid;
       await user.delete();
       await _deleteFirestoreUserData(uid);
+      await _resetOnboardingForNextLogin();
 
       try {
         await _googleSignIn.signOut();
@@ -1095,7 +1109,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       navigator.pop();
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(
+          builder: (_) => const CricknovaOnboardingScreen(
+            userName: 'Player',
+            skipGetStarted: false,
+          ),
+        ),
         (route) => false,
       );
     } on FirebaseAuthException catch (error) {
@@ -2159,6 +2178,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 onPressed: () async {
                                   Navigator.pop(context);
                                   try {
+                                    await _resetOnboardingForNextLogin();
                                     await FirebaseAuth.instance.signOut();
                                     await _googleSignIn.signOut();
                                     await _googleSignIn.disconnect();
@@ -2166,10 +2186,13 @@ class _ProfileScreenState extends State<ProfileScreen>
 
                                   if (!mounted) return;
 
-                                  Navigator.pushAndRemoveUntil(
-                                    context,
+                                  Navigator.of(this.context).pushAndRemoveUntil(
                                     MaterialPageRoute(
-                                      builder: (_) => const LoginScreen(),
+                                      builder: (_) =>
+                                          const CricknovaOnboardingScreen(
+                                            userName: 'Player',
+                                            skipGetStarted: false,
+                                          ),
                                     ),
                                     (route) => false,
                                   );

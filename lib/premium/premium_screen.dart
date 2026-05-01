@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
@@ -19,10 +20,11 @@ Future<void> showPremiumSuccessScreen(
   await Navigator.of(context).push(
     PageRouteBuilder(
       opaque: false,
-      barrierColor: Colors.black.withOpacity(0.85),
+      barrierColor: Colors.black.withValues(alpha: 0.85),
       transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (_, __, ___) => PremiumSuccessScreen(userName: userName),
-      transitionsBuilder: (_, animation, __, child) {
+      pageBuilder: (context, animation, secondaryAnimation) =>
+          PremiumSuccessScreen(userName: userName),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
         final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
         return FadeTransition(opacity: fade, child: child);
       },
@@ -277,7 +279,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                     ),
                                     const SizedBox(height: 18),
                                     const Text(
-                                      "Welcome to CrickNova AI ⚡",
+                                      "Welcome to CrickNova AI",
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: Colors.white,
@@ -603,7 +605,8 @@ class _FreePlanDetailsScreen extends StatelessWidget {
               Expanded(
                 child: ListView.separated(
                   itemCount: _features.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final feature = _features[index];
                     return Container(
@@ -713,8 +716,13 @@ class _StadiumLightBackdrop extends StatelessWidget {
 
 class PremiumScreen extends StatefulWidget {
   final String? entrySource;
+  final bool showDirectPlansOnly;
 
-  const PremiumScreen({super.key, this.entrySource});
+  const PremiumScreen({
+    super.key,
+    this.entrySource,
+    this.showDirectPlansOnly = false,
+  });
 
   @override
   State<PremiumScreen> createState() => _PremiumScreenState();
@@ -1232,6 +1240,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   @override
   Widget build(BuildContext context) {
     final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
+    final bool directPlansOnly = widget.showDirectPlansOnly;
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String? sourceFromArgs = args?['source'] as String?;
@@ -1255,19 +1264,19 @@ class _PremiumScreenState extends State<PremiumScreen>
       });
     }
     return Scaffold(
-      backgroundColor: const Color(0xFF020A1F),
+      backgroundColor: const Color(0xFF050505),
 
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        title: const Text(
-          "Upgrade to Premium",
-          style: TextStyle(
-            color: Color(0xFF38BDF8),
-            fontWeight: FontWeight.bold,
-            fontSize: 22,
-            shadows: [Shadow(color: Color(0xFF38BDF8), blurRadius: 20)],
+        title: Text(
+          "Premium Plans",
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: 0.2,
           ),
         ),
       ),
@@ -1291,10 +1300,16 @@ class _PremiumScreenState extends State<PremiumScreen>
                   ),
                 _currentPlanOverviewCard(),
                 ...(isIndia
-                    ? (isAnalyseEntry ? indiaCompareOnlyPlans() : indiaPlans())
-                    : (isAnalyseEntry
-                          ? internationalCompareOnlyPlans()
-                          : internationalPlans())),
+                    ? (directPlansOnly
+                          ? indiaDirectPlans()
+                          : (isAnalyseEntry
+                                ? indiaCompareOnlyPlans()
+                                : indiaPlans()))
+                    : (directPlansOnly
+                          ? internationalDirectPlans()
+                          : (isAnalyseEntry
+                                ? internationalCompareOnlyPlans()
+                                : internationalPlans()))),
               ],
             ),
           ),
@@ -1326,7 +1341,7 @@ class _PremiumScreenState extends State<PremiumScreen>
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: const Color(0xFF38BDF8).withOpacity(0.35),
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
                     blurRadius: 16,
                   ),
                 ]
@@ -1335,7 +1350,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: Center(
           child: Text(
             text,
-            style: TextStyle(
+            style: GoogleFonts.poppins(
               color: selected ? Colors.white : Colors.white54,
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -1354,7 +1369,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "Monthly",
           price: "₹99",
-          tag: "Starter ⚡",
+          tag: "Starter",
           glowColor: Colors.blueAccent,
           features: [
             "200 AI Chats",
@@ -1373,7 +1388,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "6 Months",
           price: "₹299",
-          tag: "Most Popular 🔥",
+          tag: "Most Popular",
           glowColor: Colors.purpleAccent,
           features: [
             "1,200 AI Chats",
@@ -1385,6 +1400,81 @@ class _PremiumScreenState extends State<PremiumScreen>
             "XP System & Milestones",
             "Enhanced DRS Decision System",
             "Enhanced UltraEdge Detection",
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      KeyedSubtree(
+        key: _planKeys["₹499"],
+        child: sexyPlanCard(
+          title: "Yearly",
+          price: "₹499",
+          tag: "Best Value",
+          glowColor: Colors.greenAccent,
+          features: [
+            "3,000 AI Chats",
+            "60 Mistake Detection",
+            "60 Analyse Yourself Batting/Bowling",
+            "Advanced Speed Detection",
+            "Advanced Swing Detection",
+            "Advanced Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Advanced DRS Decision System",
+            "Advanced UltraEdge Detection",
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      KeyedSubtree(
+        key: _planKeys["₹1999"],
+        child: sexyPlanCard(
+          title: "ULTRA PRO",
+          price: "₹1999",
+          tag: "Elite Access",
+          glowColor: Colors.redAccent,
+          features: [
+            "5,000 AI Chats",
+            "150 Mistake Detection",
+            "150 Analyse Yourself Batting/Bowling",
+            "Pro Speed Detection",
+            "Pro Swing Detection",
+            "Pro Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Special Gifts",
+            "Pro DRS Decision System",
+            "Pro UltraEdge Detection",
+            "Priority AI",
+          ],
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> indiaDirectPlans() {
+    return [
+      KeyedSubtree(
+        key: _planKeys["₹99"],
+        child: sexyPlanCard(
+          title: "Monthly",
+          price: "₹99",
+          tag: "Starter ⚡",
+          glowColor: Colors.blueAccent,
+          features: [
+            "200 AI Chats",
+            "15 Mistake Detection",
+            "Basic Speed Detection",
+            "Basic Swing Detection",
+            "Basic Spin Detection",
+            "Basic DRS Decision System",
+            "Basic UltraEdge Detection",
           ],
         ),
       ),
@@ -1413,33 +1503,6 @@ class _PremiumScreenState extends State<PremiumScreen>
           ],
         ),
       ),
-      const SizedBox(height: 20),
-      KeyedSubtree(
-        key: _planKeys["₹1999"],
-        child: sexyPlanCard(
-          title: "ULTRA PRO",
-          price: "₹1999",
-          tag: "Elite Access 👑",
-          glowColor: Colors.redAccent,
-          features: [
-            "5,000 AI Chats",
-            "150 Mistake Detection",
-            "150 Analyse Yourself Batting/Bowling",
-            "Pro Speed Detection",
-            "Pro Swing Detection",
-            "Pro Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
-            "Special Gifts",
-            "Pro DRS Decision System",
-            "Pro UltraEdge Detection",
-            "Priority AI",
-          ],
-        ),
-      ),
     ];
   }
 
@@ -1450,7 +1513,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "Yearly",
           price: "₹499",
-          tag: "Analyse Pro 🎯",
+          tag: "Analyse Pro",
           glowColor: Colors.greenAccent,
           features: [
             "3,000 AI Chats",
@@ -1475,7 +1538,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "ULTRA PRO",
           price: "₹1999",
-          tag: "Unlimited Analysis 🚀",
+          tag: "Unlimited Analysis",
           glowColor: Colors.redAccent,
           features: [
             "5,000 AI Chats",
@@ -1507,7 +1570,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "Monthly",
           price: "\$29.99",
-          tag: "Starter Pass ⚡",
+          tag: "Starter Pass",
           glowColor: Colors.blueAccent,
           features: [
             "200 AI Chats",
@@ -1526,7 +1589,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "6 Months",
           price: "\$49.99",
-          tag: "Most Popular 🔥",
+          tag: "Most Popular",
           glowColor: Colors.purpleAccent,
           features: [
             "1,200 AI Chats",
@@ -1547,7 +1610,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "Yearly",
           price: "\$69.99",
-          tag: "Best Deal 💰",
+          tag: "Best Deal",
           glowColor: Colors.greenAccent,
           features: [
             "3,000 AI Chats",
@@ -1591,6 +1654,54 @@ class _PremiumScreenState extends State<PremiumScreen>
             "Pro DRS Decision System",
             "Pro UltraEdge Detection",
             "Priority AI",
+          ],
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> internationalDirectPlans() {
+    return [
+      KeyedSubtree(
+        key: _planKeys["\$29.99"],
+        child: sexyPlanCard(
+          title: "Monthly",
+          price: "\$29.99",
+          tag: "Starter Pass ⚡",
+          glowColor: Colors.blueAccent,
+          features: [
+            "200 AI Chats",
+            "15 Mistake Detection",
+            "Basic Speed Detection",
+            "Basic Swing Detection",
+            "Basic Spin Detection",
+            "Basic DRS Decision System",
+            "Basic UltraEdge Detection",
+          ],
+        ),
+      ),
+      const SizedBox(height: 20),
+      KeyedSubtree(
+        key: _planKeys["\$69.99"],
+        child: sexyPlanCard(
+          title: "Yearly",
+          price: "\$69.99",
+          tag: "Best Deal 💰",
+          glowColor: Colors.greenAccent,
+          features: [
+            "3,000 AI Chats",
+            "60 Mistake Detection",
+            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
+            "Advanced Speed Detection",
+            "Advanced Swing Detection",
+            "Advanced Spin Detection",
+            "Speed Graph",
+            "Accuracy Graph",
+            "Monthly Reports",
+            "XP System & Milestones",
+            "Speed Certificates",
+            "Advanced DRS Decision System",
+            "Advanced UltraEdge Detection",
           ],
         ),
       ),
@@ -1647,7 +1758,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         child: sexyPlanCard(
           title: "ULTRA INTERNATIONAL",
           price: "\$169.99",
-          tag: "Unlimited Analysis 🚀",
+          tag: "Unlimited Analysis",
           glowColor: Colors.redAccent,
           features: [
             "7,000 AI Chats",
@@ -1672,65 +1783,51 @@ class _PremiumScreenState extends State<PremiumScreen>
     ];
   }
 
-  // 🌟 SEXY PLAN CARD (Neon + Glass UI)
+  // 🌟 LUXURY PLAN CARD (Sleek Minimalist Gold)
   Widget sexyPlanCard({
     required String title,
     required String price,
-    required Color glowColor,
+    required Color glowColor, // kept for signature compatibility
     required List<String> features,
     String? tag,
   }) {
-    final bool isMostPopular = (tag ?? "").contains("Most Popular");
+    final rawTag = (tag ?? '').trim();
+    final bool isMostPopular =
+        rawTag.contains("Most Popular") ||
+        rawTag.contains("ULTRA") ||
+        rawTag.contains("Best") ||
+        rawTag.contains("Analyse Pro");
     final bool isCurrentPlan = _isCurrentPlan(price);
-    final cardGradient = isMostPopular
-        ? const [Color(0xFF9A2BFF), Color(0xFF1D2CFF), Color(0xFF06155A)]
-        : isCurrentPlan
-        ? const [Color(0xFF10203F), Color(0xFF0C1730), Color(0xFF07101E)]
-        : [
-            Colors.white.withValues(alpha: 0.06),
-            Colors.white.withValues(alpha: 0.04),
-          ];
+
+    // Luxury dark theme base with subtle accents
+    final cardGradient = [const Color(0xFF0B1220), const Color(0xFF070B12)];
+
+    final goldColor = const Color(0xFFD4AF37);
+
     return RepaintBoundary(
       child: Stack(
         clipBehavior: Clip.none,
         children: [
           Container(
             margin: const EdgeInsets.only(top: 18, bottom: 22),
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: cardGradient,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: isCurrentPlan
-                    ? const Color(0xFFFFD700).withValues(alpha: 0.9)
-                    : isMostPopular
-                    ? const Color(0xFFBA78FF).withValues(alpha: 0.88)
-                    : Colors.white.withValues(alpha: 0.12),
-                width: isCurrentPlan ? 1.5 : 1.1,
+                color: isMostPopular
+                    ? goldColor.withValues(alpha: 0.4)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: isMostPopular ? 1.5 : 1.0,
               ),
               boxShadow: [
-                BoxShadow(
-                  color:
-                      (isCurrentPlan
-                              ? const Color(0xFFFFD700)
-                              : (isMostPopular
-                                    ? const Color(0xFF8F4BFF)
-                                    : glowColor))
-                          .withValues(
-                            alpha: isCurrentPlan
-                                ? 0.34
-                                : (isMostPopular ? 0.55 : 0.35),
-                          ),
-                  blurRadius: 28,
-                  spreadRadius: 1,
-                ),
                 if (isMostPopular)
                   BoxShadow(
-                    color: const Color(0xFF2D4BFF).withValues(alpha: 0.45),
+                    color: goldColor.withValues(alpha: 0.12),
                     blurRadius: 40,
                     spreadRadius: 2,
                   ),
@@ -1739,165 +1836,159 @@ class _PremiumScreenState extends State<PremiumScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 6),
                 Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
+                  title.toUpperCase(),
+                  style: GoogleFonts.poppins(
+                    color: isMostPopular ? goldColor : Colors.white60,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2.5,
                   ),
                 ),
+                const SizedBox(height: 8),
                 Text(
                   price,
-                  style: TextStyle(
+                  style: GoogleFonts.cormorantGaramond(
                     color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    shadows: [
-                      Shadow(
-                        color:
-                            (isMostPopular
-                                    ? const Color(0xFF9A2BFF)
-                                    : glowColor)
-                                .withValues(alpha: 0.75),
-                        blurRadius: 16,
-                      ),
-                      Shadow(
-                        color:
-                            (isMostPopular
-                                    ? const Color(0xFF2D4BFF)
-                                    : glowColor)
-                                .withValues(alpha: 0.45),
-                        blurRadius: 26,
-                      ),
-                    ],
+                    fontSize: 46,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
                   ),
                 ),
-                if (price == "\$159.99")
+                if (price == "\$159.99" || price == "\$169.99")
                   const Padding(
-                    padding: EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.only(top: 8),
                     child: Text(
                       "Less than \$0.45 per day",
                       style: TextStyle(
                         color: Colors.white54,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
                 if (price == "₹1999")
                   const Padding(
-                    padding: EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.only(top: 8),
                     child: Text(
                       "Less than ₹5 per day",
                       style: TextStyle(
                         color: Colors.white54,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
-                const SizedBox(height: 12),
-                const Text(
-                  "Features Included:",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Divider(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    height: 1,
                   ),
                 ),
-                const SizedBox(height: 10),
-                for (String f in features)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Row(
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(milliseconds: 1400),
+                  curve: Curves.easeOutCubic,
+                  builder: (context, value, child) {
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _featureTick(
-                          tint: isMostPopular
-                              ? const Color(0xFFAF74FF)
-                              : glowColor,
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            f,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                        for (int i = 0; i < features.length; i++)
+                          Opacity(
+                            opacity: (value * 2.5 - (i * 0.1)).clamp(0.0, 1.0),
+                            child: Transform.translate(
+                              offset: Offset(
+                                0,
+                                15 *
+                                    (1 -
+                                        (value * 2.5 - (i * 0.1)).clamp(
+                                          0.0,
+                                          1.0,
+                                        )),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Icon(
+                                      Icons.check_circle_rounded,
+                                      color: goldColor,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Flexible(
+                                      child: Text(
+                                        features[i],
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.85,
+                                          ),
+                                          fontSize: 15,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
                       ],
-                    ),
-                  ),
-                const SizedBox(height: 16),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
                 GestureDetector(
                   onTap: () async {
                     HapticFeedback.mediumImpact();
+                    if (!mounted) return;
 
                     setState(() {
                       _animatingPlan = price;
                     });
-
                     _lastPlanPrice = price;
 
-                    if (!mounted) return;
-
-                    await _showPlayBillingSheet();
-
-                    setState(() {
-                      _animatingPlan = null;
-                    });
+                    try {
+                      await _showPlayBillingSheet();
+                    } finally {
+                      if (mounted) {
+                        setState(() {
+                          _animatingPlan = null;
+                        });
+                      }
+                    }
                   },
                   child: AnimatedScale(
-                    scale: _animatingPlan == price ? 0.94 : 1.0,
+                    scale: _animatingPlan == price ? 0.96 : 1.0,
                     duration: const Duration(milliseconds: 160),
                     curve: Curves.easeOut,
-                    child: AnimatedOpacity(
-                      opacity: _animatingPlan == price ? 0.85 : 1.0,
-                      duration: const Duration(milliseconds: 160),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isMostPopular
-                                ? const [Color(0xFFBE47FF), Color(0xFF364BFF)]
-                                : [glowColor, glowColor.withValues(alpha: 0.8)],
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          boxShadow: [
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      decoration: BoxDecoration(
+                        color: isMostPopular ? goldColor : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          if (isMostPopular)
                             BoxShadow(
-                              color:
-                                  (isMostPopular
-                                          ? const Color(0xFF9A2BFF)
-                                          : glowColor)
-                                      .withValues(alpha: 0.6),
-                              blurRadius: 18,
-                              spreadRadius: 1,
+                              color: goldColor.withValues(alpha: 0.25),
+                              blurRadius: 20,
+                              offset: const Offset(0, 6),
                             ),
-                            BoxShadow(
-                              color:
-                                  (isMostPopular
-                                          ? const Color(0xFF2D4BFF)
-                                          : glowColor)
-                                      .withValues(alpha: 0.32),
-                              blurRadius: 35,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            isCurrentPlan ? "CURRENT PLAN" : "BUY NOW",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          isCurrentPlan ? "Current Plan" : "Upgrade",
+                          style: GoogleFonts.poppins(
+                            color: isMostPopular
+                                ? Colors.black
+                                : Colors.black87,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.2,
                           ),
                         ),
                       ),
@@ -1907,61 +1998,38 @@ class _PremiumScreenState extends State<PremiumScreen>
               ],
             ),
           ),
-          if (tag != null)
+          if (rawTag.isNotEmpty)
             Positioned(
               top: 0,
-              left: 20,
+              right: 24,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  gradient: isMostPopular
-                      ? const LinearGradient(
-                          colors: [Color(0xFFD776FF), Color(0xFF5F5DFF)],
-                        )
-                      : tag.contains("Elite")
-                      ? const LinearGradient(
-                          colors: [Color(0xFFFFD700), Color(0xFFE6A800)],
-                        )
-                      : tag.contains("Best")
-                      ? const LinearGradient(
-                          colors: [Color(0xFF2563EB), Color(0xFF38BDF8)],
-                        )
-                      : const LinearGradient(
-                          colors: [Color(0xFF1E293B), Color(0xFF334155)],
-                        ),
-                  borderRadius: BorderRadius.circular(24),
+                  color: const Color(0xFF1A1A1A),
+                  border: Border.all(
+                    color: (isMostPopular ? goldColor : const Color(0xFF38BDF8))
+                        .withValues(alpha: 0.42),
+                  ),
+                  borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color:
-                          (isMostPopular ? const Color(0xFF9A2BFF) : glowColor)
-                              .withValues(alpha: 0.5),
-                      blurRadius: 18,
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: Row(
-                  children: [
-                    if (tag.contains("Elite"))
-                      const Icon(
-                        Icons.workspace_premium,
-                        color: Color(0xFFFFD700),
-                        size: 18,
-                      ),
-                    if (tag.contains("Elite")) const SizedBox(width: 6),
-                    Text(
-                      tag,
-                      style: TextStyle(
-                        color: tag.contains("Elite")
-                            ? Colors.black
-                            : Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  rawTag.toUpperCase(),
+                  style: GoogleFonts.poppins(
+                    color: isMostPopular ? goldColor : const Color(0xFF7DD3FC),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
+                  ),
                 ),
               ),
             ),
@@ -1999,29 +2067,6 @@ class _PremiumScreenState extends State<PremiumScreen>
             ),
         ],
       ),
-    );
-  }
-
-  Widget _featureTick({required Color tint}) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [tint.withValues(alpha: 0.95), tint.withValues(alpha: 0.62)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: tint.withValues(alpha: 0.20),
-            blurRadius: 8,
-            spreadRadius: 0.2,
-          ),
-        ],
-      ),
-      child: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
     );
   }
 

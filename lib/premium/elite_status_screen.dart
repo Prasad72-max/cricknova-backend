@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 
 import '../ai/ai_coach_screen.dart';
+import '../analysis/analyzing_videos_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
 import '../upload/upload_screen.dart';
@@ -450,41 +451,15 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
   }
 
   void _showTrainingVideosInfo() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0B1220),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          title: Text(
-            "Exclusive Training Videos",
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          content: Text(
-            "Elite-only training drops are being curated. You'll receive a notification when the next session unlocks.",
-            style: GoogleFonts.poppins(
-              color: Colors.white70,
-              fontSize: 13.5,
-              height: 1.4,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text(
-                "Got it",
-                style: TextStyle(color: Color(0xFFFFD86B)),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+    final nav = MainNavigation.of(context);
+    if (nav != null) {
+      nav.setTab(2); // Analyzing Vid tab
+      Navigator.of(context).pop();
+      return;
+    }
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()));
   }
 
   void _openCoachTab() {

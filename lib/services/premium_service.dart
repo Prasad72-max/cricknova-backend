@@ -8,6 +8,18 @@ import 'package:http/http.dart' as http;
 import 'package:CrickNova_Ai/config/api_config.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+enum SubscriptionAccessState {
+  unknown,
+  free,
+  trialActive,
+  trialRevokeScheduled,
+  active,
+  gracePeriod,
+  pastDue,
+  accountHold,
+  expired,
+}
+
 class PremiumService {
   // ⚠️ RULE: Usage counters are NEVER reset on client.
   // They are restored ONLY from Firestore backend.
@@ -17,18 +29,47 @@ class PremiumService {
   static bool _usageDirty = false;
   static DateTime? _lastLocalUsageUpdate;
 
+  // ValueNotifier doesn't expose a public "force notify" API.
+  // We use a tiny subclass so we can safely emit updates when the boolean
+  // doesn't change but other premium fields (plan/limits/usage) do.
+  static final PremiumStateNotifier premiumNotifier = PremiumStateNotifier(
+    false,
+  );
+
   // Single source of truth for UI
   static bool isPremium = false;
-  static final ValueNotifier<bool> premiumNotifier = ValueNotifier<bool>(false);
   // 🔔 Expiry tracking
   static bool justExpired = false;
   static DateTime? expiryDate;
   static DateTime? startedDate;
+  static DateTime? graceUntil;
+  static DateTime? holdUntil;
+  static DateTime? trialRevokeAt;
+  static SubscriptionAccessState accessState = SubscriptionAccessState.unknown;
+  static String billingState = "UNKNOWN";
 
   /// 🔐 Premium validity = premium flag only
   /// Limits are enforced strictly by backend
   static bool get isPremiumActive {
-    return isPremium;
+    return isPremium && !isAccountOnHold;
+  }
+
+  static bool get isInGracePeriod => accessState == SubscriptionAccessState.gracePeriod;
+  static bool get isAccountOnHold =>
+      accessState == SubscriptionAccessState.accountHold ||
+      accessState == SubscriptionAccessState.pastDue;
+  static bool get isTrialRevokeScheduled =>
+      accessState == SubscriptionAccessState.trialRevokeScheduled;
+  static bool get isReadOnlyMode => isAccountOnHold;
+  static bool get shouldShowBillingBanner => isInGracePeriod;
+  static String? get billingBannerMessage {
+    if (isInGracePeriod) {
+      return 'Payment failed! Please update your balance within 48 hours to avoid losing Pro access.';
+    }
+    if (isAccountOnHold) {
+      return 'Account on Hold. Please settle your ₹499 payment to continue your training.';
+    }
+    return null;
   }
 
   // Backward-compat alias (used by UI)
@@ -52,10 +93,64 @@ class PremiumService {
 
   static const String _premiumKey = "is_premium";
   static const String _planKey = "premium_plan";
+  static const String _billingStateKey = "premium_billing_state";
+  static const String _accessStateKey = "premium_access_state";
+  static const String _trialRevokeAtKey = "premium_trial_revoke_at";
+  static const String _graceUntilKey = "premium_grace_until";
+  static const String _holdUntilKey = "premium_hold_until";
 
   static const String _chatLimitKey = "chat_limit";
   static const String _mistakeLimitKey = "mistake_limit";
   static const String _compareLimitKey = "compare_limit";
+
+  static ({
+    bool premium,
+    String plan,
+    int chatUsed,
+    int mistakeUsed,
+    int compareUsed,
+    int chatLimit,
+    int mistakeLimit,
+    int compareLimit,
+    DateTime? expiryDate,
+    DateTime? startedDate,
+    DateTime? graceUntil,
+    DateTime? holdUntil,
+    DateTime? trialRevokeAt,
+    bool justExpired,
+    SubscriptionAccessState accessState,
+    String billingState,
+  })
+  _snapshot() {
+    return (
+      premium: isPremium,
+      plan: plan,
+      chatUsed: chatUsed,
+      mistakeUsed: mistakeUsed,
+      compareUsed: compareUsed,
+      chatLimit: chatLimit,
+      mistakeLimit: mistakeLimit,
+      compareLimit: compareLimit,
+      expiryDate: expiryDate,
+      startedDate: startedDate,
+      graceUntil: graceUntil,
+      holdUntil: holdUntil,
+      trialRevokeAt: trialRevokeAt,
+      justExpired: justExpired,
+      accessState: accessState,
+      billingState: billingState,
+    );
+  }
+
+  static void _notifyPremium({required bool force}) {
+    if (premiumNotifier.value != isPremium) {
+      premiumNotifier.value = isPremium;
+      return;
+    }
+    if (force) {
+      premiumNotifier.forceNotify();
+    }
+  }
 
   static void _resetUsageState() {
     chatUsed = 0;
@@ -63,6 +158,232 @@ class PremiumService {
     compareUsed = 0;
     _usageDirty = false;
     _lastLocalUsageUpdate = null;
+  }
+
+  static String _stringField(
+    Map<String, dynamic> data,
+    List<String> keys, {
+    String fallback = "",
+  }) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return fallback;
+  }
+
+  static DateTime? _dateField(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is Timestamp) {
+        return value.toDate();
+      }
+      if (value is String) {
+        final parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value);
+      }
+    }
+    return null;
+  }
+
+  static SubscriptionAccessState _stateFromRaw(String raw) {
+    switch (raw.toUpperCase()) {
+      case "IN_GRACE_PERIOD":
+      case "GRACE_PERIOD":
+        return SubscriptionAccessState.gracePeriod;
+      case "ACCOUNT_HOLD":
+        return SubscriptionAccessState.accountHold;
+      case "PAST_DUE":
+        return SubscriptionAccessState.pastDue;
+      case "TRIAL_ACTIVE":
+      case "TRIAL":
+        return SubscriptionAccessState.trialActive;
+      case "TRIAL_REVOKE_SCHEDULED":
+        return SubscriptionAccessState.trialRevokeScheduled;
+      case "ACTIVE":
+      case "SUBSCRIBED":
+      case "PREMIUM":
+        return SubscriptionAccessState.active;
+      case "EXPIRED":
+      case "CANCELLED":
+      case "CANCELED":
+        return SubscriptionAccessState.expired;
+      default:
+        return SubscriptionAccessState.unknown;
+    }
+  }
+
+  static SubscriptionAccessState _resolveAccessState(
+    Map<String, dynamic> data,
+    DateTime? now,
+  ) {
+    final String billing = _stringField(
+      data,
+      const ["subscription_state", "billing_state", "state"],
+    );
+    final rawState = _stateFromRaw(billing);
+
+    final DateTime? trialRevoke = _dateField(
+      data,
+      const ["trial_revoke_at", "trial_revokeAt", "revoke_at"],
+    );
+    final DateTime? grace = _dateField(
+      data,
+      const ["grace_until", "graceUntil", "grace_ends_at"],
+    );
+    final DateTime? hold = _dateField(
+      data,
+      const ["hold_until", "holdUntil", "account_hold_until"],
+    );
+
+    trialRevokeAt = trialRevoke;
+    graceUntil = grace;
+    holdUntil = hold;
+    billingState = billing.isEmpty ? "UNKNOWN" : billing.toUpperCase();
+
+    if (trialRevoke != null && now != null && now.isBefore(trialRevoke)) {
+      return SubscriptionAccessState.trialRevokeScheduled;
+    }
+    if (trialRevoke != null &&
+        now != null &&
+        now.isAfter(trialRevoke) &&
+        rawState == SubscriptionAccessState.trialRevokeScheduled) {
+      return SubscriptionAccessState.expired;
+    }
+    if (rawState == SubscriptionAccessState.gracePeriod) {
+      if (grace != null && now != null && now.isAfter(grace)) {
+        return SubscriptionAccessState.pastDue;
+      }
+      return SubscriptionAccessState.gracePeriod;
+    }
+    if (rawState == SubscriptionAccessState.accountHold) {
+      if (hold != null && now != null && now.isAfter(hold)) {
+        return SubscriptionAccessState.expired;
+      }
+      return SubscriptionAccessState.accountHold;
+    }
+    if (rawState == SubscriptionAccessState.pastDue) {
+      if (hold != null && now != null && now.isAfter(hold)) {
+        return SubscriptionAccessState.expired;
+      }
+      return SubscriptionAccessState.pastDue;
+    }
+    if (rawState == SubscriptionAccessState.trialRevokeScheduled) {
+      return SubscriptionAccessState.trialRevokeScheduled;
+    }
+    if (rawState == SubscriptionAccessState.active) {
+      return SubscriptionAccessState.active;
+    }
+
+    final bool hasPremiumFlag =
+        data["isPremium"] == true || data["premium"] == true;
+    if (hasPremiumFlag) {
+      return SubscriptionAccessState.active;
+    }
+
+    return SubscriptionAccessState.free;
+  }
+
+  static bool _stateIsUnlocked(SubscriptionAccessState state) {
+    switch (state) {
+      case SubscriptionAccessState.active:
+      case SubscriptionAccessState.gracePeriod:
+      case SubscriptionAccessState.trialActive:
+      case SubscriptionAccessState.trialRevokeScheduled:
+        return true;
+      case SubscriptionAccessState.unknown:
+      case SubscriptionAccessState.free:
+      case SubscriptionAccessState.pastDue:
+      case SubscriptionAccessState.accountHold:
+      case SubscriptionAccessState.expired:
+        return false;
+    }
+  }
+
+  static void _setAccessState(SubscriptionAccessState state) {
+    accessState = state;
+    isPremium = _stateIsUnlocked(state);
+  }
+
+  static void _cancelScheduledStateTimer() {
+    _trialRevokeTimer?.cancel();
+    _trialRevokeTimer = null;
+  }
+
+  static Timer? _trialRevokeTimer;
+
+  static void _scheduleStateRefresh({
+    required String uid,
+    DateTime? at,
+  }) {
+    _cancelScheduledStateTimer();
+    if (at == null) return;
+
+    final now = DateTime.now();
+    final delay = at.difference(now);
+    if (delay.isNegative || delay == Duration.zero) {
+      unawaited(_runSingleLoad(uid, force: true));
+      return;
+    }
+
+    _trialRevokeTimer = Timer(delay, () {
+      unawaited(_runSingleLoad(uid, force: true));
+    });
+  }
+
+  static Future<void> _setCachedState({
+    required bool premium,
+    required String planId,
+    required int chat,
+    required int mistake,
+    required int compare,
+    SubscriptionAccessState? state,
+    String? billing,
+    DateTime? trialRevoke,
+    DateTime? grace,
+    DateTime? hold,
+    bool resetUsage = false,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_premiumKey, premium);
+    await prefs.setString(_planKey, planId);
+    await prefs.setInt(_chatLimitKey, chat);
+    await prefs.setInt(_mistakeLimitKey, mistake);
+    await prefs.setInt(_compareLimitKey, compare);
+    await prefs.setString(_billingStateKey, billing ?? billingState);
+    await prefs.setString(
+      _accessStateKey,
+      (state ?? accessState).name,
+    );
+    if (trialRevoke != null) {
+      await prefs.setString(_trialRevokeAtKey, trialRevoke.toIso8601String());
+    }
+    if (grace != null) {
+      await prefs.setString(_graceUntilKey, grace.toIso8601String());
+    }
+    if (hold != null) {
+      await prefs.setString(_holdUntilKey, hold.toIso8601String());
+    }
+
+    if (state != null) {
+      accessState = state;
+    }
+    billingState = billing ?? billingState;
+    isPremium = premium;
+    premiumNotifier.value = premium;
+    plan = planId;
+    chatLimit = chat;
+    mistakeLimit = mistake;
+    compareLimit = compare;
+
+    if (resetUsage) {
+      _resetUsageState();
+    }
   }
 
   /// 🔥 CALL THIS ON APP START (main.dart)
@@ -98,11 +419,6 @@ class PremiumService {
     }
 
     await _runSingleLoad(user.uid, force: true);
-
-    // 🔔 Force immediate UI update
-    premiumNotifier.value = isPremium;
-    premiumNotifier.notifyListeners();
-
     isLoaded = true;
   }
 
@@ -112,6 +428,7 @@ class PremiumService {
       return;
     }
 
+    final before = _snapshot();
     final bool switchedUser = _lastLoadedUid != null && _lastLoadedUid != uid;
     if (switchedUser) {
       _resetUsageState();
@@ -127,11 +444,20 @@ class PremiumService {
 
       if (!doc.exists) {
         _resetUsageState();
-        await _cache(false, "FREE", 0, 0, 0);
+        _setAccessState(SubscriptionAccessState.free);
+        await _setCachedState(
+          premium: false,
+          planId: "FREE",
+          chat: 0,
+          mistake: 0,
+          compare: 0,
+          state: accessState,
+          billing: billingState,
+          resetUsage: false,
+        );
         isLoaded = true;
         _lastLoadedUid = uid;
-        premiumNotifier.value = isPremium;
-        premiumNotifier.notifyListeners();
+        _notifyPremium(force: before != _snapshot());
         completer.complete();
         return;
       }
@@ -145,18 +471,16 @@ class PremiumService {
         "🔥 Premium flag from Firestore = $firestorePremium | raw keys: ${data.keys}",
       );
 
-      if (!firestorePremium) {
-        await _cache(false, "FREE", 0, 0, 0);
-        isLoaded = true;
-        _lastLoadedUid = uid;
-        premiumNotifier.value = isPremium;
-        premiumNotifier.notifyListeners();
-        completer.complete();
-        return;
-      }
-
       final rawExpiry = data["expiry"] ?? data["expiryDate"];
       final rawStarted = data["started_at"] ?? data["startedAt"];
+      final planId = (data["plan"] ?? "FREE").toString();
+      final resolvedState = _resolveAccessState(data, DateTime.now());
+      final limits = _limitsForPlan(planId);
+      if (resolvedState == SubscriptionAccessState.expired &&
+          trialRevokeAt != null &&
+          DateTime.now().isAfter(trialRevokeAt!)) {
+        justExpired = true;
+      }
 
       if (rawExpiry is Timestamp) {
         expiryDate = rawExpiry.toDate();
@@ -177,7 +501,9 @@ class PremiumService {
         debugPrint("🕒 NOW(UTC): $nowUtc");
         debugPrint("🕒 EXPIRY(UTC): $expiryUtc");
 
-        if (nowUtc.isAfter(expiryUtc)) {
+        if (nowUtc.isAfter(expiryUtc) &&
+            resolvedState != SubscriptionAccessState.gracePeriod &&
+            resolvedState != SubscriptionAccessState.trialRevokeScheduled) {
           debugPrint("🚨 PLAN EXPIRED DETECTED");
 
           final prefs = await SharedPreferences.getInstance();
@@ -190,18 +516,26 @@ class PremiumService {
           }
 
           _resetUsageState();
-          await _cache(false, "FREE", 0, 0, 0);
+          _setAccessState(SubscriptionAccessState.expired);
+          await _setCachedState(
+            premium: false,
+            planId: planId,
+            chat: limits.chat,
+            mistake: limits.mistake,
+            compare: limits.compare,
+            state: SubscriptionAccessState.expired,
+            billing: billingState,
+            resetUsage: false,
+          );
           _lastLoadedUid = uid;
+          _scheduleStateRefresh(uid: uid, at: expiryDate);
 
-          premiumNotifier.value = false;
-          premiumNotifier.notifyListeners();
+          _notifyPremium(force: before != _snapshot());
 
           completer.complete();
           return;
         }
       }
-
-      final planId = data["plan"] ?? "FREE";
 
       // 2) Read usage from nested "used" map, fallback to root-level fields
       final usedMap = (data["used"] is Map)
@@ -226,40 +560,86 @@ class PremiumService {
         _lastLocalUsageUpdate = null;
       }
 
-      switch (planId) {
-        case "IN_99":
-          await _cache(firestorePremium, planId, 200, 15, 0);
-          break;
-        case "IN_299":
-          await _cache(firestorePremium, planId, 1200, 30, 0);
-          break;
-        case "IN_499":
-          await _cache(firestorePremium, planId, 3000, 60, 60);
-          break;
-        case "IN_1999":
-          await _cache(firestorePremium, planId, 5000, 150, 150);
-          break;
-        case "INTL_MONTHLY":
-          await _cache(firestorePremium, planId, 200, 15, 0);
-          break;
-        case "INTL_6M":
-          await _cache(firestorePremium, planId, 1200, 30, 0);
-          break;
-        case "INTL_YEARLY":
-          await _cache(firestorePremium, planId, 3000, 60, 60);
-          break;
-        case "INT_ULTRA":
-        case "INTL_ULTRA":
-        case "ULTRA":
-          await _cache(firestorePremium, planId, 7000, 150, 150);
-          break;
-        default:
-          _resetUsageState();
-          await _cache(false, "FREE", 0, 0, 0);
+      final bool isHold =
+          resolvedState == SubscriptionAccessState.accountHold ||
+          resolvedState == SubscriptionAccessState.pastDue;
+      final bool isGrace =
+          resolvedState == SubscriptionAccessState.gracePeriod;
+      final bool isTrialRevoke =
+          resolvedState == SubscriptionAccessState.trialRevokeScheduled ||
+          resolvedState == SubscriptionAccessState.trialActive;
+      final bool isUnlocked =
+          firestorePremium ||
+          isGrace ||
+          isTrialRevoke ||
+          resolvedState == SubscriptionAccessState.active;
+
+      _setAccessState(
+        isHold
+            ? resolvedState
+            : isGrace
+                ? SubscriptionAccessState.gracePeriod
+                : isTrialRevoke
+                    ? SubscriptionAccessState.trialRevokeScheduled
+                    : isUnlocked
+                        ? SubscriptionAccessState.active
+                        : SubscriptionAccessState.free,
+      );
+
+      if (isHold) {
+        isPremium = false;
+        await _setCachedState(
+          premium: false,
+          planId: planId,
+          chat: limits.chat,
+          mistake: limits.mistake,
+          compare: limits.compare,
+          state: accessState,
+          billing: billingState,
+          grace: graceUntil,
+          hold: holdUntil,
+          trialRevoke: trialRevokeAt,
+          resetUsage: false,
+        );
+      } else if (isUnlocked) {
+        await _setCachedState(
+          premium: true,
+          planId: planId,
+          chat: limits.chat,
+          mistake: limits.mistake,
+          compare: limits.compare,
+          state: accessState,
+          billing: billingState,
+          grace: graceUntil,
+          hold: holdUntil,
+          trialRevoke: trialRevokeAt,
+          resetUsage: false,
+        );
+      } else {
+        _resetUsageState();
+        await _setCachedState(
+          premium: false,
+          planId: planId,
+          chat: 0,
+          mistake: 0,
+          compare: 0,
+          state: accessState,
+          billing: billingState,
+          grace: graceUntil,
+          hold: holdUntil,
+          trialRevoke: trialRevokeAt,
+          resetUsage: false,
+        );
       }
+
+      _scheduleStateRefresh(
+        uid: uid,
+        at: trialRevokeAt ?? graceUntil ?? holdUntil ?? expiryDate,
+      );
 
       isLoaded = true;
       _lastLoadedUid = uid;
+      _notifyPremium(force: before != _snapshot());
       completer.complete();
     } catch (e) {
       if (!completer.isCompleted) {
@@ -294,9 +674,14 @@ class PremiumService {
 
     final cachedPremium = prefs.getBool(_premiumKey);
     final cachedPlan = prefs.getString(_planKey);
+    final cachedBilling = prefs.getString(_billingStateKey);
+    final cachedAccess = prefs.getString(_accessStateKey);
     final cachedChatLimit = prefs.getInt(_chatLimitKey);
     final cachedMistakeLimit = prefs.getInt(_mistakeLimitKey);
     final cachedCompareLimit = prefs.getInt(_compareLimitKey);
+    final cachedTrialRevoke = prefs.getString(_trialRevokeAtKey);
+    final cachedGraceUntil = prefs.getString(_graceUntilKey);
+    final cachedHoldUntil = prefs.getString(_holdUntilKey);
 
     if (cachedPremium != null) {
       isPremium = cachedPremium;
@@ -306,6 +691,24 @@ class PremiumService {
     if (cachedPlan != null) {
       plan = cachedPlan;
     }
+    if (cachedBilling != null && cachedBilling.isNotEmpty) {
+      billingState = cachedBilling;
+    }
+    if (cachedAccess != null && cachedAccess.isNotEmpty) {
+      accessState = SubscriptionAccessState.values.firstWhere(
+        (state) => state.name == cachedAccess,
+        orElse: () => SubscriptionAccessState.unknown,
+      );
+    }
+    if (cachedTrialRevoke != null && cachedTrialRevoke.isNotEmpty) {
+      trialRevokeAt = DateTime.tryParse(cachedTrialRevoke);
+    }
+    if (cachedGraceUntil != null && cachedGraceUntil.isNotEmpty) {
+      graceUntil = DateTime.tryParse(cachedGraceUntil);
+    }
+    if (cachedHoldUntil != null && cachedHoldUntil.isNotEmpty) {
+      holdUntil = DateTime.tryParse(cachedHoldUntil);
+    }
 
     if (cachedChatLimit != null) chatLimit = cachedChatLimit;
     if (cachedMistakeLimit != null) mistakeLimit = cachedMistakeLimit;
@@ -314,7 +717,7 @@ class PremiumService {
     debugPrint("💾 Premium restored from cache: $isPremium ($plan)");
     isLoaded = cachedPremium != null || cachedPlan != null;
     if (isLoaded) {
-      premiumNotifier.notifyListeners();
+      _notifyPremium(force: true);
     }
 
     final user = FirebaseAuth.instance.currentUser;
@@ -338,8 +741,7 @@ class PremiumService {
 
       // Mark loaded and notify UI immediately
       isLoaded = true;
-      premiumNotifier.value = isPremium;
-      premiumNotifier.notifyListeners();
+      _notifyPremium(force: true);
 
       debugPrint("✅ Premium restored on launch: $isPremium ($plan)");
     } catch (e) {
@@ -353,8 +755,7 @@ class PremiumService {
     if (user == null) return;
     await _runSingleLoad(user.uid, force: true);
     isLoaded = true;
-    premiumNotifier.value = isPremium;
-    premiumNotifier.notifyListeners();
+    _notifyPremium(force: true);
   }
 
   /// ✅ CALL THIS AFTER PAYMENT SUCCESS
@@ -374,6 +775,9 @@ class PremiumService {
         .doc(user.uid)
         .set({
           "isPremium": true,
+          "premium": true,
+          "subscription_state": "ACTIVE",
+          "billing_state": "ACTIVE",
           "plan": planId,
           "chatLimit": chatLimit,
           "mistakeLimit": mistakeLimit,
@@ -385,6 +789,8 @@ class PremiumService {
           "updatedAt": FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
 
+    _setAccessState(SubscriptionAccessState.active);
+    billingState = "ACTIVE";
     await _cache(
       true,
       planId,
@@ -459,10 +865,6 @@ class PremiumService {
     await syncFromBackend(user.uid);
     // 🔥 FORCE local premium refresh so UI updates instantly
     await refresh();
-
-    // 🔔 Notify UI immediately after payment
-    premiumNotifier.value = isPremium;
-    premiumNotifier.notifyListeners();
   }
 
   // -----------------------------
@@ -476,27 +878,14 @@ class PremiumService {
     int compare, {
     bool resetUsage = false,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Persist limits
-    await prefs.setBool(_premiumKey, premium);
-    await prefs.setString(_planKey, planId);
-    await prefs.setInt(_chatLimitKey, chat);
-    await prefs.setInt(_mistakeLimitKey, mistake);
-    await prefs.setInt(_compareLimitKey, compare);
-
-    // In-memory state (single source for UI)
-    isPremium = premium;
-    premiumNotifier.value = premium;
-    plan = planId;
-
-    chatLimit = chat;
-    mistakeLimit = mistake;
-    compareLimit = compare;
-
-    if (resetUsage) {
-      _resetUsageState();
-    }
+    await _setCachedState(
+      premium: premium,
+      planId: planId,
+      chat: chat,
+      mistake: mistake,
+      compare: compare,
+      resetUsage: resetUsage,
+    );
   }
 
   // -----------------------------
@@ -509,6 +898,14 @@ class PremiumService {
     chatLimit = 0;
     mistakeLimit = 0;
     compareLimit = 0;
+    billingState = "UNKNOWN";
+    accessState = SubscriptionAccessState.free;
+    expiryDate = null;
+    startedDate = null;
+    graceUntil = null;
+    holdUntil = null;
+    trialRevokeAt = null;
+    _cancelScheduledStateTimer();
     _resetUsageState();
     isLoaded = false;
     _lastLoadedUid = null;
@@ -543,6 +940,11 @@ class PremiumService {
     bool premium, {
     String planId = "FREE",
   }) async {
+    final before = _snapshot();
+    _setAccessState(
+      premium ? SubscriptionAccessState.active : SubscriptionAccessState.free,
+    );
+    billingState = premium ? "ACTIVE" : "FREE";
     final limits = premium
         ? _limitsForPlan(planId)
         : (chat: 0, mistake: 0, compare: 0);
@@ -555,7 +957,7 @@ class PremiumService {
       resetUsage: premium,
     );
     isLoaded = true;
-    premiumNotifier.notifyListeners();
+    _notifyPremium(force: before != _snapshot());
   }
 
   /// Lets external billing flows reuse the app's existing premium state.
@@ -565,7 +967,14 @@ class PremiumService {
     int chatLimit = 0,
     int mistakeLimit = 0,
     int compareLimit = 0,
+    String billing = "ACTIVE",
+    SubscriptionAccessState? state,
   }) async {
+    final before = _snapshot();
+    _setAccessState(
+      state ?? (premium ? SubscriptionAccessState.active : SubscriptionAccessState.free),
+    );
+    billingState = billing;
     await _cache(
       premium,
       planId,
@@ -575,7 +984,7 @@ class PremiumService {
       resetUsage: premium,
     );
     isLoaded = true;
-    premiumNotifier.notifyListeners();
+    _notifyPremium(force: before != _snapshot());
   }
 
   // -----------------------------
@@ -586,7 +995,7 @@ class PremiumService {
   // -----------------------------
   static Future<void> syncAfterUsage() async {
     isLoaded = true;
-    premiumNotifier.notifyListeners();
+    _notifyPremium(force: true);
   }
 
   static bool canChat() {
@@ -852,6 +1261,12 @@ class PremiumService {
   }) {
     // Intentionally empty: navigation is controlled by UI, not service
   }
+}
+
+class PremiumStateNotifier extends ValueNotifier<bool> {
+  PremiumStateNotifier(super.value);
+
+  void forceNotify() => notifyListeners();
 }
 
 enum _UsageType { swing, mistake }

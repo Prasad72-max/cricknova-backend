@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
 import '../navigation/main_navigation.dart';
-import 'login_screen.dart';
+import '../onboarding/cricknova_onboarding_screen.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -31,13 +31,17 @@ class _AuthGateState extends State<AuthGate> {
 
     if (user != null) {
       // 🔐 Force refresh Firebase ID token
-      final idToken = await user.getIdToken(true);
-      if (idToken != null && idToken.isNotEmpty) {
-        await prefs.setString("firebase_id_token", idToken);
-      }
+      try {
+        final idToken = await user.getIdToken(true);
+        if (idToken != null && idToken.isNotEmpty) {
+          await prefs.setString("firebase_id_token", idToken);
+        }
+      } catch (_) {}
 
-      // 🧠 Sync premium before entering app
-      await PremiumService.syncFromFirestore(user.uid);
+      // 🧠 Sync premium before entering app (don't crash on network errors)
+      try {
+        await PremiumService.ensureFreshState();
+      } catch (_) {}
 
       debugPrint("AUTH_GATE → premium synced uid=${user.uid}");
 
@@ -78,6 +82,9 @@ class _AuthGateState extends State<AuthGate> {
       return MainNavigation(userName: userId);
     }
 
-    return const LoginScreen();
+    return const CricknovaOnboardingScreen(
+      userName: 'Player',
+      skipGetStarted: false,
+    );
   }
 }

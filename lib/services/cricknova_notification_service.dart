@@ -11,6 +11,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../analysis/analyzing_videos_screen.dart';
+import '../app_router.dart';
+import '../navigation/main_navigation.dart';
+import 'premium_service.dart';
 import 'cricknova_marketing_notification_service.dart';
 
 class CrickNovaNotificationService {
@@ -29,12 +33,14 @@ class CrickNovaNotificationService {
   static const int _inactivityId = 1103;
   static const int _eveningReminderId = 1104;
   static const int _leaderboardAlertId = 1105;
+  static const int _analysisCheckBaseId = 1200;
 
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
 
   bool _initialized = false;
+  String? _pendingLaunchPayload;
 
   String _optInKey(String uid) => 'notifications_opt_in_$uid';
   String _promptSeenKey(String uid) => 'notifications_prompt_seen_$uid';
@@ -46,7 +52,9 @@ class CrickNovaNotificationService {
     tz.initializeTimeZones();
     await _configureLocalTimezone();
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const darwinSettings = DarwinInitializationSettings();
     const settings = InitializationSettings(
       android: androidSettings,
@@ -58,6 +66,18 @@ class CrickNovaNotificationService {
       settings: settings,
       onDidReceiveNotificationResponse: _handleNotificationTap,
     );
+    final launchDetails = await _localNotifications
+        .getNotificationAppLaunchDetails();
+    final launchPayload = launchDetails?.didNotificationLaunchApp == true
+        ? launchDetails?.notificationResponse?.payload
+        : null;
+    if (launchPayload != null && launchPayload.isNotEmpty) {
+      _pendingLaunchPayload = launchPayload;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openPayload(_pendingLaunchPayload);
+        _pendingLaunchPayload = null;
+      });
+    }
 
     final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
@@ -131,7 +151,8 @@ class CrickNovaNotificationService {
     await cancelEngagementNotifications();
     await CrickNovaMarketingNotificationService.instance
         .cancelScheduledMarketingNotifications();
-    await CrickNovaMarketingNotificationService.instance.unsubscribeTesterTopic();
+    await CrickNovaMarketingNotificationService.instance
+        .unsubscribeTesterTopic();
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'notificationsEnabled': false,
       'notificationPermissionAskedAt': FieldValue.serverTimestamp(),
@@ -167,7 +188,10 @@ class CrickNovaNotificationService {
   Future<void> handleAppOpened(String uid) async {
     await initialize();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_lastOpenKey(uid), DateTime.now().toUtc().toIso8601String());
+    await prefs.setString(
+      _lastOpenKey(uid),
+      DateTime.now().toUtc().toIso8601String(),
+    );
 
     if (!await isOptedIn(uid)) {
       await cancelEngagementNotifications();
@@ -180,15 +204,36 @@ class CrickNovaNotificationService {
     await CrickNovaMarketingNotificationService.instance.refreshForUser(uid);
   }
 
-  Future<void> maybeNotifyAnalysisComplete() async {
+  Future<void> maybeNotifyAnalysisComplete({String? resultJobId}) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || !await isOptedIn(uid)) return;
 
     await _showNow(
       id: _analysisCompleteId,
-      title: 'CrickNova AI',
+      title: 'Check it out, results are ready',
+      body: 'Your CrickNova analysis is ready in Analyzing Vid.',
+      payload: resultJobId == null ? null : 'analysis_ready:$resultJobId',
+    );
+  }
+
+  Future<void> scheduleAnalysisCheckReminder({String? resultJobId}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || !await isOptedIn(uid)) return;
+
+    await initialize();
+    final reminderAt = tz.TZDateTime.now(
+      tz.local,
+    ).add(const Duration(minutes: 2));
+    final idSuffix = resultJobId == null ? 0 : resultJobId.hashCode.abs() % 700;
+    await _localNotifications.zonedSchedule(
+      id: _analysisCheckBaseId + idSuffix,
+      title: 'Check it out, results',
       body:
-          'Are you a Yorker? Because you just bowled me over! 😍 Great session! Check out your stats.',
+          'CrickNova has been analyzing your video. Tap to check the saved result.',
+      scheduledDate: reminderAt,
+      notificationDetails: _notificationDetails(),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'analysis_queue',
     );
   }
 
@@ -266,12 +311,14 @@ class CrickNovaNotificationService {
     required int id,
     required String title,
     required String body,
+    String? payload,
   }) async {
     await _localNotifications.show(
       id: id,
       title: title,
       body: body,
       notificationDetails: _notificationDetails(),
+      payload: payload,
     );
   }
 
@@ -289,7 +336,11 @@ class CrickNovaNotificationService {
       presentBadge: true,
       presentSound: true,
     );
-    return const NotificationDetails(android: android, iOS: darwin, macOS: darwin);
+    return const NotificationDetails(
+      android: android,
+      iOS: darwin,
+      macOS: darwin,
+    );
   }
 
   Future<void> _handleForegroundRemoteMessage(RemoteMessage message) async {
@@ -313,7 +364,9 @@ class CrickNovaNotificationService {
   Future<void> _handleRemoteDataMessage(RemoteMessage message) async {
     final type = message.data['type']?.toString();
     if (type == 'leaderboard_alert') {
-      final speed = double.tryParse(message.data['speedKmph']?.toString() ?? '');
+      final speed = double.tryParse(
+        message.data['speedKmph']?.toString() ?? '',
+      );
       await notifyLeaderboardAlert(
         nearbyTopSpeedKmph: speed ?? 0,
         areaLabel: message.data['areaLabel']?.toString(),
@@ -337,6 +390,66 @@ class CrickNovaNotificationService {
 
   void _handleNotificationTap(NotificationResponse response) {
     debugPrint('NOTIFICATIONS tapped payload=${response.payload}');
+    _openPayload(response.payload);
+  }
+
+  void _openPayload(String? payload) {
+    final value = payload ?? '';
+    if (value == 'analysis_queue') {
+      final navigator = appNavigatorKey.currentState;
+      if (navigator == null) {
+        _pendingLaunchPayload = value;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final retryPayload = _pendingLaunchPayload;
+          _pendingLaunchPayload = null;
+          _openPayload(retryPayload);
+        });
+        return;
+      }
+      if (PremiumService.isElite) {
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => MainNavigation(
+              userName: _fallbackUserName(),
+              initialIndex: 2, // Elite: Analyzing Vid / Exclusive Training
+            ),
+          ),
+          (route) => false,
+        );
+      } else {
+        navigator.push(
+          MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
+        );
+      }
+      return;
+    }
+    if (!value.startsWith('analysis_ready:')) return;
+    final jobId = value.substring('analysis_ready:'.length);
+    if (jobId.isEmpty) return;
+    final navigator = appNavigatorKey.currentState;
+    if (navigator == null) {
+      _pendingLaunchPayload = value;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final retryPayload = _pendingLaunchPayload;
+        _pendingLaunchPayload = null;
+        _openPayload(retryPayload);
+      });
+      return;
+    }
+    navigator.push(
+      MaterialPageRoute(builder: (_) => AnalysisResultScreen(jobId: jobId)),
+    );
+  }
+
+  String _fallbackUserName() {
+    final user = FirebaseAuth.instance.currentUser;
+    final name = user?.displayName;
+    if (name != null && name.trim().isNotEmpty) {
+      return name.trim().split(RegExp(r'\s+')).first;
+    }
+    final email = user?.email ?? '';
+    if (email.contains('@')) return email.split('@').first;
+    return 'Player';
   }
 }
 

@@ -1,19 +1,81 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../navigation/main_navigation.dart';
+import '../onboarding/cricknova_onboarding_store.dart';
+import '../onboarding/cricknova_onboarding_screen.dart';
+import '../onboarding/cricknova_paywall_screen.dart';
+import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
+import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/premium_service.dart';
-import 'post_login_welcome_screen.dart';
+
+enum LoginPostLoginTarget {
+  auto,
+  app,
+  onboarding,
+  paywall,
+  getStarted,
+  signInCheck,
+}
 
 class LoginScreen extends StatelessWidget {
-  const LoginScreen({super.key});
+  final LoginPostLoginTarget postLoginTarget;
+  final bool skipOnboardingGetStarted;
+
+  const LoginScreen({
+    super.key,
+    this.postLoginTarget = LoginPostLoginTarget.auto,
+    this.skipOnboardingGetStarted = false,
+  });
+
+  static final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  Future<bool> _firestoreUserExists(String uid) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.serverAndCache));
+      return snap.exists;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _storeSession(User user) async {
+    final prefs = await SharedPreferences.getInstance();
+    final firebaseIdToken = await user.getIdToken();
+    if (firebaseIdToken != null && firebaseIdToken.isNotEmpty) {
+      await prefs.setString("firebase_id_token", firebaseIdToken);
+    }
+
+    await prefs.setBool("is_logged_in", true);
+    await prefs.setString("user_id", user.uid);
+    await prefs.setString("login_type", "google");
+    await prefs.setString("user_name", user.displayName ?? "Player");
+    await prefs.setString("userName", user.displayName ?? "Player");
+  }
+
+  Future<void> _finishLoginWarmup(User user) async {
+    try {
+      final refreshedToken = await user.getIdToken(true);
+      if (refreshedToken != null && refreshedToken.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString("firebase_id_token", refreshedToken);
+      }
+    } catch (_) {}
+  }
 
   Future<void> signInWithGoogle(BuildContext context) async {
     final navigator = Navigator.of(context, rootNavigator: true);
     final messenger = ScaffoldMessenger.of(context);
 
+    bool loaderOpen = false;
     try {
       // Show blocking loader
       showDialog(
@@ -21,10 +83,21 @@ class LoginScreen extends StatelessWidget {
         barrierDismissible: false,
         builder: (_) => const Center(child: CircularProgressIndicator()),
       );
+      loaderOpen = true;
 
-      final googleUser = await GoogleSignIn().signIn();
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
+      final googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
-        navigator.pop();
+        try {
+          await FirebaseAuth.instance.signOut();
+          await _googleSignIn.signOut();
+        } catch (_) {}
+        if (loaderOpen && navigator.canPop()) {
+          navigator.pop();
+        }
         return;
       }
 
@@ -41,77 +114,120 @@ class LoginScreen extends StatelessWidget {
 
       final user = userCredential.user;
       if (user == null) {
-        navigator.pop();
+        if (loaderOpen && navigator.canPop()) {
+          navigator.pop();
+        }
         return;
       }
 
-      // ✅ ALWAYS store Firebase ID token (not Google ID token)
-      final firebaseIdToken = await user.getIdToken(true);
-      if (firebaseIdToken == null || firebaseIdToken.isEmpty) {
-        throw Exception("Failed to fetch Firebase ID token");
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString("firebase_id_token", firebaseIdToken);
-
-      await prefs.setBool("is_logged_in", true);
-      await prefs.setString("user_id", user.uid);
-      await prefs.setString("login_type", "google");
-      await prefs.setString("user_name", user.displayName ?? "Player");
-
-      // 🔒 IMPORTANT: Clear any cached premium from previous user
-      await PremiumService.clearPremium();
-
-      // 🔥 Restore premium strictly for THIS user UID from Firestore
-      await PremiumService.syncFromFirestore(user.uid);
-
-      // 🔁 Force token refresh AFTER premium sync (critical for backend auth)
-      final refreshedToken = await FirebaseAuth.instance.currentUser
-          ?.getIdToken(true);
-      if (refreshedToken == null || refreshedToken.isEmpty) {
-        throw Exception(
-          "Failed to refresh Firebase ID token after premium sync",
-        );
-      }
-      await prefs.setString("firebase_id_token", refreshedToken);
-
       final userName = user.displayName ?? "Player";
-      final welcomeDecision = await PostLoginWelcomeScreen.shouldShowFor(
-        prefs: prefs,
-        user: user,
-        explicitIsNewUser: userCredential.additionalUserInfo?.isNewUser,
-      );
-      if (welcomeDecision.shouldShow) {
-        await PostLoginWelcomeScreen.markSeen(prefs, user.uid);
-      }
+
+      try {
+        await _storeSession(user);
+      } catch (_) {}
+
+      try {
+        await CricknovaOnboardingStore.promotePendingToUser(user.uid);
+        await CricknovaOnboardingStore.markCompleted(user.uid);
+      } catch (_) {}
+
+      try {
+        await PremiumService.clearPremium();
+      } catch (_) {}
+
+      try {
+        await PremiumService.ensureFreshState();
+      } catch (_) {}
 
       // Close loader
       if (!context.mounted) return;
-      navigator.pop();
+      if (loaderOpen && navigator.canPop()) {
+        navigator.pop();
+      }
+      loaderOpen = false;
 
-      // Navigate only AFTER premium sync
+      if (!context.mounted) return;
+      unawaited(_finishLoginWarmup(user));
+
+      final bool isPremium = PremiumService.isPremiumActive;
+      final bool onboardingCompleted =
+          await CricknovaOnboardingStore.isCompleted(user.uid);
+      Widget signedInDestination({bool usePrePaywall = false}) {
+        if (isPremium) {
+          return MainNavigation(userName: userName);
+        }
+        if (usePrePaywall) {
+          return CricknovaPrePaywallFlowScreen(
+            userName: userName,
+            allowSkipToApp: false,
+          );
+        }
+        return CricknovaPaywallScreen(userName: userName);
+      }
+
+      final Widget destination = switch (postLoginTarget) {
+        LoginPostLoginTarget.paywall =>
+          isPremium
+              ? MainNavigation(userName: userName)
+              : CricknovaPaywallScreen(userName: userName),
+        LoginPostLoginTarget.app => MainNavigation(userName: userName),
+        LoginPostLoginTarget.onboarding =>
+          onboardingCompleted
+              ? signedInDestination()
+              : CricknovaOnboardingScreen(
+                  userName: userName,
+                  skipGetStarted: skipOnboardingGetStarted,
+                ),
+        LoginPostLoginTarget.getStarted => await (() async {
+          final uid = user.uid;
+          final exists = await _firestoreUserExists(uid);
+          if (exists || onboardingCompleted) {
+            return signedInDestination(usePrePaywall: true);
+          }
+          return CricknovaOnboardingScreen(
+            userName: userName,
+            skipGetStarted: true,
+          );
+        })(),
+        LoginPostLoginTarget.signInCheck => await (() async {
+          final uid = user.uid;
+          final exists = await _firestoreUserExists(uid);
+          if (exists || onboardingCompleted) {
+            return signedInDestination();
+          }
+          return CricknovaOnboardingScreen(
+            userName: userName,
+            skipGetStarted: false,
+            entryNotice:
+                'You are not logged in CrickNova yet. Complete the questions to unlock your paywall trial.',
+          );
+        })(),
+        LoginPostLoginTarget.auto =>
+          onboardingCompleted
+              ? signedInDestination()
+              : CricknovaOnboardingScreen(
+                  userName: userName,
+                  skipGetStarted: skipOnboardingGetStarted,
+                ),
+      };
+
+      if (!context.mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(
-          builder: (_) => welcomeDecision.shouldShow
-              ? PostLoginWelcomeScreen(
-                  userName: userName,
-                  showSkip: welcomeDecision.showSkip,
-                )
-              : MainNavigation(userName: userName),
-        ),
+        MaterialPageRoute(builder: (_) => destination),
         (route) => false,
       );
     } catch (e) {
-      if (navigator.canPop()) {
+      try {
+        await FirebaseAuth.instance.signOut();
+        await _googleSignIn.signOut();
+      } catch (_) {}
+      if (loaderOpen && navigator.canPop()) {
         navigator.pop();
       }
       if (!context.mounted) return;
       messenger.showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.redAccent,
-          content: Text("Google login failed"),
-        ),
+        SnackBar(content: Text("Login failed. Please try again.")),
       );
     }
   }
@@ -119,65 +235,82 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050505),
+      backgroundColor: OnboardingColors.bgBase,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 26),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-
-              // LOGO + TITLE
               Column(
-                children: const [
-                  Icon(
-                    Icons.sports_cricket,
-                    size: 64,
-                    color: Color(0xFF7CFF6B),
-                    shadows: [
-                      Shadow(color: Color(0xFF7CFF6B), blurRadius: 14),
-                      Shadow(color: Color(0xAA7CFF6B), blurRadius: 24),
-                    ],
-                  ),
-                  SizedBox(height: 16),
-                  Text(
-                    "CrickNova AI",
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                children: [
+                  Container(
+                    width: 96,
+                    height: 96,
+                    decoration: BoxDecoration(
+                      color: OnboardingColors.bgSurface,
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: OnboardingColors.borderSubtle),
+                    ),
+                    child: const Icon(
+                      Icons.sports_cricket_rounded,
+                      size: 42,
+                      color: OnboardingColors.textPrimary,
                     ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 28),
                   Text(
-                    "Where cricket meets intelligence",
+                    'CrickNova',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                    style: OnboardingTextStyles.uiSans(
+                      color: OnboardingColors.textPrimary,
+                      fontSize: 42,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Sign in to continue with your personalized cricket plan.',
+                    textAlign: TextAlign.center,
+                    style: OnboardingTextStyles.uiSans(
+                      color: OnboardingColors.textSecondary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      height: 1.5,
+                    ),
                   ),
                 ],
               ),
-
-              const SizedBox(height: 60),
-
-              // GOOGLE BUTTON
+              const SizedBox(height: 48),
               _loginButton(
-                text: "Continue with Google",
+                text: 'Continue with Google',
                 icon: Icons.g_mobiledata,
-                color: Colors.white,
-                textColor: Colors.black,
+                color: OnboardingColors.textPrimary,
+                textColor: OnboardingColors.ctaText,
                 onTap: () => signInWithGoogle(context),
               ),
-
-              const SizedBox(height: 16),
-
+              const SizedBox(height: 18),
+              Text(
+                'Your saved answers will be ready after login.',
+                textAlign: TextAlign.center,
+                style: OnboardingTextStyles.uiSans(
+                  color: OnboardingColors.textMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
               const Spacer(),
-
-              const Text(
-                "By continuing, you agree to our Terms & Privacy Policy",
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+              Text(
+                'By continuing, you agree to our Terms & Privacy Policy',
+                style: OnboardingTextStyles.uiSans(
+                  color: OnboardingColors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                ),
                 textAlign: TextAlign.center,
               ),
-
               const SizedBox(height: 18),
             ],
           ),
@@ -197,19 +330,11 @@ class LoginScreen extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 54,
+        height: 58,
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(999),
           border: border ? Border.all(color: Colors.white24) : null,
-          boxShadow: color != Colors.transparent
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                  ),
-                ]
-              : [],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -218,7 +343,7 @@ class LoginScreen extends StatelessWidget {
             const SizedBox(width: 10),
             Text(
               text,
-              style: TextStyle(
+              style: OnboardingTextStyles.uiSans(
                 color: textColor,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,

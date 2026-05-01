@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/premium_service.dart';
-import '../premium/premium_screen.dart';
+import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
 
 class PremiumGuard {
   static Future<bool> ensureAccess({
@@ -23,7 +23,13 @@ class PremiumGuard {
       if (!context.mounted) return false;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const PremiumScreen()),
+        MaterialPageRoute(
+          builder: (_) => CricknovaPrePaywallFlowScreen(
+            userName: user.displayName?.trim().isNotEmpty == true
+                ? user.displayName!.trim()
+                : 'Player',
+          ),
+        ),
       );
       return false;
     }

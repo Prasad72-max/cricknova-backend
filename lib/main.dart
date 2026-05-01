@@ -10,6 +10,9 @@ import 'package:CrickNova_Ai/services/cricknova_notification_service.dart';
 import 'package:CrickNova_Ai/services/premium_service.dart';
 import 'package:CrickNova_Ai/services/pricing_location_service.dart';
 import 'package:CrickNova_Ai/services/subscription_provider.dart';
+import 'package:CrickNova_Ai/app_router.dart';
+import 'package:CrickNova_Ai/models/pending_video.dart';
+import 'package:CrickNova_Ai/services/background_analysis_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -27,6 +30,17 @@ Future<void> main() async {
 
   // Keep Hive ready before any screen tries to open chat/session boxes.
   await Hive.initFlutter();
+  
+  // Register manual background queue adapter
+  Hive.registerAdapter(PendingVideoAdapter());
+  try {
+    await Hive.openBox<PendingVideo>('pending_videos');
+    await Hive.openBox('analysis_cache');
+    debugPrint("HIVE BOXES INITIALIZED (pending_videos, analysis_cache)");
+  } catch (e) {
+    debugPrint("HIVE INIT ERROR: $e");
+  }
+  
   await PricingLocationService.primeFromCache();
 
   runApp(const MyApp());
@@ -42,6 +56,9 @@ Future<void> _warmStartup() async {
   try {
     await CrickNovaMarketingNotificationService.instance.initialize();
   } catch (_) {}
+  
+  // Start background analysis checker
+  BackgroundAnalysisService.instance.start();
 }
 
 class MyApp extends StatefulWidget {
@@ -55,7 +72,7 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   ThemeMode _themeMode = ThemeMode.light;
 
   late final AppLinks _appLinks;
@@ -71,9 +88,20 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrapNonCriticalStartup());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(
+      PricingLocationService.refreshPricingRegion(
+        timeout: const Duration(seconds: 5),
+      ),
+    );
   }
 
   Future<void> _bootstrapNonCriticalStartup() async {
@@ -128,6 +156,7 @@ class _MyAppState extends State<MyApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
     _linkSub?.cancel();
     super.dispose();
@@ -138,6 +167,7 @@ class _MyAppState extends State<MyApp> {
     return ChangeNotifierProvider<SubscriptionProvider>(
       create: (_) => SubscriptionProvider(),
       child: MaterialApp(
+        navigatorKey: appNavigatorKey,
         debugShowCheckedModeBanner: false,
         themeMode: _themeMode,
 

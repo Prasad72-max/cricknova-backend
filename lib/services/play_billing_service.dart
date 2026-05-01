@@ -1,13 +1,13 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'premium_service.dart';
 
-class PlayBillingService {
+class PlayBillingService with WidgetsBindingObserver {
   PlayBillingService._();
 
   static final PlayBillingService instance = PlayBillingService._();
@@ -52,6 +52,8 @@ class PlayBillingService {
       return;
     }
 
+    WidgetsBinding.instance.addObserver(this);
+
     _purchaseSubscription = _inAppPurchase.purchaseStream.listen(
       _handlePurchaseUpdates,
       onError: (Object error, StackTrace stackTrace) {
@@ -75,9 +77,22 @@ class PlayBillingService {
   }
 
   Future<void> dispose() async {
+    WidgetsBinding.instance.removeObserver(this);
     await _purchaseSubscription?.cancel();
     _purchaseSubscription = null;
     _initialized = false;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      return;
+    }
+    if (!purchasePendingNotifier.value) {
+      return;
+    }
+
+    purchasePendingNotifier.value = false;
   }
 
   Future<void> syncEntitlementToPremiumService() async {
