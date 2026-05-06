@@ -32,10 +32,6 @@ enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
 enum _DrsReplayMode { ultraEdge, lbw }
 
-enum _DrsLbwPrediction { hitting, missing, umpiresCall }
-
-enum _DrsEdgePrediction { edged, missed, closeCall }
-
 enum _DrsUmpireCall { out, notOut, umpire }
 
 enum _DrsViewMode { keeper, umpire, striker }
@@ -3802,27 +3798,27 @@ class _UploadScreenState extends State<UploadScreen>
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _buildUnifiedOption(
-                    title: "ULTRA-EDGE",
-                    subtitle: "Spike & Visual Analysis",
-                    icon: Icons.graphic_eq,
-                    color: const Color(0xFF38BDF8),
-                    choices: ["EDGED", "MISSED", "CLOSE CALL"],
-                    values: [_DrsEdgePrediction.edged, _DrsEdgePrediction.missed, _DrsEdgePrediction.closeCall],
-                    onSelect: (val) => Navigator.of(context).pop({"mode": _DrsReplayMode.ultraEdge, "pred": val}),
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(color: Colors.white10),
-                  const SizedBox(height: 20),
-                  _buildUnifiedOption(
-                    title: "LBW ANALYSIS",
-                    subtitle: "Stump Tracking & Path",
-                    icon: Icons.shield_rounded,
-                    color: const Color(0xFF818CF8),
-                    choices: ["HITTING", "MISSING", "UMPIRE CALL"],
-                    values: [_DrsLbwPrediction.hitting, _DrsLbwPrediction.missing, _DrsLbwPrediction.umpiresCall],
-                    onSelect: (val) => Navigator.of(context).pop({"mode": _DrsReplayMode.lbw, "pred": val}),
-                  ),
+                    _buildUnifiedOption(
+                      title: "ULTRA-EDGE",
+                      subtitle: "Spike & Visual Analysis",
+                      icon: Icons.graphic_eq,
+                      color: const Color(0xFF38BDF8),
+                      choices: ["EDGED", "MISSED", "CLOSE CALL"],
+                      values: [_DrsUmpireCall.out, _DrsUmpireCall.notOut, _DrsUmpireCall.umpire],
+                      onSelect: (val) => Navigator.of(context).pop({"mode": _DrsReplayMode.ultraEdge, "pred": val}),
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 20),
+                    _buildUnifiedOption(
+                      title: "LBW ANALYSIS",
+                      subtitle: "Stump Tracking & Path",
+                      icon: Icons.shield_rounded,
+                      color: const Color(0xFF818CF8),
+                      choices: ["HITTING", "MISSING", "UMPIRE CALL"],
+                      values: [_DrsUmpireCall.out, _DrsUmpireCall.notOut, _DrsUmpireCall.umpire],
+                      onSelect: (val) => Navigator.of(context).pop({"mode": _DrsReplayMode.lbw, "pred": val}),
+                    ),
                 ],
               ),
             ),
@@ -4527,8 +4523,7 @@ class _UploadScreenState extends State<UploadScreen>
   int _drsRunId = 0;
   late final AnimationController _drsPhaseController;
   _DrsReplayMode _drsReplayMode = _DrsReplayMode.lbw;
-  _DrsLbwPrediction? _userLbwPrediction;
-  _DrsEdgePrediction? _userEdgePrediction;
+  _DrsUmpireCall? _userCall;
 
   bool showCoach = false;
   String? coachReply;
@@ -5580,39 +5575,23 @@ class _UploadScreenState extends State<UploadScreen>
     }
     bool aiEdgeDetected = audioSpike || visualEdgeDetected;
 
-    // Advanced Probability Reconciliation Engine
+    // DRS Probability Reconciliation Engine (as requested)
+    // Factors: AI Result, User Prediction, AI Confidence
     double aiVal = 0.0;
     double userVal = 0.5;
-    double aiCertainty = confidence.clamp(0.4, 0.95);
-    
-    if (_drsReplayMode == _DrsReplayMode.lbw) {
-      aiVal = aiHitStumps ? 1.0 : 0.0;
-      if (_userLbwPrediction == _DrsLbwPrediction.hitting) userVal = 1.0;
-      else if (_userLbwPrediction == _DrsLbwPrediction.missing) userVal = 0.0;
-      else userVal = aiVal;
-    } else {
-      final decision = _resolveUltraEdgeDecision(
-        points: trajectoryPoints,
-        spikeDetected: audioSpike,
-        geometry: _drsGeometry,
-      );
-      aiVal = decision.edgeDetected ? 1.0 : 0.0;
-      if (_userEdgePrediction == _DrsEdgePrediction.edged) userVal = 1.0;
-      else if (_userEdgePrediction == _DrsEdgePrediction.missed) userVal = 0.0;
-      else userVal = aiVal;
-    }
+    double weightAI = 0.75; // Trust the tracking system more (75%)
+    double weightUser = 0.25; // User intent (25%)
 
-    // Fairness Multiplier: Weight shifts towards AI only if confidence is exceptionally high (>85%)
-    double aiWeight = 0.5 + (aiCertainty * 0.4); 
-    double userWeight = 1.0 - aiWeight;
-    double combinedProb = (aiVal * aiWeight) + (userVal * userWeight);
-    
-    // Final Verdict Logic
-    bool isOut = combinedProb >= 0.5;
-    
     if (_drsReplayMode == _DrsReplayMode.lbw) {
-      _drsOut = isOut;
-      // Override if inside edge is detected (Fairness rule: Bat first = Not Out)
+      aiVal = _drsGeometry.wicketsHitting ? 1.0 : 0.0;
+      if (_userCall == _DrsUmpireCall.out) userVal = 1.0;
+      else if (_userCall == _DrsUmpireCall.notOut) userVal = 0.0;
+      else userVal = aiVal; // Umpire's call stays neutral
+
+      double finalProb = (aiVal * weightAI) + (userVal * weightUser);
+      _drsOut = finalProb >= 0.5;
+
+      // Rule: Inside Edge = Always NOT OUT
       if (_drsHasSpike || aiEdgeDetected) {
         _drsOut = false;
         _drsWickets = "Missing";
@@ -5620,26 +5599,31 @@ class _UploadScreenState extends State<UploadScreen>
         _drsDecisionDetail = "INSIDE EDGE";
         drsResult = "NOT OUT (INSIDE EDGE)";
       } else {
-        _drsWickets = _drsOut ? "Hitting" : (confidence >= 0.70 ? "Umpires Call" : "Missing");
         _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
-        final probPct = (combinedProb * 100).toStringAsFixed(0);
-        drsResult = "${_drsDecisionCall} (Prob: $probPct%)";
+        _drsWickets = _drsOut ? "Hitting" : (_drsGeometry.wicketsText);
+        final probPct = (finalProb * 100).toStringAsFixed(0);
+        drsResult = "$_drsDecisionCall ($probPct%)";
       }
     } else {
-      _drsEdgeDetected = isOut;
-      _drsOut = isOut;
+      final decision = _resolveUltraEdgeDecision(
+        points: trajectoryPoints,
+        spikeDetected: audioSpike,
+        geometry: _drsGeometry,
+      );
+      aiVal = decision.edgeDetected ? 1.0 : 0.0;
+      if (_userCall == _DrsUmpireCall.out) userVal = 1.0;
+      else if (_userCall == _DrsUmpireCall.notOut) userVal = 0.0;
+      else userVal = aiVal;
+
+      double finalProb = (aiVal * weightAI) + (userVal * weightUser);
+      _drsEdgeDetected = finalProb >= 0.5;
+      _drsOut = _drsEdgeDetected;
       _drsDecisionCall = _drsEdgeDetected ? "EDGE DETECTED" : "NO EDGE";
-      final probPct = (combinedProb * 100).toStringAsFixed(0);
+      final probPct = (finalProb * 100).toStringAsFixed(0);
       drsResult = "$_drsDecisionCall ($probPct%)";
     }
 
-    _drsSwingDeg =
-        ((_drsGeometry.pitchPoint.dx - _drsGeometry.deliveryStart.dx).abs() *
-                6.0)
-            .clamp(0.1, 5.0);
-    _drsSpinDeg =
-        ((_drsGeometry.impactPoint.dx - _drsGeometry.pitchPoint.dx).abs() * 7.0)
-            .clamp(0.1, 6.0);
+    // Removed else logic (swing, spin) from DRS as requested
   }
 
   Map<String, dynamic> _serializeDrsGeometry(_DrsTrackingGeometry geometry) {
@@ -6518,7 +6502,6 @@ class _UploadScreenState extends State<UploadScreen>
                         _buildSessionCard(
                           title: "Standard Practice Mode",
                           subtitle: "Optimized for natural bowling dynamics. Tracks release height and standard ball trajectory with precision.",
-                          advantage: "मुख्य फायदा: हा मोड नैसर्गिक रन-अप आणि हवेतील चेंडूचा वेग मोजण्यासाठी सर्वोत्तम आहे.",
                           icon: Icons.sports_cricket,
                           color: const Color(0xFF3B82F6),
                           type: "Solo / Nets Practice",
@@ -6528,7 +6511,6 @@ class _UploadScreenState extends State<UploadScreen>
                         _buildSessionCard(
                           title: "High-Velocity Sidearm",
                           subtitle: "Engineered for 100+ km/h pace. Intelligently filters coach's arm artifacts to lock only on the ball.",
-                          advantage: "मुख्य फायदा: साइडआर्ममध्ये चेंडू वेगाने सुटतो, हा मोड १०-१२ फ्रेम्समध्येच अचूक रिझल्ट देण्यास सक्षम आहे.",
                           icon: Icons.bolt,
                           color: const Color(0xFFF59E0B),
                           type: "Sidearm",
@@ -6538,7 +6520,6 @@ class _UploadScreenState extends State<UploadScreen>
                         _buildSessionCard(
                           title: "Professional Match Analysis",
                           subtitle: "Advanced noise filtering for complex backgrounds. Tracks full-pitch trajectory and accounts for run-up speed.",
-                          advantage: "मुख्य फायदा: लांबून घेतलेल्या व्हिडिओमध्येही हा मोड बॅकग्राउंडमधील अडथळे काढून चेंडूचा अचूक मार्ग शोधतो.",
                           icon: Icons.stadium,
                           color: const Color(0xFF8B5CF6),
                           type: "Match",
@@ -6559,7 +6540,6 @@ class _UploadScreenState extends State<UploadScreen>
   Widget _buildSessionCard({
     required String title,
     required String subtitle,
-    required String advantage,
     required IconData icon,
     required Color color,
     required String type,
@@ -6634,32 +6614,6 @@ class _UploadScreenState extends State<UploadScreen>
                       color: Colors.white70,
                       fontSize: 12,
                       height: 1.3,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: color.withOpacity(0.2)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.auto_awesome, color: color, size: 14),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            advantage,
-                            style: TextStyle(
-                              color: color.withOpacity(0.9),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
@@ -7174,11 +7128,7 @@ class _UploadScreenState extends State<UploadScreen>
     final prediction = unifiedResult["pred"];
     
     _drsReplayMode = selectedMode;
-    if (selectedMode == _DrsReplayMode.lbw) {
-      _userLbwPrediction = prediction as _DrsLbwPrediction?;
-    } else {
-      _userEdgePrediction = prediction as _DrsEdgePrediction?;
-    }
+    _userCall = prediction as _DrsUmpireCall?;
 
     setState(() {
       showDRS = false;
