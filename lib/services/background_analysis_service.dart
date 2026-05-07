@@ -7,6 +7,7 @@ import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
 import '../models/pending_video.dart';
 import '../analysis/analysis_queue_store.dart';
+import 'cricknova_notification_service.dart';
 
 class BackgroundAnalysisService {
   BackgroundAnalysisService._();
@@ -101,6 +102,10 @@ class BackgroundAnalysisService {
           'swing': analysis["swing"] ?? "NONE",
           'spin': analysis["spin"] ?? "NONE",
         });
+
+        await CrickNovaNotificationService.instance.maybeNotifyAnalysisComplete(
+          resultJobId: video.id,
+        );
 
         debugPrint("BackgroundAnalysis: Success for ${video.id}");
       } else {

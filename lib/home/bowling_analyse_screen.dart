@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 
 import '../compare/analyse_yourself_screen.dart';
 import '../premium/premium_screen.dart';
@@ -64,10 +63,10 @@ class BowlingAnalyseScreen extends StatelessWidget {
                     "Upload your bowling clip and get bowling-specific mistakes with fix drills.",
                 buttonText: "Start Mistake Detection",
                 locked: !mistakeUnlocked,
-                lockCaption: "Locked for Free users. Upgrade to unlock.",
+                lockCaption: "Unlock elite bowling AI with Pro or Ultra.",
                 onTap: () {
                   if (!mistakeUnlocked) {
-                    _goPremium(context, "mistake_lock");
+                    _goPremium(context, "bowling_analysis");
                     return;
                   }
                   Navigator.of(context).push(
@@ -84,11 +83,10 @@ class BowlingAnalyseScreen extends StatelessWidget {
                     "Compare two bowling videos and get bowling difference feedback.",
                 buttonText: "Start Compare",
                 locked: !compareUnlocked,
-                lockCaption:
-                    "Unlocked only in Pro/Ultra (₹499/₹1999 or \$69.99/\$169.99).",
+                lockCaption: "Unlock elite video comparison with Pro or Ultra.",
                 onTap: () {
                   if (!compareUnlocked) {
-                    _goPremium(context, "analyse");
+                    _goPremium(context, "bowling_compare");
                     return;
                   }
                   Navigator.of(context).push(
@@ -169,17 +167,17 @@ class _BowlingActionCard extends StatelessWidget {
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
-              backgroundColor: locked
-                  ? Colors.white12
-                  : const Color(0xFF38BDF8),
-              foregroundColor: locked ? Colors.white70 : Colors.black,
+              backgroundColor: const Color(0xFF38BDF8),
+              foregroundColor: Colors.black,
+              elevation: locked ? 8 : 2,
+              shadowColor: const Color(0xFF38BDF8).withOpacity(0.35),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
             onPressed: onTap,
             child: Text(
-              locked ? "LOCKED" : buttonText,
+              locked ? "Go Elite" : buttonText,
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
@@ -195,66 +193,35 @@ class _BowlingActionCard extends StatelessWidget {
       ],
     );
 
-    return Padding(
-      padding: const EdgeInsets.all(18),
-      child: Center(
-        child: Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(maxWidth: 560),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withOpacity(0.72),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.28),
-                blurRadius: 22,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: locked
-              ? Stack(
-                  children: [
-                    ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                      child: Opacity(opacity: 0.85, child: content),
-                    ),
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.35),
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(
-                                Icons.lock_rounded,
-                                color: Colors.white,
-                                size: 34,
-                              ),
-                              SizedBox(height: 10),
-                              Text(
-                                "Premium Locked",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 36),
+            child: Center(
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxWidth: 560),
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A).withOpacity(0.72),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: Colors.white.withOpacity(0.12)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.28),
+                      blurRadius: 22,
+                      offset: const Offset(0, 12),
                     ),
                   ],
-                )
-              : content,
-        ),
-      ),
+                ),
+                child: content,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

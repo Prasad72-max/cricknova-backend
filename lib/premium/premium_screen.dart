@@ -728,6 +728,20 @@ class PremiumScreen extends StatefulWidget {
   State<PremiumScreen> createState() => _PremiumScreenState();
 }
 
+class _PremiumEntryHighlight {
+  const _PremiumEntryHighlight({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.keywords,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<String> keywords;
+}
+
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   late PricingRegion _resolvedPricingRegion;
@@ -1253,15 +1267,142 @@ class _PremiumScreenState extends State<PremiumScreen>
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String? _entrySourceFromRoute() {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    return (args?['source'] as String?) ?? widget.entrySource;
+  }
+
+  _PremiumEntryHighlight? _entryHighlightFor(String? source) {
+    switch (source) {
+      case "ai_coach":
+        return const _PremiumEntryHighlight(
+          title: "AI Chat Coach",
+          subtitle: "You were redirected because Chat Coach needs Premium.",
+          icon: Icons.auto_awesome_rounded,
+          keywords: ["AI Chats", "Priority AI"],
+        );
+      case "analyse":
+      case "compare_lock":
+      case "compare_limit":
+        return const _PremiumEntryHighlight(
+          title: "Analyse Yourself Batting",
+          subtitle: "You were redirected to unlock batting video comparison.",
+          icon: Icons.analytics_rounded,
+          keywords: ["Analyse Yourself"],
+        );
+      case "bowling_analysis":
+      case "mistake_lock":
+      case "mistake_usage_limit":
+        return const _PremiumEntryHighlight(
+          title: "Bowling Mistake Detection",
+          subtitle: "You were redirected to unlock bowling AI feedback.",
+          icon: Icons.sports_baseball_rounded,
+          keywords: ["Mistake Detection"],
+        );
+      case "bowling_compare":
+        return const _PremiumEntryHighlight(
+          title: "Bowling Compare",
+          subtitle: "You were redirected to unlock bowling video comparison.",
+          icon: Icons.compare_arrows_rounded,
+          keywords: ["Analyse Yourself"],
+        );
+      case "upload_gate":
+        return const _PremiumEntryHighlight(
+          title: "Training Video Analysis",
+          subtitle: "You were redirected to unlock AI video analysis.",
+          icon: Icons.cloud_upload_rounded,
+          keywords: ["Speed Detection", "Swing Detection", "Spin Detection"],
+        );
+      case "certificate_lock":
+        return const _PremiumEntryHighlight(
+          title: "Speed Certificates",
+          subtitle: "You were redirected to unlock premium certificates.",
+          icon: Icons.workspace_premium_rounded,
+          keywords: ["Speed Certificates"],
+        );
+      default:
+        return null;
+    }
+  }
+
+  bool _isAnalyseEntrySource(String? source) {
+    return source == "analyse" ||
+        source == "compare_lock" ||
+        source == "compare_limit" ||
+        source == "bowling_compare" ||
+        source == "bowling_analysis";
+  }
+
+  bool _shouldHighlightFeature(String feature) {
+    final highlight = _entryHighlightFor(_entrySourceFromRoute());
+    if (highlight == null) return false;
+    final lowerFeature = feature.toLowerCase();
+    return highlight.keywords.any(
+      (keyword) => lowerFeature.contains(keyword.toLowerCase()),
+    );
+  }
+
+  Widget _entryHighlightCard(_PremiumEntryHighlight highlight) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF38BDF8).withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFF38BDF8).withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(highlight.icon, color: const Color(0xFF7DD3FC)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Unlocking: ${highlight.title}",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  highlight.subtitle,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white70,
+                    fontSize: 12.5,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isIndia = _resolvedPricingRegion == PricingRegion.india;
     final bool directPlansOnly = widget.showDirectPlansOnly;
-    final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final String? sourceFromArgs = args?['source'] as String?;
-    final bool isAnalyseEntry =
-        sourceFromArgs == "analyse" || widget.entrySource == "analyse";
+    final String? entrySource = _entrySourceFromRoute();
+    final highlight = _entryHighlightFor(entrySource);
+    final bool isAnalyseEntry = _isAnalyseEntrySource(entrySource);
     if (!_showPremiumShimmer && PremiumService.isPremiumActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _enablePremiumShimmer();
@@ -1271,8 +1412,8 @@ class _PremiumScreenState extends State<PremiumScreen>
     // and NOT when user explicitly opens from Profile or Features tab.
     if (PremiumService.isPremiumActive &&
         widget.entrySource == null &&
-        sourceFromArgs != "profile" &&
-        sourceFromArgs != "features") {
+        entrySource != "profile" &&
+        entrySource != "features") {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (Navigator.canPop(context)) {
           Navigator.pop(context);
@@ -1315,6 +1456,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                     ),
                   ),
                 _currentPlanOverviewCard(),
+                if (highlight != null) _entryHighlightCard(highlight),
                 ...(isIndia
                     ? (directPlansOnly
                           ? indiaDirectPlans()
@@ -1726,24 +1868,6 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   List<Widget> internationalCompareOnlyPlans() {
     return [
-      sexyPlanCard(
-        title: "6 Months",
-        price: "\$49.99",
-        tag: "Analyse Pro 🎯",
-        glowColor: Colors.purpleAccent,
-        features: [
-          "1,200 AI Chats",
-          "30 Mistake Detection",
-          "Enhanced Speed Detection",
-          "Enhanced Swing Detection",
-          "Enhanced Spin Detection",
-          "Monthly Reports",
-          "XP System & Milestones",
-          "Enhanced DRS Decision System",
-          "Enhanced UltraEdge Detection",
-        ],
-      ),
-      const SizedBox(height: 20),
       KeyedSubtree(
         key: _planKeys["\$69.99"],
         child: sexyPlanCard(
@@ -1914,45 +2038,84 @@ class _PremiumScreenState extends State<PremiumScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         for (int i = 0; i < features.length; i++)
-                          Opacity(
-                            opacity: (value * 2.5 - (i * 0.1)).clamp(0.0, 1.0),
-                            child: Transform.translate(
-                              offset: Offset(
-                                0,
-                                15 *
-                                    (1 -
-                                        (value * 2.5 - (i * 0.1)).clamp(
-                                          0.0,
-                                          1.0,
-                                        )),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle_rounded,
-                                      color: goldColor,
-                                      size: 20,
+                          Builder(
+                            builder: (context) {
+                              final isHighlighted = _shouldHighlightFeature(
+                                features[i],
+                              );
+                              return Opacity(
+                                opacity: (value * 2.5 - (i * 0.1)).clamp(
+                                  0.0,
+                                  1.0,
+                                ),
+                                child: Transform.translate(
+                                  offset: Offset(
+                                    0,
+                                    15 *
+                                        (1 -
+                                            (value * 2.5 - (i * 0.1)).clamp(
+                                              0.0,
+                                              1.0,
+                                            )),
+                                  ),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: isHighlighted ? 10 : 0,
+                                      vertical: isHighlighted ? 8 : 0,
                                     ),
-                                    const SizedBox(width: 14),
-                                    Flexible(
-                                      child: Text(
-                                        features[i],
-                                        style: TextStyle(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.85,
-                                          ),
-                                          fontSize: 15,
-                                          height: 1.4,
-                                        ),
+                                    decoration: BoxDecoration(
+                                      color: isHighlighted
+                                          ? const Color(
+                                              0xFF38BDF8,
+                                            ).withValues(alpha: 0.12)
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isHighlighted
+                                            ? const Color(
+                                                0xFF38BDF8,
+                                              ).withValues(alpha: 0.45)
+                                            : Colors.transparent,
                                       ),
                                     ),
-                                  ],
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          isHighlighted
+                                              ? Icons.arrow_circle_right_rounded
+                                              : Icons.check_circle_rounded,
+                                          color: isHighlighted
+                                              ? const Color(0xFF7DD3FC)
+                                              : goldColor,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Flexible(
+                                          child: Text(
+                                            features[i],
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(
+                                                alpha: isHighlighted
+                                                    ? 1.0
+                                                    : 0.85,
+                                              ),
+                                              fontSize: 15,
+                                              fontWeight: isHighlighted
+                                                  ? FontWeight.w800
+                                                  : FontWeight.w400,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
                           ),
                       ],
                     );

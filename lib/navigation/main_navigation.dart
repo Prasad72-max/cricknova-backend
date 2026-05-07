@@ -91,11 +91,16 @@ class _MainNavigationState extends State<MainNavigation>
     }
     _activeSince = DateTime.now();
     _startMinuteTimer();
+    
+    // Performance Fix: Only build the CURRENT tab immediately.
+    // Building all tabs at once was causing startup lag.
     _screenCache = List<Widget?>.filled(_lastKnownTabCount, null);
     _screenCache[_index] = _buildScreenAt(_index);
+    
     MainNavigation.activeTabNotifier.value = _index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrapSession());
+      // Lazily build remaining tabs across frames so startup is lightning fast.
       _startPrewarmTabs();
     });
   }
@@ -121,7 +126,12 @@ class _MainNavigationState extends State<MainNavigation>
     setState(() {
       _screenCache[i] ??= _buildScreenAt(i);
     });
-    SchedulerBinding.instance.addPostFrameCallback((_) => _prewarmNextTab());
+    // Wait a tiny bit between tabs to let the Home screen animations breathe.
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        SchedulerBinding.instance.addPostFrameCallback((_) => _prewarmNextTab());
+      }
+    });
   }
 
   bool get _hasEliteAnalysisTab => PremiumService.isElite;

@@ -210,9 +210,9 @@ class CrickNovaNotificationService {
 
     await _showNow(
       id: _analysisCompleteId,
-      title: 'CrickNova: Result ready आहे',
+      title: 'CrickNova: Result ready',
       body:
-          'तुमचा video analysis complete झाला आहे. “Analyzing Vid” मध्ये result पहा.',
+          'Your video analysis is complete. View the result in "Analyzing Vid".',
       payload: resultJobId == null ? null : 'analysis_ready:$resultJobId',
     );
   }
@@ -228,9 +228,9 @@ class CrickNovaNotificationService {
     final idSuffix = resultJobId == null ? 0 : resultJobId.hashCode.abs() % 700;
     await _localNotifications.zonedSchedule(
       id: _analysisCheckBaseId + idSuffix,
-      title: 'CrickNova: Result check करा',
+      title: 'CrickNova: Check your result',
       body:
-          'Video analyze होत आहे. Tap करून “Analyzing Vid” मध्ये progress/result पाहा.',
+          'Your video is still being analyzed. Tap to view progress or the result in "Analyzing Vid".',
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -248,7 +248,7 @@ class CrickNovaNotificationService {
       id: _personalBestId,
       title: 'CrickNova: New Personal Best',
       body:
-          "तुमचा नवीन top speed ${speedKmph.toStringAsFixed(1)} km/h झाला आहे. छान.",
+          "Your new top speed is ${speedKmph.toStringAsFixed(1)} km/h. Great work.",
     );
   }
 
@@ -266,7 +266,7 @@ class CrickNovaNotificationService {
       id: _leaderboardAlertId,
       title: 'CrickNova: Leaderboard Alert',
       body:
-          "Nearby$suffix कुणीतरी ${nearbyTopSpeedKmph.toStringAsFixed(1)} km/h टाकलं आहे. तुमचं नाव वर आणा.",
+          "Someone nearby$suffix posted ${nearbyTopSpeedKmph.toStringAsFixed(1)} km/h. Move your name up the leaderboard.",
     );
   }
 
@@ -281,7 +281,7 @@ class CrickNovaNotificationService {
     await _localNotifications.zonedSchedule(
       id: _inactivityId,
       title: 'CrickNova',
-      body: "तुम्ही 3 दिवस bowling केलेली नाही. आज एक delivery टाका.",
+      body: "You have not bowled for 3 days. Bowl one delivery today.",
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -299,7 +299,7 @@ class CrickNovaNotificationService {
     await _localNotifications.zonedSchedule(
       id: _eveningReminderId,
       title: 'CrickNova',
-      body: 'आज संध्याकाळी 10 minutes practice करूया.',
+      body: "Let's practice for 10 minutes this evening.",
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

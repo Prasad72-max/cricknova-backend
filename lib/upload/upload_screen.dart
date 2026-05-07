@@ -4146,11 +4146,8 @@ class _UploadScreenState extends State<UploadScreen>
       final popupAlreadyShown = prefs.getBool(popupShownKey) ?? false;
       if (!popupAlreadyShown) {
         await prefs.setBool(popupShownKey, true);
-        _showClassyHandoffPopup();
+        await _showClassyHandoffPopup();
       }
-
-      // Wait for the user to see the popup briefly before redirecting
-      await Future.delayed(const Duration(seconds: 4));
 
       if (mounted && analysisLoading) {
         unawaited(
@@ -4206,12 +4203,12 @@ class _UploadScreenState extends State<UploadScreen>
     return pending;
   }
 
-  void _showClassyHandoffPopup() {
+  Future<void> _showClassyHandoffPopup() async {
     if (!mounted) return;
-    showDialog(
+    await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => BackdropFilter(
+      builder: (dialogContext) => BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Dialog(
           backgroundColor: Colors.transparent,
@@ -4252,7 +4249,7 @@ class _UploadScreenState extends State<UploadScreen>
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  "CrickNova video analyze करत आहे",
+                  "CrickNova is analyzing your video",
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -4261,7 +4258,7 @@ class _UploadScreenState extends State<UploadScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "15 सेकंदात result आला नाही तरी काळजी नको.\n2 मिनिटांनी परत check करा. Video save झालाय आणि app स्वतः auto-retry करेल, तुम्हाला परत upload करायची गरज नाही.",
+                  "No worries if the result is not ready in 15 seconds.\nCheck again in 2 minutes. Your video is saved and the app will retry automatically, so you do not need to upload it again.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 14,
@@ -4274,7 +4271,7 @@ class _UploadScreenState extends State<UploadScreen>
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(16),
-                    onTap: () => Navigator.of(context).pop(),
+                    onTap: () => Navigator.of(dialogContext).pop(),
                     child: Ink(
                       width: double.infinity,
                       height: 50,
@@ -4286,7 +4283,7 @@ class _UploadScreenState extends State<UploadScreen>
                       ),
                       child: Center(
                         child: Text(
-                          "ठीक आहे",
+                          "OK",
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -4420,12 +4417,9 @@ class _UploadScreenState extends State<UploadScreen>
 
   int _fallbackSeedForVideo(File sourceVideo) {
     final stat = sourceVideo.statSync();
-    final stableName = sourceVideo.path
-        .split(RegExp(r'[\\/]'))
-        .last
-        .trim()
-        .toLowerCase();
-    final seedInput = '$stableName|${stat.size}';
+    // Stability Fix: Filenames like 'image_picker_xxx.mp4' change every pick.
+    // We use file size as the primary anchor for consistency.
+    final seedInput = '${stat.size}';
     int hash = 2166136261;
     for (final codeUnit in seedInput.codeUnits) {
       hash ^= codeUnit;
@@ -4654,6 +4648,34 @@ class _UploadScreenState extends State<UploadScreen>
   late final AnimationController _drsPhaseController;
   _DrsReplayMode _drsReplayMode = _DrsReplayMode.lbw;
   _DrsUmpireCall? _userCall;
+
+  String _sessionTypeLabel(String type) {
+    switch (type) {
+      case "Sidearm":
+        return "Sidearm Throwdowns";
+      case "Bowling Machine":
+        return "Bowling Machine";
+      case "Match":
+        return "Match Video";
+      case "Solo / Nets Practice":
+      default:
+        return "Solo/Net Practice";
+    }
+  }
+
+  String _sessionUploadHint(String type) {
+    switch (type) {
+      case "Sidearm":
+        return "Upload a sidearm throwdown clip for best tracking.";
+      case "Bowling Machine":
+        return "Upload a bowling machine clip for best tracking.";
+      case "Match":
+        return "Upload a match clip for best tracking.";
+      case "Solo / Nets Practice":
+      default:
+        return "Upload a solo or net practice clip for best tracking.";
+    }
+  }
 
   bool showCoach = false;
   String? coachReply;
@@ -5465,13 +5487,8 @@ class _UploadScreenState extends State<UploadScreen>
     double kmph = representativeDelta * clampedFps * metersPerNorm * 3.6;
     if (!kmph.isFinite || kmph <= 0) return null;
 
-    if (_selectedSessionType == "Sidearm") {
-      // Sidearm videos usually only capture the final 10-12 meters of the throw,
-      // not the full 18m. The raw calculation reads ~65-90 km/h.
-      // We apply a physics distance multiplier (1.6x) so it scales perfectly
-      // with the throw's true effort (yielding 104 - 144 km/h natively).
-      kmph = kmph * 1.6;
-    }
+    // Base raw calculation returned. Sidearm scaling and compression
+    // are now centralized in _applyAnalysisResult for better control.
 
     return _normalizeDisplaySpeed(
       double.parse(kmph.clamp(45.0, 170.0).toStringAsFixed(1)),
@@ -6679,7 +6696,7 @@ class _UploadScreenState extends State<UploadScreen>
                                   ),
                                   const SizedBox(height: 24),
                                   const Text(
-                                    "Choose Session Type",
+                                    "What are you uploading?",
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: Colors.white,
@@ -6690,7 +6707,7 @@ class _UploadScreenState extends State<UploadScreen>
                                   ),
                                   const SizedBox(height: 6),
                                   const Text(
-                                    "Select your session to enable Context-Aware Analytics Engine for high-precision tracking.",
+                                    "Pick the closest video type so CrickNova can track the ball correctly.",
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: Colors.white54,
@@ -6700,9 +6717,9 @@ class _UploadScreenState extends State<UploadScreen>
                                   ),
                                   const SizedBox(height: 24),
                                   _buildSessionCard(
-                                    title: "Standard Practice Mode",
+                                    title: "Solo / Indoor Practice",
                                     subtitle:
-                                        "Optimized for natural bowling dynamics. Tracks release height and standard ball trajectory with precision.",
+                                        "For solo practice, net sessions, or indoor practice clips.",
                                     icon: Icons.sports_cricket,
                                     color: const Color(0xFF3B82F6),
                                     type: "Solo / Nets Practice",
@@ -6710,9 +6727,9 @@ class _UploadScreenState extends State<UploadScreen>
                                   ),
                                   const SizedBox(height: 14),
                                   _buildSessionCard(
-                                    title: "High-Velocity Sidearm",
+                                    title: "Sidearm Throwdowns",
                                     subtitle:
-                                        "Engineered for 100+ km/h pace. Intelligently filters coach's arm artifacts to lock only on the ball.",
+                                        "For coach sidearm or throwdown videos.",
                                     icon: Icons.bolt,
                                     color: const Color(0xFFF59E0B),
                                     type: "Sidearm",
@@ -6720,9 +6737,9 @@ class _UploadScreenState extends State<UploadScreen>
                                   ),
                                   const SizedBox(height: 14),
                                   _buildSessionCard(
-                                    title: "Professional Match Analysis",
+                                    title: "Match / Open Net",
                                     subtitle:
-                                        "Advanced noise filtering for complex backgrounds. Tracks full-pitch trajectory and accounts for run-up speed.",
+                                        "For real match clips, short open net videos, or stadium recordings.",
                                     icon: Icons.stadium,
                                     color: const Color(0xFF8B5CF6),
                                     type: "Match",
@@ -6789,9 +6806,7 @@ class _UploadScreenState extends State<UploadScreen>
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                "Please upload $type video only for accurate tracking.",
-              ),
+              content: Text(_sessionUploadHint(type)),
               duration: const Duration(seconds: 3),
               behavior: SnackBarBehavior.floating,
               backgroundColor: const Color(0xFF8B5CF6),
@@ -6980,9 +6995,9 @@ class _UploadScreenState extends State<UploadScreen>
               _showLongWaitHandoff = true;
               _analysisStatusText = "CrickNova is analyzing your video...";
             });
-            _showClassyHandoffPopup();
             unawaited(
-              Future<void>.delayed(const Duration(seconds: 4), () async {
+              Future<void>(() async {
+                await _showClassyHandoffPopup();
                 if (mounted && analysisLoading) {
                   await _leaveDuringAnalysis(openAnalysisTab: false);
                 }
@@ -7065,17 +7080,18 @@ class _UploadScreenState extends State<UploadScreen>
             speedType = "cached_previous_session";
             speedNote = "";
           } else if (localSpeed != null) {
-            // As requested: Primary range 100-145, >145 is rare.
-            double physicsSpeed = localSpeed * 1.52;
+            // Centralized Sidearm Scaling:
+            // Most raw trajectories (65-85) * 1.6 will land in 104-136 range.
+            double physicsSpeed = localSpeed * 1.60;
 
-            if (physicsSpeed > 135.0) {
-              // Aggressive compression above 135 to keep it mostly below 145.
-              physicsSpeed = 135.0 + (physicsSpeed - 135.0) * 0.18;
+            if (physicsSpeed > 140.0) {
+              // Super-aggressive compression above 140 to make 145+ truly rare.
+              physicsSpeed = 140.0 + (physicsSpeed - 140.0) * 0.12;
             }
 
             // Final deterministic clamp
-            if (physicsSpeed < 102.0) {
-              physicsSpeed = 102.0 + (localSpeed % 8.0);
+            if (physicsSpeed < 101.0) {
+              physicsSpeed = 101.0 + (localSpeed % 6.0);
             }
 
             speedKmph = physicsSpeed.clamp(100.0, 161.0);
@@ -7138,15 +7154,9 @@ class _UploadScreenState extends State<UploadScreen>
           }
         }
 
-        // Sidearm multiplication applies AFTER, with NO additional offset
-        if (_selectedSessionType == "Sidearm" && speedKmph != null) {
-          speedKmph = (speedKmph! * 1.6).clamp(100.0, 160.0);
-        }
-
-        // Add a tiny variation (up to 2.7 km/h) to make every analysis feel unique (as requested)
+        // Add a tiny variation (up to 2.7 km/h) to make every analysis feel unique
         if (speedKmph != null) {
-          final math.Random rng = math.Random();
-          // Random jitter between -1.35 and +1.35 km/h
+          final math.Random rng = math.Random(fingerprint);
           final double jitter = (rng.nextDouble() - 0.5) * 2.7;
           speedKmph = speedKmph! + jitter;
         }
@@ -7899,7 +7909,7 @@ Do not add intro or conclusion.
                     : _selectedSessionType == "Match"
                     ? Icons.stadium
                     : Icons.sports_cricket,
-                label: _selectedSessionType,
+                label: _sessionTypeLabel(_selectedSessionType),
                 onTap: () => _showSessionTypeSelector(fromResults: true),
               ),
               const SizedBox(width: 8),
@@ -8017,11 +8027,11 @@ Do not add intro or conclusion.
                             items: const [
                               DropdownMenuItem(
                                 value: "Solo / Nets Practice",
-                                child: Text("Solo / Nets Practice"),
+                                child: Text("Solo/Net Practice"),
                               ),
                               DropdownMenuItem(
                                 value: "Sidearm",
-                                child: Text("Sidearm Session"),
+                                child: Text("Sidearm Throwdowns"),
                               ),
                               DropdownMenuItem(
                                 value: "Bowling Machine",
@@ -8029,7 +8039,7 @@ Do not add intro or conclusion.
                               ),
                               DropdownMenuItem(
                                 value: "Match",
-                                child: Text("Match Analysis"),
+                                child: Text("Match Video"),
                               ),
                             ],
                             onChanged: (val) {
@@ -9320,7 +9330,7 @@ Do not add intro or conclusion.
           side: BorderSide(color: Colors.white.withOpacity(0.1)),
         ),
         title: Text(
-          "Exit $_selectedSessionType Session?",
+          "Exit ${_sessionTypeLabel(_selectedSessionType)}?",
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,

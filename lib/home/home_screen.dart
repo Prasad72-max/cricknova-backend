@@ -268,11 +268,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         backgroundColor: const Color(0xFF0F172A),
         duration: const Duration(seconds: 6),
         content: Text(
-          '2 मिनिटं झाली. “Analyzing Vid” मध्ये result/progress पाहा.',
+          '2 minutes are up. View the result or progress in "Analyzing Vid".',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         action: SnackBarAction(
-          label: 'पहा',
+          label: 'View',
           textColor: const Color(0xFF38BDF8),
           onPressed: () {
             Navigator.of(context).push(
@@ -859,7 +859,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     children: [
                       _actionCard(
                         title: "Upload Training Video",
-                        subtitle: "AI will analyze your batting or bowling",
+                        subtitle:
+                            "Elite AI reads speed, swing, spin, DRS & batting flaws",
                         icon: Icons.cloud_upload_rounded,
                         iconGradient: const [
                           Color(0xFF7FDBFF),
@@ -878,7 +879,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       const SizedBox(height: 14),
                       _actionCard(
                         title: "Analyse Yourself",
-                        subtitle: "Compare two videos and see differences",
+                        subtitle:
+                            "Compare batting clips and find technique gaps",
                         icon: Icons.analytics_rounded,
                         iconGradient: const [
                           Color(0xFFF7D173),
@@ -906,8 +908,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                           Navigator.of(context)
                               .push(
-                                MaterialPageRoute(
-                                  builder: (_) => const AnalyseYourselfScreen(),
+                                PageRouteBuilder(
+                                  transitionDuration: const Duration(milliseconds: 320),
+                                  pageBuilder: (context, animation, secondaryAnimation) => 
+                                      const AnalyseYourselfScreen(),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: ScaleTransition(
+                                        scale: Tween<double>(begin: 0.98, end: 1.0).animate(
+                                          CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                                        ),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
                                 ),
                               )
                               .then((_) => _syncQuickStats());
@@ -935,8 +950,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                           Navigator.of(context)
                               .push(
-                                MaterialPageRoute(
-                                  builder: (_) => const BowlingAnalyseScreen(),
+                                PageRouteBuilder(
+                                  transitionDuration: const Duration(milliseconds: 320),
+                                  pageBuilder: (context, animation, secondaryAnimation) => 
+                                      const BowlingAnalyseScreen(),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: ScaleTransition(
+                                        scale: Tween<double>(begin: 0.98, end: 1.0).animate(
+                                          CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                                        ),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
                                 ),
                               )
                               .then((_) => _syncQuickStats());

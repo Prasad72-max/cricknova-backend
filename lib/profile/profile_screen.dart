@@ -842,19 +842,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     remainingXP = nextMilestone - totalXP;
     if (remainingXP < 0) remainingXP = 0;
 
-    // 👤 Load profile name from Hive (per-user)
-    final hiveName = box.get("profileName") as String?;
-    if (hiveName != null && hiveName.trim().isNotEmpty) {
-      _savedName = hiveName.trim();
-    } else {
-      final legacyName = prefs.getString("profileName");
-      if (legacyName != null && legacyName.trim().isNotEmpty) {
-        _savedName = legacyName.trim();
-        await box.put("profileName", _savedName);
-        await prefs.remove("profileName");
-      } else {
-        _savedName = "";
-      }
+    // 👤 Load profile name. Onboarding stores this in SharedPreferences/Hive,
+    // so use it as the profile default before asking the user again.
+    final hiveName = (box.get("profileName") as String?)?.trim();
+    final onboardingProfileName = prefs.getString("profileName")?.trim();
+    final onboardingUserName = prefs.getString("userName")?.trim();
+    final authName = user?.displayName?.trim();
+    final resolvedName =
+        [
+          hiveName,
+          onboardingProfileName,
+          onboardingUserName,
+          authName,
+        ].whereType<String>().firstWhere(
+          (name) => name.isNotEmpty && name.toLowerCase() != "player",
+          orElse: () => "",
+        );
+
+    _savedName = resolvedName;
+    if (_savedName.isNotEmpty && _savedName != hiveName) {
+      await box.put("profileName", _savedName);
     }
     nameController.text = _savedName;
     _isEditingProfile = _savedName.isEmpty;
@@ -887,7 +894,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
     final box = await _getStatsBox(uid);
+    final prefs = await SharedPreferences.getInstance();
     await box.put("profileName", trimmed);
+    await prefs.setString("profileName", trimmed);
+    await prefs.setString("userName", trimmed);
     _savedName = trimmed;
     _isEditingProfile = false;
     _nameDirty = false;

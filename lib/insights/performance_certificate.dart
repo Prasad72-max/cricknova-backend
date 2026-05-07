@@ -998,7 +998,7 @@ class _BottomQrSignature extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            "Founder’s Seal",
+                            "CrickNova Seal",
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1023,7 +1023,7 @@ class _BottomQrSignature extends StatelessWidget {
                               const SizedBox(width: 10),
                               const Expanded(
                                 child: Text(
-                                  "Prasad — Founder & Visionary,\nCrickNova AI",
+                                  "Certified by the CrickNova AI\nPerformance Council",
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
