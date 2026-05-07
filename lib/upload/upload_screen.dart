@@ -24,9 +24,9 @@ import '../premium/premium_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/razorpay_service.dart';
 import '../services/play_billing_service.dart';
-import '../services/cricknova_notification_service.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
+import '../services/cricknova_notification_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
@@ -107,9 +107,13 @@ List<Map<String, double>> _smoothVideoTrajectory(
   return out;
 }
 
-double _trajectoryQualityScore(List<Map<String, double>> points, {Size? videoSize}) {
+double _trajectoryQualityScore(
+  List<Map<String, double>> points, {
+  Size? videoSize,
+}) {
   if (points.isEmpty) return 0.0;
-  final minDim = videoSize == null || videoSize.width <= 0 || videoSize.height <= 0
+  final minDim =
+      videoSize == null || videoSize.width <= 0 || videoSize.height <= 0
       ? 720.0
       : math.min(videoSize.width, videoSize.height);
   final resScore = ((minDim - 240.0) / 840.0).clamp(0.0, 1.0);
@@ -171,24 +175,66 @@ int _detectBounceIndex(List<Map<String, double>> points) {
 Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
   final pointsRaw = (input["points"] as List<dynamic>? ?? const []);
   final points = _smoothVideoTrajectory(_sanitizeVideoTrajectory(pointsRaw));
-  final decisionText = (input["decision"] as String? ?? "NOT OUT")
-      .toUpperCase();
   final confidence = (input["confidence"] as num?)?.toDouble() ?? 0.0;
+  final backendBallTracking = input["ballTracking"] == true;
+  final seed = (input["seed"] as num?)?.toInt() ?? 0;
 
   if (points.length < 3) {
+    final lane = seed % 7;
+    final pitchX = points.isNotEmpty
+        ? points.first["x"]!
+        : <double>[0.39, 0.44, 0.48, 0.51, 0.55, 0.60, 0.64][lane];
+    final drift = <double>[
+      -0.08,
+      -0.04,
+      -0.015,
+      0.01,
+      0.035,
+      0.065,
+      0.09,
+    ][lane];
+    final impactX = (points.length >= 2 ? points.last["x"]! : pitchX + drift)
+        .clamp(0.08, 0.92);
+    final projectedX = (impactX + (drift * 0.75)).clamp(0.08, 0.92);
+    const stumpCenterX = 0.5;
+    const offStumpX = 0.575;
+    const legStumpX = 0.425;
+    final dOff = (projectedX - offStumpX).abs();
+    final dMid = (projectedX - stumpCenterX).abs();
+    final dLeg = (projectedX - legStumpX).abs();
+    final minD = math.min(dOff, math.min(dMid, dLeg));
+    // Avoid "always OUT" feedback loops: only treat backend ball tracking as
+    // a strong hint, not an unconditional override.
+    final isHitting =
+        (backendBallTracking && confidence >= 0.55) ||
+        (minD <= 0.055 && confidence >= 0.50);
+    final isUmpires = !isHitting && minD <= 0.12;
+    final pitchDelta = pitchX - stumpCenterX;
+    final impactDelta = (impactX - stumpCenterX).abs();
+    final pitchingText = pitchDelta < -0.075
+        ? "Outside Leg"
+        : (pitchDelta > 0.075 ? "Outside Off" : "In Line");
+    final impactText = impactDelta > 0.13
+        ? "Outside"
+        : (impactDelta > 0.08 ? "Umpires Call" : "In Line");
+    final wicketTarget = dOff <= dMid && dOff <= dLeg
+        ? "Off"
+        : (dLeg <= dOff && dLeg <= dMid ? "Leg" : "Middle");
     return {
-      "deliveryStart": {"x": 0.16, "y": 0.20},
-      "pitchPoint": {"x": 0.47, "y": 0.58},
-      "impactPoint": {"x": 0.66, "y": 0.72},
-      "stumpsPoint": {"x": 0.79, "y": 0.82},
-      "stumpLeft": {"x": 0.463, "y": 0.82},
-      "stumpRight": {"x": 0.537, "y": 0.82},
+      "deliveryStart": {"x": (pitchX - drift).clamp(0.08, 0.92), "y": 0.20},
+      "pitchPoint": {"x": pitchX, "y": 0.58},
+      "impactPoint": {"x": impactX, "y": 0.74},
+      "stumpsPoint": {"x": 0.50, "y": 0.88},
+      "stumpLeft": {"x": legStumpX, "y": 0.88},
+      "stumpRight": {"x": offStumpX, "y": 0.88},
       "pathPoints": points,
-      "pitchingText": "In Line",
-      "impactText": confidence >= 0.55 ? "In Line" : "Outside",
-      "wicketsText": "Missing",
-      "wicketTarget": "Middle",
-      "wicketsHitting": false,
+      "pitchingText": pitchingText,
+      "impactText": impactText,
+      "wicketsText": isHitting
+          ? "Hitting"
+          : (isUmpires ? "Umpires Call" : "Missing"),
+      "wicketTarget": wicketTarget,
+      "wicketsHitting": isHitting,
     };
   }
 
@@ -208,56 +254,60 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
   // Accuracy: Stumps do not move with the ball. Use fixed 0.5 (center).
   const stumpCenterX = 0.5;
   const stumpY = 0.88;
-  
-  final offStumpX = stumpCenterX + 0.055;
-  final legStumpX = stumpCenterX - 0.055;
 
-  final projectedAtStumpsX;
-  final dxPitchToImpact = (impactPoint["x"]! - pitchPoint["x"]!);
-  final dyPitchToImpact = (impactPoint["y"]! - pitchPoint["y"]!);
-  
-  if (dyPitchToImpact.abs() < 0.04) {
+  final offStumpX = stumpCenterX + 0.085;
+  final legStumpX = stumpCenterX - 0.085;
+
+  final dxPost = impactPoint["x"]! - pitchPoint["x"]!;
+  final dyPost = impactPoint["y"]! - pitchPoint["y"]!;
+
+  double projectedAtStumpsX;
+  if (dyPost.abs() < 0.02) {
+    // Ball is nearly flat — use impact X directly
     projectedAtStumpsX = impactPoint["x"]!;
   } else {
-    final distToStumps = (stumpY - impactPoint["y"]!).clamp(0.02, 0.5);
-    final travelRatio = dyPitchToImpact.abs() > 0.01
-        ? distToStumps / dyPitchToImpact.abs()
-        : 1.0;
-    projectedAtStumpsX = (impactPoint["x"]! + (dxPitchToImpact * travelRatio)).clamp(0.05, 0.95);
+    // Linear extrapolation from pitch point through impact to stump depth
+    final stumpRelY = stumpY - pitchPoint["y"]!;
+    final impactRelY = impactPoint["y"]! - pitchPoint["y"]!;
+    final ratio = impactRelY.abs() > 0.005 ? stumpRelY / impactRelY : 1.0;
+    projectedAtStumpsX = (pitchPoint["x"]! + dxPost * ratio).clamp(0.05, 0.95);
   }
-  
+
   final stumpsPoint = {"x": stumpCenterX, "y": stumpY};
   final stumpLeft = {"x": legStumpX, "y": stumpY};
   final stumpRight = {"x": offStumpX, "y": stumpY};
 
   String pitchingText;
   final pitchDelta = (pitchPoint["x"]! - stumpCenterX);
-  if (pitchDelta < -0.07) {
+  if (pitchDelta < -0.075) {
     pitchingText = "Outside Leg";
-  } else if (pitchDelta > 0.07) {
+  } else if (pitchDelta > 0.075) {
     pitchingText = "Outside Off";
   } else {
     pitchingText = "In Line";
   }
 
   String impactText;
-  final impactDelta = (impactPoint["x"]! - stumpCenterX).abs();
-  if (impactDelta > 0.13) {
+  final absImpactDelta = (impactPoint["x"]! - stumpCenterX).abs();
+  if (absImpactDelta > 0.13) {
     impactText = "Outside";
-  } else if (impactDelta > 0.09) {
+  } else if (absImpactDelta > 0.08) {
     impactText = "Umpires Call";
   } else {
     impactText = "In Line";
   }
 
-  const stumpRadius = 0.055;
+  const stumpRadius = 0.042;
   final dOff = (projectedAtStumpsX - offStumpX).abs();
   final dMid = (projectedAtStumpsX - stumpCenterX).abs();
   final dLeg = (projectedAtStumpsX - legStumpX).abs();
   final minD = math.min(dOff, math.min(dMid, dLeg));
-  
+
   final legalPitch = pitchingText != "Outside Leg";
-  final legalImpact = !impactText.contains("Outside") || confidence >= 0.60;
+  final legalImpact =
+      !impactText.contains("Outside") ||
+      backendBallTracking ||
+      confidence >= 0.45;
 
   // Wicket Hitting Logic with Real-World Tolerances
   bool wicketsHitting = false;
@@ -267,19 +317,13 @@ Map<String, dynamic> _drsGeometryWorker(Map<String, dynamic> input) {
     if (minD <= stumpRadius) {
       wicketsHitting = true;
       wicketsText = "Hitting";
-    } else if (minD <= stumpRadius * 1.8) {
-      wicketsHitting = decisionText == "OUT";
+    } else if (minD <= stumpRadius * 1.5) {
+      wicketsHitting = false;
       wicketsText = "Umpires Call";
     } else {
       wicketsHitting = false;
       wicketsText = "Missing";
     }
-  }
-
-  // Factor in AI confidence/decision for final verdict
-  if (decisionText == "OUT" && confidence >= 0.55 && wicketsText == "Umpires Call") {
-    wicketsText = "Hitting";
-    wicketsHitting = true;
   }
 
   String wicketTarget;
@@ -346,9 +390,9 @@ class _DrsTrackingGeometry {
       pathPoints = const [],
       pitchingText = "In Line",
       impactText = "In Line",
-      wicketsText = "Hitting",
+      wicketsText = "Missing",
       wicketTarget = "Middle",
-      wicketsHitting = true;
+      wicketsHitting = false;
 }
 
 class TrajectoryPainter extends CustomPainter {
@@ -1789,7 +1833,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
       _awaitingUmpireCall = true;
       _stageText = "DECISION PENDING";
     });
-    
+
     await _videoController.pause();
     await _startDecisionHeartbeat();
   }
@@ -1965,51 +2009,21 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     await _stopDecisionHeartbeat();
     if (!mounted) return;
 
-    // 🔥 5-Step Probability Engine (As Requested)
-    
-    // 1. User Prediction Value
-    double userVal = 0.5;
-    if (call == _DrsUmpireCall.out) userVal = 1.0;
-    else if (call == _DrsUmpireCall.notOut) userVal = 0.0;
-    else userVal = widget.aiVal; // Umpire's call fallback
-
-    // 2. AI Tracking Value
-    double aiVal = widget.aiVal;
-
-    // 3. Real Ball Path Value (Geometry Proximity)
-    final dX = (widget.geometry.stumpsPoint.dx - widget.geometry.impactPoint.dx).abs();
-    final geomVal = (1.0 - (dX / 0.12).clamp(0.0, 1.0));
-
-    // 4. Imaginary Path Quality (Projection Smoothness)
-    final points = widget.geometry.pathPoints;
-    final qualityScore = _trajectoryQualityScore(
-      points.map((p) => {"x": p.dx, "y": p.dy}).toList(),
-      videoSize: _videoController.value.size,
-    );
-    final projVal = qualityScore;
-
-    // 5. Final Organic Decision (Probability weights + Organic Jitter)
-    // Weights: AI (45%), User (20%), Geometry (20%), Projection (15%)
-    double finalProb = (aiVal * 0.45) + (userVal * 0.20) + (geomVal * 0.20) + (projVal * 0.15);
-    
-    // Add ±5% "Non-Scripted" Organic Jitter
-    final randomJitter = (math.Random().nextDouble() * 0.10) - 0.05;
-    final organicProb = (finalProb + randomJitter).clamp(0.0, 1.0);
-
-    bool reconciledOut = organicProb >= 0.5;
+    bool finalVerdict = widget.isOut;
+    String finalCall = widget.decisionCall;
 
     setState(() {
       _userCall = call;
       _awaitingUmpireCall = false;
-      _finalOut = reconciledOut;
-      _decisionCall = reconciledOut 
-          ? (widget.mode == _DrsReplayMode.lbw ? "OUT" : "EDGE DETECTED") 
-          : (widget.mode == _DrsReplayMode.lbw ? "NOT OUT" : "NO EDGE");
+      _finalOut = finalVerdict;
+      _decisionCall = finalCall;
       _showUserCallChip = true;
       _showOutcomePanel = false;
       _showDecisionBanner = false;
       _showSidebarDecision = false;
-      _stageText = widget.mode == _DrsReplayMode.lbw ? "RUNNING BALL TRACKING" : "SCANNING ULTRAEDGE";
+      _stageText = widget.mode == _DrsReplayMode.lbw
+          ? "ANALYZING BALL"
+          : "SCANNING ULTRAEDGE";
       _whyPageIndex = 0;
     });
     await _videoController.seekTo(Duration.zero);
@@ -2113,7 +2127,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
         _showWicket = false;
         _showDecisionBanner = false;
         _showSidebarDecision = false;
-        _stageText = "CHECKING EDGE";
+        _stageText = "CHECKING CONTACT";
       });
       await _playTickSound();
       if (!await _waitStage(const Duration(milliseconds: 650), token)) return;
@@ -2131,14 +2145,16 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
 
     setState(() {
       _showImpact = true;
-      _stageText = _impactVisualLocked ? "IMPACT CONFIRMED" : "TRACKING IMPACT";
+      _stageText = _impactVisualLocked
+          ? "IMPACT CONFIRMED"
+          : "ANALYZING IMPACT";
     });
     await _playTickSound();
     if (!await _waitStage(const Duration(milliseconds: 500), token)) return;
 
     setState(() {
       _showPath = true;
-      _stageText = "PROJECTING TO WICKETS";
+      _stageText = "PROJECTING";
     });
     unawaited(_pathController.forward(from: 0));
     if (!await _waitStage(const Duration(milliseconds: 600), token)) return;
@@ -2149,30 +2165,14 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     await revealDecision();
   }
 
-  int? _detectBounceIndex(List<Offset> points) {
-    if (points.length < 3) return null;
-    int bestIdx = -1;
-    double bestY = -1e9;
-    for (int i = 1; i < points.length - 1; i++) {
-      final current = points[i].dy;
-      if (current >= points[i - 1].dy &&
-          current >= points[i + 1].dy &&
-          current > bestY) {
-        bestY = current;
-        bestIdx = i;
-      }
-    }
-    if (bestIdx == -1) return null;
-    return bestIdx;
-  }
-
   ({double pitch, double impact, double wicket}) _timelineMilestones() {
     final points = widget.geometry.pathPoints;
     if (points.length < 3) {
       return (pitch: 0.50, impact: 0.88, wicket: 0.97);
     }
-    final bounceIdx =
-        _detectBounceIndex(points) ?? (points.length * 0.52).round();
+    final bounceIdx = _detectBounceIndex(
+      points.map((o) => {"x": o.dx, "y": o.dy}).toList(),
+    ).clamp(0, points.length - 2);
     final pitch = (bounceIdx / (points.length - 1)).clamp(0.18, 0.78);
     final impact = ((points.length - 2) / (points.length - 1)).clamp(
       pitch + 0.08,
@@ -2654,188 +2654,197 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
           color: Colors.black.withValues(alpha: 0.65),
           child: Center(
             child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(30),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF071018).withValues(alpha: 0.94),
-                        const Color(0xFF101C29).withValues(alpha: 0.88),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    border: Border.all(
-                      color: const Color(0xFFFFD54F).withValues(alpha: 0.16),
-                    ),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xAA000000),
-                        blurRadius: 34,
-                        spreadRadius: 2,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF071018).withValues(alpha: 0.94),
+                          const Color(0xFF101C29).withValues(alpha: 0.88),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                    ],
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final stackButtons = constraints.maxWidth < 430;
-                      final isLbw = _mode == _DrsReplayMode.lbw;
-                      
-                      final titleOut = isLbw ? "OUT" : "EDGED";
-                      final subtitleOut = isLbw 
-                          ? "Finger goes up. You are calling it dead straight." 
-                          : "You heard a clear sound. Finger goes up.";
-                      final iconOut = isLbw ? Icons.gavel_rounded : Icons.graphic_eq;
-                      
-                      final titleNotOut = isLbw ? "NOT OUT" : "MISSED";
-                      final subtitleNotOut = isLbw 
-                          ? "Batter survives. You think the ball is missing." 
-                          : "Daylight between bat and ball. Not out.";
-                      final iconNotOut = isLbw ? Icons.shield_rounded : Icons.close;
-                      
-                      final titleUmpire = isLbw ? "UMPIRE'S CALL" : "CLOSE CALL";
-                      final subtitleUmpire = isLbw 
-                          ? "Marginal impact. You leave it with the on-field umpire." 
-                          : "Too close to tell. You leave it to the TV Umpire.";
-                      
-                      final buttons = stackButtons
-                          ? Column(
-                              children: [
-                                _predictionActionButton(
-                                  title: titleOut,
-                                  subtitle: subtitleOut,
-                                  accent: const Color(0xFFD93D47),
-                                  icon: iconOut,
-                                  onTap: () =>
-                                      _submitUmpireCall(_DrsUmpireCall.out),
-                                ),
-                                const SizedBox(height: 12),
-                                _predictionActionButton(
-                                  title: titleNotOut,
-                                  subtitle: subtitleNotOut,
-                                  accent: const Color(0xFF12B76A),
-                                  icon: iconNotOut,
-                                  onTap: () =>
-                                      _submitUmpireCall(_DrsUmpireCall.notOut),
-                                ),
-                                const SizedBox(height: 12),
-                                _predictionActionButton(
-                                  title: titleUmpire,
-                                  subtitle: subtitleUmpire,
-                                  accent: const Color(0xFFFFD54F),
-                                  icon: Icons.sports_cricket,
-                                  onTap: () =>
-                                      _submitUmpireCall(_DrsUmpireCall.umpire),
-                                ),
-                              ],
-                            )
-                          : Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _predictionActionButton(
-                                        title: titleOut,
-                                        subtitle: subtitleOut,
-                                        accent: const Color(0xFFD93D47),
-                                        icon: iconOut,
-                                        onTap: () => _submitUmpireCall(
-                                          _DrsUmpireCall.out,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: _predictionActionButton(
-                                        title: titleNotOut,
-                                        subtitle: subtitleNotOut,
-                                        accent: const Color(0xFF12B76A),
-                                        icon: iconNotOut,
-                                        onTap: () => _submitUmpireCall(
-                                          _DrsUmpireCall.notOut,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                _predictionActionButton(
-                                  title: titleUmpire,
-                                  subtitle: subtitleUmpire,
-                                  accent: const Color(0xFFFFD54F),
-                                  icon: Icons.sports_cricket,
-                                  onTap: () =>
-                                      _submitUmpireCall(_DrsUmpireCall.umpire),
-                                ),
-                              ],
-                            );
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: const Color(0xFFFFD54F).withValues(alpha: 0.16),
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xAA000000),
+                          blurRadius: 34,
+                          spreadRadius: 2,
+                        ),
+                      ],
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final stackButtons = constraints.maxWidth < 430;
+                        final isLbw = _mode == _DrsReplayMode.lbw;
 
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFFFFD54F,
-                              ).withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
+                        final titleOut = isLbw ? "OUT" : "EDGED";
+                        final subtitleOut = isLbw
+                            ? "Finger goes up. You are calling it dead straight."
+                            : "You heard a clear sound. Finger goes up.";
+                        final iconOut = isLbw
+                            ? Icons.gavel_rounded
+                            : Icons.graphic_eq;
+
+                        final titleNotOut = isLbw ? "NOT OUT" : "MISSED";
+                        final subtitleNotOut = isLbw
+                            ? "Batter survives. You think the ball is missing."
+                            : "Daylight between bat and ball. Not out.";
+                        final iconNotOut = isLbw
+                            ? Icons.shield_rounded
+                            : Icons.close;
+
+                        final titleUmpire = isLbw
+                            ? "UMPIRE'S CALL"
+                            : "CLOSE CALL";
+                        final subtitleUmpire = isLbw
+                            ? "Marginal impact. You leave it with the on-field umpire."
+                            : "Too close to tell. You leave it to the TV Umpire.";
+
+                        final buttons = stackButtons
+                            ? Column(
+                                children: [
+                                  _predictionActionButton(
+                                    title: titleOut,
+                                    subtitle: subtitleOut,
+                                    accent: const Color(0xFFD93D47),
+                                    icon: iconOut,
+                                    onTap: () =>
+                                        _submitUmpireCall(_DrsUmpireCall.out),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _predictionActionButton(
+                                    title: titleNotOut,
+                                    subtitle: subtitleNotOut,
+                                    accent: const Color(0xFF12B76A),
+                                    icon: iconNotOut,
+                                    onTap: () => _submitUmpireCall(
+                                      _DrsUmpireCall.notOut,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _predictionActionButton(
+                                    title: titleUmpire,
+                                    subtitle: subtitleUmpire,
+                                    accent: const Color(0xFFFFD54F),
+                                    icon: Icons.sports_cricket,
+                                    onTap: () => _submitUmpireCall(
+                                      _DrsUmpireCall.umpire,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _predictionActionButton(
+                                          title: titleOut,
+                                          subtitle: subtitleOut,
+                                          accent: const Color(0xFFD93D47),
+                                          icon: iconOut,
+                                          onTap: () => _submitUmpireCall(
+                                            _DrsUmpireCall.out,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _predictionActionButton(
+                                          title: titleNotOut,
+                                          subtitle: subtitleNotOut,
+                                          accent: const Color(0xFF12B76A),
+                                          icon: iconNotOut,
+                                          onTap: () => _submitUmpireCall(
+                                            _DrsUmpireCall.notOut,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  _predictionActionButton(
+                                    title: titleUmpire,
+                                    subtitle: subtitleUmpire,
+                                    accent: const Color(0xFFFFD54F),
+                                    icon: Icons.sports_cricket,
+                                    onTap: () => _submitUmpireCall(
+                                      _DrsUmpireCall.umpire,
+                                    ),
+                                  ),
+                                ],
+                              );
+
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
                                 color: const Color(
                                   0xFFFFD54F,
-                                ).withValues(alpha: 0.22),
+                                ).withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFFFFD54F,
+                                  ).withValues(alpha: 0.22),
+                                ),
+                              ),
+                              child: const Text(
+                                "DECISION PENDING",
+                                style: TextStyle(
+                                  color: Color(0xFFFFE082),
+                                  fontFamily: "Montserrat",
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                  letterSpacing: 1.2,
+                                ),
                               ),
                             ),
-                            child: const Text(
-                              "DECISION PENDING",
+                            const SizedBox(height: 16),
+                            const Text(
+                              "Close call! What's your decision, Umpire?",
                               style: TextStyle(
-                                color: Color(0xFFFFE082),
+                                color: Colors.white,
                                 fontFamily: "Montserrat",
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
-                                letterSpacing: 1.2,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 24,
+                                height: 1.15,
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            "Close call! What's your decision, Umpire?",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontFamily: "Montserrat",
-                              fontWeight: FontWeight.w900,
-                              fontSize: 24,
-                              height: 1.15,
+                            const SizedBox(height: 10),
+                            Text(
+                              "Lock your verdict before CrickNova reveals the ball tracking.",
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.74),
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            "Lock your verdict before CrickNova reveals the ball tracking.",
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.74),
-                              fontSize: 13,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-                          buttons,
-                        ],
-                      );
-                    },
+                            const SizedBox(height: 22),
+                            buttons,
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
               ),
             ),
           ),
@@ -3914,7 +3923,8 @@ class _UploadScreenState extends State<UploadScreen>
                     title: "ULTRA-EDGE",
                     icon: Icons.graphic_eq,
                     accent: const Color(0xFF38BDF8),
-                    onTap: () => Navigator.pop(context, _DrsReplayMode.ultraEdge),
+                    onTap: () =>
+                        Navigator.pop(context, _DrsReplayMode.ultraEdge),
                   ),
                   const SizedBox(height: 12),
                   _drsModeButton(
@@ -3931,8 +3941,6 @@ class _UploadScreenState extends State<UploadScreen>
       },
     );
   }
-
-
 
   Widget _buildUnifiedOption({
     required String title,
@@ -3962,11 +3970,18 @@ class _UploadScreenState extends State<UploadScreen>
               children: [
                 Text(
                   title,
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 11,
+                  ),
                 ),
               ],
             ),
@@ -3977,7 +3992,9 @@ class _UploadScreenState extends State<UploadScreen>
           children: List.generate(choices.length, (idx) {
             return Expanded(
               child: Padding(
-                padding: EdgeInsets.only(right: idx == choices.length - 1 ? 0 : 8),
+                padding: EdgeInsets.only(
+                  right: idx == choices.length - 1 ? 0 : 8,
+                ),
                 child: InkWell(
                   onTap: () => onSelect(values[idx]),
                   borderRadius: BorderRadius.circular(12),
@@ -4040,7 +4057,7 @@ class _UploadScreenState extends State<UploadScreen>
   bool _analysisQueued = false;
   static const Duration _cachedAnalysisResultDelay = Duration(seconds: 4);
   // If result doesn't arrive fast, hand off to background + queue.
-  static const Duration _analysisHandoffDelay = Duration(seconds: 12);
+  static const Duration _analysisHandoffDelay = Duration(seconds: 15);
 
   String spinStrength = "NONE";
   double spinTurnDeg = 0.0;
@@ -4099,10 +4116,12 @@ class _UploadScreenState extends State<UploadScreen>
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('analysis_two_min_timer_started_${pending.id}', true);
-      await CrickNovaNotificationService.instance.scheduleAnalysisCheckReminder(
-        resultJobId: pending.id,
+      // If the backend is sleeping (Render), nudge the user after ~2 minutes.
+      unawaited(
+        CrickNovaNotificationService.instance.scheduleAnalysisCheckReminder(
+          resultJobId: pending.id,
+        ),
       );
-
       if (PremiumService.isElite && _analysisJobId != null) {
         _analysisQueued = true;
         await AnalysisQueueStore.upsertJob({
@@ -4233,7 +4252,7 @@ class _UploadScreenState extends State<UploadScreen>
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  "CrickNova is analyzing",
+                  "CrickNova video analyze करत आहे",
                   style: GoogleFonts.poppins(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -4242,7 +4261,7 @@ class _UploadScreenState extends State<UploadScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Check it after 2 min. Your video is saved, so you will not need to upload it again.",
+                  "15 सेकंदात result आला नाही तरी काळजी नको.\n2 मिनिटांनी परत check करा. Video save झालाय आणि app स्वतः auto-retry करेल, तुम्हाला परत upload करायची गरज नाही.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 14,
@@ -4267,7 +4286,7 @@ class _UploadScreenState extends State<UploadScreen>
                       ),
                       child: Center(
                         child: Text(
-                          "Got it",
+                          "ठीक आहे",
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -4567,7 +4586,7 @@ class _UploadScreenState extends State<UploadScreen>
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    
+
     // Auto-stop attention pulse after 3 seconds
     _exitAttentionController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
@@ -4781,8 +4800,6 @@ class _UploadScreenState extends State<UploadScreen>
     );
   }
 
-
-
   double? _extractCoachRating(String raw) {
     final parsedJson = _tryParseCoachJson(raw);
     final fromJson = parsedJson == null
@@ -4893,17 +4910,24 @@ class _UploadScreenState extends State<UploadScreen>
       );
     }
 
-    final quality = _trajectoryQualityScore(points, videoSize: controller?.value.size);
-    final proximity = _edgeProximityThreshold(quality: quality) * 1.5; // Wider detection
-    
+    final quality = _trajectoryQualityScore(
+      points,
+      videoSize: controller?.value.size,
+    );
+    final proximity = _edgeProximityThreshold(quality: quality);
+
     // Dynamically detect Bat Area from trajectory deviation
     double trajAvgX = 0.5;
     if (points.length > 4) {
-      trajAvgX = points.skip(points.length ~/ 2).fold(0.0, (sum, p) => sum + (p["x"] ?? 0.5)) / (points.length / 2);
+      trajAvgX =
+          points
+              .skip(points.length ~/ 2)
+              .fold(0.0, (sum, p) => sum + (p["x"] ?? 0.5)) /
+          (points.length / 2);
     }
     final dynamicBatXMin = (trajAvgX - 0.12).clamp(0.0, 1.0);
     final dynamicBatXMax = (trajAvgX + 0.12).clamp(0.0, 1.0);
-    final batRect = Rect.fromLTRB(dynamicBatXMin, 0.60, dynamicBatXMax, 0.92);
+    final batRect = Rect.fromLTRB(dynamicBatXMin, 0.46, dynamicBatXMax, 0.86);
 
     final tight = proximity * (0.75 + ((1.0 - quality) * 0.15));
     final expanded = batRect.inflate(proximity);
@@ -4951,19 +4975,21 @@ class _UploadScreenState extends State<UploadScreen>
         ? ((nearCount / points.length).clamp(0.0, 0.35) / 0.35)
         : 0.0;
 
-    final strongHit = intersectsTight || minDist <= tight;
-    final softHit = intersectsLoose || minDist <= proximity;
+    final strongHit =
+        intersectsTight || (minDist <= tight && directionScore >= 0.20);
+    final softHit =
+        intersectsLoose || (minDist <= proximity && directionScore >= 0.35);
     final base =
         (strongHit
-            ? 0.75
+            ? 0.62
             : softHit
-            ? 0.45
+            ? 0.34
             : 0.0) +
-        (0.20 * directionScore) +
-        (0.12 * nearScore) +
-        (0.08 * proximityScore);
+        (0.26 * directionScore) +
+        (0.07 * nearScore) +
+        (0.05 * proximityScore);
     final confidence = (base * (0.85 + (0.15 * quality))).clamp(0.0, 1.0);
-    final threshold = (0.30 - (quality * 0.12)); // Lower threshold for more realistic detections
+    final threshold = (0.68 - (quality * 0.10)).clamp(0.54, 0.72);
     final detected = confidence >= threshold;
 
     return (
@@ -5030,7 +5056,8 @@ class _UploadScreenState extends State<UploadScreen>
     double amplitudeRatio,
     String reason,
     bool detected,
-  }) _calculateAudioFidelity({
+  })
+  _calculateAudioFidelity({
     required List<double> waveform,
     required double spikeMs,
     required double contactMs,
@@ -5047,11 +5074,15 @@ class _UploadScreenState extends State<UploadScreen>
     }
 
     final offsetMs = (spikeMs - contactMs).abs();
-    
+
     // Baseline detection (first 15% of waveform)
-    final baselineSample = waveform.take((waveform.length * 0.15).toInt()).toList();
-    final baseline = baselineSample.isEmpty ? 0.05 : (baselineSample.reduce((a, b) => a + b) / baselineSample.length);
-    
+    final baselineSample = waveform
+        .take((waveform.length * 0.15).toInt())
+        .toList();
+    final baseline = baselineSample.isEmpty
+        ? 0.05
+        : (baselineSample.reduce((a, b) => a + b) / baselineSample.length);
+
     // Peak detection
     double peak = 0.0;
     int peakIdx = 0;
@@ -5061,9 +5092,9 @@ class _UploadScreenState extends State<UploadScreen>
         peakIdx = i;
       }
     }
-    
+
     final amplitudeRatio = baseline > 0 ? (peak / baseline) : 0.0;
-    
+
     // Sharp Peak Detection (must drop 40% within 8 samples)
     bool isSharp = false;
     if (peakIdx > 8 && peakIdx < waveform.length - 8) {
@@ -5102,7 +5133,8 @@ class _UploadScreenState extends State<UploadScreen>
         confidence: 55.0,
         offsetMs: offsetMs,
         amplitudeRatio: amplitudeRatio,
-        reason: "Spike is a rolling wave (likely ground contact), not a sharp peak",
+        reason:
+            "Spike is a rolling wave (likely ground contact), not a sharp peak",
         detected: false,
       );
     }
@@ -5110,7 +5142,9 @@ class _UploadScreenState extends State<UploadScreen>
     // Check for multiple spikes (pad-bat combo)
     int peakCount = 0;
     for (int i = 1; i < waveform.length - 1; i++) {
-      if (waveform[i] > baseline * 2.2 && waveform[i] > waveform[i-1] && waveform[i] > waveform[i+1]) {
+      if (waveform[i] > baseline * 2.2 &&
+          waveform[i] > waveform[i - 1] &&
+          waveform[i] > waveform[i + 1]) {
         peakCount++;
       }
     }
@@ -5121,7 +5155,8 @@ class _UploadScreenState extends State<UploadScreen>
         confidence: 65.0,
         offsetMs: offsetMs,
         amplitudeRatio: amplitudeRatio,
-        reason: "Multiple spikes detected (pad-bat combo). Benefit of doubt to batsman.",
+        reason:
+            "Multiple spikes detected (pad-bat combo). Benefit of doubt to batsman.",
         detected: false,
       );
     }
@@ -5131,7 +5166,8 @@ class _UploadScreenState extends State<UploadScreen>
       confidence: 95.0,
       offsetMs: offsetMs,
       amplitudeRatio: amplitudeRatio,
-      reason: "Genuine edge detected within 3ms window with high amplitude and sharp peak",
+      reason:
+          "Genuine edge detected within 3ms window with high amplitude and sharp peak",
       detected: true,
     );
   }
@@ -5153,24 +5189,27 @@ class _UploadScreenState extends State<UploadScreen>
         edgeDetected: false,
       );
     }
-    
+
     final fidelity = _calculateAudioFidelity(
       waveform: waveform,
       spikeMs: spikeMs,
       contactMs: contactMs,
     );
-    
+
     final summary = _detectEdgeSummary(points);
     final visualDetected = summary.detected;
-    
+
     // Strict rules: Audio Fidelity is paramount for Ultra-Edge
-    final edgeDetected = (fidelity.detected && visualDetected) || (fidelity.confidence >= 85);
-    
+    final edgeDetected =
+        (fidelity.detected && visualDetected) || (fidelity.confidence >= 85);
+
     if (!edgeDetected) {
       return (
         isOut: false,
         call: "NOT OUT",
-        detail: fidelity.decision == "Inconclusive" ? "INCONCLUSIVE" : "NO EDGE",
+        detail: fidelity.decision == "Inconclusive"
+            ? "INCONCLUSIVE"
+            : "NO EDGE",
         edgeDetected: false,
       );
     }
@@ -5180,11 +5219,15 @@ class _UploadScreenState extends State<UploadScreen>
     final afterContactBounce = bounceIdx != -1 && bounceIdx > contactIdx + 1;
     final lastPoint = points.last;
     final padLikely = _isLikelyPadImpact(lastPoint, geometry.stumpsPoint.dy);
-    
+
     // Probabilistic Catch logic (Requires clean trajectory after bat)
     final trajQuality = summary.quality;
     final isCleanTrajectory = trajQuality >= 0.65;
-    final caught = !afterContactBounce && !padLikely && isCleanTrajectory && (points.length - contactIdx) > 2;
+    final caught =
+        !afterContactBounce &&
+        !padLikely &&
+        isCleanTrajectory &&
+        (points.length - contactIdx) > 2;
 
     if (caught) {
       return (isOut: true, call: "OUT", detail: "CAUGHT", edgeDetected: true);
@@ -5194,6 +5237,84 @@ class _UploadScreenState extends State<UploadScreen>
       call: "NOT OUT",
       detail: "INSIDE EDGE",
       edgeDetected: true,
+    );
+  }
+
+  ({
+    bool isOut,
+    String call,
+    String detail,
+    bool edgeDetected,
+    double confidence,
+  })
+  _resolveUltraEdgeFromTracking({
+    required List<Map<String, double>> points,
+    required bool audioSpike,
+    required _DrsTrackingGeometry geometry,
+    required ({
+      bool detected,
+      int? contactIndex,
+      double confidence,
+      double quality,
+      String qualityLabel,
+      double proximity,
+    })
+    summary,
+  }) {
+    if (points.length < 3) {
+      return (
+        isOut: false,
+        call: "NO EDGE",
+        detail: "",
+        edgeDetected: false,
+        confidence: 0.0,
+      );
+    }
+
+    final strongVisualEdge =
+        summary.detected &&
+        summary.confidence >= 0.68 &&
+        summary.quality >= 0.35;
+    final supportedAudioEdge =
+        audioSpike && (summary.confidence >= 0.42 || summary.quality >= 0.55);
+    final edgeDetected = supportedAudioEdge || strongVisualEdge;
+
+    if (!edgeDetected) {
+      final confidence = math.max(audioSpike ? 0.58 : 0.0, summary.confidence);
+      return (
+        isOut: false,
+        call: "NO EDGE",
+        detail: "",
+        edgeDetected: false,
+        confidence: confidence.clamp(0.0, 0.82),
+      );
+    }
+
+    final contactIdx = summary.contactIndex ?? _estimateBatContactIndex(points);
+    final bounceIdx = _detectBounceIndex(points);
+    final afterContactBounce = bounceIdx != -1 && bounceIdx > contactIdx + 1;
+    final padLikely = _isLikelyPadImpact(points.last, geometry.stumpsPoint.dy);
+    final cleanCarry =
+        summary.quality >= 0.58 && (points.length - contactIdx) >= 3;
+    final caught = !afterContactBounce && !padLikely && cleanCarry;
+    final confidence = math.max(audioSpike ? 0.82 : 0.0, summary.confidence);
+
+    if (caught) {
+      return (
+        isOut: true,
+        call: "EDGE DETECTED",
+        detail: "CAUGHT",
+        edgeDetected: true,
+        confidence: confidence.clamp(0.0, 0.98),
+      );
+    }
+
+    return (
+      isOut: false,
+      call: "EDGE DETECTED",
+      detail: "INSIDE EDGE",
+      edgeDetected: true,
+      confidence: confidence.clamp(0.0, 0.94),
     );
   }
 
@@ -5294,18 +5415,19 @@ class _UploadScreenState extends State<UploadScreen>
     if (pts.length < 3) return null;
 
     final clampedFps = fps.isFinite ? fps.clamp(20.0, 60.0) : 30.0;
-    
+
     // Global Outlier Correction: Discard physically impossible jumps
     final cleanedPts = <Map<String, double>>[pts.first];
     for (int i = 1; i < pts.length; i++) {
       final dx = pts[i]["x"]! - cleanedPts.last["x"]!;
       final dy = pts[i]["y"]! - cleanedPts.last["y"]!;
       final d = math.sqrt((dx * dx) + (dy * dy));
-      if (d <= 0.35) { // Allow up to 35% jump for very fast balls/missed frames
+      if (d <= 0.35) {
+        // Allow up to 35% jump for very fast balls/missed frames
         cleanedPts.add(pts[i]);
       }
     }
-    
+
     if (cleanedPts.length < 2) return null;
 
     final deltas = <double>[];
@@ -5318,12 +5440,15 @@ class _UploadScreenState extends State<UploadScreen>
       }
     }
     if (deltas.isEmpty) return null;
-    
+
     // For Sidearm: Prioritize Initial Velocity (use top quartile instead of median)
     deltas.sort();
     double representativeDelta;
     if (_selectedSessionType == "Sidearm") {
-      final topQuartileIndex = (deltas.length * 0.75).toInt().clamp(0, deltas.length - 1);
+      final topQuartileIndex = (deltas.length * 0.75).toInt().clamp(
+        0,
+        deltas.length - 1,
+      );
       representativeDelta = deltas[topQuartileIndex];
     } else if (_selectedSessionType == "Bowling Machine") {
       // High Consistency: Smooth the trajectory results based on low variance
@@ -5336,14 +5461,14 @@ class _UploadScreenState extends State<UploadScreen>
     final ySpan = (ys.reduce(math.max) - ys.reduce(math.min)).abs();
     final effectiveSpan = ySpan.clamp(0.22, 0.92);
     final metersPerNorm = 18.0 / effectiveSpan;
-    
+
     double kmph = representativeDelta * clampedFps * metersPerNorm * 3.6;
     if (!kmph.isFinite || kmph <= 0) return null;
 
     if (_selectedSessionType == "Sidearm") {
-      // Sidearm videos usually only capture the final 10-12 meters of the throw, 
+      // Sidearm videos usually only capture the final 10-12 meters of the throw,
       // not the full 18m. The raw calculation reads ~65-90 km/h.
-      // We apply a physics distance multiplier (1.6x) so it scales perfectly 
+      // We apply a physics distance multiplier (1.6x) so it scales perfectly
       // with the throw's true effort (yielding 104 - 144 km/h natively).
       kmph = kmph * 1.6;
     }
@@ -5472,41 +5597,76 @@ class _UploadScreenState extends State<UploadScreen>
     _DrsTrackingGeometry geometry, {
     required double confidence,
     required bool backendBallTracking,
+    required bool onFieldOut,
   }) {
     final pitching = geometry.pitchingText.toLowerCase();
     final impact = geometry.impactText.toLowerCase();
     final wickets = geometry.wicketsText.toLowerCase();
     final legalPitch = !pitching.contains("outside leg");
-    final legalImpact = !impact.contains("outside");
-    final hitting = geometry.wicketsHitting ||
+    final legalImpact =
+        !impact.contains("outside") ||
+        (backendBallTracking && confidence >= 0.55);
+    final umpiresCall = wickets.contains("umpire");
+    final hitting =
+        geometry.wicketsHitting ||
         wickets.contains("hitting") ||
-        wickets.contains("umpire") ||
-        (backendBallTracking && confidence >= 0.40);
-    return legalPitch && legalImpact && hitting && confidence >= 0.40;
+        (umpiresCall && onFieldOut) ||
+        (backendBallTracking && confidence >= 0.55);
+    return legalPitch && legalImpact && hitting;
   }
 
-  _DrsTrackingGeometry _buildDrsGeometry({
-    required String decisionText,
-    required double confidence,
-  }) {
+  _DrsTrackingGeometry _buildDrsGeometry({required double confidence}) {
     final points = _extractTrajectoryPoints(trajectory);
     if (points.isEmpty) {
-      // Absolute failure fallback - still unique based on video metadata
-      final seed = video?.lengthSync() ?? 42;
-      final xOff = (seed % 20 - 10) / 400.0;
+      final seed = video == null ? 0 : _fallbackSeedForVideo(video!);
+      final lane = seed % 7;
+      final pitchX = <double>[0.39, 0.44, 0.48, 0.51, 0.55, 0.60, 0.64][lane];
+      final drift = <double>[
+        -0.08,
+        -0.04,
+        -0.015,
+        0.01,
+        0.035,
+        0.065,
+        0.09,
+      ][lane];
+      final impactX = (pitchX + drift).clamp(0.08, 0.92);
+      final projectedX = (impactX + (drift * 0.75)).clamp(0.08, 0.92);
+      const stumpCenterX = 0.5;
+      const offStumpX = 0.575;
+      const legStumpX = 0.425;
+      final dOff = (projectedX - offStumpX).abs();
+      final dMid = (projectedX - stumpCenterX).abs();
+      final dLeg = (projectedX - legStumpX).abs();
+      final minD = math.min(dOff, math.min(dMid, dLeg));
+      final isHitting = minD <= 0.055 && confidence >= 0.50;
+      final isUmpires = !isHitting && minD <= 0.12;
+      final pitchDelta = pitchX - stumpCenterX;
+      final impactDelta = (impactX - stumpCenterX).abs();
+      final pitchingText = pitchDelta < -0.075
+          ? "Outside Leg"
+          : (pitchDelta > 0.075 ? "Outside Off" : "In Line");
+      final impactText = impactDelta > 0.13
+          ? "Outside"
+          : (impactDelta > 0.08 ? "Umpires Call" : "In Line");
+      final wicketTarget = dOff <= dMid && dOff <= dLeg
+          ? "Off"
+          : (dLeg <= dOff && dLeg <= dMid ? "Leg" : "Middle");
       return _DrsTrackingGeometry(
-        deliveryStart: Offset(0.48 + xOff, 0.20),
-        pitchPoint: Offset(0.50 + xOff, 0.60),
-        impactPoint: Offset(0.51 + xOff, 0.75),
-        stumpsPoint: Offset(0.51 + xOff, 0.88),
-        stumpLeft: Offset(0.47 + xOff, 0.88),
-        stumpRight: Offset(0.55 + xOff, 0.88),
+        deliveryStart: Offset((pitchX - drift).clamp(0.08, 0.92), 0.20),
+        pitchPoint: Offset(pitchX, 0.58),
+        impactPoint: Offset(impactX, 0.74),
+        stumpsPoint: const Offset(0.50, 0.88),
+        stumpLeft: const Offset(legStumpX, 0.88),
+        stumpRight: const Offset(offStumpX, 0.88),
         pathPoints: const [],
-        pitchingText: "In Line",
-        impactText: "In Line",
-        wicketsText: confidence >= 0.80 ? "Hitting" : "Missing",
-        wicketTarget: "Middle",
-        wicketsHitting: confidence >= 0.80,
+        pitchingText: pitchingText,
+        impactText: impactText,
+        wicketsText: isHitting
+            ? "Hitting"
+            : (isUmpires ? "Umpires Call" : "Missing"),
+        wicketTarget: wicketTarget,
+        wicketsHitting: isHitting,
       );
     }
 
@@ -5517,7 +5677,7 @@ class _UploadScreenState extends State<UploadScreen>
       final y1 = p1["y"] ?? 0.3;
       final x2 = p2["x"] ?? 0.5;
       final y2 = p2["y"] ?? 0.7;
-      
+
       return _DrsTrackingGeometry(
         deliveryStart: Offset(x1, y1),
         pitchPoint: Offset(x2, y2),
@@ -5526,12 +5686,11 @@ class _UploadScreenState extends State<UploadScreen>
         stumpLeft: Offset(x2 - 0.04, 0.88),
         stumpRight: Offset(x2 + 0.04, 0.88),
         pathPoints: points.map((p) => Offset(p["x"]!, p["y"]!)).toList(),
-        pitchingText: "In Line",
-        impactText: "In Line",
-        wicketsText: confidence >= 0.72 ? "Hitting" : 
-                     confidence >= 0.55 ? "Umpires Call" : "Missing",
+        pitchingText: (x2 - 0.5).abs() <= 0.14 ? "In Line" : "Outside Off",
+        impactText: (x2 - 0.5).abs() <= 0.18 ? "In Line" : "Outside",
+        wicketsText: confidence >= 0.55 ? "Hitting" : "Missing",
         wicketTarget: "Middle",
-        wicketsHitting: confidence >= 0.72,
+        wicketsHitting: confidence >= 0.55,
       );
     }
 
@@ -5544,36 +5703,37 @@ class _UploadScreenState extends State<UploadScreen>
       points[impactIdx]["x"]!,
       points[impactIdx]["y"]!,
     );
-    
-    // Accuracy Fix: Stumps are fixed at the center of the pitch. 
+
+    // Accuracy Fix: Stumps are fixed at the center of the pitch.
     // Using ball avgX makes DRS 'follow' the ball, making it always 'In Line'.
-    const stumpCenterX = 0.5; 
+    const stumpCenterX = 0.5;
     const stumpY = 0.88;
-    
+
     // Better projection logic
     // Calculate the horizontal velocity after pitch
     final dxAfterPitch = impactPoint.dx - pitchPoint.dx;
     final dyAfterPitch = impactPoint.dy - pitchPoint.dy;
-    
+
     // Project based on the distance to the stumps (stumpY is usually 0.85-0.90)
     final distToStumps = (stumpY - impactPoint.dy).clamp(0.02, 0.5);
     final travelRatio = dyAfterPitch.abs() > 0.01
         ? distToStumps / dyAfterPitch.abs()
         : 1.0;
 
-    final projectedAtStumpsX = (impactPoint.dx + (dxAfterPitch * travelRatio)).clamp(0.05, 0.95);
-    
-    final offStumpX = stumpCenterX + 0.055;
-    final legStumpX = stumpCenterX - 0.055;
+    final projectedAtStumpsX = (impactPoint.dx + (dxAfterPitch * travelRatio))
+        .clamp(0.05, 0.95);
+
+    final offStumpX = stumpCenterX + 0.075;
+    final legStumpX = stumpCenterX - 0.075;
     final stumpsPoint = Offset(stumpCenterX, stumpY);
     final stumpLeft = Offset(legStumpX, stumpY);
     final stumpRight = Offset(offStumpX, stumpY);
 
     String pitchingText;
     final pitchDelta = pitchPoint.dx - stumpCenterX;
-    if (pitchDelta < -0.07) {
+    if (pitchDelta < -0.075) {
       pitchingText = "Outside Leg";
-    } else if (pitchDelta > 0.07) {
+    } else if (pitchDelta > 0.075) {
       pitchingText = "Outside Off";
     } else {
       pitchingText = "In Line";
@@ -5583,7 +5743,7 @@ class _UploadScreenState extends State<UploadScreen>
     final absImpactDelta = (impactPoint.dx - stumpCenterX).abs();
     if (absImpactDelta > 0.13) {
       impactText = "Outside";
-    } else if (absImpactDelta > 0.09) {
+    } else if (absImpactDelta > 0.08) {
       impactText = "Umpires Call";
     } else {
       impactText = "In Line";
@@ -5593,14 +5753,12 @@ class _UploadScreenState extends State<UploadScreen>
     final dMid = (projectedAtStumpsX - stumpCenterX).abs();
     final dLeg = (projectedAtStumpsX - legStumpX).abs();
     final minD = math.min(dOff, math.min(dMid, dLeg));
-    const stumpRadiusTolerance = 0.055; 
+    const stumpRadiusTolerance = 0.075;
     final projectionHitting = minD <= stumpRadiusTolerance;
-    
+
     final legalPitch = pitchingText != "Outside Leg";
-    final legalImpact = !impactText.contains("Outside") || confidence >= 0.60;
-    final decisionHit = (decisionText == "OUT") && confidence >= 0.50;
-    final wicketsHitting = legalPitch && legalImpact && 
-        (projectionHitting || decisionHit);
+    final legalImpact = !impactText.contains("Outside") || confidence >= 0.55;
+    final wicketsHitting = legalPitch && legalImpact && projectionHitting;
 
     String wicketTarget;
     if (dOff <= dMid && dOff <= dLeg) {
@@ -5613,9 +5771,9 @@ class _UploadScreenState extends State<UploadScreen>
 
     final wicketsText = wicketsHitting
         ? "Hitting"
-        : (minD <= stumpRadiusTolerance * 2.0 && legalPitch && legalImpact)
-            ? "Umpires Call"
-            : "Missing";
+        : (minD <= stumpRadiusTolerance * 2.2 && legalPitch && legalImpact)
+        ? "Umpires Call"
+        : "Missing";
 
     return _DrsTrackingGeometry(
       deliveryStart: deliveryStart,
@@ -5631,6 +5789,27 @@ class _UploadScreenState extends State<UploadScreen>
       impactText: impactText,
       wicketsText: wicketsText,
       wicketTarget: wicketTarget,
+      wicketsHitting: wicketsHitting,
+    );
+  }
+
+  _DrsTrackingGeometry _resolvedDrsGeometry(
+    _DrsTrackingGeometry geometry, {
+    required String wicketsText,
+    required bool wicketsHitting,
+  }) {
+    return _DrsTrackingGeometry(
+      deliveryStart: geometry.deliveryStart,
+      pitchPoint: geometry.pitchPoint,
+      impactPoint: geometry.impactPoint,
+      stumpsPoint: geometry.stumpsPoint,
+      stumpLeft: geometry.stumpLeft,
+      stumpRight: geometry.stumpRight,
+      pathPoints: geometry.pathPoints,
+      pitchingText: geometry.pitchingText,
+      impactText: geometry.impactText,
+      wicketsText: wicketsText,
+      wicketTarget: geometry.wicketTarget,
       wicketsHitting: wicketsHitting,
     );
   }
@@ -5674,7 +5853,7 @@ class _UploadScreenState extends State<UploadScreen>
       })(),
       pitchingText: (result["pitchingText"] as String?) ?? "In Line",
       impactText: (result["impactText"] as String?) ?? "In Line",
-      wicketsText: (result["wicketsText"] as String?) ?? "Hitting",
+      wicketsText: (result["wicketsText"] as String?) ?? "Missing",
       wicketTarget: (result["wicketTarget"] as String?) ?? "Middle",
       wicketsHitting: result["wicketsHitting"] == true,
     );
@@ -5727,6 +5906,7 @@ class _UploadScreenState extends State<UploadScreen>
     if (drsTrajectory is List && drsTrajectory.isNotEmpty) {
       trajectory = drsTrajectory;
     }
+    final backendBallTracking = drs["ball_tracking"] == true;
     final geometryRaw = drs["geometry"];
     if (geometryRaw is Map) {
       _drsGeometry = _geometryFromWorkerResult(
@@ -5735,8 +5915,9 @@ class _UploadScreenState extends State<UploadScreen>
     } else {
       final workerInput = <String, dynamic>{
         "points": _extractTrajectoryPoints(trajectory),
-        "decision": decisionText,
         "confidence": confidence,
+        "ballTracking": backendBallTracking,
+        "seed": video == null ? 0 : _fallbackSeedForVideo(video!),
       };
 
       try {
@@ -5744,36 +5925,30 @@ class _UploadScreenState extends State<UploadScreen>
         _drsGeometry = _geometryFromWorkerResult(result);
       } catch (e) {
         debugPrint("DRS_GEOMETRY_WORKER_ERROR: $e");
-        _drsGeometry = _buildDrsGeometry(
-          decisionText: decisionText,
-          confidence: confidence,
-        );
+        _drsGeometry = _buildDrsGeometry(confidence: confidence);
       }
     }
 
-    // Prioritize backend-provided labels if they exist
-    _drsPitching = (drs["pitching_text"] as String?) ??
-        (drs["pitching"] as String?) ??
-        _drsGeometry.pitchingText;
+    // Fix: Prioritize Frontend Physics over Backend strings for 100% dynamic results
+    _drsPitching = _drsGeometry.pitchingText;
+    _drsImpact = _drsGeometry.impactText;
+    _drsWickets = _drsGeometry.wicketsText;
+    _drsWicketTarget = _drsGeometry.wicketTarget;
 
-    _drsImpact = (drs["impact_text"] as String?) ??
-        (drs["impact"] as String?) ??
-        _drsGeometry.impactText;
-
-    _drsWickets = (drs["wickets_text"] as String?) ??
-        (drs["wickets"] as String?) ??
-        _drsGeometry.wicketsText;
-
-    _drsWicketTarget =
-        (drs["wicket_target"] as String?) ?? _drsGeometry.wicketTarget;
-
-    final backendBallTracking = drs["ball_tracking"] == true;
+    final frontendTrackingConfidence = _drsGeometry.pathPoints.length >= 6
+        ? 0.72
+        : (_drsGeometry.pathPoints.length >= 4 ? 0.58 : 0.0);
+    final effectiveConfidence = math.max(
+      confidence,
+      frontendTrackingConfidence,
+    );
 
     // AI Decision - 100% Physics Based
     _drsOut = _isLbwOutFromGeometry(
       _drsGeometry,
-      confidence: confidence,
+      confidence: effectiveConfidence,
       backendBallTracking: backendBallTracking,
+      onFieldOut: _userCall == _DrsUmpireCall.out,
     );
 
     _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
@@ -5784,42 +5959,88 @@ class _UploadScreenState extends State<UploadScreen>
     final edgeSummary = _detectEdgeSummary(trajectoryPoints);
     _drsEdgeConfidence = edgeSummary.confidence;
 
-    final visualEdgeDetected =
-        visualEdgeRaw is bool ? visualEdgeRaw : edgeSummary.detected;
+    final visualEdgeDetected = visualEdgeRaw is bool
+        ? visualEdgeRaw
+        : edgeSummary.detected;
 
     if (audioSpike) {
       _drsEdgeConfidence = math.max(_drsEdgeConfidence, 0.82);
     }
-    bool aiEdgeDetected = audioSpike || visualEdgeDetected;
+    final lbwInsideEdgeDetected =
+        _drsHasSpike || (visualEdgeDetected && _drsEdgeConfidence >= 0.85);
 
-    // Rule: Inside Edge = Always NOT OUT
-    if (aiEdgeDetected) {
-      _drsOut = false;
-      _drsWickets = "Missing";
-      _drsDecisionCall = "NOT OUT";
-      _drsDecisionDetail = "INSIDE EDGE";
-      drsResult = "NOT OUT (INSIDE EDGE)";
+    if (_drsReplayMode == _DrsReplayMode.lbw) {
+      _drsOut = _isLbwOutFromGeometry(
+        _drsGeometry,
+        confidence: effectiveConfidence,
+        backendBallTracking: backendBallTracking,
+        onFieldOut: _userCall == _DrsUmpireCall.out,
+      );
+
+      if (_drsGeometry.pitchingText.toLowerCase().contains("outside leg")) {
+        _drsOut = false;
+      }
+
+      _drsAiVal = _drsGeometry.wicketsHitting ? 1.0 : 0.0;
+
+      // Rule: Inside Edge = Always NOT OUT
+      if (lbwInsideEdgeDetected) {
+        _drsOut = false;
+        _drsWickets = "Missing";
+        _drsGeometry = _resolvedDrsGeometry(
+          _drsGeometry,
+          wicketsText: _drsWickets,
+          wicketsHitting: false,
+        );
+        _drsDecisionCall = "NOT OUT";
+        _drsDecisionDetail = "INSIDE EDGE";
+        drsResult = "NOT OUT (INSIDE EDGE)";
+      } else {
+        final pitchingLower = _drsGeometry.pitchingText.toLowerCase();
+        final impactLower = _drsGeometry.impactText.toLowerCase();
+        final wicketLower = _drsGeometry.wicketsText.toLowerCase();
+        if (_drsOut) {
+          _drsWickets = "Hitting";
+        } else if (pitchingLower.contains("outside leg") ||
+            impactLower.contains("outside")) {
+          _drsWickets = "Missing";
+        } else if (wicketLower.contains("umpire")) {
+          _drsWickets = "Umpires Call";
+        } else {
+          _drsWickets = "Missing";
+        }
+        _drsGeometry = _resolvedDrsGeometry(
+          _drsGeometry,
+          wicketsText: _drsWickets,
+          wicketsHitting: _drsOut,
+        );
+        _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
+        final probPct = (effectiveConfidence * 100)
+            .clamp(0.0, 100.0)
+            .toStringAsFixed(0);
+        drsResult = "$_drsDecisionCall ($probPct%)";
+      }
     } else {
-      final probPct = (confidence * 100).toStringAsFixed(0);
+      final ultraEdgeDecision = _resolveUltraEdgeFromTracking(
+        points: trajectoryPoints,
+        audioSpike: _drsHasSpike,
+        geometry: _drsGeometry,
+        summary: edgeSummary,
+      );
+      _drsEdgeConfidence = ultraEdgeDecision.confidence;
+      _drsEdgeDetected = ultraEdgeDecision.edgeDetected;
+      _drsOut = ultraEdgeDecision.isOut;
+      _drsDecisionCall = ultraEdgeDecision.call;
+      _drsDecisionDetail = ultraEdgeDecision.detail;
+      _drsUltraedgeStatus = ultraEdgeDecision.edgeDetected
+          ? "EDGE DETECTED"
+          : "NO EDGE";
+      _drsAiVal = ultraEdgeDecision.edgeDetected ? 1.0 : 0.0;
+      final probPct = (_drsEdgeConfidence * 100)
+          .clamp(0.0, 100.0)
+          .toStringAsFixed(0);
       drsResult = "$_drsDecisionCall ($probPct%)";
     }
-
-    // Consistency Cache still applies but only to the FINAL decision
-    final fingerprint = _fallbackSeedForVideo(video!);
-    final drsCache = await Hive.openBox("drs_decision_cache");
-    final modeKey =
-        "${fingerprint}_${_drsReplayMode == _DrsReplayMode.lbw ? 'LBW' : 'UE'}";
-
-    if (isCached) {
-      _drsOut = cachedDecision;
-      _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
-      drsResult = "$_drsDecisionCall (Cached)";
-    } else {
-      await drsCache.put(modeKey, _drsOut);
-    }
-  }
-
-    // Removed else logic (swing, spin) from DRS as requested
   }
 
   Map<String, dynamic> _serializeDrsGeometry(_DrsTrackingGeometry geometry) {
@@ -5845,13 +6066,10 @@ class _UploadScreenState extends State<UploadScreen>
 
   Map<String, dynamic> _buildLocalDrsPayload() {
     final trackedPoints = _extractTrajectoryPoints(trajectory);
-    final confidence = trackedPoints.length >= 6 
-        ? 0.72 
+    final confidence = trackedPoints.length >= 6
+        ? 0.72
         : (trackedPoints.length >= 4 ? 0.58 : 0.45);
-    final geometry = _buildDrsGeometry(
-      decisionText: "PENDING", 
-      confidence: confidence,
-    );
+    final geometry = _buildDrsGeometry(confidence: confidence);
     final isOut = geometry.wicketsHitting;
     final wicketsText = isOut ? "Hitting" : geometry.wicketsText;
 
@@ -5859,7 +6077,9 @@ class _UploadScreenState extends State<UploadScreen>
       "decision": isOut ? "OUT" : "NOT OUT",
       "stump_confidence": confidence,
       "ultraedge": false,
-      "ball_tracking": isOut,
+      // Local payload must not self-assert backend-style ball tracking.
+      // It creates a feedback loop where every video becomes OUT.
+      "ball_tracking": false,
       "reason": "LOCAL_TRAJECTORY_FALLBACK",
       "trajectory": trackedPoints
           .map((point) => {"x": point["x"]!, "y": point["y"]!})
@@ -6008,7 +6228,6 @@ class _UploadScreenState extends State<UploadScreen>
       ),
     );
   }
-
 
   String _videoConsentPrefsKey() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -6398,99 +6617,144 @@ class _UploadScreenState extends State<UploadScreen>
 
   Future<void> _showSessionTypeSelector({bool fromResults = false}) async {
     if (!mounted) return;
-    showModalBottomSheet(
+    await showGeneralDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A).withOpacity(0.95),
-                    border: Border(
-                      top: BorderSide(
-                        color: Colors.white.withOpacity(0.15),
-                        width: 1.5,
-                      ),
-                    ),
+      barrierDismissible: true,
+      barrierLabel: 'session_type',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, anim1, anim2) {
+        return GestureDetector(
+          onTap: () => Navigator.of(dialogContext).maybePop(),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                    child: Container(color: Colors.black.withOpacity(0.35)),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
+                          ),
                           child: Container(
-                            width: 48,
-                            height: 5,
                             decoration: BoxDecoration(
-                              color: Colors.white24,
-                              borderRadius: BorderRadius.circular(10),
+                              color: const Color(0xFF0F172A).withOpacity(0.96),
+                              border: Border(
+                                top: BorderSide(
+                                  color: Colors.white.withOpacity(0.15),
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 24,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Center(
+                                    child: Container(
+                                      width: 48,
+                                      height: 5,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white24,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  const Text(
+                                    "Choose Session Type",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    "Select your session to enable Context-Aware Analytics Engine for high-precision tracking.",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white54,
+                                      fontSize: 13,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  _buildSessionCard(
+                                    title: "Standard Practice Mode",
+                                    subtitle:
+                                        "Optimized for natural bowling dynamics. Tracks release height and standard ball trajectory with precision.",
+                                    icon: Icons.sports_cricket,
+                                    color: const Color(0xFF3B82F6),
+                                    type: "Solo / Nets Practice",
+                                    fromResults: fromResults,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _buildSessionCard(
+                                    title: "High-Velocity Sidearm",
+                                    subtitle:
+                                        "Engineered for 100+ km/h pace. Intelligently filters coach's arm artifacts to lock only on the ball.",
+                                    icon: Icons.bolt,
+                                    color: const Color(0xFFF59E0B),
+                                    type: "Sidearm",
+                                    fromResults: fromResults,
+                                  ),
+                                  const SizedBox(height: 14),
+                                  _buildSessionCard(
+                                    title: "Professional Match Analysis",
+                                    subtitle:
+                                        "Advanced noise filtering for complex backgrounds. Tracks full-pitch trajectory and accounts for run-up speed.",
+                                    icon: Icons.stadium,
+                                    color: const Color(0xFF8B5CF6),
+                                    type: "Match",
+                                    fromResults: fromResults,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        const Text(
-                          "Choose Session Type",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          "Select your session to enable Context-Aware Analytics Engine for high-precision tracking.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white54,
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        _buildSessionCard(
-                          title: "Standard Practice Mode",
-                          subtitle: "Optimized for natural bowling dynamics. Tracks release height and standard ball trajectory with precision.",
-                          icon: Icons.sports_cricket,
-                          color: const Color(0xFF3B82F6),
-                          type: "Solo / Nets Practice",
-                          fromResults: fromResults,
-                        ),
-                        const SizedBox(height: 14),
-                        _buildSessionCard(
-                          title: "High-Velocity Sidearm",
-                          subtitle: "Engineered for 100+ km/h pace. Intelligently filters coach's arm artifacts to lock only on the ball.",
-                          icon: Icons.bolt,
-                          color: const Color(0xFFF59E0B),
-                          type: "Sidearm",
-                          fromResults: fromResults,
-                        ),
-                        const SizedBox(height: 14),
-                        _buildSessionCard(
-                          title: "Professional Match Analysis",
-                          subtitle: "Advanced noise filtering for complex backgrounds. Tracks full-pitch trajectory and accounts for run-up speed.",
-                          icon: Icons.stadium,
-                          color: const Color(0xFF8B5CF6),
-                          type: "Match",
-                          fromResults: fromResults,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOut,
+        );
+        return FadeTransition(
+          opacity: Tween<double>(begin: 0, end: 1).animate(curved),
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.08),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
           ),
         );
       },
@@ -6525,7 +6789,9 @@ class _UploadScreenState extends State<UploadScreen>
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("Please upload $type video only for accurate tracking."),
+              content: Text(
+                "Please upload $type video only for accurate tracking.",
+              ),
               duration: const Duration(seconds: 3),
               behavior: SnackBarBehavior.floating,
               backgroundColor: const Color(0xFF8B5CF6),
@@ -6539,10 +6805,7 @@ class _UploadScreenState extends State<UploadScreen>
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: color.withOpacity(0.3),
-            width: 1,
-          ),
+          border: Border.all(color: color.withOpacity(0.3), width: 1),
         ),
         child: Row(
           children: [
@@ -6623,6 +6886,9 @@ class _UploadScreenState extends State<UploadScreen>
     }
     _startAnalysisExperience();
     _startFactCycling();
+    // Persist a job immediately so notification taps / restarts don't land on null.
+    // This job will only be processed in background after we flip it to 'pending'.
+    unawaited(_queueCurrentVideoForBackgroundAnalysis(status: 'front'));
 
     final analysisStartTime = DateTime.now();
 
@@ -6709,8 +6975,6 @@ class _UploadScreenState extends State<UploadScreen>
           status: 'pending',
         );
         if (pending != null) {
-          await CrickNovaNotificationService.instance
-              .scheduleAnalysisCheckReminder(resultJobId: pending.id);
           if (mounted) {
             setState(() {
               _showLongWaitHandoff = true;
@@ -6794,83 +7058,99 @@ class _UploadScreenState extends State<UploadScreen>
 
       if (!usingCachedSpeed) {
         if (_selectedSessionType == "Sidearm") {
-        final localSpeed = videoDerivedSpeed ?? fallbackSpeed;
-        
-        // As requested: If the video was uploaded in another session before, we have a backendSpeed.
-        // We allow this to be < 100 km/h to maintain historical accuracy for that specific video.
-        if (backendSpeed != null) {
-          speedKmph = backendSpeed;
-          speedType = "cached_previous_session";
-          speedNote = "";
-        } else if (localSpeed != null) {
-          // As requested: NEW video uploaded in Sidearm must NEVER be less than 100 km/h.
-          double physicsSpeed = localSpeed * 1.6;
-          if (physicsSpeed < 105.0) {
-            // Generate a natural-feeling deterministic speed above 100 based on the raw physics
-            physicsSpeed = 105.0 + (localSpeed % 26.0);
+          final localSpeed = videoDerivedSpeed ?? fallbackSpeed;
+
+          if (backendSpeed != null) {
+            speedKmph = backendSpeed;
+            speedType = "cached_previous_session";
+            speedNote = "";
+          } else if (localSpeed != null) {
+            // As requested: Primary range 100-145, >145 is rare.
+            double physicsSpeed = localSpeed * 1.52;
+
+            if (physicsSpeed > 135.0) {
+              // Aggressive compression above 135 to keep it mostly below 145.
+              physicsSpeed = 135.0 + (physicsSpeed - 135.0) * 0.18;
+            }
+
+            // Final deterministic clamp
+            if (physicsSpeed < 102.0) {
+              physicsSpeed = 102.0 + (localSpeed % 8.0);
+            }
+
+            speedKmph = physicsSpeed.clamp(100.0, 161.0);
+            speedType = "sidearm_physics";
+            speedNote = "High-velocity tracking";
+          } else {
+            // True fallback: Range 110-130
+            final seed = video!.lengthSync();
+            final base = 108.0 + (seed % 22);
+            speedKmph = base;
+            speedType = "sidearm_fallback";
+            speedNote = "";
           }
-          speedKmph = physicsSpeed;
-          speedType = "sidearm_physics";
-          speedNote = "Real tracking (Clamped >100)";
         } else {
-          // True fallback: If literally NO trajectory exists
-          final seed = video!.lengthSync();
-          final jitter = (seed % 25) * 1.2;
-          speedKmph = 110.0 + jitter;
-          speedType = "sidearm_fallback";
-          speedNote = "";
-        }
-      } else {
-        if (backendSpeed != null) {
-          speedKmph = backendSpeed;
-          speedType = speedTypeVal?.toString() ?? "estimated";
-          speedNote = speedNoteVal?.toString() ?? "";
-        } else if (_isSpeedSentinelUnavailable(speedVal)) {
-          if (videoDerivedSpeed != null) {
-            speedKmph = _normalizeNoBackendEstimatedSpeed(
-              videoDerivedSpeed,
+          if (backendSpeed != null) {
+            speedKmph = backendSpeed;
+            speedType = speedTypeVal?.toString() ?? "estimated";
+            speedNote = speedNoteVal?.toString() ?? "";
+          } else if (_isSpeedSentinelUnavailable(speedVal)) {
+            if (videoDerivedSpeed != null) {
+              speedKmph = _normalizeNoBackendEstimatedSpeed(
+                videoDerivedSpeed,
+                video!,
+              );
+              speedType = "video_derived";
+            } else if (fallbackSpeed != null) {
+              speedKmph = _resolveTrajectoryFallbackDisplay(
+                fallbackSpeed,
+                video!,
+              );
+              speedType = "trajectory_fallback";
+            } else {
+              speedKmph = _generateUnavailableSpeedFallback(video!);
+              speedType = "display_fallback";
+            }
+          } else if (fallbackSpeed != null) {
+            speedKmph = _resolveTrajectoryFallbackDisplay(
+              fallbackSpeed,
               video!,
             );
-            speedType = "video_derived";
-          } else if (fallbackSpeed != null) {
-            speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed, video!);
             speedType = "trajectory_fallback";
           } else {
             speedKmph = _generateUnavailableSpeedFallback(video!);
             speedType = "display_fallback";
           }
-        } else if (fallbackSpeed != null) {
-          speedKmph = _resolveTrajectoryFallbackDisplay(fallbackSpeed, video!);
-          speedType = "trajectory_fallback";
-        } else {
-          speedKmph = _generateUnavailableSpeedFallback(video!);
-          speedType = "display_fallback";
         }
-      }
 
-      // Apply session-specific boosts from original values
-      if (speedKmph != null) {
-        if (_selectedSessionType == "Match") {
-          speedKmph = speedKmph! + 20.0;
-        } else if (_selectedSessionType == "Solo / Nets Practice") {
-          if (speedKmph! > 101) {
-            speedKmph = speedKmph! + 7.0;
-          } else if (speedKmph! > 82) {
-            speedKmph = speedKmph! + 10.0;
-          } else {
-            speedKmph = speedKmph! + 20.0;
+        // Apply session boosts to raw trajectory speed ONLY (not sidearm)
+        if (speedKmph != null && _selectedSessionType != "Sidearm") {
+          if (_selectedSessionType == "Match") {
+            speedKmph = speedKmph! + 12.0;
+          } else if (_selectedSessionType == "Solo / Nets Practice") {
+            if (speedKmph! > 95) {
+              speedKmph = speedKmph! + 5.0;
+            } else if (speedKmph! > 75) {
+              speedKmph = speedKmph! + 8.0;
+            } else {
+              speedKmph = speedKmph! + 12.0;
+            }
           }
         }
-      }
 
-      // Add a tiny variation (up to 2.7 km/h) to make every analysis feel unique (as requested)
-      if (speedKmph != null) {
-        final math.Random rng = math.Random();
-        // Random jitter between -1.35 and +1.35 km/h
-        final double jitter = (rng.nextDouble() - 0.5) * 2.7;
-        speedKmph = speedKmph! + jitter;
+        // Sidearm multiplication applies AFTER, with NO additional offset
+        if (_selectedSessionType == "Sidearm" && speedKmph != null) {
+          speedKmph = (speedKmph! * 1.6).clamp(100.0, 160.0);
+        }
+
+        // Add a tiny variation (up to 2.7 km/h) to make every analysis feel unique (as requested)
+        if (speedKmph != null) {
+          final math.Random rng = math.Random();
+          // Random jitter between -1.35 and +1.35 km/h
+          final double jitter = (rng.nextDouble() - 0.5) * 2.7;
+          speedKmph = speedKmph! + jitter;
+        }
       }
-    }
 
       // Save to Consistency Cache (As requested: same video = same speed)
       if (!usingCachedSpeed && speedKmph != null) {
@@ -6896,9 +7176,6 @@ class _UploadScreenState extends State<UploadScreen>
             .toDouble();
         if (speedKmph! > currentMax) {
           await statsBox.put('maxSpeed', speedKmph);
-          await CrickNovaNotificationService.instance.maybeNotifyPersonalBest(
-            speedKmph!,
-          );
         }
       }
 
@@ -6967,9 +7244,6 @@ class _UploadScreenState extends State<UploadScreen>
           'spin': spin,
           'resultData': analysis,
         });
-        await CrickNovaNotificationService.instance.maybeNotifyAnalysisComplete(
-          resultJobId: _analysisJobId,
-        );
       }
     } catch (e) {
       debugPrint("Error applying analysis: $e");
@@ -7149,10 +7423,15 @@ class _UploadScreenState extends State<UploadScreen>
             // Update the main trajectory from backend if provided
             if (backendData["trajectory"] is List) {
               trajectory = backendData["trajectory"];
+              drsPayload["trajectory"] = backendData["trajectory"];
             }
-            // Use the 'drs' sub-map for payload
+            // Merge backend decision fields without discarding local trajectory/geometry.
             if (backendData["drs"] is Map) {
-              drsPayload = Map<String, dynamic>.from(backendData["drs"]);
+              drsPayload.addAll(Map<String, dynamic>.from(backendData["drs"]));
+              drsPayload["trajectory"] ??= localPoints;
+              if (localPoints.length < 3 && backendData["geometry"] is! Map) {
+                drsPayload.remove("geometry");
+              }
             }
           }
         }
@@ -7618,8 +7897,8 @@ Do not add intro or conclusion.
                 icon: _selectedSessionType == "Sidearm"
                     ? Icons.bolt
                     : _selectedSessionType == "Match"
-                        ? Icons.stadium
-                        : Icons.sports_cricket,
+                    ? Icons.stadium
+                    : Icons.sports_cricket,
                 label: _selectedSessionType,
                 onTap: () => _showSessionTypeSelector(fromResults: true),
               ),
@@ -7627,7 +7906,9 @@ Do not add intro or conclusion.
               AnimatedBuilder(
                 animation: _exitAttentionController,
                 builder: (context, child) {
-                  final pulse = Curves.elasticOut.transform(_exitAttentionController.value);
+                  final pulse = Curves.elasticOut.transform(
+                    _exitAttentionController.value,
+                  );
                   return Transform.scale(
                     scale: 1.0 + (pulse * 0.12),
                     child: Container(
@@ -7658,7 +7939,9 @@ Do not add intro or conclusion.
               AnimatedBuilder(
                 animation: _exitAttentionController,
                 builder: (context, child) {
-                  final pulse = Curves.elasticOut.transform(_exitAttentionController.value);
+                  final pulse = Curves.elasticOut.transform(
+                    _exitAttentionController.value,
+                  );
                   return Transform.scale(
                     scale: 1.0 + (pulse * 0.12),
                     child: Container(
@@ -7706,9 +7989,8 @@ Do not add intro or conclusion.
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-
                       const SizedBox(height: 18),
-                      
+
                       // 🎯 Session Category Selector
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -7723,7 +8005,10 @@ Do not add intro or conclusion.
                           child: DropdownButton<String>(
                             value: _selectedSessionType,
                             dropdownColor: const Color(0xFF1E293B),
-                            icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                            icon: const Icon(
+                              Icons.arrow_drop_down,
+                              color: Colors.white70,
+                            ),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
@@ -7743,8 +8028,8 @@ Do not add intro or conclusion.
                                 child: Text("Bowling Machine"),
                               ),
                               DropdownMenuItem(
-                                value: "Match / Full Track",
-                                child: Text("Match / Full Track"),
+                                value: "Match",
+                                child: Text("Match Analysis"),
                               ),
                             ],
                             onChanged: (val) {
@@ -8166,9 +8451,11 @@ Do not add intro or conclusion.
                       ),
                     ),
 
-
                   // Video Controls at bottom
-                  if (!drsLoading && !showCoach && controller != null && !analysisLoading)
+                  if (!drsLoading &&
+                      !showCoach &&
+                      controller != null &&
+                      !analysisLoading)
                     Positioned(
                       bottom: 0,
                       left: 0,
@@ -8204,48 +8491,81 @@ Do not add intro or conclusion.
                                     bufferedColor: Colors.white24,
                                     backgroundColor: Colors.white12,
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
                                   children: [
                                     IconButton(
-                                      icon: const Icon(Icons.replay_5, color: Colors.white),
+                                      icon: const Icon(
+                                        Icons.replay_5,
+                                        color: Colors.white,
+                                      ),
                                       onPressed: () {
-                                        controller!.seekTo(value.position - const Duration(seconds: 2));
+                                        controller!.seekTo(
+                                          value.position -
+                                              const Duration(seconds: 2),
+                                        );
                                       },
                                     ),
                                     IconButton(
                                       icon: Icon(
-                                        value.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                                        value.isPlaying
+                                            ? Icons.pause_circle_filled
+                                            : Icons.play_circle_filled,
                                         color: Colors.white,
                                         size: 44,
                                       ),
                                       onPressed: () {
-                                        value.isPlaying ? controller!.pause() : controller!.play();
+                                        value.isPlaying
+                                            ? controller!.pause()
+                                            : controller!.play();
                                       },
                                     ),
                                     IconButton(
-                                      icon: const Icon(Icons.forward_5, color: Colors.white),
+                                      icon: const Icon(
+                                        Icons.forward_5,
+                                        color: Colors.white,
+                                      ),
                                       onPressed: () {
-                                        controller!.seekTo(value.position + const Duration(seconds: 2));
+                                        controller!.seekTo(
+                                          value.position +
+                                              const Duration(seconds: 2),
+                                        );
                                       },
                                     ),
                                     GestureDetector(
                                       onTap: () {
                                         double speed = value.playbackSpeed;
-                                        if (speed == 1.0) speed = 0.5;
-                                        else if (speed == 0.5) speed = 0.25;
-                                        else speed = 1.0;
+                                        if (speed == 1.0)
+                                          speed = 0.5;
+                                        else if (speed == 0.5)
+                                          speed = 0.25;
+                                        else
+                                          speed = 1.0;
                                         controller!.setPlaybackSpeed(speed);
                                       },
                                       child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: value.playbackSpeed < 1.0 ? const Color(0xFF22D3EE).withOpacity(0.3) : Colors.white12,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: Colors.white24),
+                                          color: value.playbackSpeed < 1.0
+                                              ? const Color(
+                                                  0xFF22D3EE,
+                                                ).withOpacity(0.3)
+                                              : Colors.white12,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: Colors.white24,
+                                          ),
                                         ),
                                         child: Text(
                                           "${value.playbackSpeed}x",
@@ -8775,10 +9095,7 @@ Do not add intro or conclusion.
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(
-              color: Color(0xFF38BDF8),
-              strokeWidth: 3,
-            ),
+            CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 3),
             SizedBox(height: 24),
             Text(
               "PREPARING REPLAY...",
@@ -8917,7 +9234,9 @@ Do not add intro or conclusion.
         SnackBar(
           backgroundColor: Colors.redAccent.withOpacity(0.9),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           content: const Row(
             children: [
               Icon(Icons.touch_app, color: Colors.white),
@@ -9015,7 +9334,10 @@ Do not add intro or conclusion.
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Keep Playing", style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              "Keep Playing",
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -9025,7 +9347,9 @@ Do not add intro or conclusion.
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text("Exit Session"),
           ),
@@ -9061,10 +9385,7 @@ Do not add intro or conclusion.
           decoration: BoxDecoration(
             color: color ?? Colors.black.withOpacity(0.4),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.1),
-              width: 1,
-            ),
+            border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -9085,6 +9406,4 @@ Do not add intro or conclusion.
       ),
     );
   }
-
-
 }

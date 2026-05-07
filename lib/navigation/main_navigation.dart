@@ -12,6 +12,7 @@ import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
 import 'dart:async';
 import '../insights/insights_screen.dart';
+import 'package:flutter/scheduler.dart';
 
 abstract class MainNavigationController {
   void setTab(int index);
@@ -21,12 +22,14 @@ abstract class MainNavigationController {
 class MainNavigation extends StatefulWidget {
   final String userName;
   final int initialIndex;
+  final String? initialAnalysisJobId;
   static final ValueNotifier<int> activeTabNotifier = ValueNotifier<int>(0);
 
   const MainNavigation({
     super.key,
     required this.userName,
     this.initialIndex = 0,
+    this.initialAnalysisJobId,
   });
 
   static MainNavigationController? of(BuildContext context) {
@@ -49,6 +52,7 @@ class _MainNavigationState extends State<MainNavigation>
   late int _lastKnownTabCount;
   DateTime? _activeSince;
   Timer? _minuteTimer;
+  int _prewarmIndex = 0;
 
   @override
   void goHome() {
@@ -92,7 +96,32 @@ class _MainNavigationState extends State<MainNavigation>
     MainNavigation.activeTabNotifier.value = _index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrapSession());
+      _startPrewarmTabs();
     });
+  }
+
+  void _startPrewarmTabs() {
+    // Build the remaining tabs lazily across frames so tab switching feels instant.
+    // This avoids a big one-frame jank right after onboarding / first open.
+    if (!mounted) return;
+    _prewarmIndex = 0;
+    SchedulerBinding.instance.addPostFrameCallback((_) => _prewarmNextTab());
+  }
+
+  void _prewarmNextTab() {
+    if (!mounted) return;
+    final count = _tabCount();
+    while (_prewarmIndex < count && _screenCache[_prewarmIndex] != null) {
+      _prewarmIndex++;
+    }
+    if (_prewarmIndex >= count) return;
+    final i = _prewarmIndex;
+    _prewarmIndex++;
+    // Insert the screen widget so it becomes part of the tree (but offstage).
+    setState(() {
+      _screenCache[i] ??= _buildScreenAt(i);
+    });
+    SchedulerBinding.instance.addPostFrameCallback((_) => _prewarmNextTab());
   }
 
   bool get _hasEliteAnalysisTab => PremiumService.isElite;
@@ -192,7 +221,8 @@ class _MainNavigationState extends State<MainNavigation>
       unawaited(WeeklyStatsService.recordAppOpen(user.uid));
     }
 
-    await loadUser();
+    // Don't block the first few frames; load username opportunistically.
+    unawaited(loadUser());
     Future<void>.delayed(const Duration(seconds: 4), () {
       if (!mounted) return;
       unawaited(_evaluatePremiumAlerts());
@@ -417,7 +447,10 @@ class _MainNavigationState extends State<MainNavigation>
       return const InsightsScreen(key: ValueKey("insights"));
     }
     if (_hasEliteAnalysisTab && index == 2) {
-      return const AnalyzingVideosScreen(key: ValueKey("analyzing_vid"));
+      return AnalyzingVideosScreen(
+        key: const ValueKey("analyzing_vid"),
+        initialJobId: widget.initialAnalysisJobId,
+      );
     }
     if (index == _coachTabIndex) {
       return const AICoachScreen(key: ValueKey("coach"));

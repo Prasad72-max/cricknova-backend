@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   );
   Timer? _statsTimer;
   Timer? _analysisCountdownTicker;
+  final ValueNotifier<int> _analysisClockTick = ValueNotifier<int>(0);
   bool _quickStatsSyncInProgress = false;
   StreamSubscription? _statsBoxSub;
   StreamSubscription? _speedBoxSub;
@@ -172,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             (video) => video.status == 'pending' || video.status == 'uploading',
           );
       if (hasActiveAnalysis) {
-        setState(() {});
+        _analysisClockTick.value++;
       }
     });
   }
@@ -267,16 +268,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         backgroundColor: const Color(0xFF0F172A),
         duration: const Duration(seconds: 6),
         content: Text(
-          '2 min complete. Upload another video now.',
+          '2 मिनिटं झाली. “Analyzing Vid” मध्ये result/progress पाहा.',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         action: SnackBarAction(
-          label: 'Upload',
+          label: 'पहा',
           textColor: const Color(0xFF38BDF8),
           onPressed: () {
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const UploadScreen()));
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
+            );
           },
         ),
       ),
@@ -1774,12 +1775,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 itemBuilder: (context, index) {
                   final video = videos[index];
                   final bool isReady = video.status == 'complete';
-                  final remaining = _analysisReminderRemaining(video);
-                  final statusText = isReady
-                      ? "Ready"
-                      : remaining == Duration.zero
-                      ? "2 min complete"
-                      : "Timer ${_formatAnalysisReminder(remaining)}";
 
                   return GestureDetector(
                     onTap: isReady
@@ -1859,15 +1854,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  statusText,
-                                  style: GoogleFonts.poppins(
-                                    color: isReady
-                                        ? const Color(0xFF00FF9D)
-                                        : Colors.white60,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                                ValueListenableBuilder<int>(
+                                  valueListenable: _analysisClockTick,
+                                  builder: (context, _, __) {
+                                    final liveRemaining =
+                                        _analysisReminderRemaining(video);
+                                    final liveStatusText = isReady
+                                        ? "Ready"
+                                        : liveRemaining == Duration.zero
+                                        ? "2 min complete"
+                                        : "Timer ${_formatAnalysisReminder(liveRemaining)}";
+                                    return Text(
+                                      liveStatusText,
+                                      style: GoogleFonts.poppins(
+                                        color: isReady
+                                            ? const Color(0xFF00FF9D)
+                                            : Colors.white60,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    );
+                                  },
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -2023,6 +2030,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void dispose() {
     _statsTimer?.cancel();
     _analysisCountdownTicker?.cancel();
+    _analysisClockTick.dispose();
     for (final timer in _analysisTwoMinuteTimers.values) {
       timer.cancel();
     }

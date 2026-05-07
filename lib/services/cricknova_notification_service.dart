@@ -210,8 +210,9 @@ class CrickNovaNotificationService {
 
     await _showNow(
       id: _analysisCompleteId,
-      title: 'Check it out, results are ready',
-      body: 'Your CrickNova analysis is ready in Analyzing Vid.',
+      title: 'CrickNova: Result ready आहे',
+      body:
+          'तुमचा video analysis complete झाला आहे. “Analyzing Vid” मध्ये result पहा.',
       payload: resultJobId == null ? null : 'analysis_ready:$resultJobId',
     );
   }
@@ -227,13 +228,15 @@ class CrickNovaNotificationService {
     final idSuffix = resultJobId == null ? 0 : resultJobId.hashCode.abs() % 700;
     await _localNotifications.zonedSchedule(
       id: _analysisCheckBaseId + idSuffix,
-      title: 'Check it out, results',
+      title: 'CrickNova: Result check करा',
       body:
-          'CrickNova has been analyzing your video. Tap to check the saved result.',
+          'Video analyze होत आहे. Tap करून “Analyzing Vid” मध्ये progress/result पाहा.',
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: 'analysis_queue',
+      payload: resultJobId == null
+          ? 'analysis_queue'
+          : 'analysis_track:$resultJobId',
     );
   }
 
@@ -243,9 +246,9 @@ class CrickNovaNotificationService {
 
     await _showNow(
       id: _personalBestId,
-      title: 'New Personal Best',
+      title: 'CrickNova: New Personal Best',
       body:
-          "New Feature Alert: We added 'Ego Boost'! 🚀 Just kidding, but your new top speed of ${speedKmph.toStringAsFixed(1)} km/h will definitely boost your ego.",
+          "तुमचा नवीन top speed ${speedKmph.toStringAsFixed(1)} km/h झाला आहे. छान.",
     );
   }
 
@@ -261,9 +264,9 @@ class CrickNovaNotificationService {
         : ' in $areaLabel';
     await _showNow(
       id: _leaderboardAlertId,
-      title: 'Leaderboard Alert',
+      title: 'CrickNova: Leaderboard Alert',
       body:
-          "The local leaderboard is looking for a King... 👑 Someone nearby$suffix just clocked ${nearbyTopSpeedKmph.toStringAsFixed(1)} km/h. Don't let them keep the crown!",
+          "Nearby$suffix कुणीतरी ${nearbyTopSpeedKmph.toStringAsFixed(1)} km/h टाकलं आहे. तुमचं नाव वर आणा.",
     );
   }
 
@@ -277,9 +280,8 @@ class CrickNovaNotificationService {
     final reminderAt = now.add(const Duration(days: 3));
     await _localNotifications.zonedSchedule(
       id: _inactivityId,
-      title: 'CrickNova AI',
-      body:
-          "My grandma runs faster than your last delivery! 👵💨 You haven't bowled in 3 days. Want to prove me wrong?",
+      title: 'CrickNova',
+      body: "तुम्ही 3 दिवस bowling केलेली नाही. आज एक delivery टाका.",
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -296,9 +298,8 @@ class CrickNovaNotificationService {
 
     await _localNotifications.zonedSchedule(
       id: _eveningReminderId,
-      title: 'CrickNova AI',
-      body:
-          'The stumps are getting lonely... 🪵 They miss the sound of you crashing into them. Come give them company!',
+      title: 'CrickNova',
+      body: 'आज संध्याकाळी 10 minutes practice करूया.',
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -419,6 +420,39 @@ class CrickNovaNotificationService {
       } else {
         navigator.push(
           MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
+        );
+      }
+      return;
+    }
+    if (value.startsWith('analysis_track:')) {
+      final jobId = value.substring('analysis_track:'.length);
+      if (jobId.isEmpty) return;
+      final navigator = appNavigatorKey.currentState;
+      if (navigator == null) {
+        _pendingLaunchPayload = value;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final retryPayload = _pendingLaunchPayload;
+          _pendingLaunchPayload = null;
+          _openPayload(retryPayload);
+        });
+        return;
+      }
+      if (PremiumService.isElite) {
+        navigator.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => MainNavigation(
+              userName: _fallbackUserName(),
+              initialIndex: 2,
+              initialAnalysisJobId: jobId,
+            ),
+          ),
+          (route) => false,
+        );
+      } else {
+        navigator.push(
+          MaterialPageRoute(
+            builder: (_) => AnalyzingVideosScreen(initialJobId: jobId),
+          ),
         );
       }
       return;

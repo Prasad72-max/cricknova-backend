@@ -914,7 +914,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   void showPremiumPopup() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const PremiumScreen()),
+      MaterialPageRoute(
+        builder: (_) => const PremiumScreen(entrySource: "profile"),
+      ),
     );
   }
 

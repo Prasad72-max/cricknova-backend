@@ -739,6 +739,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   String? _animatingPlan;
   bool _showPremiumShimmer = false;
   Timer? _countdownTimer;
+  final ValueNotifier<Duration?> _countdownRemaining = ValueNotifier(null);
   final ScrollController _scrollController = ScrollController();
 
   bool _pendingPlayBillingSuccessPopup = false;
@@ -846,13 +847,14 @@ class _PremiumScreenState extends State<PremiumScreen>
     _countdownTimer?.cancel();
     if (PremiumService.expiryDate == null || !_isPremiumTabVisible) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
       if (PremiumService.expiryDate == null || !_isPremiumTabVisible) {
         _countdownTimer?.cancel();
+        _countdownRemaining.value = null;
         return;
       }
-      setState(() {});
+      _countdownRemaining.value = _remainingDuration();
     });
+    _countdownRemaining.value = _remainingDuration();
   }
 
   @override
@@ -864,6 +866,7 @@ class _PremiumScreenState extends State<PremiumScreen>
     MainNavigation.activeTabNotifier.removeListener(_handleTabVisibilityChange);
     _countdownTimer?.cancel();
     _scrollController.dispose();
+    _countdownRemaining.dispose();
     super.dispose();
   }
 
@@ -936,7 +939,6 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   Widget _currentPlanOverviewCard() {
-    final remaining = _remainingDuration();
     final isActive = PremiumService.isPremiumActive;
     final card = Container(
       width: double.infinity,
@@ -1017,17 +1019,31 @@ class _PremiumScreenState extends State<PremiumScreen>
             ),
           ),
           const SizedBox(height: 10),
-          Text(
-            isActive
-                ? "Remaining: ${_formatCountdown(remaining)}"
-                : "Tap to view Free Plan features.",
-            style: TextStyle(
-              color: isActive ? Colors.white : const Color(0xFFA0A0A0),
-              fontSize: isActive ? 14 : 13,
-              fontWeight: FontWeight.w600,
-              height: 1.4,
+          if (!isActive)
+            const Text(
+              "Tap to view Free Plan features.",
+              style: TextStyle(
+                color: Color(0xFFA0A0A0),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            )
+          else
+            ValueListenableBuilder<Duration?>(
+              valueListenable: _countdownRemaining,
+              builder: (context, remaining, _) {
+                return Text(
+                  "Remaining: ${_formatCountdown(remaining ?? _remainingDuration())}",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    height: 1.4,
+                  ),
+                );
+              },
             ),
-          ),
         ],
       ),
     );
@@ -1264,7 +1280,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       });
     }
     return Scaffold(
-      backgroundColor: const Color(0xFF050505),
+      backgroundColor: const Color(0xFF0B0F14),
 
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -1798,6 +1814,9 @@ class _PremiumScreenState extends State<PremiumScreen>
         rawTag.contains("Best") ||
         rawTag.contains("Analyse Pro");
     final bool isCurrentPlan = _isCurrentPlan(price);
+    final String displayTag = isCurrentPlan
+        ? "Current Plan"
+        : (rawTag.isEmpty ? "" : rawTag);
 
     // Luxury dark theme base with subtle accents
     final cardGradient = [const Color(0xFF0B1220), const Color(0xFF070B12)];
@@ -1998,7 +2017,7 @@ class _PremiumScreenState extends State<PremiumScreen>
               ],
             ),
           ),
-          if (rawTag.isNotEmpty)
+          if (displayTag.isNotEmpty)
             Positioned(
               top: 0,
               right: 24,
@@ -2008,13 +2027,32 @@ class _PremiumScreenState extends State<PremiumScreen>
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
+                  gradient: isCurrentPlan
+                      ? const LinearGradient(
+                          colors: [Color(0xFFFFE28A), Color(0xFFFFB300)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: isCurrentPlan ? null : const Color(0xFF1A1A1A),
                   border: Border.all(
-                    color: (isMostPopular ? goldColor : const Color(0xFF38BDF8))
-                        .withValues(alpha: 0.42),
+                    color:
+                        (isCurrentPlan
+                                ? const Color(0xFFFFD700)
+                                : (isMostPopular
+                                      ? goldColor
+                                      : const Color(0xFF38BDF8)))
+                            .withValues(alpha: 0.42),
                   ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
+                    if (isCurrentPlan)
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.45),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 6),
+                      ),
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.4),
                       blurRadius: 12,
@@ -2022,46 +2060,34 @@ class _PremiumScreenState extends State<PremiumScreen>
                     ),
                   ],
                 ),
-                child: Text(
-                  rawTag.toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    color: isMostPopular ? goldColor : const Color(0xFF7DD3FC),
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-            ),
-          if (isCurrentPlan)
-            Positioned(
-              top: 0,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFFE28A), Color(0xFFFFB300)],
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.34),
-                      blurRadius: 16,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isCurrentPlan)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Icon(
+                          Icons.workspace_premium_rounded,
+                          size: 14,
+                          color: Colors.black,
+                        ),
+                      ),
+                    Text(
+                      displayTag.toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        color: isCurrentPlan
+                            ? Colors.black
+                            : (isMostPopular
+                                  ? goldColor
+                                  : const Color(0xFF7DD3FC)),
+                        fontWeight: isCurrentPlan
+                            ? FontWeight.w900
+                            : FontWeight.w800,
+                        fontSize: 11,
+                        letterSpacing: 1.35,
+                      ),
                     ),
                   ],
-                ),
-                child: const Text(
-                  "ACTIVE",
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                    letterSpacing: 0.6,
-                  ),
                 ),
               ),
             ),

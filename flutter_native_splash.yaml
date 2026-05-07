@@ -1,0 +1,10 @@
+flutter_native_splash:
+  # Native (pre-Flutter) splash. Keep it logo-free; Flutter SplashScreen
+  # will render the same background plus the tagline text.
+  color: "#000000"
+  background_image: "assets/images/splash_intro.jpg"
+  android: true
+  ios: true
+  android_12:
+    color: "#000000"
+    image: null

@@ -163,7 +163,9 @@ String _resolveSpin(Map<String, dynamic>? resultData) {
 }
 
 class AnalyzingVideosScreen extends StatefulWidget {
-  const AnalyzingVideosScreen({super.key});
+  const AnalyzingVideosScreen({super.key, this.initialJobId});
+
+  final String? initialJobId;
 
   @override
   State<AnalyzingVideosScreen> createState() => _AnalyzingVideosScreenState();
@@ -174,6 +176,7 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
   List<Map<String, dynamic>> _jobs = const [];
   bool _loading = true;
   Timer? _pollTimer;
+  bool _autoOpenedInitial = false;
 
   @override
   void initState() {
@@ -233,6 +236,27 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
       _jobs.sort((a, b) => b['id'].toString().compareTo(a['id'].toString()));
       _loading = false;
     });
+
+    final focusId = widget.initialJobId;
+    if (focusId != null && focusId.isNotEmpty && !_autoOpenedInitial) {
+      final match = _jobs.cast<Map<String, dynamic>?>().firstWhere(
+        (j) => j?['id']?.toString() == focusId,
+        orElse: () => null,
+      );
+      final status = match?['status']?.toString() ?? '';
+      final hasResult = match?['resultData'] != null;
+      if (hasResult || status == 'ready') {
+        _autoOpenedInitial = true;
+        if (!mounted) return;
+        unawaited(
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AnalysisResultScreen(jobId: focusId),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   @override
