@@ -47,26 +47,27 @@ def detect_ultraedge(video_path, trajectory):
     return False
 
 def detect_stump_hit(trajectory):
-    """DRS 2.0 – Projection Based Ball Tracking"""
+    """DRS 2.0 – Projection Based Ball Tracking with Physics Labels"""
 
     if not trajectory or len(trajectory) < 6:
-        print("DRS 2.0 → insufficient trajectory")
-        return 0.0
+        return {
+            "confidence": 0.0,
+            "pitching": "In Line",
+            "impact": "In Line",
+            "wickets": "Missing"
+        }
 
     # ---- 1️⃣ Find Bounce (highest Y = closest to ground) ----
     y_positions = [_get_xy(p)[1] for p in trajectory]
     pitch_frame = int(np.argmax(y_positions))
 
     # Reject very short balls (bouncer logic)
-    if pitch_frame < len(trajectory) * 0.25:
-        print("DRS 2.0 → short ball")
-        return 0.0
+    if pitch_frame < len(trajectory) * 0.15:
+        return {"confidence": 0.0, "pitching": "Short Ball", "impact": "In Line", "wickets": "Missing"}
 
     post_pitch = trajectory[pitch_frame:]
-
     if len(post_pitch) < 3:
-        print("DRS 2.0 → not enough post-bounce data")
-        return 0.0
+        return {"confidence": 0.0, "pitching": "In Line", "impact": "In Line", "wickets": "Missing"}
 
     # ---- 2️⃣ Fit Linear Model (x = m*y + c) ----
     xs = np.array([_get_xy(p)[0] for p in post_pitch])
@@ -75,31 +76,51 @@ def detect_stump_hit(trajectory):
     try:
         m, c = np.polyfit(ys, xs, 1)
     except:
-        print("DRS 2.0 → polyfit failed")
-        return 0.0
+        return {"confidence": 0.0, "pitching": "In Line", "impact": "In Line", "wickets": "Missing"}
 
     # ---- 3️⃣ Project To Stump Plane ----
-    stump_y_plane = 0.90
+    stump_y_plane = 0.88
     projected_x = m * stump_y_plane + c
 
     # ---- 4️⃣ Stump Geometry (Normalized 0–1 scale) ----
-    stump_center_x = 0.62
-    stump_half_width = 0.07
+    # Accuracy Fix: Use center of frame (0.5) as stumps aren't usually at 0.62 offset
+    stump_center_x = 0.50
+    stump_half_width = 0.06
 
     stump_x_min = stump_center_x - stump_half_width
     stump_x_max = stump_center_x + stump_half_width
 
-    print("DRS 2.0 → projected_x:", round(projected_x, 3))
+    # ---- 5️⃣ Physics Status Labels ----
+    pitch_x = _get_xy(trajectory[pitch_frame])[0]
+    impact_x = _get_xy(trajectory[-1])[0]
 
-    # ---- 5️⃣ Decision Confidence ----
-    if stump_x_min <= projected_x <= stump_x_max:
-        stability = 1 - min(np.std(xs), 0.1)
-        confidence = max(min(stability, 1.0), 0.4)
-        print("DRS 2.0 → HITTING")
-        return confidence
+    pitching = "In Line"
+    if pitch_x < stump_center_x - 0.07: pitching = "Outside Leg"
+    elif pitch_x > stump_center_x + 0.07: pitching = "Outside Off"
 
-    print("DRS 2.0 → MISSING")
-    return 0.0
+    impact = "In Line"
+    if abs(impact_x - stump_center_x) > 0.12: impact = "Outside"
+    elif abs(impact_x - stump_center_x) > 0.08: impact = "Umpires Call"
+
+    hitting = stump_x_min <= projected_x <= stump_x_max
+    wickets = "Hitting" if hitting else "Missing"
+    
+    # Margin of error / Umpires Call for wickets
+    if not hitting and (stump_x_min - 0.03 <= projected_x <= stump_x_max + 0.03):
+        wickets = "Umpires Call"
+
+    # ---- 6️⃣ Decision Confidence ----
+    stability = 1 - min(np.std(xs), 0.1)
+    base_conf = 0.85 if hitting else (0.55 if wickets == "Umpires Call" else 0.15)
+    confidence = max(min(base_conf * stability, 1.0), 0.0)
+
+    return {
+        "confidence": confidence,
+        "pitching": pitching,
+        "impact": impact,
+        "wickets": wickets,
+        "projected_x": float(projected_x)
+    }
 
 def analyze_training(data):
     """Main DRS analysis - TV DRS physics logic"""
@@ -111,21 +132,30 @@ def analyze_training(data):
     
     # UltraEdge first (highest priority)
     ultraedge = bool(video_path and ball_near_bat_cache and detect_ultraedge(video_path, trajectory))
-    stump_confidence = detect_stump_hit(trajectory)
+    stump_results = detect_stump_hit(trajectory)
     
+    stump_confidence = stump_results["confidence"]
+    pitching_text = stump_results["pitching"]
+    impact_text = stump_results["impact"]
+    wickets_text = stump_results["wickets"]
+
     # FIXED: Realistic decision thresholds
     if ultraedge:
         decision = "NOT OUT"
         reason = "UltraEdge: Bat first contact"
-    elif stump_confidence >= 0.45:  # Strong hit
+        wickets_text = "Missing" # Edge overrides hitting
+    elif pitching_text == "Outside Leg":
+        decision = "NOT OUT"
+        reason = "Pitching outside leg stump"
+    elif stump_confidence >= 0.75:  # Strong hit
         decision = "OUT"
         reason = "Ball projected to hit stumps"
-    elif stump_confidence >= 0.25:  # Marginal
+    elif stump_confidence >= 0.45:  # Marginal
         decision = "UMPIRE'S CALL"
         reason = "Clipping stumps - marginal impact"
     else:
         decision = "NOT OUT"
-        reason = "Missing stumps outside line"
+        reason = "Missing stumps"
     
     return {
         "speed": data.get("speed", 0),
@@ -137,6 +167,9 @@ def analyze_training(data):
             "stump_confidence": round(stump_confidence, 2),
             "decision": decision,
             "reason": reason,
+            "pitching_text": pitching_text,
+            "impact_text": impact_text,
+            "wickets_text": wickets_text,
             "pitch_frame": int(np.argmin([_get_xy(p)[1] for p in trajectory])) if trajectory else 0
         }
     }
