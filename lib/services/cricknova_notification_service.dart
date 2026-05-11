@@ -13,8 +13,6 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../analysis/analyzing_videos_screen.dart';
 import '../app_router.dart';
-import '../navigation/main_navigation.dart';
-import 'premium_service.dart';
 import 'cricknova_marketing_notification_service.dart';
 
 class CrickNovaNotificationService {
@@ -212,7 +210,7 @@ class CrickNovaNotificationService {
       id: _analysisCompleteId,
       title: 'CrickNova: Result ready',
       body:
-          'Your video analysis is complete. View the result in "Analyzing Vid".',
+          'Your video analysis is complete. Open your video queue to view it.',
       payload: resultJobId == null ? null : 'analysis_ready:$resultJobId',
     );
   }
@@ -230,7 +228,7 @@ class CrickNovaNotificationService {
       id: _analysisCheckBaseId + idSuffix,
       title: 'CrickNova: Check your result',
       body:
-          'Your video is still being analyzed. Tap to view progress or the result in "Analyzing Vid".',
+          'Your video is still being analyzed. Tap to view progress or the result.',
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -407,21 +405,9 @@ class CrickNovaNotificationService {
         });
         return;
       }
-      if (PremiumService.isElite) {
-        navigator.pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => MainNavigation(
-              userName: _fallbackUserName(),
-              initialIndex: 2, // Elite: Analyzing Vid / Exclusive Training
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        navigator.push(
-          MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
-        );
-      }
+      navigator.push(
+        MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
+      );
       return;
     }
     if (value.startsWith('analysis_track:')) {
@@ -437,24 +423,11 @@ class CrickNovaNotificationService {
         });
         return;
       }
-      if (PremiumService.isElite) {
-        navigator.pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => MainNavigation(
-              userName: _fallbackUserName(),
-              initialIndex: 2,
-              initialAnalysisJobId: jobId,
-            ),
-          ),
-          (route) => false,
-        );
-      } else {
-        navigator.push(
-          MaterialPageRoute(
-            builder: (_) => AnalyzingVideosScreen(initialJobId: jobId),
-          ),
-        );
-      }
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => AnalyzingVideosScreen(initialJobId: jobId),
+        ),
+      );
       return;
     }
     if (!value.startsWith('analysis_ready:')) return;
@@ -473,17 +446,6 @@ class CrickNovaNotificationService {
     navigator.push(
       MaterialPageRoute(builder: (_) => AnalysisResultScreen(jobId: jobId)),
     );
-  }
-
-  String _fallbackUserName() {
-    final user = FirebaseAuth.instance.currentUser;
-    final name = user?.displayName;
-    if (name != null && name.trim().isNotEmpty) {
-      return name.trim().split(RegExp(r'\s+')).first;
-    }
-    final email = user?.email ?? '';
-    if (email.contains('@')) return email.split('@').first;
-    return 'Player';
   }
 }
 

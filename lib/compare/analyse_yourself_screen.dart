@@ -11,6 +11,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import 'package:hive/hive.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../services/weekly_stats_service.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
@@ -765,7 +766,59 @@ Do not give rating/score.
         child: SizedBox(
           width: controller.value.size.width,
           height: controller.value.size.height,
-          child: VideoPlayer(controller),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              VideoPlayer(controller),
+              // CrickNova AI Watermark (Enlarged + Slogan)
+              Positioned(
+                left: 12,
+                bottom: 12,
+                child: Opacity(
+                  opacity: 0.95,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      ClipOval(
+                        child: Image.asset(
+                          "assets/logo.png",
+                          width: 32,
+                          height: 32,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Uploaded on CrickNova AI",
+                            style: GoogleFonts.outfit(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                          Text(
+                            "Where Cricket Meets Intelligence",
+                            style: GoogleFonts.outfit(
+                              color: Colors.white.withOpacity(0.8),
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1038,7 +1091,59 @@ Do not give rating/score.
                 if (controller != null && controller.value.isInitialized)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(18),
-                    child: VideoPlayer(controller),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        VideoPlayer(controller),
+                        // CrickNova AI Watermark (Enlarged + Slogan)
+                        Positioned(
+                          left: 12,
+                          bottom: 12,
+                          child: Opacity(
+                            opacity: 0.95,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                ClipOval(
+                                  child: Image.asset(
+                                    "assets/logo.png",
+                                    width: 28,
+                                    height: 28,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Uploaded on CrickNova AI",
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                    Text(
+                                      "Where Cricket Meets Intelligence",
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white.withOpacity(0.8),
+                                        fontSize: 7.5,
+                                        fontWeight: FontWeight.w600,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 Positioned(
                   top: 12,

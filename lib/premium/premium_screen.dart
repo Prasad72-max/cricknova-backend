@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
@@ -539,21 +540,121 @@ class _CardSweepPainter extends CustomPainter {
   }
 }
 
-class _FreePlanDetailsScreen extends StatelessWidget {
+class _FreePlanDetailsScreen extends StatefulWidget {
   const _FreePlanDetailsScreen();
 
+  @override
+  State<_FreePlanDetailsScreen> createState() => _FreePlanDetailsScreenState();
+}
+
+class _FreePlanDetailsScreenState extends State<_FreePlanDetailsScreen> {
+  static const int _freeUploadLimit = 7;
+
   static const List<String> _features = [
-    "Unlimited Speed Detection",
-    "Unlimited Swing Detection",
-    "Unlimited Spin Detection",
+    "7 video uploads every 24 hours",
+    "Speed Detection on free uploads",
+    "Swing Detection on free uploads",
+    "Spin Detection on free uploads",
     "DRS Decision System",
     "UltraEdge Detection",
     "Speed Graph",
     "Accuracy Table",
   ];
 
+  Timer? _timer;
+  int _used = 0;
+  Duration _resetIn = const Duration(hours: 24);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuota();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _loadQuota());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _uid() => FirebaseAuth.instance.currentUser?.uid ?? "guest";
+
+  String _windowStartKey() => 'free_video_upload_window_start_${_uid()}';
+
+  String _countKey() => 'free_video_upload_count_${_uid()}';
+
+  DocumentReference<Map<String, dynamic>>? _quotaDoc() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    return FirebaseFirestore.instance
+        .collection("free_video_upload_limits")
+        .doc(user.uid);
+  }
+
+  int? _intFromQuotaValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return null;
+  }
+
+  Future<void> _loadQuota() async {
+    final prefs = await SharedPreferences.getInstance();
+    final quotaDoc = _quotaDoc();
+    Map<String, dynamic>? remoteData;
+    if (quotaDoc != null) {
+      try {
+        final snapshot = await quotaDoc.get();
+        remoteData = snapshot.data();
+      } catch (_) {
+        remoteData = null;
+      }
+    }
+
+    final startMs =
+        _intFromQuotaValue(remoteData?["window_start_ms"]) ??
+        prefs.getInt(_windowStartKey());
+
+    int used = 0;
+    Duration resetIn = const Duration(hours: 24);
+
+    if (startMs != null) {
+      final resetAt = DateTime.fromMillisecondsSinceEpoch(
+        startMs,
+      ).add(const Duration(hours: 24));
+      resetIn = resetAt.difference(DateTime.now());
+      if (resetIn.isNegative) {
+        await prefs.remove(_windowStartKey());
+        await prefs.setInt(_countKey(), 0);
+        resetIn = const Duration(hours: 24);
+      } else {
+        used =
+            _intFromQuotaValue(remoteData?["used"]) ??
+            prefs.getInt(_countKey()) ??
+            0;
+        await prefs.setInt(_windowStartKey(), startMs);
+        await prefs.setInt(_countKey(), used);
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _used = used.clamp(0, _freeUploadLimit);
+      _resetIn = resetIn;
+    });
+  }
+
+  String _formatReset(Duration duration) {
+    final safe = duration.isNegative ? Duration.zero : duration;
+    final hours = safe.inHours.toString().padLeft(2, '0');
+    final minutes = safe.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = safe.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "${hours}H ${minutes}M ${seconds}S";
+  }
+
   @override
   Widget build(BuildContext context) {
+    final remaining = (_freeUploadLimit - _used).clamp(0, _freeUploadLimit);
     return Scaffold(
       backgroundColor: const Color(0xFF020A1F),
       appBar: AppBar(
@@ -593,12 +694,32 @@ class _FreePlanDetailsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                "Everything currently available in your Free Plan.",
-                style: TextStyle(
+              Text(
+                "$remaining of $_freeUploadLimit video uploads left. Count resets in ${_formatReset(_resetIn)}.",
+                style: const TextStyle(
                   color: Color(0xFFA0A0A0),
                   fontSize: 13.5,
                   fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Text(
+                  "Go Elite for unlimited video uploads.",
+                  style: TextStyle(
+                    color: Color(0xFFFFE8A3),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -1035,7 +1156,7 @@ class _PremiumScreenState extends State<PremiumScreen>
           const SizedBox(height: 10),
           if (!isActive)
             const Text(
-              "Tap to view Free Plan features.",
+              "Free Plan includes 7 video uploads every 24 hours. Tap to view your count.",
               style: TextStyle(
                 color: Color(0xFFA0A0A0),
                 fontSize: 13,

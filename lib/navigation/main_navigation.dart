@@ -5,14 +5,12 @@ import 'package:hive/hive.dart';
 
 import '../home/home_screen.dart';
 import '../ai/ai_coach_screen.dart';
-import '../analysis/analyzing_videos_screen.dart';
 import '../premium/premium_screen.dart';
 import '../profile/profile_screen.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
 import 'dart:async';
 import '../insights/insights_screen.dart';
-import 'package:flutter/scheduler.dart';
 
 abstract class MainNavigationController {
   void setTab(int index);
@@ -22,14 +20,12 @@ abstract class MainNavigationController {
 class MainNavigation extends StatefulWidget {
   final String userName;
   final int initialIndex;
-  final String? initialAnalysisJobId;
   static final ValueNotifier<int> activeTabNotifier = ValueNotifier<int>(0);
 
   const MainNavigation({
     super.key,
     required this.userName,
     this.initialIndex = 0,
-    this.initialAnalysisJobId,
   });
 
   static MainNavigationController? of(BuildContext context) {
@@ -52,7 +48,6 @@ class _MainNavigationState extends State<MainNavigation>
   late int _lastKnownTabCount;
   DateTime? _activeSince;
   Timer? _minuteTimer;
-  int _prewarmIndex = 0;
 
   @override
   void goHome() {
@@ -67,10 +62,9 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   void setTab(int index) {
     if (!mounted) return;
-    if (_screenCache[index] == null) {
-      _screenCache[index] = _buildScreenAt(index);
-    }
+    if (index < 0 || index >= _screenCache.length) return;
     setState(() {
+      _screenCache[index] ??= _buildScreenAt(index);
       _index = index;
     });
     MainNavigation.activeTabNotifier.value = _index;
@@ -91,55 +85,22 @@ class _MainNavigationState extends State<MainNavigation>
     }
     _activeSince = DateTime.now();
     _startMinuteTimer();
-    
-    // Performance Fix: Only build the CURRENT tab immediately.
-    // Building all tabs at once was causing startup lag.
-    _screenCache = List<Widget?>.filled(_lastKnownTabCount, null);
-    _screenCache[_index] = _buildScreenAt(_index);
-    
+
+    _screenCache = _buildScreenCache(_lastKnownTabCount);
+
     MainNavigation.activeTabNotifier.value = _index;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrapSession());
-      // Lazily build remaining tabs across frames so startup is lightning fast.
-      _startPrewarmTabs();
     });
   }
 
-  void _startPrewarmTabs() {
-    // Build the remaining tabs lazily across frames so tab switching feels instant.
-    // This avoids a big one-frame jank right after onboarding / first open.
-    if (!mounted) return;
-    _prewarmIndex = 0;
-    SchedulerBinding.instance.addPostFrameCallback((_) => _prewarmNextTab());
+  List<Widget?> _buildScreenCache(int tabCount) {
+    return List<Widget?>.generate(tabCount, _buildScreenAt);
   }
 
-  void _prewarmNextTab() {
-    if (!mounted) return;
-    final count = _tabCount();
-    while (_prewarmIndex < count && _screenCache[_prewarmIndex] != null) {
-      _prewarmIndex++;
-    }
-    if (_prewarmIndex >= count) return;
-    final i = _prewarmIndex;
-    _prewarmIndex++;
-    // Insert the screen widget so it becomes part of the tree (but offstage).
-    setState(() {
-      _screenCache[i] ??= _buildScreenAt(i);
-    });
-    // Wait a tiny bit between tabs to let the Home screen animations breathe.
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
-        SchedulerBinding.instance.addPostFrameCallback((_) => _prewarmNextTab());
-      }
-    });
-  }
-
-  bool get _hasEliteAnalysisTab => PremiumService.isElite;
-
-  int get _coachTabIndex => _hasEliteAnalysisTab ? 3 : 2;
+  int get _coachTabIndex => 2;
 
   int get _profileTabIndex {
-    if (_hasEliteAnalysisTab) return 4;
     return PremiumService.isPremiumActive ? 3 : 4;
   }
 
@@ -164,11 +125,10 @@ class _MainNavigationState extends State<MainNavigation>
     _lastKnownTabCount = nextTabCount;
     final maxIndex = nextTabCount - 1;
     setState(() {
-      _screenCache = List<Widget?>.filled(nextTabCount, null);
       if (_index > maxIndex) {
         _index = maxIndex;
       }
-      _screenCache[_index] = _buildScreenAt(_index);
+      _screenCache = _buildScreenCache(nextTabCount);
     });
     MainNavigation.activeTabNotifier.value = _index;
     _evaluatePremiumAlerts();
@@ -445,7 +405,6 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   int _tabCount() {
-    if (_hasEliteAnalysisTab) return 5;
     return PremiumService.isPremiumActive ? 4 : 5;
   }
 
@@ -456,14 +415,8 @@ class _MainNavigationState extends State<MainNavigation>
     if (index == 1) {
       return const InsightsScreen(key: ValueKey("insights"));
     }
-    if (_hasEliteAnalysisTab && index == 2) {
-      return AnalyzingVideosScreen(
-        key: const ValueKey("analyzing_vid"),
-        initialJobId: widget.initialAnalysisJobId,
-      );
-    }
     if (index == _coachTabIndex) {
-      return const AICoachScreen(key: ValueKey("coach"));
+      return const AICoachScreen(key: ValueKey("CrickNovacoach"));
     }
     if (!PremiumService.isPremiumActive && index == 3) {
       return const PremiumScreen(entrySource: "tab", key: ValueKey("premium"));
@@ -471,47 +424,27 @@ class _MainNavigationState extends State<MainNavigation>
     return const ProfileScreen(key: ValueKey("profile"));
   }
 
-  Widget _screenAt(int index) {
-    final existing = _screenCache[index];
-    if (existing != null) return existing;
-    final built = _buildScreenAt(index);
-    _screenCache[index] = built;
-    return built;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final navItems = <BottomNavigationBarItem>[
-      BottomNavigationBarItem(
-        label: "Home",
-        icon: _navIcon(Icons.home_outlined, 0),
-      ),
-      BottomNavigationBarItem(
-        label: "Insights",
-        icon: _navIcon(Icons.insights_outlined, 1),
-      ),
-      if (_hasEliteAnalysisTab)
-        BottomNavigationBarItem(
-          label: "Analyzing Vid",
-          icon: _navIcon(Icons.video_collection_outlined, 2),
-        ),
-      BottomNavigationBarItem(
+    final navItems = <_NavTabData>[
+      _NavTabData(label: "Home", icon: Icons.home_outlined, index: 0),
+      _NavTabData(label: "Insights", icon: Icons.insights_outlined, index: 1),
+      _NavTabData(
         label: "CrickNova Coach",
-        icon: _navIcon(Icons.auto_awesome_outlined, _coachTabIndex),
+        icon: Icons.auto_awesome_outlined,
+        index: _coachTabIndex,
       ),
     ];
     if (!PremiumService.isPremiumActive) {
       navItems.add(
-        BottomNavigationBarItem(
-          label: "Premium",
-          icon: _navIcon(Icons.star_outline, 3),
-        ),
+        _NavTabData(label: "Premium", icon: Icons.star_outline, index: 3),
       );
     }
     navItems.add(
-      BottomNavigationBarItem(
+      _NavTabData(
         label: "Profile",
-        icon: _navIcon(Icons.person_outline, _profileTabIndex),
+        icon: Icons.person_outline,
+        index: _profileTabIndex,
       ),
     );
 
@@ -522,55 +455,114 @@ class _MainNavigationState extends State<MainNavigation>
           _tabCount(),
           (i) => i == _index || _screenCache[i] != null
               ? RepaintBoundary(
-                  child: TickerMode(enabled: i == _index, child: _screenAt(i)),
+                  child: TickerMode(
+                    enabled: i == _index,
+                    child: _screenCache[i] ?? const _DeferredTabLoader(),
+                  ),
                 )
               : const SizedBox.shrink(),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _index,
-        backgroundColor: Colors.black,
-        selectedItemColor: Colors.amber,
-        unselectedItemColor: Colors.white60,
-        selectedIconTheme: const IconThemeData(size: 22),
-        unselectedIconTheme: const IconThemeData(size: 20),
-        type: BottomNavigationBarType.fixed,
-
-        onTap: (i) async {
-          if (i == _index) return;
-          debugPrint(
-            "BOTTOM_NAV tap=$i isPremium=${PremiumService.isPremiumActive}",
-          );
-
-          if (!mounted) return;
-          setTab(i);
-        },
-        items: navItems,
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          height: 64,
+          color: Colors.black,
+          child: Row(
+            children: [
+              for (final item in navItems) Expanded(child: _buildNavTab(item)),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _navIcon(IconData icon, int tabIndex) {
-    final bool isActive = _index == tabIndex;
+  Widget _buildNavTab(_NavTabData item) {
+    final bool isActive = _index == item.index;
+    final color = isActive ? Colors.amber : Colors.white60;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (isActive)
-          Container(
-            height: 3,
-            width: 24,
-            margin: const EdgeInsets.only(bottom: 4),
-            decoration: BoxDecoration(
-              color: Colors.amber,
-              borderRadius: BorderRadius.circular(4),
-              boxShadow: const [
-                BoxShadow(color: Colors.amber, blurRadius: 8, spreadRadius: 1),
-              ],
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (item.index == _index) return;
+          debugPrint(
+            "BOTTOM_NAV tap=${item.index} isPremium=${PremiumService.isPremiumActive}",
+          );
+          if (!mounted) return;
+          setTab(item.index);
+        },
+        child: SizedBox.expand(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                height: 7,
+                child: Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    height: 3,
+                    width: isActive ? 24 : 0,
+                    decoration: BoxDecoration(
+                      color: Colors.amber,
+                      borderRadius: BorderRadius.circular(4),
+                      boxShadow: isActive
+                          ? const [
+                              BoxShadow(
+                                color: Colors.amber,
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ]
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+              Icon(item.icon, color: color, size: isActive ? 22 : 20),
+              const SizedBox(height: 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 11,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        Icon(icon),
-      ],
+        ),
+      ),
     );
+  }
+}
+
+class _NavTabData {
+  final String label;
+  final IconData icon;
+  final int index;
+
+  const _NavTabData({
+    required this.label,
+    required this.icon,
+    required this.index,
+  });
+}
+
+class _DeferredTabLoader extends StatelessWidget {
+  const _DeferredTabLoader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const ColoredBox(color: Colors.black);
   }
 }

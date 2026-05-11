@@ -7,10 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
-import '../onboarding/cricknova_paywall_screen.dart';
 import '../onboarding/cricknova_onboarding_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
-import '../services/premium_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -99,9 +97,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     late final Widget destination;
     if (user != null) {
-      destination = PremiumService.isPremiumActive
-          ? MainNavigation(userName: userName)
-          : CricknovaPaywallScreen(userName: userName);
+      destination = MainNavigation(userName: userName);
     } else if (!onboardingSeen) {
       await prefs.setBool(_onboardingSeenKey, true);
       destination = const CricknovaOnboardingScreen(
@@ -167,32 +163,40 @@ class _SplashScreenState extends State<SplashScreen> {
                   final scale = 0.92 + (t * 0.12);
                   final letterSpacing = lerpDouble(14, -1.2, t)!;
                   final blur = (1.0 - t) * 10.0;
-                  
+
                   return Transform.scale(
                     scale: scale,
                     child: Opacity(
                       opacity: t,
                       child: ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                        imageFilter: ImageFilter.blur(
+                          sigmaX: blur,
+                          sigmaY: blur,
+                        ),
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
                             // Soft gold glow behind the logo
                             Text(
                               'CrickNova',
-                              style: OnboardingTextStyles.serif(
-                                color: const Color(0xFFD4AF37).withValues(alpha: 0.2 * t),
-                                fontSize: 52,
-                                fontWeight: FontWeight.w300,
-                                letterSpacing: letterSpacing,
-                              ).copyWith(
-                                shadows: [
-                                  Shadow(
-                                    color: const Color(0xFFD4AF37).withValues(alpha: 0.4 * t),
-                                    blurRadius: 30 * t,
+                              style:
+                                  OnboardingTextStyles.serif(
+                                    color: const Color(
+                                      0xFFD4AF37,
+                                    ).withValues(alpha: 0.2 * t),
+                                    fontSize: 52,
+                                    fontWeight: FontWeight.w300,
+                                    letterSpacing: letterSpacing,
+                                  ).copyWith(
+                                    shadows: [
+                                      Shadow(
+                                        color: const Color(
+                                          0xFFD4AF37,
+                                        ).withValues(alpha: 0.4 * t),
+                                        blurRadius: 30 * t,
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
                             ),
                             // Main white logo text
                             Text(

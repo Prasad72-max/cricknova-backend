@@ -3,8 +3,10 @@ import 'dart:ui';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:video_player/video_player.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/pending_video.dart';
 
 import 'analysis_queue_store.dart';
@@ -201,11 +203,22 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
   }
 
   Future<void> _loadJobs() async {
-    final jobs = await AnalysisQueueStore.loadJobs();
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    final jobs = (await AnalysisQueueStore.loadJobs())
+        .where((job) => currentUid != null && job['userId'] == currentUid)
+        .toList(growable: false);
 
     // 🔥 Fetch from Hive pending box too
     final box = Hive.box<PendingVideo>('pending_videos');
     final pending = box.values
+        .where(
+          (v) =>
+              currentUid != null &&
+              v.userId == currentUid &&
+              (v.status == 'pending' ||
+                  v.status == 'uploading' ||
+                  v.status == 'complete'),
+        )
         .map(
           (v) => {
             'id': v.id,
@@ -213,6 +226,7 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
             'status': v.status == 'complete' ? 'ready' : 'processing',
             'discipline': 'training',
             'localFilePath': v.localFilePath,
+            'userId': v.userId,
             'resultData': v.resultData,
             'speedLabel': v.resultData?['speed_kmph'] ?? '0',
             'swing': _resolveSwing(v.resultData),
@@ -330,7 +344,7 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
                     ),
                     SizedBox(height: 12),
                     Text(
-                      "No slow analyses right now.",
+                      "No pending analyses",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -339,7 +353,7 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
                     ),
                     SizedBox(height: 8),
                     Text(
-                      "When an upload takes longer than 15 seconds, it will show up here.",
+                      "Videos that need extra processing will appear here automatically.",
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.white70, height: 1.45),
                     ),
@@ -673,6 +687,53 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
                             ),
                           ),
                         ),
+                        // CrickNova AI Watermark (Enlarged + Slogan)
+                        Positioned(
+                          left: 16,
+                          bottom: 28,
+                          child: Opacity(
+                            opacity: 0.95,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                ClipOval(
+                                  child: Image.asset(
+                                    "assets/logo.png",
+                                    width: 36,
+                                    height: 36,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Uploaded on CrickNova AI",
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                    Text(
+                                      "Where Cricket Meets Intelligence",
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white.withOpacity(0.8),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -711,18 +772,25 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
   }
 
   Future<void> _load() async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
     var job = await AnalysisQueueStore.getJob(widget.jobId);
+    if (job != null && (currentUid == null || job['userId'] != currentUid)) {
+      job = null;
+    }
     if (job == null && Hive.isBoxOpen('pending_videos')) {
       final pending = Hive.box<PendingVideo>(
         'pending_videos',
       ).get(widget.jobId);
-      if (pending != null) {
+      if (pending != null &&
+          pending.userId == currentUid &&
+          pending.status != 'front') {
         job = {
           'id': pending.id,
           'title': pending.localFilePath.split(RegExp(r'[\\/]')).last,
           'status': pending.status == 'complete' ? 'ready' : 'processing',
           'discipline': 'training',
           'localFilePath': pending.localFilePath,
+          'userId': pending.userId,
           'resultData': pending.resultData,
           'speedLabel': pending.resultData?['speed_kmph'] ?? 'Unavailable',
           'swing': _resolveSwing(pending.resultData),
@@ -927,6 +995,53 @@ class _InlineVideoCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                ),
+                // CrickNova AI Watermark (Enlarged + Slogan)
+                Positioned(
+                  left: 16,
+                  bottom: 28,
+                  child: Opacity(
+                    opacity: 0.95,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ClipOval(
+                          child: Image.asset(
+                            "assets/logo.png",
+                            width: 36,
+                            height: 36,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Uploaded on CrickNova AI",
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            Text(
+                              "Where Cricket Meets Intelligence",
+                              style: GoogleFonts.outfit(
+                                color: Colors.white.withOpacity(0.8),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),

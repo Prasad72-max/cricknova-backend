@@ -36,9 +36,15 @@ class BackgroundAnalysisService {
     _isProcessing = true;
 
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
       final box = Hive.box<PendingVideo>('pending_videos');
       final pendingVideos = box.values
-          .where((v) => v.status == 'pending' || v.status == 'uploading')
+          .where(
+            (v) =>
+                uid != null &&
+                v.userId == uid &&
+                (v.status == 'pending' || v.status == 'uploading'),
+          )
           .toList();
 
       for (final video in pendingVideos) {
@@ -97,6 +103,7 @@ class BackgroundAnalysisService {
           'discipline': 'training',
           'status': 'ready',
           'localFilePath': video.localFilePath,
+          'userId': user.uid,
           'resultData': analysis,
           'speedLabel': analysis["speed_kmph"] ?? "0",
           'swing': analysis["swing"] ?? "NONE",

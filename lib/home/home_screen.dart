@@ -168,9 +168,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (_analysisCountdownTicker != null) return;
     _analysisCountdownTicker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || !_isHomeTabVisible) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
       final hasActiveAnalysis = Hive.box<PendingVideo>('pending_videos').values
           .any(
-            (video) => video.status == 'pending' || video.status == 'uploading',
+            (video) =>
+                uid != null &&
+                video.userId == uid &&
+                (video.status == 'pending' || video.status == 'uploading'),
           );
       if (hasActiveAnalysis) {
         _analysisClockTick.value++;
@@ -213,16 +217,27 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final prefs = await SharedPreferences.getInstance();
       final box = Hive.box<PendingVideo>('pending_videos');
       final activeIds = <String>{};
+      final uid = FirebaseAuth.instance.currentUser?.uid;
 
       for (final video in box.values) {
+        if (uid == null || video.userId != uid) {
+          continue;
+        }
         if (!(prefs.getBool(_analysisTimerStartedKey(video.id)) ?? false)) {
           continue;
         }
         if (prefs.getBool(_analysisMessageShownKey(video.id)) ?? false) {
           continue;
         }
+        if (video.status == 'complete') {
+          await prefs.setBool(_analysisMessageShownKey(video.id), true);
+          continue;
+        }
         if (video.status == 'failed') {
           await prefs.setBool(_analysisMessageShownKey(video.id), true);
+          continue;
+        }
+        if (video.status != 'pending' && video.status != 'uploading') {
           continue;
         }
 
@@ -266,9 +281,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: const Color(0xFF0F172A),
-        duration: const Duration(seconds: 6),
+        duration: const Duration(milliseconds: 1700),
         content: Text(
-          '2 minutes are up. View the result or progress in "Analyzing Vid".',
+          'Analysis update ready. Open your video queue.',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         action: SnackBarAction(
@@ -460,6 +475,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 : 'Notifications are still blocked on this device. You can enable them later in settings.',
           ),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 1700),
         ),
       );
       return;
@@ -891,6 +907,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text("Checking premium status..."),
+                                duration: Duration(milliseconds: 1700),
                               ),
                             );
                             return;
@@ -909,20 +926,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           Navigator.of(context)
                               .push(
                                 PageRouteBuilder(
-                                  transitionDuration: const Duration(milliseconds: 320),
-                                  pageBuilder: (context, animation, secondaryAnimation) => 
-                                      const AnalyseYourselfScreen(),
-                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: ScaleTransition(
-                                        scale: Tween<double>(begin: 0.98, end: 1.0).animate(
-                                          CurvedAnimation(parent: animation, curve: Curves.easeOut),
-                                        ),
-                                        child: child,
-                                      ),
-                                    );
-                                  },
+                                  transitionDuration: const Duration(
+                                    milliseconds: 320,
+                                  ),
+                                  pageBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                      ) => const AnalyseYourselfScreen(),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: ScaleTransition(
+                                            scale:
+                                                Tween<double>(
+                                                  begin: 0.98,
+                                                  end: 1.0,
+                                                ).animate(
+                                                  CurvedAnimation(
+                                                    parent: animation,
+                                                    curve: Curves.easeOut,
+                                                  ),
+                                                ),
+                                            child: child,
+                                          ),
+                                        );
+                                      },
                                 ),
                               )
                               .then((_) => _syncQuickStats());
@@ -943,6 +979,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text("Checking premium status..."),
+                                duration: Duration(milliseconds: 1700),
                               ),
                             );
                             return;
@@ -951,20 +988,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           Navigator.of(context)
                               .push(
                                 PageRouteBuilder(
-                                  transitionDuration: const Duration(milliseconds: 320),
-                                  pageBuilder: (context, animation, secondaryAnimation) => 
-                                      const BowlingAnalyseScreen(),
-                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: ScaleTransition(
-                                        scale: Tween<double>(begin: 0.98, end: 1.0).animate(
-                                          CurvedAnimation(parent: animation, curve: Curves.easeOut),
-                                        ),
-                                        child: child,
-                                      ),
-                                    );
-                                  },
+                                  transitionDuration: const Duration(
+                                    milliseconds: 320,
+                                  ),
+                                  pageBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                      ) => const BowlingAnalyseScreen(),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        return FadeTransition(
+                                          opacity: animation,
+                                          child: ScaleTransition(
+                                            scale:
+                                                Tween<double>(
+                                                  begin: 0.98,
+                                                  end: 1.0,
+                                                ).animate(
+                                                  CurvedAnimation(
+                                                    parent: animation,
+                                                    curve: Curves.easeOut,
+                                                  ),
+                                                ),
+                                            child: child,
+                                          ),
+                                        );
+                                      },
                                 ),
                               )
                               .then((_) => _syncQuickStats());
@@ -974,10 +1030,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
-                if (PremiumService.isElite) ...[
-                  const SizedBox(height: 24),
-                  _exclusiveTrainingVidSection(),
-                ],
+                const SizedBox(height: 24),
+                _exclusiveTrainingVidSection(),
 
                 const SizedBox(height: 50),
 
@@ -995,69 +1049,62 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.07),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.18),
-                                width: 1,
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFF111827,
+                          ).withValues(alpha: 0.74),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.14),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "Premium",
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    Text(
-                                      PremiumService.isPremium
-                                          ? "Premium"
-                                          : "Free",
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: PremiumService.isPremium
-                                            ? Colors.green
-                                            : Colors.grey,
-                                      ),
-                                    ),
-                                  ],
+                                Text(
+                                  "Premium",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                                const SizedBox(height: 14),
-                                _usageRow(
-                                  label: "CrickNova Coach Chats",
-                                  used: PremiumService.chatUsed,
-                                  total: PremiumService.chatLimit,
-                                ),
-                                const SizedBox(height: 10),
-                                _usageRow(
-                                  label: "Mistake Detection",
-                                  used: PremiumService.mistakeUsed,
-                                  total: PremiumService.mistakeLimit,
-                                ),
-                                const SizedBox(height: 10),
-                                _usageRow(
-                                  label: "Analyse Yourself",
-                                  used: PremiumService.compareUsed,
-                                  total: PremiumService.compareLimit,
+                                Text(
+                                  PremiumService.isPremium ? "Premium" : "Free",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: PremiumService.isPremium
+                                        ? Colors.green
+                                        : Colors.grey,
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
+                            const SizedBox(height: 14),
+                            _usageRow(
+                              label: "CrickNova Coach Chats",
+                              used: PremiumService.chatUsed,
+                              total: PremiumService.chatLimit,
+                            ),
+                            const SizedBox(height: 10),
+                            _usageRow(
+                              label: "Mistake Detection",
+                              used: PremiumService.mistakeUsed,
+                              total: PremiumService.mistakeLimit,
+                            ),
+                            const SizedBox(height: 10),
+                            _usageRow(
+                              label: "Analyse Yourself",
+                              used: PremiumService.compareUsed,
+                              total: PremiumService.compareLimit,
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -1087,91 +1134,85 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _quickStatsCard({required _QuickStatData stat}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            color: Colors.white.withValues(alpha: 0.08),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.2),
-              width: 1,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1C000000),
-                blurRadius: 18,
-                offset: Offset(0, 8),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        color: const Color(0xFF111827).withValues(alpha: 0.78),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.16),
+          width: 1,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1C000000),
+            blurRadius: 18,
+            offset: Offset(0, 8),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(100),
-                  gradient: LinearGradient(
-                    colors: stat.accent,
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(100),
+              gradient: LinearGradient(
+                colors: stat.accent,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  stat.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.72),
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      stat.title,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.72),
+                const SizedBox(height: 6),
+                RichText(
+                  text: TextSpan(
+                    children: [
+                      TextSpan(
+                        text: stat.value,
+                        style: GoogleFonts.poppins(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: stat.value,
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                          TextSpan(
-                            text: stat.suffix,
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withValues(alpha: 0.72),
-                            ),
-                          ),
-                        ],
+                      TextSpan(
+                        text: stat.suffix,
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.72),
+                        ),
                       ),
-                    ),
-                    Text(
-                      stat.metric,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white.withValues(alpha: 0.64),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                Text(
+                  stat.metric,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white.withValues(alpha: 0.64),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1191,58 +1232,52 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           onTap();
         },
         borderRadius: BorderRadius.circular(22),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  width: 1,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x22000000),
-                    blurRadius: 14,
-                    spreadRadius: 1,
-                    offset: Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  _isometricFeatureIcon(icon: icon, gradient: iconGradient),
-                  const SizedBox(width: 18),
-                  Flexible(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          subtitle,
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            color: Colors.white.withValues(alpha: 0.78),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827).withValues(alpha: 0.76),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.16),
+              width: 1,
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x22000000),
+                blurRadius: 14,
+                spreadRadius: 1,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _isometricFeatureIcon(icon: icon, gradient: iconGradient),
+              const SizedBox(width: 18),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: Colors.white.withValues(alpha: 0.78),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1716,6 +1751,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _exclusiveTrainingVidSection() {
+    void openAnalysisQueue() {
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()));
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1725,7 +1766,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Exclusive Training Vid",
+                PremiumService.isElite
+                    ? "Exclusive Training Vid"
+                    : "Training Videos",
                 style: GoogleFonts.poppins(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -1734,12 +1777,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
               GestureDetector(
-                onTap: () {
-                  final nav = MainNavigation.of(context);
-                  if (nav != null) {
-                    nav.setTab(2); // Analysis Tab
-                  }
-                },
+                onTap: openAnalysisQueue,
                 child: Text(
                   "See All",
                   style: GoogleFonts.poppins(
@@ -1760,7 +1798,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               'pending_videos',
             ).listenable(),
             builder: (context, Box<PendingVideo> box, _) {
-              final videos = box.values.toList().reversed.take(5).toList();
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              final videos = box.values
+                  .where((video) => uid != null && video.userId == uid)
+                  .toList()
+                  .reversed
+                  .take(5)
+                  .toList();
 
               if (videos.isEmpty) {
                 return Padding(
@@ -1884,7 +1928,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               children: [
                                 ValueListenableBuilder<int>(
                                   valueListenable: _analysisClockTick,
-                                  builder: (context, _, __) {
+                                  builder: (context, _, child) {
                                     final liveRemaining =
                                         _analysisReminderRemaining(video);
                                     final liveStatusText = isReady
@@ -1945,7 +1989,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             width: double.infinity,
             constraints: const BoxConstraints(maxWidth: 400),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withOpacity(0.95),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(28),
               border: Border.all(color: Colors.white10),
             ),
@@ -2028,7 +2072,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(color: Colors.white10),
                           ),

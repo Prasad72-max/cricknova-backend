@@ -1,4 +1,5 @@
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
@@ -19,6 +20,7 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../analysis/analysis_queue_store.dart';
+import '../analysis/analyzing_videos_screen.dart';
 import '../models/pending_video.dart';
 import '../premium/premium_screen.dart';
 import '../navigation/main_navigation.dart';
@@ -4058,12 +4060,14 @@ class _UploadScreenState extends State<UploadScreen>
   static const Duration _cachedAnalysisResultDelay = Duration(seconds: 4);
   // If result doesn't arrive fast, hand off to background + queue.
   static const Duration _analysisHandoffDelay = Duration(seconds: 15);
+  static const int _freeDailyVideoUploadLimit = 7;
 
   String spinStrength = "NONE";
   double spinTurnDeg = 0.0;
 
   Future<void> _incrementTotalVideos() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid ?? "guest";
     final box = await Hive.openBox("local_stats_$uid");
 
     int current = (box.get('totalVideos', defaultValue: 0) as num).toInt();
@@ -4071,7 +4075,417 @@ class _UploadScreenState extends State<UploadScreen>
 
     await box.put('totalVideos', updated);
 
+    if (user != null) {
+      try {
+        await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
+          "totalVideos": FieldValue.increment(1),
+          "lastVideoUploadedAt": FieldValue.serverTimestamp(),
+          "updatedAt": FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint("TOTAL VIDEOS FIRESTORE UPDATE FAILED => $e");
+      }
+    }
+
     debugPrint("TOTAL VIDEOS UPDATED (HIVE) => $updated");
+  }
+
+  String _freeVideoUploadWindowStartPrefsKey() {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
+    return 'free_video_upload_window_start_$uid';
+  }
+
+  String _freeVideoUploadCountPrefsKey() {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
+    return 'free_video_upload_count_$uid';
+  }
+
+  DocumentReference<Map<String, dynamic>>? _freeVideoUploadQuotaDoc() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    return FirebaseFirestore.instance
+        .collection("free_video_upload_limits")
+        .doc(user.uid);
+  }
+
+  Future<bool> _hasUnlimitedVideoUploads() async {
+    if (!PremiumService.isLoaded) {
+      await PremiumService.restoreOnLaunch();
+    }
+    if (!PremiumService.isPremiumActive) {
+      await PremiumService.ensureFreshState();
+    }
+    return PremiumService.isPremiumActive;
+  }
+
+  String _formatFreeUploadResetDuration(Duration duration) {
+    final safe = duration.isNegative ? Duration.zero : duration;
+    final hours = safe.inHours.toString().padLeft(2, '0');
+    final minutes = safe.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = safe.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return "${hours}H ${minutes}M ${seconds}S";
+  }
+
+  int? _intFromQuotaValue(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return null;
+  }
+
+  Future<void> _cacheFreeVideoUploadQuota({
+    required int used,
+    required DateTime? windowStart,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final startKey = _freeVideoUploadWindowStartPrefsKey();
+    final countKey = _freeVideoUploadCountPrefsKey();
+    await prefs.setInt(countKey, used.clamp(0, _freeDailyVideoUploadLimit));
+    if (windowStart == null) {
+      await prefs.remove(startKey);
+    } else {
+      await prefs.setInt(startKey, windowStart.millisecondsSinceEpoch);
+    }
+  }
+
+  ({int used, Duration resetIn, DateTime? windowStart}) _quotaStateFromValues({
+    required int used,
+    required DateTime? windowStart,
+  }) {
+    final safeUsed = used.clamp(0, _freeDailyVideoUploadLimit);
+    if (windowStart == null) {
+      return (used: safeUsed, resetIn: Duration.zero, windowStart: null);
+    }
+
+    final resetAt = windowStart.add(const Duration(hours: 24));
+    final resetIn = resetAt.difference(DateTime.now());
+    if (resetIn.isNegative) {
+      return (used: 0, resetIn: const Duration(hours: 24), windowStart: null);
+    }
+
+    return (used: safeUsed, resetIn: resetIn, windowStart: windowStart);
+  }
+
+  Future<({int used, Duration resetIn})> _freeVideoUploadQuotaState() async {
+    final doc = _freeVideoUploadQuotaDoc();
+    if (doc != null) {
+      try {
+        final snapshot = await doc.get();
+        if (snapshot.exists) {
+          final data = snapshot.data() ?? <String, dynamic>{};
+          final windowStartMs = _intFromQuotaValue(data["window_start_ms"]);
+          final windowStart = windowStartMs == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(windowStartMs);
+          final state = _quotaStateFromValues(
+            used: _intFromQuotaValue(data["used"]) ?? 0,
+            windowStart: windowStart,
+          );
+
+          if (state.windowStart == null &&
+              state.used >= _freeDailyVideoUploadLimit) {
+            final now = DateTime.now();
+            final resetAt = now.add(const Duration(hours: 24));
+            await doc.set({
+              "uid": FirebaseAuth.instance.currentUser!.uid,
+              "used": _freeDailyVideoUploadLimit,
+              "limit": _freeDailyVideoUploadLimit,
+              "window_hours": 24,
+              "window_start_ms": now.millisecondsSinceEpoch,
+              "window_reset_at_ms": resetAt.millisecondsSinceEpoch,
+              "window_start_at": Timestamp.fromDate(now),
+              "window_reset_at": Timestamp.fromDate(resetAt),
+              "updatedAt": FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+            await _cacheFreeVideoUploadQuota(
+              used: _freeDailyVideoUploadLimit,
+              windowStart: now,
+            );
+            return (
+              used: _freeDailyVideoUploadLimit,
+              resetIn: const Duration(hours: 24),
+            );
+          }
+
+          await _cacheFreeVideoUploadQuota(
+            used: state.used,
+            windowStart: state.windowStart,
+          );
+
+          if (state.windowStart == null && windowStart != null) {
+            await doc.set({
+              "uid": FirebaseAuth.instance.currentUser!.uid,
+              "used": 0,
+              "limit": _freeDailyVideoUploadLimit,
+              "window_start_ms": null,
+              "window_reset_at_ms": null,
+              "updatedAt": FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+          }
+
+          return (used: state.used, resetIn: state.resetIn);
+        }
+
+        await doc.set({
+          "uid": FirebaseAuth.instance.currentUser!.uid,
+          "used": 0,
+          "limit": _freeDailyVideoUploadLimit,
+          "window_hours": 24,
+          "total_uploads": 0,
+          "createdAt": FieldValue.serverTimestamp(),
+          "updatedAt": FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint("FREE UPLOAD QUOTA FIRESTORE READ FAILED: $e");
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final startKey = _freeVideoUploadWindowStartPrefsKey();
+    final countKey = _freeVideoUploadCountPrefsKey();
+    final startMs = prefs.getInt(startKey);
+
+    if (startMs == null) {
+      final used = (prefs.getInt(countKey) ?? 0).clamp(
+        0,
+        _freeDailyVideoUploadLimit,
+      );
+      if (used >= _freeDailyVideoUploadLimit) {
+        await prefs.setInt(startKey, DateTime.now().millisecondsSinceEpoch);
+        return (
+          used: _freeDailyVideoUploadLimit,
+          resetIn: const Duration(hours: 24),
+        );
+      }
+      await prefs.setInt(countKey, used);
+      return (used: used, resetIn: Duration.zero);
+    }
+
+    final start = DateTime.fromMillisecondsSinceEpoch(startMs);
+    final resetAt = start.add(const Duration(hours: 24));
+    final resetIn = resetAt.difference(DateTime.now());
+
+    if (!resetIn.isNegative) {
+      return (used: prefs.getInt(countKey) ?? 0, resetIn: resetIn);
+    }
+
+    await prefs.remove(startKey);
+    await prefs.setInt(countKey, 0);
+    return (used: 0, resetIn: const Duration(hours: 24));
+  }
+
+  Future<bool> _recordFreeDailyVideoUpload() async {
+    if (await _hasUnlimitedVideoUploads()) return true;
+    final doc = _freeVideoUploadQuotaDoc();
+    if (doc != null) {
+      try {
+        final now = DateTime.now();
+        final result = await FirebaseFirestore.instance
+            .runTransaction<
+              ({
+                bool allowed,
+                int used,
+                Duration resetIn,
+                DateTime? windowStart,
+              })
+            >((transaction) async {
+              final snapshot = await transaction.get(doc);
+              final data = snapshot.data() ?? <String, dynamic>{};
+              final rawStartMs = _intFromQuotaValue(data["window_start_ms"]);
+              DateTime? windowStart = rawStartMs == null
+                  ? null
+                  : DateTime.fromMillisecondsSinceEpoch(rawStartMs);
+              var currentUsed = _intFromQuotaValue(data["used"]) ?? 0;
+
+              if (windowStart != null &&
+                  now.difference(windowStart) >= const Duration(hours: 24)) {
+                windowStart = null;
+                currentUsed = 0;
+              }
+
+              if (currentUsed >= _freeDailyVideoUploadLimit) {
+                windowStart ??= now;
+                final resetAt = windowStart.add(const Duration(hours: 24));
+                transaction.set(doc, {
+                  "uid": FirebaseAuth.instance.currentUser!.uid,
+                  "used": _freeDailyVideoUploadLimit,
+                  "limit": _freeDailyVideoUploadLimit,
+                  "window_hours": 24,
+                  "window_start_ms": windowStart.millisecondsSinceEpoch,
+                  "window_reset_at_ms": resetAt.millisecondsSinceEpoch,
+                  "window_start_at": Timestamp.fromDate(windowStart),
+                  "window_reset_at": Timestamp.fromDate(resetAt),
+                  "updatedAt": FieldValue.serverTimestamp(),
+                }, SetOptions(merge: true));
+                return (
+                  allowed: false,
+                  used: _freeDailyVideoUploadLimit,
+                  resetIn: resetAt.difference(now),
+                  windowStart: windowStart,
+                );
+              }
+
+              final updatedUsed = currentUsed + 1;
+              final limitReached = updatedUsed >= _freeDailyVideoUploadLimit;
+              if (limitReached) {
+                windowStart ??= now;
+              }
+              final resetAt = windowStart?.add(const Duration(hours: 24));
+              transaction.set(doc, {
+                "uid": FirebaseAuth.instance.currentUser!.uid,
+                "used": updatedUsed,
+                "limit": _freeDailyVideoUploadLimit,
+                "window_hours": 24,
+                "window_start_ms": windowStart?.millisecondsSinceEpoch,
+                "window_reset_at_ms": resetAt?.millisecondsSinceEpoch,
+                "window_start_at": windowStart == null
+                    ? null
+                    : Timestamp.fromDate(windowStart),
+                "window_reset_at": resetAt == null
+                    ? null
+                    : Timestamp.fromDate(resetAt),
+                "last_upload_at": FieldValue.serverTimestamp(),
+                "updatedAt": FieldValue.serverTimestamp(),
+                "total_uploads": FieldValue.increment(1),
+              }, SetOptions(merge: true));
+
+              return (
+                allowed: true,
+                used: updatedUsed,
+                resetIn: resetAt == null
+                    ? Duration.zero
+                    : resetAt.difference(now),
+                windowStart: windowStart,
+              );
+            });
+
+        await _cacheFreeVideoUploadQuota(
+          used: result.used,
+          windowStart: result.windowStart,
+        );
+
+        if (!result.allowed) {
+          await _showFreeUploadLimitReached(result.resetIn);
+          return false;
+        }
+
+        await _showFreeUploadElitePrompt(result.used, result.resetIn);
+        return true;
+      } catch (e) {
+        debugPrint("FREE UPLOAD QUOTA FIRESTORE WRITE FAILED: $e");
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final startKey = _freeVideoUploadWindowStartPrefsKey();
+    final countKey = _freeVideoUploadCountPrefsKey();
+    var state = await _freeVideoUploadQuotaState();
+
+    if (state.used >= _freeDailyVideoUploadLimit) {
+      await _showFreeUploadLimitReached(state.resetIn);
+      return false;
+    }
+
+    final updatedUsed = state.used + 1;
+    var resetIn = state.resetIn;
+    if (updatedUsed >= _freeDailyVideoUploadLimit &&
+        prefs.getInt(startKey) == null) {
+      await prefs.setInt(startKey, DateTime.now().millisecondsSinceEpoch);
+      resetIn = const Duration(hours: 24);
+    }
+
+    await prefs.setInt(countKey, updatedUsed);
+    await _showFreeUploadElitePrompt(updatedUsed, resetIn);
+    return true;
+  }
+
+  Future<bool> _ensureFreeDailyVideoUploadAvailable() async {
+    if (await _hasUnlimitedVideoUploads()) return true;
+
+    final quota = await _freeVideoUploadQuotaState();
+    if (quota.used < _freeDailyVideoUploadLimit) return true;
+
+    await _showFreeUploadLimitReached(quota.resetIn);
+    return false;
+  }
+
+  Future<void> _showFreeUploadLimitReached(Duration resetIn) async {
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            "Free Upload Limit Reached",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            "Free users get 7 video uploads every 24 hours.\n\nGo Elite for unlimited video uploads.\n\nResets in ${_formatFreeUploadResetDuration(resetIn)}.",
+            style: const TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                "Later",
+                style: TextStyle(color: Colors.white54),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const PremiumScreen(entrySource: "upload_gate"),
+                  ),
+                );
+              },
+              child: const Text("Go Elite"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showFreeUploadElitePrompt(int used, Duration resetIn) async {
+    if (!mounted) return;
+    final remaining = (_freeDailyVideoUploadLimit - used).clamp(
+      0,
+      _freeDailyVideoUploadLimit,
+    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            remaining == 0
+                ? "Free uploads finished. Go Elite for unlimited videos. Resets in ${_formatFreeUploadResetDuration(resetIn)}."
+                : "$remaining of 7 free video uploads left. Go Elite for unlimited uploads.",
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(milliseconds: 1700),
+          action: SnackBarAction(
+            label: "GO ELITE",
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const PremiumScreen(entrySource: "upload_gate"),
+                ),
+              );
+            },
+          ),
+        ),
+      );
   }
 
   void _startAnalysisExperience() {
@@ -4113,6 +4527,7 @@ class _UploadScreenState extends State<UploadScreen>
         status: 'pending',
       );
       if (pending == null) return;
+      _analysisQueued = true;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('analysis_two_min_timer_started_${pending.id}', true);
@@ -4123,7 +4538,6 @@ class _UploadScreenState extends State<UploadScreen>
         ),
       );
       if (PremiumService.isElite && _analysisJobId != null) {
-        _analysisQueued = true;
         await AnalysisQueueStore.upsertJob({
           'id': _analysisJobId,
           'title': video == null
@@ -4132,6 +4546,7 @@ class _UploadScreenState extends State<UploadScreen>
           'discipline': _analysisDiscipline,
           'status': 'processing',
           'localFilePath': video?.path,
+          'userId': FirebaseAuth.instance.currentUser?.uid,
           'startedAt':
               _analysisJobStartedAt ?? DateTime.now().toUtc().toIso8601String(),
         });
@@ -4175,6 +4590,8 @@ class _UploadScreenState extends State<UploadScreen>
     final source = video;
     final path = source?.path ?? '';
     if (path.isEmpty) return null;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return null;
 
     final id =
         _analysisJobId ?? 'analysis_${DateTime.now().millisecondsSinceEpoch}';
@@ -4187,6 +4604,7 @@ class _UploadScreenState extends State<UploadScreen>
           localFilePath: path,
           timestamp: DateTime.now().millisecondsSinceEpoch,
           status: status,
+          userId: uid,
         );
     pending.status = status;
     await box.put(pending.id, pending);
@@ -4197,10 +4615,20 @@ class _UploadScreenState extends State<UploadScreen>
       'discipline': _analysisDiscipline,
       'status': 'processing',
       'localFilePath': path,
+      'userId': uid,
       'startedAt':
           _analysisJobStartedAt ?? DateTime.now().toUtc().toIso8601String(),
     });
     return pending;
+  }
+
+  Future<void> _removeCurrentForegroundAnalysisQueueEntry() async {
+    final id = _analysisJobId;
+    if (id == null || id.isEmpty) return;
+    if (Hive.isBoxOpen('pending_videos')) {
+      await Hive.box<PendingVideo>('pending_videos').delete(id);
+    }
+    await AnalysisQueueStore.removeJob(id);
   }
 
   Future<void> _showClassyHandoffPopup() async {
@@ -4258,7 +4686,7 @@ class _UploadScreenState extends State<UploadScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "No worries if the result is not ready in 15 seconds.\nCheck again in 2 minutes. Your video is saved and the app will retry automatically, so you do not need to upload it again.",
+                  "Your video needs a little more processing time. We have saved it securely on this device and will continue the analysis in the background.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 14,
@@ -6290,6 +6718,10 @@ class _UploadScreenState extends State<UploadScreen>
   }
 
   Future<void> _showVideoRulesThenPick() async {
+    final parentContext = context;
+    final canUpload = await _ensureFreeDailyVideoUploadAvailable();
+    if (!canUpload || !parentContext.mounted) return;
+
     if (_hasAcceptedVideoTermsCache == true) {
       debugPrint("UPLOAD_SCREEN → video terms already accepted");
       pickAndUpload();
@@ -6298,6 +6730,7 @@ class _UploadScreenState extends State<UploadScreen>
 
     if (_hasAcceptedVideoTermsCache == null) {
       await _primeVideoTermsAcceptance();
+      if (!parentContext.mounted) return;
       if (_hasAcceptedVideoTermsCache == true) {
         debugPrint("UPLOAD_SCREEN → video terms already accepted");
         pickAndUpload();
@@ -6305,8 +6738,6 @@ class _UploadScreenState extends State<UploadScreen>
       }
     }
 
-    if (!mounted) return;
-    final parentContext = context;
     showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
@@ -6596,7 +7027,7 @@ class _UploadScreenState extends State<UploadScreen>
                                                     behavior: SnackBarBehavior
                                                         .floating,
                                                     duration: Duration(
-                                                      seconds: 4,
+                                                      milliseconds: 1700,
                                                     ),
                                                   ),
                                                 );
@@ -6807,7 +7238,7 @@ class _UploadScreenState extends State<UploadScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(_sessionUploadHint(type)),
-              duration: const Duration(seconds: 3),
+              duration: const Duration(milliseconds: 1700),
               behavior: SnackBarBehavior.floating,
               backgroundColor: const Color(0xFF8B5CF6),
             ),
@@ -6867,9 +7298,15 @@ class _UploadScreenState extends State<UploadScreen>
   Future<bool> pickAndUpload() async {
     debugPrint("UPLOAD_SCREEN → pickAndUpload start");
 
+    final canUpload = await _ensureFreeDailyVideoUploadAvailable();
+    if (!canUpload) return false;
+
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
     if (picked == null) return false;
+
+    final recordedUpload = await _recordFreeDailyVideoUpload();
+    if (!recordedUpload) return false;
 
     final pickedFile = File(picked.path);
     video = await _copyVideoToAnalysisStorage(pickedFile);
@@ -6901,9 +7338,6 @@ class _UploadScreenState extends State<UploadScreen>
     }
     _startAnalysisExperience();
     _startFactCycling();
-    // Persist a job immediately so notification taps / restarts don't land on null.
-    // This job will only be processed in background after we flip it to 'pending'.
-    unawaited(_queueCurrentVideoForBackgroundAnalysis(status: 'front'));
 
     final analysisStartTime = DateTime.now();
 
@@ -6985,7 +7419,7 @@ class _UploadScreenState extends State<UploadScreen>
       return true;
     } catch (e) {
       debugPrint("UPLOAD ERROR: $e");
-      if (!_showLongWaitHandoff && analysisLoading) {
+      if (_showLongWaitHandoff && analysisLoading) {
         final pending = await _queueCurrentVideoForBackgroundAnalysis(
           status: 'pending',
         );
@@ -7080,23 +7514,34 @@ class _UploadScreenState extends State<UploadScreen>
             speedType = "cached_previous_session";
             speedNote = "";
           } else if (localSpeed != null) {
-            // Centralized Sidearm Scaling:
-            // Most raw trajectories (65-85) * 1.6 will land in 104-136 range.
-            double physicsSpeed = localSpeed * 1.60;
+            // Sidearm Range Expansion Logic:
+            // The user wants 107-145 KMPH. We map raw trajectory (roughly 66-88)
+            // into this wide spectrum using a non-linear sensitivity curve.
 
-            if (physicsSpeed > 140.0) {
-              // Super-aggressive compression above 140 to make 145+ truly rare.
-              physicsSpeed = 140.0 + (physicsSpeed - 140.0) * 0.12;
+            // 1. Normalize input (assume 67 is base, 85 is very fast)
+            final double rawMin = 67.0;
+            final double rawMax = 85.0;
+            double norm = (localSpeed - rawMin) / (rawMax - rawMin);
+            norm = norm.clamp(0.0, 1.8); // Allow for huge outliers
+
+            // 2. Map to target range 107 - 165
+            // Standard performance lands in 107-145.
+            // Elite performance (norm > 1.0) pushes into 145-165 but is HEAVILY throttled.
+            double physicsSpeed = 107.0 + (norm * 38.0);
+
+            if (physicsSpeed > 145.0) {
+              // Super-steep compression to make 145-165 extremely rare
+              physicsSpeed = 145.0 + (physicsSpeed - 145.0) * 0.08;
             }
 
             // Final deterministic clamp
-            if (physicsSpeed < 101.0) {
-              physicsSpeed = 101.0 + (localSpeed % 6.0);
+            if (physicsSpeed < 107.0) {
+              physicsSpeed = 107.0 + (localSpeed % 4.0);
             }
 
-            speedKmph = physicsSpeed.clamp(100.0, 161.0);
-            speedType = "sidearm_physics";
-            speedNote = "High-velocity tracking";
+            speedKmph = physicsSpeed.clamp(107.0, 165.0);
+            speedType = "sidearm_physics_v3";
+            speedNote = "Elite-velocity tracking";
           } else {
             // True fallback: Range 110-130
             final seed = video!.lengthSync();
@@ -7238,22 +7683,34 @@ class _UploadScreenState extends State<UploadScreen>
         });
       }
 
-      // If this was a background handoff that finished, update the queue
-      if (_analysisJobId != null) {
+      // Only the 15-second handoff belongs in the analysis queue.
+      if ((_analysisQueued || _showLongWaitHandoff) && _analysisJobId != null) {
         final resolvedSpeedLabel = speedKmph == null
             ? "Unavailable"
             : "${speedKmph!.toStringAsFixed(1)} km/h";
+        if (Hive.isBoxOpen('pending_videos')) {
+          final box = Hive.box<PendingVideo>('pending_videos');
+          final pending = box.get(_analysisJobId);
+          if (pending != null) {
+            pending.status = 'complete';
+            pending.resultData = analysis;
+            await box.put(pending.id, pending);
+          }
+        }
         await AnalysisQueueStore.upsertJob({
           'id': _analysisJobId,
           'title': video?.path.split(RegExp(r'[\\/]')).last ?? 'Training Video',
           'discipline': _analysisDiscipline,
           'status': 'ready',
           'localFilePath': video?.path,
+          'userId': FirebaseAuth.instance.currentUser?.uid,
           'speedLabel': resolvedSpeedLabel,
           'swing': swing,
           'spin': spin,
           'resultData': analysis,
         });
+      } else {
+        await _removeCurrentForegroundAnalysisQueueEntry();
       }
     } catch (e) {
       debugPrint("Error applying analysis: $e");
@@ -7297,9 +7754,12 @@ class _UploadScreenState extends State<UploadScreen>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Please login first.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please login first."),
+          duration: Duration(milliseconds: 1700),
+        ),
+      );
       return;
     }
 
@@ -7351,9 +7811,12 @@ class _UploadScreenState extends State<UploadScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() => _paymentBusy = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Unable to start payment.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Unable to start payment."),
+          duration: Duration(milliseconds: 1700),
+        ),
+      );
     }
   }
 
@@ -7364,13 +7827,19 @@ class _UploadScreenState extends State<UploadScreen>
       if (!mounted) return;
       setState(() => _paymentBusy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Premium unlocked successfully.")),
+        const SnackBar(
+          content: Text("Premium unlocked successfully."),
+          duration: Duration(milliseconds: 1700),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _paymentBusy = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Payment succeeded but unlock failed.")),
+        const SnackBar(
+          content: Text("Payment succeeded but unlock failed."),
+          duration: Duration(milliseconds: 1700),
+        ),
       );
     }
   }
@@ -7383,6 +7852,7 @@ class _UploadScreenState extends State<UploadScreen>
         content: Text(
           "Payment failed: ${response.code} | ${response.message ?? 'Unknown error'}",
         ),
+        duration: const Duration(milliseconds: 1700),
       ),
     );
   }
@@ -7390,7 +7860,10 @@ class _UploadScreenState extends State<UploadScreen>
   void _handleRazorpayWallet(ExternalWalletResponse response) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Opening ${response.walletName ?? 'wallet'}...")),
+      SnackBar(
+        content: Text("Opening ${response.walletName ?? 'wallet'}..."),
+        duration: const Duration(milliseconds: 1700),
+      ),
     );
   }
 
@@ -8185,6 +8658,81 @@ Do not add intro or conclusion.
                       ),
                     ),
                   ),
+                  // CrickNova AI Watermark - Premium Branding
+                  Positioned(
+                    left: 20,
+                    bottom: 110,
+                    child: Opacity(
+                      opacity: 0.95,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.blueAccent.withOpacity(0.4),
+                                  blurRadius: 15,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: Image.asset(
+                                "assets/logo.png",
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Uploaded on CrickNova AI",
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.5,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.8),
+                                      offset: const Offset(1, 1),
+                                      blurRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                "Where Cricket Meets Intelligence",
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white.withOpacity(0.85),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.3,
+                                  fontStyle: FontStyle.italic,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.8),
+                                      offset: const Offset(1, 1),
+                                      blurRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                   // LEFT SIDEBAR (Result Panel) - always visible, dimmed while loading
                   if (!drsLoading)
@@ -8749,16 +9297,18 @@ Do not add intro or conclusion.
     HapticFeedback.mediumImpact();
     _stopAnalysisExperience();
     if (!mounted) return;
-    final targetIndex = openAnalysisTab && PremiumService.isElite ? 2 : 0;
-    Navigator.of(context).pushAndRemoveUntil(
+    final navigator = Navigator.of(context);
+    navigator.pushAndRemoveUntil(
       MaterialPageRoute(
-        builder: (_) => MainNavigation(
-          userName: _wakeOverlayUserName(),
-          initialIndex: targetIndex,
-        ),
+        builder: (_) => MainNavigation(userName: _wakeOverlayUserName()),
       ),
       (route) => false,
     );
+    if (openAnalysisTab) {
+      navigator.push(
+        MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
+      );
+    }
   }
 
   Widget _buildAnalysisOverlay() {
@@ -9259,7 +9809,7 @@ Do not add intro or conclusion.
               ),
             ],
           ),
-          duration: const Duration(seconds: 3),
+          duration: const Duration(milliseconds: 1700),
         ),
       );
       return;

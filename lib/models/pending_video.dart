@@ -6,6 +6,7 @@ class PendingVideo {
   final int timestamp;
   String status; // 'pending', 'uploading', 'complete', 'failed'
   Map<String, dynamic>? resultData;
+  final String? userId;
 
   PendingVideo({
     required this.id,
@@ -13,6 +14,7 @@ class PendingVideo {
     required this.timestamp,
     this.status = 'pending',
     this.resultData,
+    this.userId,
   });
 }
 
@@ -32,13 +34,14 @@ class PendingVideoAdapter extends TypeAdapter<PendingVideo> {
       timestamp: fields[2] as int,
       status: fields[3] as String,
       resultData: (fields[4] as Map?)?.cast<String, dynamic>(),
+      userId: fields[5] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, PendingVideo obj) {
     writer
-      ..writeByte(5)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -48,6 +51,8 @@ class PendingVideoAdapter extends TypeAdapter<PendingVideo> {
       ..writeByte(3)
       ..write(obj.status)
       ..writeByte(4)
-      ..write(obj.resultData);
+      ..write(obj.resultData)
+      ..writeByte(5)
+      ..write(obj.userId);
   }
 }
