@@ -55,11 +55,11 @@ PLAN_LIMITS = {
     "IN_299": {"chat": 1200, "mistake": 30},
     "IN_499": {"chat": 3000, "mistake": 60},
     "IN_1999": {"chat": 5000, "mistake": 150},
-    "INTL_MONTHLY": {"chat": 200, "mistake": 20},
-    "INTL_6M": {"chat": 1200, "mistake": 30},
-    "INTL_YEARLY": {"chat": 1800, "mistake": 50},
-    "INT_ULTRA": {"chat": 7000, "mistake": 150},
-    "INTL_ULTRA": {"chat": 7000, "mistake": 150},
+    "INTL_MONTHLY": {"chat": 250, "mistake": 15},
+    "INTL_6M": {"chat": 1500, "mistake": 30},
+    "INTL_YEARLY": {"chat": 5000, "mistake": 60},
+    "INT_ULTRA": {"chat": 999999, "mistake": 150},
+    "INTL_ULTRA": {"chat": 999999, "mistake": 150},
     "MONTHLY": {"chat": 200, "mistake": 15},
     "6 MONTHS": {"chat": 1200, "mistake": 30},
     "YEARLY": {"chat": 3000, "mistake": 60},
@@ -72,6 +72,11 @@ PLAN_ALIASES = {
     "6_months": "IN_299",
     "yearly": "IN_499",
     "ultra_pro": "IN_1999",
+    "intl_monthly": "INTL_MONTHLY",
+    "intl_6m": "INTL_6M",
+    "intl_yearly": "INTL_YEARLY",
+    "intl_ultra": "INT_ULTRA",
+    "int_ultra": "INT_ULTRA",
 }
 
 

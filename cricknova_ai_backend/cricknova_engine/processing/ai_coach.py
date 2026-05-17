@@ -26,8 +26,11 @@ PLAN_LIMITS = {
     "IN_299": 1200,
     "IN_499": 3000,
     "IN_1999": 5000,
-    "INT_ULTRA": 7000,
-    "INTL_ULTRA": 7000,
+    "INTL_MONTHLY": 250,
+    "INTL_6M": 1500,
+    "INTL_YEARLY": 5000,
+    "INT_ULTRA": 999999,
+    "INTL_ULTRA": 999999,
 }
 
 # -----------------------------

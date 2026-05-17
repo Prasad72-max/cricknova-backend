@@ -61,7 +61,11 @@ PLAN_LIMITS = {
     "IN_299":  {"chat": 1200,  "mistake": 30,  "compare": 0,   "days": 180},
     "IN_499":  {"chat": 3000,  "mistake": 60,  "compare": 50,  "days": 365},
     "IN_1999": {"chat": 5000, "mistake": 150, "compare": 150, "days": 365},
-    "INT_ULTRA": {"chat": 7000, "mistake": 150, "compare": 150, "days": 365},
+    "INTL_MONTHLY": {"chat": 250, "mistake": 15, "compare": 15, "days": 30},
+    "INTL_6M": {"chat": 1500, "mistake": 30, "compare": 30, "days": 180},
+    "INTL_YEARLY": {"chat": 5000, "mistake": 60, "compare": 60, "days": 365},
+    "INT_ULTRA": {"chat": 999999, "mistake": 150, "compare": 150, "days": 365},
+    "INTL_ULTRA": {"chat": 999999, "mistake": 150, "compare": 150, "days": 365},
 }
 
 

@@ -133,9 +133,9 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
             pw.Bullet(text: "App opens: ${stats.appOpens}"),
             pw.Bullet(text: "Active days: $activeDays / 7"),
             pw.Bullet(text: "CrickNova Coach chats: ${stats.aiChats}"),
-            pw.Bullet(text: "Analyse Yourself uses: ${stats.analyseAi}"),
+            pw.Bullet(text: "Cricknova Analyse Yourself uses: ${stats.analyseAi}"),
             pw.Bullet(
-              text: "Mistake Detection uses: ${stats.mistakeDetection}",
+              text: "Cricknova Mistake Detection uses: ${stats.mistakeDetection}",
             ),
             if (stats.appMinutes > 0)
               pw.Bullet(text: "Time in app: ${_fmtUsage(stats.appMinutes)}"),
@@ -305,7 +305,7 @@ class _UsageSummaryRow extends StatelessWidget {
         const SizedBox(height: 10),
         Row(
           children: [
-            _StatChip(label: "AI Chats", value: stats.aiChats.toString()),
+            _StatChip(label: "Cricknova Chat Coach", value: stats.aiChats.toString()),
             const SizedBox(width: 10),
             _StatChip(label: "Analyse", value: stats.analyseAi.toString()),
             const SizedBox(width: 10),

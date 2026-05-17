@@ -48,7 +48,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
   late final AnimationController _pulseController;
   late final AnimationController _floatController;
   final List<_WelcomeFeature> _features = const [
-    _WelcomeFeature(Icons.psychology_rounded, "AI-Powered Analysis"),
+    _WelcomeFeature(Icons.psychology_rounded, "Cricknova Analysis"),
     _WelcomeFeature(Icons.gavel_rounded, "DRS Decision System"),
     _WelcomeFeature(Icons.graphic_eq_rounded, "UltraEdge Detection"),
     _WelcomeFeature(Icons.query_stats_rounded, "Speed & Accuracy Graphs"),
@@ -291,7 +291,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                     ),
                                     const SizedBox(height: 10),
                                     Text(
-                                      "Your personal AI cricket coach starts now",
+                                      "Your personal Cricknova Chat Coach starts now",
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
                                         color: const Color(
@@ -782,9 +782,16 @@ class _StadiumLightBackdrop extends StatelessWidget {
         Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
-              colors: [Color(0xFF020A1F), Color(0xFF060C23), Color(0xFF010713)],
+              colors: [Color(0xFF02040C), Color(0xFF071025), Color(0xFF020714)],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _InternationalAnalyticsBackdropPainter(),
             ),
           ),
         ),
@@ -831,6 +838,181 @@ class _StadiumLightBackdrop extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _InternationalAnalyticsBackdropPainter extends CustomPainter {
+  const _InternationalAnalyticsBackdropPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Removed background graph lines and grid to make background empty
+  }
+
+  @override
+  bool shouldRepaint(
+    covariant _InternationalAnalyticsBackdropPainter oldDelegate,
+  ) {
+    return false;
+  }
+}
+
+class _InternationalPremiumHero extends StatelessWidget {
+  const _InternationalPremiumHero();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 18),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(26),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.10),
+            const Color(0xFF07111F).withValues(alpha: 0.82),
+            const Color(0xFF020614).withValues(alpha: 0.92),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: const Color(0xFF67E8F9).withValues(alpha: 0.26),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF38BDF8).withValues(alpha: 0.18),
+            blurRadius: 34,
+            spreadRadius: 1,
+          ),
+          BoxShadow(
+            color: const Color(0xFFA855F7).withValues(alpha: 0.10),
+            blurRadius: 44,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -12,
+            top: -10,
+            child: Icon(
+              Icons.sports_cricket_rounded,
+              color: Colors.white.withValues(alpha: 0.055),
+              size: 104,
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: const Color(0xFF67E8F9).withValues(alpha: 0.30),
+                  ),
+                ),
+                child: Text(
+                  "GLOBAL AI CRICKET ACCESS",
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFFBAF4FF),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                "CRICKNOVA INTERNATIONAL PREMIUM 🌍",
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 25,
+                  fontWeight: FontWeight.w900,
+                  height: 1.08,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Elite Cricket Intelligence Powered By AI",
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFFD8F7FF).withValues(alpha: 0.82),
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _HeroMetric(label: "SPEED", value: "AI"),
+                  const SizedBox(width: 10),
+                  _HeroMetric(label: "SWING", value: "LIVE"),
+                  const SizedBox(width: 10),
+                  _HeroMetric(label: "DRS", value: "EDGE"),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetric extends StatelessWidget {
+  const _HeroMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.24),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                color: Colors.white54,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.7,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -885,10 +1067,10 @@ class _PremiumScreenState extends State<PremiumScreen>
     "₹299": GlobalKey(),
     "₹499": GlobalKey(),
     "₹1999": GlobalKey(),
+    "\$8.99": GlobalKey(),
     "\$29.99": GlobalKey(),
-    "\$49.99": GlobalKey(),
-    "\$69.99": GlobalKey(),
-    "\$169.99": GlobalKey(),
+    "\$59.99": GlobalKey(),
+    "\$109.99": GlobalKey(),
   };
 
   @override
@@ -1016,15 +1198,15 @@ class _PremiumScreenState extends State<PremiumScreen>
       case "IN_1999":
         return "Ultra Pro • ₹1999";
       case "INTL_MONTHLY":
-        return "Monthly • \$29.99";
+        return "Starter ⚡ • \$8.99/month";
       case "INTL_6M":
-        return "6 Months • \$49.99";
+        return "Season Pass 🔥 • \$29.99 / 6 months";
       case "INTL_YEARLY":
-        return "Yearly • \$69.99";
+        return "Pro Athlete 💎 • \$59.99/year";
       case "INTL_ULTRA":
       case "INT_ULTRA":
       case "ULTRA":
-        return "Ultra International • \$169.99";
+        return "CrickNova Elite 👑 • \$109.99/year";
       default:
         return "Free Plan";
     }
@@ -1041,15 +1223,15 @@ class _PremiumScreenState extends State<PremiumScreen>
       case "IN_1999":
         return price == "₹1999";
       case "INTL_MONTHLY":
-        return price == "\$29.99";
+        return price == "\$8.99";
       case "INTL_6M":
-        return price == "\$49.99";
+        return price == "\$29.99";
       case "INTL_YEARLY":
-        return price == "\$69.99";
+        return price == "\$59.99";
       case "INTL_ULTRA":
       case "INT_ULTRA":
       case "ULTRA":
-        return price == "\$169.99";
+        return price == "\$109.99";
       default:
         return false;
     }
@@ -1232,15 +1414,15 @@ class _PremiumScreenState extends State<PremiumScreen>
       case "IN_1999":
         return "₹1999";
       case "INTL_MONTHLY":
-        return "\$29.99";
+        return "\$8.99";
       case "INTL_6M":
-        return "\$49.99";
+        return "\$29.99";
       case "INTL_YEARLY":
-        return "\$69.99";
+        return "\$59.99";
       case "INTL_ULTRA":
       case "INT_ULTRA":
       case "ULTRA":
-        return "\$169.99";
+        return "\$109.99";
       default:
         return null;
     }
@@ -1327,16 +1509,16 @@ class _PremiumScreenState extends State<PremiumScreen>
   String? _selectedGooglePlayBasePlanId() {
     switch (_lastPlanPrice) {
       case "₹99":
-      case "\$29.99":
+      case "\$8.99":
         return SubscriptionProvider.monthlyPlanId;
       case "₹299":
-      case "\$49.99":
+      case "\$29.99":
         return SubscriptionProvider.sixMonthPlanId;
       case "₹499":
-      case "\$69.99":
+      case "\$59.99":
         return SubscriptionProvider.oneYearPlanId;
       case "₹1999":
-      case "\$169.99":
+      case "\$109.99":
         return SubscriptionProvider.oneYearElitePlanId;
       default:
         return null;
@@ -1349,7 +1531,7 @@ class _PremiumScreenState extends State<PremiumScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            "Google Play plan not found for this card. Please use one of the mapped plans: ₹99, ₹299, ₹499, ₹1999, \$29.99, \$49.99, \$69.99, or \$169.99.",
+            "Google Play plan not found for this card. Please use one of the mapped plans: ₹99, ₹299, ₹499, ₹1999, \$8.99, \$29.99, \$59.99, or \$109.99.",
           ),
         ),
       );
@@ -1398,35 +1580,35 @@ class _PremiumScreenState extends State<PremiumScreen>
     switch (source) {
       case "ai_coach":
         return const _PremiumEntryHighlight(
-          title: "AI Chat Coach",
+          title: "Cricknova Chat Coach",
           subtitle: "You were redirected because Chat Coach needs Premium.",
           icon: Icons.auto_awesome_rounded,
-          keywords: ["AI Chats", "Priority AI"],
+          keywords: ["Cricknova Chat Coach", "Priority AI"],
         );
       case "analyse":
       case "compare_lock":
       case "compare_limit":
         return const _PremiumEntryHighlight(
-          title: "Analyse Yourself Batting",
+          title: "Cricknova Analyse Yourself Batting",
           subtitle: "You were redirected to unlock batting video comparison.",
           icon: Icons.analytics_rounded,
-          keywords: ["Analyse Yourself"],
+          keywords: ["Cricknova Analyse Yourself"],
         );
       case "bowling_analysis":
       case "mistake_lock":
       case "mistake_usage_limit":
         return const _PremiumEntryHighlight(
-          title: "Bowling Mistake Detection",
+          title: "Cricknova Mistake Detection",
           subtitle: "You were redirected to unlock bowling AI feedback.",
           icon: Icons.sports_baseball_rounded,
-          keywords: ["Mistake Detection"],
+          keywords: ["Cricknova Mistake Detection"],
         );
       case "bowling_compare":
         return const _PremiumEntryHighlight(
           title: "Bowling Compare",
           subtitle: "You were redirected to unlock bowling video comparison.",
           icon: Icons.compare_arrows_rounded,
-          keywords: ["Analyse Yourself"],
+          keywords: ["Cricknova Analyse Yourself"],
         );
       case "upload_gate":
         return const _PremiumEntryHighlight(
@@ -1549,7 +1731,7 @@ class _PremiumScreenState extends State<PremiumScreen>
         elevation: 0,
         centerTitle: true,
         title: Text(
-          "Premium Plans",
+          isIndia ? "Premium Plans" : "International Premium",
           style: GoogleFonts.poppins(
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -1576,6 +1758,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                       backgroundColor: Colors.white12,
                     ),
                   ),
+                if (!isIndia) const _InternationalPremiumHero(),
                 _currentPlanOverviewCard(),
                 if (highlight != null) _entryHighlightCard(highlight),
                 ...(isIndia
@@ -1584,11 +1767,40 @@ class _PremiumScreenState extends State<PremiumScreen>
                           : (isAnalyseEntry
                                 ? indiaCompareOnlyPlans()
                                 : indiaPlans()))
-                    : (directPlansOnly
-                          ? internationalDirectPlans()
-                          : (isAnalyseEntry
-                                ? internationalCompareOnlyPlans()
-                                : internationalPlans()))),
+                    : internationalPlans()),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.blueAccent.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        color: Colors.blueAccent,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Note: Cricknova Analyse Yourself and Mistake Detection limits are shared between Batting and Bowling. Each usage counts as 1 towards your total limit.",
+                          style: GoogleFonts.poppins(
+                            color: Colors.white70,
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 30),
               ],
             ),
           ),
@@ -1651,8 +1863,8 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Starter",
           glowColor: Colors.blueAccent,
           features: [
-            "200 AI Chats",
-            "15 Mistake Detection",
+            "200 Cricknova Chat Coach",
+            "15 Cricknova Mistake Detection (Batting/Bowling)",
             "Basic Speed Detection",
             "Basic Swing Detection",
             "Basic Spin Detection",
@@ -1670,8 +1882,8 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Most Popular",
           glowColor: Colors.purpleAccent,
           features: [
-            "1,200 AI Chats",
-            "30 Mistake Detection",
+            "1,200 Cricknova Chat Coach",
+            "30 Cricknova Mistake Detection (Batting/Bowling)",
             "Enhanced Speed Detection",
             "Enhanced Swing Detection",
             "Enhanced Spin Detection",
@@ -1691,9 +1903,9 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Best Value",
           glowColor: Colors.greenAccent,
           features: [
-            "3,000 AI Chats",
-            "60 Mistake Detection",
-            "60 Analyse Yourself Batting/Bowling",
+            "3,000 Cricknova Chat Coach",
+            "60 Cricknova Mistake Detection (Batting/Bowling)",
+            "60 Cricknova Analyse Yourself (Batting/Bowling)",
             "Advanced Speed Detection",
             "Advanced Swing Detection",
             "Advanced Spin Detection",
@@ -1716,9 +1928,9 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Elite Access",
           glowColor: Colors.redAccent,
           features: [
-            "5,000 AI Chats",
-            "150 Mistake Detection",
-            "150 Analyse Yourself Batting/Bowling",
+            "5,000 Cricknova Chat Coach",
+            "150 Cricknova Mistake Detection (Batting/Bowling)",
+            "150 Cricknova Analyse Yourself (Batting/Bowling)",
             "Pro Speed Detection",
             "Pro Swing Detection",
             "Pro Spin Detection",
@@ -1747,8 +1959,8 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Starter ⚡",
           glowColor: Colors.blueAccent,
           features: [
-            "200 AI Chats",
-            "15 Mistake Detection",
+            "200 Cricknova Chat Coach",
+            "15 Cricknova Mistake Detection (Batting/Bowling)",
             "Basic Speed Detection",
             "Basic Swing Detection",
             "Basic Spin Detection",
@@ -1766,9 +1978,9 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Best Value 💎",
           glowColor: Colors.greenAccent,
           features: [
-            "3,000 AI Chats",
-            "60 Mistake Detection",
-            "60 Analyse Yourself Batting/Bowling",
+            "3,000 Cricknova Chat Coach",
+            "60 Cricknova Mistake Detection (Batting/Bowling)",
+            "60 Cricknova Analyse Yourself (Batting/Bowling)",
             "Advanced Speed Detection",
             "Advanced Swing Detection",
             "Advanced Spin Detection",
@@ -1795,9 +2007,9 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Analyse Pro",
           glowColor: Colors.greenAccent,
           features: [
-            "3,000 AI Chats",
-            "60 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
+            "3,000 Cricknova Chat Coach",
+            "60 Cricknova Mistake Detection (Batting/Bowling)",
+            "60 Cricknova Analyse Yourself (Batting/Bowling)",
             "Advanced Speed Detection",
             "Advanced Swing Detection",
             "Advanced Spin Detection",
@@ -1820,9 +2032,9 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Unlimited Analysis",
           glowColor: Colors.redAccent,
           features: [
-            "5,000 AI Chats",
-            "150 Mistake Detection",
-            "Analyse Yourself Batting/",
+            "5,000 Cricknova Chat Coach",
+            "150 Cricknova Mistake Detection (Batting/Bowling)",
+            "150 Cricknova Analyse Yourself (Batting/Bowling)",
             "Pro Speed Detection",
             "Pro Swing Detection",
             "Pro Spin Detection",
@@ -1845,64 +2057,66 @@ class _PremiumScreenState extends State<PremiumScreen>
   List<Widget> internationalPlans() {
     return [
       KeyedSubtree(
-        key: _planKeys["\$29.99"],
+        key: _planKeys["\$8.99"],
         child: sexyPlanCard(
-          title: "Monthly",
-          price: "\$29.99",
-          tag: "Starter Pass",
+          title: "STARTER ⚡",
+          price: "\$8.99/month",
+          purchasePriceKey: "\$8.99",
+          tag: "Starter ⚡",
           glowColor: Colors.blueAccent,
           features: [
-            "200 AI Chats",
-            "15 Mistake Detection",
-            "Basic Speed Detection",
-            "Basic Swing Detection",
-            "Basic Spin Detection",
-            "Basic DRS Decision System",
-            "Basic UltraEdge Detection",
+            "250 Cricknova Chat Coach",
+            "15 Cricknova Mistake Detection (Batting/Bowling)",
+            "15 Cricknova Analyse Yourself (Batting/Bowling)",
+            "AI Speed Analysis",
+            "AI Swing Analysis",
+            "AI Spin Analysis",
+            "DRS Decision System",
+            "UltraEdge Detection",
           ],
         ),
       ),
       const SizedBox(height: 20),
       KeyedSubtree(
-        key: _planKeys["\$49.99"],
+        key: _planKeys["\$29.99"],
         child: sexyPlanCard(
-          title: "6 Months",
-          price: "\$49.99",
+          title: "SEASON PASS 🔥",
+          price: "\$29.99 / 6 months",
+          purchasePriceKey: "\$29.99",
           tag: "Most Popular",
           glowColor: Colors.purpleAccent,
           features: [
-            "1,200 AI Chats",
-            "30 Mistake Detection",
-            "Enhanced Speed Detection",
-            "Enhanced Swing Detection",
-            "Enhanced Spin Detection",
-            "Monthly Reports",
+            "1500 Cricknova Chat Coach",
+            "30 Cricknova Mistake Detection (Batting/Bowling)",
+            "30 Cricknova Analyse Yourself (Batting/Bowling)",
+            "Advanced Speed Analysis",
+            "Advanced Swing Analysis",
+            "Advanced Spin Analysis",
+            "Monthly Performance Reports",
             "XP System & Milestones",
-            "Enhanced DRS Decision System",
-            "Enhanced UltraEdge Detection",
+            "Enhanced DRS System",
+            "Enhanced UltraEdge",
+            "Progress Tracking",
           ],
         ),
       ),
       const SizedBox(height: 20),
       KeyedSubtree(
-        key: _planKeys["\$69.99"],
+        key: _planKeys["\$59.99"],
         child: sexyPlanCard(
-          title: "Yearly",
-          price: "\$69.99",
+          title: "PRO ATHLETE 💎",
+          price: "\$59.99/year",
+          purchasePriceKey: "\$59.99",
           tag: "Best Deal",
           glowColor: Colors.greenAccent,
           features: [
-            "3,000 AI Chats",
-            "60 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
-            "Advanced Speed Detection",
-            "Advanced Swing Detection",
-            "Advanced Spin Detection",
+            "5000 Cricknova Chat Coach",
+            "60 Cricknova Mistake Detection (Batting/Bowling)",
+            "60 Cricknova Analyse Yourself (Batting/Bowling)",
             "Speed Graph",
             "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
             "Speed Certificates",
+            "Advanced AI Reports",
             "Advanced DRS Decision System",
             "Advanced UltraEdge Detection",
           ],
@@ -1910,29 +2124,25 @@ class _PremiumScreenState extends State<PremiumScreen>
       ),
       const SizedBox(height: 20),
       KeyedSubtree(
-        key: _planKeys["\$169.99"],
+        key: _planKeys["\$109.99"],
         child: sexyPlanCard(
-          title: "ULTRA INTERNATIONAL",
-          price: "\$169.99",
+          title: "CRICKNOVA ELITE 👑",
+          price: "\$109.99/year",
+          purchasePriceKey: "\$109.99",
           tag: "Elite International 🌍",
           glowColor: Colors.redAccent,
           features: [
-            "7,000 AI Chats",
-            "150 Diff Analyse",
-            "150 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (150 Vid Compare)",
-            "Pro Speed Detection",
-            "Pro Swing Detection",
-            "Pro Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
+            "Unlimited Cricknova Chat Coach",
+            "150 Cricknova Mistake Detection (Batting/Bowling)",
+            "150 Cricknova Analyse Yourself (Batting/Bowling)",
+            "Elite AI Engine",
+            "Elite Speed/Swing/Spin Analysis",
+            "Priority AI Processing",
+            "Premium Reports",
+            "Exclusive Features",
             "Special Gifts",
-            "Pro DRS Decision System",
-            "Pro UltraEdge Detection",
-            "Priority AI",
+            "Elite DRS System",
+            "Elite UltraEdge",
           ],
         ),
       ),
@@ -1940,108 +2150,11 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   List<Widget> internationalDirectPlans() {
-    return [
-      KeyedSubtree(
-        key: _planKeys["\$29.99"],
-        child: sexyPlanCard(
-          title: "Monthly",
-          price: "\$29.99",
-          tag: "Starter Pass ⚡",
-          glowColor: Colors.blueAccent,
-          features: [
-            "200 AI Chats",
-            "15 Mistake Detection",
-            "Basic Speed Detection",
-            "Basic Swing Detection",
-            "Basic Spin Detection",
-            "Basic DRS Decision System",
-            "Basic UltraEdge Detection",
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
-      KeyedSubtree(
-        key: _planKeys["\$69.99"],
-        child: sexyPlanCard(
-          title: "Yearly",
-          price: "\$69.99",
-          tag: "Best Deal 💰",
-          glowColor: Colors.greenAccent,
-          features: [
-            "3,000 AI Chats",
-            "60 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
-            "Advanced Speed Detection",
-            "Advanced Swing Detection",
-            "Advanced Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
-            "Advanced DRS Decision System",
-            "Advanced UltraEdge Detection",
-          ],
-        ),
-      ),
-    ];
+    return internationalPlans();
   }
 
   List<Widget> internationalCompareOnlyPlans() {
-    return [
-      KeyedSubtree(
-        key: _planKeys["\$69.99"],
-        child: sexyPlanCard(
-          title: "Yearly",
-          price: "\$69.99",
-          tag: "Best Value 💎",
-          glowColor: Colors.greenAccent,
-          features: [
-            "3,000 AI Chats",
-            "60 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (60 Vid Compare)",
-            "Advanced Speed Detection",
-            "Advanced Swing Detection",
-            "Advanced Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
-            "Advanced DRS Decision System",
-            "Advanced UltraEdge Detection",
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
-      KeyedSubtree(
-        key: _planKeys["\$169.99"],
-        child: sexyPlanCard(
-          title: "ULTRA INTERNATIONAL",
-          price: "\$169.99",
-          tag: "Unlimited Analysis",
-          glowColor: Colors.redAccent,
-          features: [
-            "7,000 AI Chats",
-            "150 Diff Analyse",
-            "150 Mistake Detection",
-            "Analyse Yourself Batting/Bowling (150 Vid Compare)",
-            "Pro Speed Detection",
-            "Pro Swing Detection",
-            "Pro Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
-            "Special Gifts",
-            "Pro DRS Decision System",
-            "Pro UltraEdge Detection",
-            "Priority AI",
-          ],
-        ),
-      ),
-    ];
+    return internationalPlans();
   }
 
   // 🌟 LUXURY PLAN CARD (Sleek Minimalist Gold)
@@ -2051,22 +2164,27 @@ class _PremiumScreenState extends State<PremiumScreen>
     required Color glowColor, // kept for signature compatibility
     required List<String> features,
     String? tag,
+    String? purchasePriceKey,
   }) {
+    final String planKey = purchasePriceKey ?? price;
     final rawTag = (tag ?? '').trim();
     final bool isMostPopular =
         rawTag.contains("Most Popular") ||
         rawTag.contains("ULTRA") ||
         rawTag.contains("Best") ||
         rawTag.contains("Analyse Pro");
-    final bool isCurrentPlan = _isCurrentPlan(price);
+    final bool isCurrentPlan = _isCurrentPlan(planKey);
     final String displayTag = isCurrentPlan
         ? "Current Plan"
         : (rawTag.isEmpty ? "" : rawTag);
 
-    // Luxury dark theme base with subtle accents
-    final cardGradient = [const Color(0xFF0B1220), const Color(0xFF070B12)];
-
+    final cardGradient = [
+      Colors.white.withValues(alpha: 0.085),
+      const Color(0xFF0B1220).withValues(alpha: 0.94),
+      const Color(0xFF050712).withValues(alpha: 0.98),
+    ];
     final goldColor = const Color(0xFFD4AF37);
+    final accentColor = isCurrentPlan ? goldColor : glowColor;
 
     return RepaintBoundary(
       child: Stack(
@@ -2074,231 +2192,289 @@ class _PremiumScreenState extends State<PremiumScreen>
         children: [
           Container(
             margin: const EdgeInsets.only(top: 18, bottom: 22),
-            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: cardGradient,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(26),
               border: Border.all(
-                color: isMostPopular
-                    ? goldColor.withValues(alpha: 0.4)
-                    : Colors.white.withValues(alpha: 0.08),
-                width: isMostPopular ? 1.5 : 1.0,
+                color: accentColor.withValues(
+                  alpha: isMostPopular ? 0.55 : 0.34,
+                ),
+                width: isMostPopular ? 1.5 : 1.1,
               ),
               boxShadow: [
-                if (isMostPopular)
-                  BoxShadow(
-                    color: goldColor.withValues(alpha: 0.12),
-                    blurRadius: 40,
-                    spreadRadius: 2,
+                BoxShadow(
+                  color: accentColor.withValues(
+                    alpha: isMostPopular ? 0.28 : 0.18,
                   ),
+                  blurRadius: isMostPopular ? 42 : 30,
+                  spreadRadius: isMostPopular ? 2 : 0,
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  blurRadius: 28,
+                  offset: const Offset(0, 18),
+                ),
               ],
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    color: isMostPopular ? goldColor : Colors.white60,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  price,
-                  style: GoogleFonts.cormorantGaramond(
-                    color: Colors.white,
-                    fontSize: 46,
-                    fontWeight: FontWeight.w700,
-                    height: 1.1,
-                  ),
-                ),
-                if (price == "\$159.99" || price == "\$169.99")
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      "Less than \$0.45 per day",
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                if (price == "₹1999")
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      "Less than ₹5 per day",
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Divider(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    height: 1,
-                  ),
-                ),
-                TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  duration: const Duration(milliseconds: 1400),
-                  curve: Curves.easeOutCubic,
-                  builder: (context, value, child) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (int i = 0; i < features.length; i++)
-                          Builder(
-                            builder: (context) {
-                              final isHighlighted = _shouldHighlightFeature(
-                                features[i],
-                              );
-                              return Opacity(
-                                opacity: (value * 2.5 - (i * 0.1)).clamp(
-                                  0.0,
-                                  1.0,
-                                ),
-                                child: Transform.translate(
-                                  offset: Offset(
-                                    0,
-                                    15 *
-                                        (1 -
-                                            (value * 2.5 - (i * 0.1)).clamp(
-                                              0.0,
-                                              1.0,
-                                            )),
-                                  ),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: isHighlighted ? 10 : 0,
-                                      vertical: isHighlighted ? 8 : 0,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isHighlighted
-                                          ? const Color(
-                                              0xFF38BDF8,
-                                            ).withValues(alpha: 0.12)
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isHighlighted
-                                            ? const Color(
-                                                0xFF38BDF8,
-                                              ).withValues(alpha: 0.45)
-                                            : Colors.transparent,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          isHighlighted
-                                              ? Icons.arrow_circle_right_rounded
-                                              : Icons.check_circle_rounded,
-                                          color: isHighlighted
-                                              ? const Color(0xFF7DD3FC)
-                                              : goldColor,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Flexible(
-                                          child: Text(
-                                            features[i],
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(
-                                                alpha: isHighlighted
-                                                    ? 1.0
-                                                    : 0.85,
-                                              ),
-                                              fontSize: 15,
-                                              fontWeight: isHighlighted
-                                                  ? FontWeight.w800
-                                                  : FontWeight.w400,
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
-                GestureDetector(
-                  onTap: () async {
-                    HapticFeedback.mediumImpact();
-                    if (!mounted) return;
-
-                    setState(() {
-                      _animatingPlan = price;
-                    });
-                    _lastPlanPrice = price;
-
-                    try {
-                      await _showPlayBillingSheet();
-                    } finally {
-                      if (mounted) {
-                        setState(() {
-                          _animatingPlan = null;
-                        });
-                      }
-                    }
-                  },
-                  child: AnimatedScale(
-                    scale: _animatingPlan == price ? 0.96 : 1.0,
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOut,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(26),
+              child: Stack(
+                children: [
+                  Positioned(
+                    top: -70,
+                    right: -56,
                     child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      width: 170,
+                      height: 170,
                       decoration: BoxDecoration(
-                        color: isMostPopular ? goldColor : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          if (isMostPopular)
-                            BoxShadow(
-                              color: goldColor.withValues(alpha: 0.25),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
-                            ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          isCurrentPlan ? "Current Plan" : "Upgrade",
-                          style: GoogleFonts.poppins(
-                            color: isMostPopular
-                                ? Colors.black
-                                : Colors.black87,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.2,
-                          ),
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            accentColor.withValues(alpha: 0.22),
+                            Colors.transparent,
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title.toUpperCase(),
+                        style: GoogleFonts.poppins(
+                          color: accentColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        price,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.w900,
+                          height: 1.08,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 4,
+                        width: 96,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          gradient: LinearGradient(
+                            colors: [
+                              accentColor,
+                              accentColor.withValues(alpha: 0.12),
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: accentColor.withValues(alpha: 0.34),
+                              blurRadius: 14,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (planKey == "\$109.99")
+                        const Padding(
+                          padding: EdgeInsets.only(top: 10),
+                          child: Text(
+                            "Elite international access for less than \$0.31 per day",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      if (price == "₹1999")
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text(
+                            "Less than ₹5 per day",
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 22),
+                        child: Divider(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          height: 1,
+                        ),
+                      ),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.0, end: 1.0),
+                        duration: const Duration(milliseconds: 1400),
+                        curve: Curves.easeOutCubic,
+                        builder: (context, value, child) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (int i = 0; i < features.length; i++)
+                                Builder(
+                                  builder: (context) {
+                                    final isHighlighted =
+                                        _shouldHighlightFeature(features[i]);
+                                    return Opacity(
+                                      opacity: (value * 2.5 - (i * 0.1)).clamp(
+                                        0.0,
+                                        1.0,
+                                      ),
+                                      child: Transform.translate(
+                                        offset: Offset(
+                                          0,
+                                          15 *
+                                              (1 -
+                                                  (value * 2.5 - (i * 0.1))
+                                                      .clamp(0.0, 1.0)),
+                                        ),
+                                        child: Container(
+                                          margin: const EdgeInsets.only(
+                                            bottom: 10,
+                                          ),
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: isHighlighted ? 10 : 0,
+                                            vertical: isHighlighted ? 8 : 0,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isHighlighted
+                                                ? const Color(
+                                                    0xFF38BDF8,
+                                                  ).withValues(alpha: 0.12)
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: isHighlighted
+                                                  ? const Color(
+                                                      0xFF38BDF8,
+                                                    ).withValues(alpha: 0.45)
+                                                  : Colors.transparent,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Icon(
+                                                isHighlighted
+                                                    ? Icons
+                                                          .arrow_circle_right_rounded
+                                                    : Icons
+                                                          .check_circle_rounded,
+                                                color: isHighlighted
+                                                    ? const Color(0xFF7DD3FC)
+                                                    : accentColor,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 14),
+                                              Flexible(
+                                                child: Text(
+                                                  features[i],
+                                                  style: TextStyle(
+                                                    color: Colors.white
+                                                        .withValues(
+                                                          alpha: isHighlighted
+                                                              ? 1.0
+                                                              : 0.88,
+                                                        ),
+                                                    fontSize: 15,
+                                                    fontWeight: isHighlighted
+                                                        ? FontWeight.w800
+                                                        : FontWeight.w500,
+                                                    height: 1.4,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: () async {
+                          HapticFeedback.mediumImpact();
+                          if (!mounted) return;
+
+                          setState(() {
+                            _animatingPlan = planKey;
+                          });
+                          _lastPlanPrice = planKey;
+
+                          try {
+                            await _showPlayBillingSheet();
+                          } finally {
+                            if (mounted) {
+                              setState(() {
+                                _animatingPlan = null;
+                              });
+                            }
+                          }
+                        },
+                        child: AnimatedScale(
+                          scale: _animatingPlan == planKey ? 0.96 : 1.0,
+                          duration: const Duration(milliseconds: 160),
+                          curve: Curves.easeOut,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  accentColor.withValues(alpha: 0.95),
+                                  accentColor.withValues(alpha: 0.70),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accentColor.withValues(alpha: 0.28),
+                                  blurRadius: 22,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Center(
+                              child: Text(
+                                isCurrentPlan ? "Current Plan" : "Upgrade",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.black,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (displayTag.isNotEmpty)

@@ -135,7 +135,14 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     for (final offer in offers) {
       final base = offer.basePlanId.toLowerCase();
       final offerId = (offer.offerId ?? '').toLowerCase();
-      if (base.contains('year') && offerId.contains('trial')) {
+      final hasTrialTag = offer.offerTags.any(
+        (tag) => tag.toLowerCase().contains('trial'),
+      );
+      final hasFreeTrialPhase = offer.pricingPhases.any(
+        (phase) => phase.priceAmountMicros == 0,
+      );
+      if (base.contains('year') &&
+          (offerId.contains('trial') || hasTrialTag || hasFreeTrialPhase)) {
         return offer.offerIdToken;
       }
     }
@@ -213,8 +220,9 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     try {
       final subscriptionProvider = context.read<SubscriptionProvider>();
       await subscriptionProvider.fetchProducts();
-      final selectedPlan =
-          subscriptionProvider.planForBasePlanId(_lockedBasePlanId());
+      final selectedPlan = subscriptionProvider.planForBasePlanId(
+        _lockedBasePlanId(),
+      );
       if (selectedPlan == null) {
         throw StateError(
           subscriptionProvider.lastError ??
@@ -325,7 +333,9 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.06),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
                   ),
                   child: const Icon(
                     Icons.arrow_back_ios_new_rounded,
@@ -343,7 +353,9 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.06),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
                   ),
                   child: const Icon(
                     Icons.close_rounded,
@@ -365,11 +377,8 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
   String _yearlyPriceLabel(PricingRegion region) {
     return region == PricingRegion.india
         ? 'Just ₹499.00 per year (₹41/mo)'
-        : 'Just \$69.99 per year (\$5.83/mo)';
+        : 'Just \$59.99 per year (\$5.00/mo)';
   }
-
-
-
 
   String _freeTrialButtonLabel(PricingRegion region) {
     return region == PricingRegion.india ? 'Try for ₹0.00' : 'Try for \$0.00';
@@ -472,15 +481,29 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     }
 
     final bool isIndia = region == PricingRegion.india;
-    final String priceLabel = isIndia ? '₹499/year' : '\$69.99/year';
+    final String priceLabel = isIndia ? '₹499/year' : '\$59.99/year';
     final String footerLabel = isIndia
         ? '3 days free, then ₹499/year (₹41/mo)'
-        : '3 days free, then \$69.99/year (\$5.83/mo)';
+        : '3 days free, then \$59.99/year (\$5.00/mo)';
 
     final DateTime bd = DateTime.now().add(const Duration(days: 3));
-    const List<String> months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const List<String> months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     final String billingDate = '${months[bd.month - 1]} ${bd.day}, ${bd.year}';
-    final String billingLabel = 'You\'ll be charged on $billingDate unless you cancel anytime before.';
+    final String billingLabel =
+        'You\'ll be charged on $billingDate unless you cancel anytime before.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,7 +525,7 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
           children: [
             _DarkPlanOption(
               title: 'Monthly',
-              price: isIndia ? '₹99/month' : '\$29.99/mo',
+              price: isIndia ? '₹99/month' : '\$8.99/mo',
               selected: _lockedPlan == _PlanChoice.monthly,
               onTap: () {
                 setState(() {
@@ -528,7 +551,11 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            const Icon(Icons.check_circle_rounded, color: Color(0xFFFFD700), size: 16),
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Color(0xFFFFD700),
+              size: 16,
+            ),
             const SizedBox(width: 6),
             Text(
               'No Payment Due Now',
@@ -610,6 +637,7 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       ],
     );
   }
+
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<PricingRegion>(
@@ -743,9 +771,9 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       // Persist yearly plan unlock for this user (Firestore + local cache)
       await PremiumService.setPremiumTrue(
         planId: planId,
-        chatLimit: 3000,
+        chatLimit: region == PricingRegion.india ? 3000 : 5000,
         mistakeLimit: 60,
-        diffLimit: 60,
+        diffLimit: region == PricingRegion.india ? 50 : 60,
       );
     } catch (_) {
       // Fallback to local activation so user gets access immediately.
@@ -881,7 +909,8 @@ class _DeviceMockupCard extends StatefulWidget {
   State<_DeviceMockupCard> createState() => _DeviceMockupCardState();
 }
 
-class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProviderStateMixin {
+class _DeviceMockupCardState extends State<_DeviceMockupCard>
+    with TickerProviderStateMixin {
   late AnimationController _scanController;
   late AnimationController _textController;
   late AnimationController _pulseController;
@@ -889,8 +918,14 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
 
   final List<Map<String, dynamic>> _messages = [
     {'text': 'Analyzing Release Angle...', 'color': Colors.white},
-    {'text': 'Mistake Detected: Excessive Side Bend', 'color': const Color(0xFFFF5252)},
-    {'text': 'Recommended Drill: Static Wall Lean', 'color': const Color(0xFFFFD700)},
+    {
+      'text': 'Mistake Detected: Excessive Side Bend',
+      'color': const Color(0xFFFF5252),
+    },
+    {
+      'text': 'Recommended Drill: Static Wall Lean',
+      'color': const Color(0xFFFFD700),
+    },
   ];
 
   @override
@@ -908,7 +943,7 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    
+
     // Pulse animation
     _pulseController = AnimationController(
       vsync: this,
@@ -982,24 +1017,25 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
                     );
                   },
                 ),
-                  
+
                 // Dark overlay for better text readability
-                Container(
-                  color: Colors.black.withValues(alpha: 0.3),
-                ),
-
-
+                Container(color: Colors.black.withValues(alpha: 0.3)),
 
                 // Top Left: Glassmorphism badge '128.4 KMPH'
                 Positioned(
                   top: 16,
                   left: 16,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.cyan.withValues(alpha: 0.2),
@@ -1011,7 +1047,11 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.speed, color: Colors.cyanAccent, size: 16),
+                        const Icon(
+                          Icons.speed,
+                          color: Colors.cyanAccent,
+                          size: 16,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           '128.4 KMPH',
@@ -1043,17 +1083,24 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
                       );
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
                       ),
                       child: AnimatedBuilder(
                         animation: _pulseController,
                         builder: (context, child) {
                           final bool isPulsing = _messageIndex == 0;
-                          final double scale = isPulsing ? 1.0 + (_pulseController.value * 0.05) : 1.0;
+                          final double scale = isPulsing
+                              ? 1.0 + (_pulseController.value * 0.05)
+                              : 1.0;
                           return Transform.scale(
                             scale: scale,
                             child: Text(
@@ -1078,7 +1125,9 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
                   animation: _scanController,
                   builder: (context, child) {
                     return Positioned(
-                      top: _scanController.value * 420, // approximate height travel for full box
+                      top:
+                          _scanController.value *
+                          420, // approximate height travel for full box
                       left: 0,
                       right: 0,
                       child: Container(
@@ -1126,9 +1175,6 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard> with TickerProvide
     );
   }
 }
-
-
-
 
 class _TrustBellVisual extends StatelessWidget {
   const _TrustBellVisual();
@@ -1215,7 +1261,8 @@ class _DarkTimeline extends StatelessWidget {
               iconBg: Color(0xFFFFD700),
               iconColor: Colors.white,
               title: 'Today',
-              subtitle: 'Unlock all premium features like AI batting analysis, bowling coach, and more.',
+              subtitle:
+                  'Unlock all premium features like AI batting analysis, bowling coach, and more.',
             ),
             const SizedBox(height: 24),
             const _DarkTimelineItem(
@@ -1223,7 +1270,8 @@ class _DarkTimeline extends StatelessWidget {
               iconBg: Color(0xFFFFD700),
               iconColor: Colors.white,
               title: 'In 2 Days – Reminder',
-              subtitle: 'We\'ll send you a reminder that your trial is ending soon.',
+              subtitle:
+                  'We\'ll send you a reminder that your trial is ending soon.',
             ),
             const SizedBox(height: 24),
             _DarkTimelineItem(
@@ -1266,7 +1314,11 @@ class _DarkTimelineItem extends StatelessWidget {
         Container(
           width: 36,
           height: 36,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: iconBg, border: border),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: iconBg,
+            border: border,
+          ),
           child: Icon(iconData, color: iconColor, size: 18),
         ),
         const SizedBox(width: 16),
@@ -1357,7 +1409,11 @@ class _DarkPlanCard extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: Color(0xFFFFD700),
                 ),
-                child: const Icon(Icons.check_rounded, color: Colors.black, size: 18),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.black,
+                  size: 18,
+                ),
               ),
             ],
           ),
@@ -1386,6 +1442,7 @@ class _DarkPlanCard extends StatelessWidget {
     );
   }
 }
+
 class _CalTimeline extends StatelessWidget {
   final String billingLabel;
   const _CalTimeline({required this.billingLabel});
@@ -1399,7 +1456,8 @@ class _CalTimeline extends StatelessWidget {
           iconBg: const Color(0xFFF59E0B),
           iconColor: Colors.white,
           title: 'Today',
-          subtitle: 'Unlock all AI Cricket features (Speed, Swing, and Technique analysis).',
+          subtitle:
+              'Unlock all AI Cricket features (Speed, Swing, and Technique analysis).',
           isLast: false,
         ),
         _CalTimelineItem(
@@ -1568,12 +1626,18 @@ class _LockedPlanCard extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: highlighted ? Colors.black : Colors.transparent,
                         border: Border.all(
-                          color: highlighted ? Colors.black : const Color(0xFFD1D5DB),
+                          color: highlighted
+                              ? Colors.black
+                              : const Color(0xFFD1D5DB),
                           width: 1.5,
                         ),
                       ),
                       child: highlighted
-                          ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 14,
+                            )
                           : null,
                     ),
                   ],
@@ -2052,7 +2116,9 @@ class _DirectPlanCard extends StatelessWidget {
                   height: 30,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: highlighted ? const Color(0xFFFFD700) : Colors.white10,
+                    color: highlighted
+                        ? const Color(0xFFFFD700)
+                        : Colors.white10,
                     border: Border.all(
                       color: highlighted
                           ? const Color(0xFFFFD700)
@@ -2246,9 +2312,13 @@ class _DarkPlanOption extends StatelessWidget {
                   height: 26,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: selected ? const Color(0xFFFFD700) : Colors.transparent,
+                    color: selected
+                        ? const Color(0xFFFFD700)
+                        : Colors.transparent,
                     border: Border.all(
-                      color: selected ? const Color(0xFFFFD700) : Colors.white54,
+                      color: selected
+                          ? const Color(0xFFFFD700)
+                          : Colors.white54,
                     ),
                   ),
                   child: selected
@@ -2264,7 +2334,10 @@ class _DarkPlanOption extends StatelessWidget {
               top: -10,
               right: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(999),
@@ -2294,7 +2367,8 @@ class _ComparisonTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isIndia = PricingLocationService.currentRegion == PricingRegion.india;
+    final bool isIndia =
+        PricingLocationService.currentRegion == PricingRegion.india;
     const Color gold = Color(0xFFFFD700);
 
     return Column(
@@ -2312,13 +2386,13 @@ class _ComparisonTable extends StatelessWidget {
                   color: Colors.black.withValues(alpha: 0.4),
                   blurRadius: 25,
                   spreadRadius: 2,
-                )
+                ),
               ],
             ),
             child: Image.network(
-              isIndia 
-                ? 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=800&h=800&fit=crop'
-                : 'https://images.unsplash.com/photo-1595769816263-9b910be24d5f?q=80&w=800&h=800&fit=crop',
+              isIndia
+                  ? 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=800&h=800&fit=crop'
+                  : 'https://images.unsplash.com/photo-1595769816263-9b910be24d5f?q=80&w=800&h=800&fit=crop',
               fit: BoxFit.cover,
               width: double.infinity,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -2342,9 +2416,9 @@ class _ComparisonTable extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                isIndia 
-                  ? 'Costs less than a\ncup of coffee.'
-                  : 'Costs less than a\nmovie ticket (\$29.99).',
+                isIndia
+                    ? 'Costs less than a\ncup of coffee.'
+                    : 'Costs less than a\nmovie ticket (\$8.99).',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   color: Colors.white,
@@ -2364,7 +2438,10 @@ class _ComparisonTable extends StatelessWidget {
                     height: 1.5,
                   ),
                   children: [
-                    const TextSpan(text: 'Unlock elite-level cricket analysis for 30 days to '),
+                    const TextSpan(
+                      text:
+                          'Unlock elite-level cricket analysis for 30 days to ',
+                    ),
                     TextSpan(
                       text: 'boost your game.',
                       style: GoogleFonts.inter(
@@ -2375,9 +2452,9 @@ class _ComparisonTable extends StatelessWidget {
                       ),
                     ),
                     TextSpan(
-                      text: isIndia 
-                        ? ' Invest in your skills for the price of one single coffee.'
-                        : ' Invest in your skills for the price of one movie ticket.',
+                      text: isIndia
+                          ? ' Invest in your skills for the price of one single coffee.'
+                          : ' Invest in your skills for the price of one movie ticket.',
                     ),
                   ],
                 ),
@@ -2385,7 +2462,7 @@ class _ComparisonTable extends StatelessWidget {
             ],
           ),
         ),
-        
+
         const SizedBox(height: 12),
 
         // CTA Button
@@ -2436,7 +2513,7 @@ class _ComparisonCard extends StatelessWidget {
             color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -2451,21 +2528,27 @@ class _ComparisonCard extends StatelessWidget {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: imageSource.startsWith('http') 
-                      ? Image.network(imageSource, fit: BoxFit.cover)
-                      : Image.asset(imageSource, fit: BoxFit.cover),
+                    child: imageSource.startsWith('http')
+                        ? Image.network(imageSource, fit: BoxFit.cover)
+                        : Image.asset(imageSource, fit: BoxFit.cover),
                   ),
                   if (showCNLogo)
                     Positioned(
                       top: 10,
                       right: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF10B981), // Emerald/CN Green
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4)
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 4,
+                            ),
                           ],
                         ),
                         child: Text(
@@ -2498,7 +2581,7 @@ class _ComparisonCard extends StatelessWidget {
               ),
             ),
           ),
-          
+
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

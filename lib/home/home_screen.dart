@@ -894,7 +894,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 14),
                       _actionCard(
-                        title: "Analyse Yourself",
+                        title: "Cricknova Analyse Yourself",
                         subtitle:
                             "Compare batting clips and find technique gaps",
                         icon: Icons.analytics_rounded,
@@ -1094,13 +1094,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             ),
                             const SizedBox(height: 10),
                             _usageRow(
-                              label: "Mistake Detection",
+                              label: "Cricknova Mistake Detection",
                               used: PremiumService.mistakeUsed,
                               total: PremiumService.mistakeLimit,
                             ),
                             const SizedBox(height: 10),
                             _usageRow(
-                              label: "Analyse Yourself",
+                              label: "Cricknova Analyse Yourself",
                               used: PremiumService.compareUsed,
                               total: PremiumService.compareLimit,
                             ),

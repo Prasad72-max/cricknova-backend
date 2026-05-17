@@ -4839,7 +4839,7 @@ class _TechnicalBlindnessPane extends StatelessWidget {
                     delay: const Duration(milliseconds: 1600),
                     child: const _TechnicalBlindnessFeatureCard(
                       icon: _TechnicalBlindnessIcon.target,
-                      title: 'AI Mistake Detection',
+                      title: 'Cricknova Mistake Detection',
                       desc:
                           'AI watches your game and pinpoints every technical error - grip, stance, follow-through',
                     ),
@@ -4859,7 +4859,7 @@ class _TechnicalBlindnessPane extends StatelessWidget {
                     delay: const Duration(milliseconds: 1840),
                     child: const _TechnicalBlindnessFeatureCard(
                       icon: _TechnicalBlindnessIcon.chat,
-                      title: 'AI Chat Coach',
+                      title: 'Cricknova Chat Coach',
                       desc:
                           'Ask anything - your personal cricket coach available 24/7, always in your corner',
                     ),
@@ -6302,7 +6302,7 @@ class _RoadmapContent extends StatelessWidget {
   String get _recommendedPlanLabel {
     return _isIndiaPricing
         ? 'Yearly Access • ₹499 /yr'
-        : 'Yearly Access • \$69.99 /yr';
+        : 'Yearly Access • \$59.99 /yr';
   }
 
   String get _recommendedPlanReason {
@@ -6312,9 +6312,7 @@ class _RoadmapContent extends StatelessWidget {
   }
 
   String get _upgradePlanLabel {
-    return _isIndiaPricing
-        ? 'Ultra Pro • ₹1999'
-        : 'Ultra International • \$169.99';
+    return _isIndiaPricing ? 'Ultra Pro • ₹1999' : 'CrickNova Elite • \$109.99';
   }
 
   bool get _isIndiaPricing =>
@@ -6330,13 +6328,13 @@ class _RoadmapContent extends StatelessWidget {
 
     return <_RoadmapInfoCard>[
       const _RoadmapInfoCard(
-        title: 'Mistake Detection',
+        title: 'Cricknova Mistake Detection',
         body:
             'Shows where your technique leaks so you stop repeating the same error.',
         accent: Color(0xFFD4AF37),
       ),
       _RoadmapInfoCard(
-        title: 'AI Coaching',
+        title: 'Cricknova Chat Coach',
         body:
             'Gives you real-time correction instead of generic training advice.',
         accent: const Color(0xFFD4AF37),

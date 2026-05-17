@@ -257,7 +257,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Upload a few clips, then run Mistake Detection at least once so AI Rating is available.',
+            'Upload a few clips, then run Cricknova Mistake Detection at least once so AI Rating is available.',
             style: GoogleFonts.poppins(
               color: Colors.white70,
               fontSize: 13,

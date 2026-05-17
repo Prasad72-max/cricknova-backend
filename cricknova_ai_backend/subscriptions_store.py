@@ -51,7 +51,27 @@ PLANS = {
     "ultra_pro": {
         "duration_days": 365,
         "limits": {"chat": 7000, "mistake": 150, "compare": 150}
-    }
+    },
+    "INTL_MONTHLY": {
+        "duration_days": 30,
+        "limits": {"chat": 250, "mistake": 15, "compare": 15}
+    },
+    "INTL_6M": {
+        "duration_days": 180,
+        "limits": {"chat": 1500, "mistake": 30, "compare": 30}
+    },
+    "INTL_YEARLY": {
+        "duration_days": 365,
+        "limits": {"chat": 5000, "mistake": 60, "compare": 60}
+    },
+    "INT_ULTRA": {
+        "duration_days": 365,
+        "limits": {"chat": 999999, "mistake": 150, "compare": 150}
+    },
+    "INTL_ULTRA": {
+        "duration_days": 365,
+        "limits": {"chat": 999999, "mistake": 150, "compare": 150}
+    },
 }
 
 FREE_PLAN = {

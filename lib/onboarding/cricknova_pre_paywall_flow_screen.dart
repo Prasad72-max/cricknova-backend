@@ -120,9 +120,10 @@ class _CricknovaPrePaywallFlowScreenState
     setState(() {
       _step = switch (_step) {
         _PrePaywallStep.login => _PrePaywallStep.login,
-        _PrePaywallStep.comparison => _PrePaywallStep.trial, // Skip directly to pricing
-        _PrePaywallStep.snapshot => _PrePaywallStep.trial,   // Skip to pricing
-        _PrePaywallStep.hook => _PrePaywallStep.trial,       // Skip to pricing
+        _PrePaywallStep.comparison =>
+          _PrePaywallStep.trial, // Skip directly to pricing
+        _PrePaywallStep.snapshot => _PrePaywallStep.trial, // Skip to pricing
+        _PrePaywallStep.hook => _PrePaywallStep.trial, // Skip to pricing
         _PrePaywallStep.trust => _PrePaywallStep.trial,
         _PrePaywallStep.trial => _PrePaywallStep.trial,
       };
@@ -166,7 +167,9 @@ class _CricknovaPrePaywallFlowScreenState
         _PrePaywallStep.comparison => _PrePaywallStep.comparison,
         _PrePaywallStep.snapshot => _PrePaywallStep.comparison,
         _PrePaywallStep.hook =>
-          _includeSnapshot ? _PrePaywallStep.snapshot : _PrePaywallStep.comparison,
+          _includeSnapshot
+              ? _PrePaywallStep.snapshot
+              : _PrePaywallStep.comparison,
         _PrePaywallStep.trust => _PrePaywallStep.hook,
         _PrePaywallStep.trial => _PrePaywallStep.trust,
       };
@@ -914,22 +917,35 @@ class _TrialStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isIndia = PricingLocationService.currentRegion == PricingRegion.india;
-    final String priceLabel = isIndia ? '₹499 /yr' : '\$69.99 /yr';
+    final bool isIndia =
+        PricingLocationService.currentRegion == PricingRegion.india;
+    final String priceLabel = isIndia ? '₹499 /yr' : '\$59.99 /yr';
     final String footerCopy = isIndia
         ? 'Just ₹499.00 per year (approx ₹41.50/mo)'
-        : 'Just \$69.99 per year (approx \$5.83/mo)';
+        : 'Just \$59.99 per year (approx \$5.00/mo)';
     final DateTime bd = DateTime.now().add(const Duration(days: 3));
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final String billingLabel = isIndia
         ? 'Your yearly access begins at ₹499 on ${months[bd.month - 1]} ${bd.day}.'
-        : 'Your yearly access begins at \$69.99 on ${months[bd.month - 1]} ${bd.day}.';
+        : 'Your yearly access begins at \$59.99 on ${months[bd.month - 1]} ${bd.day}.';
 
     if (trialLoading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.black));
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.black),
+      );
     }
 
     return Container(
@@ -976,7 +992,11 @@ class _TrialStep extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.check_rounded, color: Color(0xFFFFD700), size: 18),
+                  const Icon(
+                    Icons.check_rounded,
+                    color: Color(0xFFFFD700),
+                    size: 18,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'No Payment Due Now',
@@ -1056,7 +1076,8 @@ class _CalAITimeline extends StatelessWidget {
           iconBg: const Color(0xFFF59E0B),
           iconColor: Colors.white,
           title: 'Today',
-          subtitle: 'Unlock all AI Cricket features (Speed, Swing, and Technique analysis).',
+          subtitle:
+              'Unlock all AI Cricket features (Speed, Swing, and Technique analysis).',
           isLast: false,
         ),
         _CalAITimelineItem(
@@ -1232,8 +1253,6 @@ class _CalAIPlanCard extends StatelessWidget {
   }
 }
 
-
-
 class _LockedTrialCard extends StatelessWidget {
   final Color teal;
   final VoidCallback onViewDirectPlans;
@@ -1335,10 +1354,7 @@ class _YearlyTrialCard extends StatelessWidget {
   final String priceLabel;
   final String billingDate;
 
-  const _YearlyTrialCard({
-    required this.priceLabel,
-    required this.billingDate,
-  });
+  const _YearlyTrialCard({required this.priceLabel, required this.billingDate});
 
   @override
   Widget build(BuildContext context) {
@@ -1403,9 +1419,16 @@ class _YearlyTrialCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: const Color(0xFFFFD700),
-                  border: Border.all(color: const Color(0xFFFFD700), width: 1.6),
+                  border: Border.all(
+                    color: const Color(0xFFFFD700),
+                    width: 1.6,
+                  ),
                 ),
-                child: const Icon(Icons.check_rounded, color: Colors.black, size: 18),
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.black,
+                  size: 18,
+                ),
               ),
             ],
           ),
@@ -1440,10 +1463,7 @@ class _Timeline extends StatelessWidget {
   final Color teal;
   final String billingDateLabel;
 
-  const _Timeline({
-    required this.teal,
-    required this.billingDateLabel,
-  });
+  const _Timeline({required this.teal, required this.billingDateLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -1467,11 +1487,7 @@ class _Timeline extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: iconBg,
                 ),
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 18,
-                ),
+                child: Icon(icon, color: iconColor, size: 18),
               ),
               if (!last)
                 Container(
@@ -1527,9 +1543,7 @@ class _Timeline extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-      ),
+      decoration: BoxDecoration(color: Colors.transparent),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1546,7 +1560,8 @@ class _Timeline extends StatelessWidget {
           item(
             icon: Icons.notifications_active_rounded,
             title: 'In 2 Days – Reminder',
-            subtitle: 'We\'ll send you a reminder that your trial is ending soon.',
+            subtitle:
+                'We\'ll send you a reminder that your trial is ending soon.',
             last: false,
             iconColor: Colors.white,
             iconBg: const Color(0xFFF59E0B),
@@ -1712,11 +1727,7 @@ class _PlanCard extends StatelessWidget {
                   color: selected ? Colors.black : Colors.transparent,
                 ),
                 child: selected
-                    ? Icon(
-                        Icons.check,
-                        size: 15,
-                        color: Colors.white,
-                      )
+                    ? Icon(Icons.check, size: 15, color: Colors.white)
                     : null,
               ),
             ],
@@ -1771,11 +1782,7 @@ class _CheckLine extends StatelessWidget {
             shape: BoxShape.circle,
             color: Colors.black,
           ),
-          child: Icon(
-            Icons.check_rounded,
-            size: 13,
-            color: Colors.white,
-          ),
+          child: Icon(Icons.check_rounded, size: 13, color: Colors.white),
         ),
         const SizedBox(width: 10),
         Text(
@@ -1807,19 +1814,18 @@ class _GlowButton extends StatelessWidget {
     return SizedBox(
       height: 58,
       child: ElevatedButton(
-        style:
-            ElevatedButton.styleFrom(
-              backgroundColor: Colors.black,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              textStyle: GoogleFonts.inter(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
         onPressed: onTap,
         child: Text(text),
       ),
@@ -2058,16 +2064,13 @@ class _ComparisonStep extends StatelessWidget {
   final Color teal;
   final VoidCallback onNext;
 
-  const _ComparisonStep({
-    super.key,
-    required this.teal,
-    required this.onNext,
-  });
+  const _ComparisonStep({super.key, required this.teal, required this.onNext});
 
   @override
   Widget build(BuildContext context) {
-    final bool isIndia = PricingLocationService.currentRegion == PricingRegion.india;
-    
+    final bool isIndia =
+        PricingLocationService.currentRegion == PricingRegion.india;
+
     return Column(
       children: [
         const SizedBox(height: 10),
@@ -2081,13 +2084,13 @@ class _ComparisonStep extends StatelessWidget {
                   color: Colors.black.withValues(alpha: 0.4),
                   blurRadius: 25,
                   spreadRadius: 2,
-                )
+                ),
               ],
             ),
             child: Image.network(
-              isIndia 
-                ? 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=800&h=800&fit=crop'
-                : 'https://images.unsplash.com/photo-1595769816263-9b910be24d5f?q=80&w=800&h=800&fit=crop',
+              isIndia
+                  ? 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=800&h=800&fit=crop'
+                  : 'https://images.unsplash.com/photo-1595769816263-9b910be24d5f?q=80&w=800&h=800&fit=crop',
               fit: BoxFit.cover,
               width: double.infinity,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -2111,9 +2114,9 @@ class _ComparisonStep extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                isIndia 
-                  ? 'Costs less than a\ncup of coffee (just ₹99).'
-                  : 'Costs less than a\nmovie ticket (\$29.99).',
+                isIndia
+                    ? 'Costs less than a\ncup of coffee (just ₹99).'
+                    : 'Costs less than a\nmovie ticket (\$8.99).',
                 textAlign: TextAlign.center,
                 style: OnboardingTextStyles.uiSans(
                   color: Colors.white,
@@ -2133,21 +2136,27 @@ class _ComparisonStep extends StatelessWidget {
                     height: 1.5,
                   ),
                   children: [
-                    const TextSpan(text: 'Unlock elite-level cricket analysis for 30 days to '),
-                    TextSpan(
-                      text: 'boost your game.',
-                      style: OnboardingTextStyles.uiSans(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ).copyWith(
-                        decoration: TextDecoration.underline,
-                        decorationColor: Colors.white.withValues(alpha: 0.5),
-                      ),
+                    const TextSpan(
+                      text:
+                          'Unlock elite-level cricket analysis for 30 days to ',
                     ),
                     TextSpan(
-                      text: isIndia 
-                        ? ' Invest in your skills for the price of one single coffee.'
-                        : ' Invest in your skills for the price of one movie ticket.',
+                      text: 'boost your game.',
+                      style:
+                          OnboardingTextStyles.uiSans(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ).copyWith(
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.white.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
+                    ),
+                    TextSpan(
+                      text: isIndia
+                          ? ' Invest in your skills for the price of one single coffee.'
+                          : ' Invest in your skills for the price of one movie ticket.',
                     ),
                   ],
                 ),
@@ -2157,7 +2166,9 @@ class _ComparisonStep extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         _GlowButton(
-          text: isIndia ? "Upgrade My Game for ₹99" : "Upgrade My Game for \$29.99",
+          text: isIndia
+              ? "Upgrade My Game for ₹99"
+              : "Upgrade My Game for \$8.99",
           teal: teal,
           onTap: onNext,
         ),
@@ -2205,7 +2216,7 @@ class _ComparisonCard extends StatelessWidget {
             color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -2220,21 +2231,27 @@ class _ComparisonCard extends StatelessWidget {
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: imageSource.startsWith('http') 
-                      ? Image.network(imageSource, fit: BoxFit.cover)
-                      : Image.asset(imageSource, fit: BoxFit.cover),
+                    child: imageSource.startsWith('http')
+                        ? Image.network(imageSource, fit: BoxFit.cover)
+                        : Image.asset(imageSource, fit: BoxFit.cover),
                   ),
                   if (showCNLogo)
                     Positioned(
                       top: 10,
                       right: 10,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF10B981), // Emerald/CN Green
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4)
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
+                              blurRadius: 4,
+                            ),
                           ],
                         ),
                         child: Text(
@@ -2267,7 +2284,7 @@ class _ComparisonCard extends StatelessWidget {
               ),
             ),
           ),
-          
+
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(

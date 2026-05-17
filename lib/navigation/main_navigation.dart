@@ -296,7 +296,7 @@ class _MainNavigationState extends State<MainNavigation>
 
     await maybeShowUsageAlert(
       featureKey: 'mistake',
-      featureLabel: 'Mistake Detection',
+      featureLabel: 'Cricknova Mistake Detection',
       remaining: PremiumService.mistakeLimit - PremiumService.mistakeUsed,
       total: PremiumService.mistakeLimit,
     );

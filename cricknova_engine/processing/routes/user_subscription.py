@@ -59,8 +59,26 @@ PLANS = {
         "compare_limit": 150,
         "duration_days": 365,
     },
+    "INTL_MONTHLY": {
+        "chat_limit": 250,
+        "mistake_limit": 15,
+        "compare_limit": 15,
+        "duration_days": 30,
+    },
+    "INTL_6M": {
+        "chat_limit": 1500,
+        "mistake_limit": 30,
+        "compare_limit": 30,
+        "duration_days": 180,
+    },
+    "INTL_YEARLY": {
+        "chat_limit": 5000,
+        "mistake_limit": 60,
+        "compare_limit": 60,
+        "duration_days": 365,
+    },
     "INT_ULTRA": {
-        "chat_limit": 7000,
+        "chat_limit": 999999,
         "mistake_limit": 150,
         "compare_limit": 150,
         "duration_days": 365,
@@ -72,11 +90,11 @@ PLAN_ALIASES = {
     "6_months": "IN_299",
     "yearly": "IN_499",
     "ultra_pro": "IN_1999",
-    "INTL_MONTHLY": "IN_99",
-    "INTL_6M": "IN_299",
-    "INTL_YEARLY": "IN_499",
-    "INTL_ULTRA": "INT_ULTRA",
-    "INT_ULTRA": "INT_ULTRA",
+    "intl_monthly": "INTL_MONTHLY",
+    "intl_6m": "INTL_6M",
+    "intl_yearly": "INTL_YEARLY",
+    "intl_ultra": "INT_ULTRA",
+    "int_ultra": "INT_ULTRA",
 }
 
 

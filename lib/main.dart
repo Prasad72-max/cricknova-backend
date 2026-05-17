@@ -13,6 +13,7 @@ import 'package:CrickNova_Ai/services/subscription_provider.dart';
 import 'package:CrickNova_Ai/app_router.dart';
 import 'package:CrickNova_Ai/models/pending_video.dart';
 import 'package:CrickNova_Ai/services/background_analysis_service.dart';
+import 'package:CrickNova_Ai/services/backend_warmup_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -20,6 +21,15 @@ import 'package:hive_flutter/hive_flutter.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final startupFuture = _initializeStartup();
+
+  runApp(MyApp(startupFuture: startupFuture));
+
+  // Warm up non-critical services after first frame to reduce cold-start jank.
+  unawaited(startupFuture.then((_) => _warmStartup()));
+}
+
+Future<void> _initializeStartup() async {
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp();
   }
@@ -30,7 +40,7 @@ Future<void> main() async {
 
   // Keep Hive ready before any screen tries to open chat/session boxes.
   await Hive.initFlutter();
-  
+
   // Register manual background queue adapter
   Hive.registerAdapter(PendingVideoAdapter());
   try {
@@ -40,29 +50,28 @@ Future<void> main() async {
   } catch (e) {
     debugPrint("HIVE INIT ERROR: $e");
   }
-  
+
   await PricingLocationService.primeFromCache();
-
-  runApp(const MyApp());
-
-  // Warm up non-critical services after first frame to reduce cold-start jank.
-  unawaited(_warmStartup());
 }
 
 Future<void> _warmStartup() async {
+  unawaited(BackendWarmupService.instance.wake());
+
   try {
     await CrickNovaNotificationService.instance.initialize();
   } catch (_) {}
   try {
     await CrickNovaMarketingNotificationService.instance.initialize();
   } catch (_) {}
-  
+
   // Start background analysis checker
   BackgroundAnalysisService.instance.start();
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.startupFuture});
+
+  final Future<void> startupFuture;
 
   static State<MyApp>? of(BuildContext context) {
     return context.findAncestorStateOfType<_MyAppState>();
@@ -97,6 +106,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
+    unawaited(BackendWarmupService.instance.wake());
     unawaited(
       PricingLocationService.refreshPricingRegion(
         timeout: const Duration(seconds: 5),
@@ -105,6 +115,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _bootstrapNonCriticalStartup() async {
+    await widget.startupFuture;
+
     unawaited(
       PricingLocationService.bootstrap(timeout: const Duration(seconds: 5)),
     );
@@ -204,7 +216,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             foregroundColor: Colors.white,
           ),
         ),
-        home: const SplashScreen(),
+        home: SplashScreen(startupFuture: widget.startupFuture),
       ),
     );
   }

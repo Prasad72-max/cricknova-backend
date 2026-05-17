@@ -2,7 +2,7 @@ name: CrickNova_Ai
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+20
+version: 1.0.0+22
 
 environment:
   sdk: ^3.10.1
@@ -43,8 +43,8 @@ dependencies:
   razorpay_flutter: ^1.4.0
   url_launcher: ^6.3.2
   qr_flutter: ^4.1.0
-  in_app_purchase: ^3.1.13
-  in_app_purchase_android: ^0.4.0+8
+  in_app_purchase: ^3.2.3
+  in_app_purchase_android: ^0.4.0+10
   in_app_review: ^2.0.9
   android_intent_plus: ^5.3.0
   app_links: ^6.0.0
@@ -73,9 +73,10 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: assets/logo.png
+  remove_alpha_ios: true
+  image_path: assets/images/launcher_icon.png
   adaptive_icon_background: "#000000"
-  adaptive_icon_foreground: assets/logo.png
+  adaptive_icon_foreground: assets/images/launcher_icon_foreground.png
 
 flutter:
   uses-material-design: true

@@ -71,6 +71,11 @@ def verify_payment(data: VerifyRequest, request: Request):
         "6_months": "IN_299",
         "yearly": "IN_499",
         "ultra_pro": "IN_1999",
+        "intl_monthly": "INTL_MONTHLY",
+        "intl_6m": "INTL_6M",
+        "intl_yearly": "INTL_YEARLY",
+        "intl_ultra": "INT_ULTRA",
+        "int_ultra": "INT_ULTRA",
 
         # numeric strings
         "99": "IN_99",
@@ -83,6 +88,11 @@ def verify_payment(data: VerifyRequest, request: Request):
         "IN_299": "IN_299",
         "IN_499": "IN_499",
         "IN_1999": "IN_1999",
+        "INTL_MONTHLY": "INTL_MONTHLY",
+        "INTL_6M": "INTL_6M",
+        "INTL_YEARLY": "INTL_YEARLY",
+        "INTL_ULTRA": "INT_ULTRA",
+        "INT_ULTRA": "INT_ULTRA",
     }
 
     incoming_plan = data.plan.strip()
@@ -119,6 +129,10 @@ def verify_payment(data: VerifyRequest, request: Request):
                 "IN_299": 180,
                 "IN_499": 365,
                 "IN_1999": 365,
+                "INTL_MONTHLY": 30,
+                "INTL_6M": 180,
+                "INTL_YEARLY": 365,
+                "INT_ULTRA": 365,
             }
             days = PLAN_DAYS.get(mapped_plan, 30)
             sub_ref.set(

@@ -1,10 +1,10 @@
 flutter_native_splash:
-  # Native (pre-Flutter) splash. Keep it logo-free; Flutter SplashScreen
-  # will render the same background plus the tagline text.
+  # Native (pre-Flutter) splash. Use padded artwork so the bat is never clipped.
   color: "#000000"
   background_image: "assets/images/splash_intro.jpg"
+  image: "assets/images/launcher_icon_foreground.png"
   android: true
   ios: true
   android_12:
     color: "#000000"
-    image: null
+    image: "assets/images/launcher_icon_foreground.png"

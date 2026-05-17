@@ -31,6 +31,26 @@ PLAN_LIMITS = {
         "mistake_limit": 150,
         "duration_days": 365,
     },
+    "INTL_MONTHLY": {
+        "mistake_limit": 15,
+        "duration_days": 30,
+    },
+    "INTL_6M": {
+        "mistake_limit": 30,
+        "duration_days": 180,
+    },
+    "INTL_YEARLY": {
+        "mistake_limit": 60,
+        "duration_days": 365,
+    },
+    "INT_ULTRA": {
+        "mistake_limit": 150,
+        "duration_days": 365,
+    },
+    "INTL_ULTRA": {
+        "mistake_limit": 150,
+        "duration_days": 365,
+    },
 }
 
 # -----------------------------

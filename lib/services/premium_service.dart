@@ -54,7 +54,8 @@ class PremiumService {
     return isPremium && !isAccountOnHold;
   }
 
-  static bool get isInGracePeriod => accessState == SubscriptionAccessState.gracePeriod;
+  static bool get isInGracePeriod =>
+      accessState == SubscriptionAccessState.gracePeriod;
   static bool get isAccountOnHold =>
       accessState == SubscriptionAccessState.accountHold ||
       accessState == SubscriptionAccessState.pastDue;
@@ -222,24 +223,28 @@ class PremiumService {
     Map<String, dynamic> data,
     DateTime? now,
   ) {
-    final String billing = _stringField(
-      data,
-      const ["subscription_state", "billing_state", "state"],
-    );
+    final String billing = _stringField(data, const [
+      "subscription_state",
+      "billing_state",
+      "state",
+    ]);
     final rawState = _stateFromRaw(billing);
 
-    final DateTime? trialRevoke = _dateField(
-      data,
-      const ["trial_revoke_at", "trial_revokeAt", "revoke_at"],
-    );
-    final DateTime? grace = _dateField(
-      data,
-      const ["grace_until", "graceUntil", "grace_ends_at"],
-    );
-    final DateTime? hold = _dateField(
-      data,
-      const ["hold_until", "holdUntil", "account_hold_until"],
-    );
+    final DateTime? trialRevoke = _dateField(data, const [
+      "trial_revoke_at",
+      "trial_revokeAt",
+      "revoke_at",
+    ]);
+    final DateTime? grace = _dateField(data, const [
+      "grace_until",
+      "graceUntil",
+      "grace_ends_at",
+    ]);
+    final DateTime? hold = _dateField(data, const [
+      "hold_until",
+      "holdUntil",
+      "account_hold_until",
+    ]);
 
     trialRevokeAt = trialRevoke;
     graceUntil = grace;
@@ -317,10 +322,7 @@ class PremiumService {
 
   static Timer? _trialRevokeTimer;
 
-  static void _scheduleStateRefresh({
-    required String uid,
-    DateTime? at,
-  }) {
+  static void _scheduleStateRefresh({required String uid, DateTime? at}) {
     _cancelScheduledStateTimer();
     if (at == null) return;
 
@@ -356,10 +358,7 @@ class PremiumService {
     await prefs.setInt(_mistakeLimitKey, mistake);
     await prefs.setInt(_compareLimitKey, compare);
     await prefs.setString(_billingStateKey, billing ?? billingState);
-    await prefs.setString(
-      _accessStateKey,
-      (state ?? accessState).name,
-    );
+    await prefs.setString(_accessStateKey, (state ?? accessState).name);
     if (trialRevoke != null) {
       await prefs.setString(_trialRevokeAtKey, trialRevoke.toIso8601String());
     }
@@ -563,8 +562,7 @@ class PremiumService {
       final bool isHold =
           resolvedState == SubscriptionAccessState.accountHold ||
           resolvedState == SubscriptionAccessState.pastDue;
-      final bool isGrace =
-          resolvedState == SubscriptionAccessState.gracePeriod;
+      final bool isGrace = resolvedState == SubscriptionAccessState.gracePeriod;
       final bool isTrialRevoke =
           resolvedState == SubscriptionAccessState.trialRevokeScheduled ||
           resolvedState == SubscriptionAccessState.trialActive;
@@ -578,12 +576,12 @@ class PremiumService {
         isHold
             ? resolvedState
             : isGrace
-                ? SubscriptionAccessState.gracePeriod
-                : isTrialRevoke
-                    ? SubscriptionAccessState.trialRevokeScheduled
-                    : isUnlocked
-                        ? SubscriptionAccessState.active
-                        : SubscriptionAccessState.free,
+            ? SubscriptionAccessState.gracePeriod
+            : isTrialRevoke
+            ? SubscriptionAccessState.trialRevokeScheduled
+            : isUnlocked
+            ? SubscriptionAccessState.active
+            : SubscriptionAccessState.free,
       );
 
       if (isHold) {
@@ -922,15 +920,15 @@ class PremiumService {
       case "IN_1999":
         return (chat: 5000, mistake: 150, compare: 150);
       case "INTL_MONTHLY":
-        return (chat: 200, mistake: 15, compare: 0);
+        return (chat: 250, mistake: 15, compare: 15);
       case "INTL_6M":
-        return (chat: 1200, mistake: 30, compare: 0);
+        return (chat: 1500, mistake: 30, compare: 30);
       case "INTL_YEARLY":
-        return (chat: 3000, mistake: 60, compare: 60);
+        return (chat: 5000, mistake: 60, compare: 60);
       case "INT_ULTRA":
       case "INTL_ULTRA":
       case "ULTRA":
-        return (chat: 7000, mistake: 150, compare: 150);
+        return (chat: 999999, mistake: 150, compare: 150);
       default:
         return (chat: 0, mistake: 0, compare: 0);
     }
@@ -972,7 +970,10 @@ class PremiumService {
   }) async {
     final before = _snapshot();
     _setAccessState(
-      state ?? (premium ? SubscriptionAccessState.active : SubscriptionAccessState.free),
+      state ??
+          (premium
+              ? SubscriptionAccessState.active
+              : SubscriptionAccessState.free),
     );
     billingState = billing;
     await _cache(

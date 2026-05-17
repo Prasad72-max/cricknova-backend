@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,15 +12,29 @@ import '../onboarding/cricknova_onboarding_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({super.key, required this.startupFuture});
+
+  final Future<void> startupFuture;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
+class _SplashNavigationTarget {
+  const _SplashNavigationTarget.online(this.destination) : hasInternet = true;
+
+  const _SplashNavigationTarget.offline()
+    : hasInternet = false,
+      destination = null;
+
+  final bool hasInternet;
+  final Widget? destination;
+}
+
 class _SplashScreenState extends State<SplashScreen> {
   static const String _onboardingSeenKey = 'cricknova_onboarding_seen_once';
   bool _fadeOut = false;
+  bool _networkDialogOpen = false;
 
   final String _taglineFull = 'TRAIN LIKE A PRO. POWERED BY AI.';
   String _taglineTyped = '';
@@ -28,17 +43,23 @@ class _SplashScreenState extends State<SplashScreen> {
   Timer? _typingTimer;
   Timer? _cursorTimer;
   Timer? _advanceTimer;
+  Future<_SplashNavigationTarget>? _navigationTargetFuture;
 
   @override
   void initState() {
     super.initState();
+    _startCursorBlinking();
     _startTaglineTyping();
-    _advanceTimer = Timer(const Duration(milliseconds: 3200), _advance);
+    _navigationTargetFuture = _prepareNavigationTarget();
+    // Keep the final brand splash polished without repeating the player logo.
+    _advanceTimer = Timer(const Duration(milliseconds: 4200), _advance);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Precache both image assets for smooth, lag-free premium rendering
+    precacheImage(const AssetImage('assets/images/splash_player.png'), context);
     // Precache immersive visuals for paywall/pre-paywall screens
     precacheImage(
       const NetworkImage(
@@ -54,18 +75,20 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 
-  void _startTaglineTyping() {
+  void _startCursorBlinking() {
     _cursorTimer?.cancel();
-    _typingTimer?.cancel();
     _cursorTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (!mounted) return;
       setState(() => _cursorOn = !_cursorOn);
     });
+  }
 
+  void _startTaglineTyping() {
+    _typingTimer?.cancel();
     int i = 0;
-    _typingTimer = Timer(const Duration(milliseconds: 600), () {
+    _typingTimer = Timer(const Duration(milliseconds: 450), () {
       if (!mounted) return;
-      _typingTimer = Timer.periodic(const Duration(milliseconds: 22), (t) {
+      _typingTimer = Timer.periodic(const Duration(milliseconds: 25), (t) {
         if (!mounted) {
           t.cancel();
           return;
@@ -85,39 +108,118 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _advance() async {
     if (!mounted) return;
     if (_fadeOut) return;
-    setState(() => _fadeOut = true);
 
-    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final target = await (_navigationTargetFuture ??=
+        _prepareNavigationTarget());
     if (!mounted) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final user = FirebaseAuth.instance.currentUser;
-    final userName = user?.displayName ?? 'Player';
-    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
-
-    late final Widget destination;
-    if (user != null) {
-      destination = MainNavigation(userName: userName);
-    } else if (!onboardingSeen) {
-      await prefs.setBool(_onboardingSeenKey, true);
-      destination = const CricknovaOnboardingScreen(
-        userName: 'Player',
-        skipGetStarted: false,
-      );
-    } else {
-      destination = const LoginScreen(
-        postLoginTarget: LoginPostLoginTarget.getStarted,
-      );
+    if (!target.hasInternet || target.destination == null) {
+      await _showNetworkErrorDialog();
+      return;
     }
 
+    setState(() => _fadeOut = true);
+
+    await Future<void>.delayed(const Duration(milliseconds: 160));
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
-        pageBuilder: (context, animation, secondaryAnimation) => destination,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            target.destination!,
       ),
     );
+  }
+
+  Future<_SplashNavigationTarget> _prepareNavigationTarget() async {
+    await widget.startupFuture;
+    final hasInternet = await _hasInternetConnection();
+    if (!hasInternet) {
+      return const _SplashNavigationTarget.offline();
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+    final userName = user?.displayName ?? 'Player';
+    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
+
+    if (user != null) {
+      return _SplashNavigationTarget.online(MainNavigation(userName: userName));
+    }
+    if (!onboardingSeen) {
+      await prefs.setBool(_onboardingSeenKey, true);
+      return const _SplashNavigationTarget.online(
+        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
+      );
+    }
+    return const _SplashNavigationTarget.online(
+      LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+    );
+  }
+
+  Future<bool> _hasInternetConnection() async {
+    try {
+      final result = await InternetAddress.lookup(
+        'example.com',
+      ).timeout(const Duration(seconds: 4));
+      return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _showNetworkErrorDialog() async {
+    if (_networkDialogOpen) return;
+    _networkDialogOpen = true;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF111113),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: Color(0xFF2A2A2F)),
+          ),
+          title: Text(
+            'Network error',
+            style: OnboardingTextStyles.uiSans(
+              color: OnboardingColors.textPrimary,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: Text(
+            'Please turn on mobile data or Wi-Fi to continue.',
+            style: OnboardingTextStyles.uiSans(
+              color: OnboardingColors.textSecondary,
+              fontSize: 14,
+              height: 1.35,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                _networkDialogOpen = false;
+                _navigationTargetFuture = _prepareNavigationTarget();
+                unawaited(_advance());
+              },
+              child: Text(
+                'Retry',
+                style: OnboardingTextStyles.uiSans(
+                  color: const Color(0xFFD4AF37),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    _networkDialogOpen = false;
   }
 
   @override
@@ -131,19 +233,25 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: OnboardingColors.bgBase,
-      body: SafeArea(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: _buildSplash(),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 1.0,
+            colors: [
+              Color(
+                0xFF151718,
+              ), // Elegant warm charcoal center (matches center of your image)
+              Color(0xFF050506), // Deep near-black vignette outer edges
+            ],
+          ),
         ),
+        child: SafeArea(child: _buildSplash()),
       ),
     );
   }
 
   Widget _buildSplash() {
-    final cursor = _cursorOn ? '|' : '';
-    final tagline = '$_taglineTyped$cursor';
     return AnimatedOpacity(
       key: const ValueKey('splash'),
       opacity: _fadeOut ? 0 : 1,
@@ -152,84 +260,123 @@ class _SplashScreenState extends State<SplashScreen> {
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 1400),
-                curve: Curves.easeOutCubic,
-                builder: (context, t, _) {
-                  final scale = 0.92 + (t * 0.12);
-                  final letterSpacing = lerpDouble(14, -1.2, t)!;
-                  final blur = (1.0 - t) * 10.0;
+          child: _buildBrandLogo(),
+        ),
+      ),
+    );
+  }
 
-                  return Transform.scale(
-                    scale: scale,
-                    child: Opacity(
-                      opacity: t,
-                      child: ImageFiltered(
-                        imageFilter: ImageFilter.blur(
-                          sigmaX: blur,
-                          sigmaY: blur,
-                        ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Soft gold glow behind the logo
-                            Text(
-                              'CrickNova',
-                              style:
-                                  OnboardingTextStyles.serif(
-                                    color: const Color(
-                                      0xFFD4AF37,
-                                    ).withValues(alpha: 0.2 * t),
-                                    fontSize: 52,
-                                    fontWeight: FontWeight.w300,
-                                    letterSpacing: letterSpacing,
-                                  ).copyWith(
-                                    shadows: [
-                                      Shadow(
-                                        color: const Color(
-                                          0xFFD4AF37,
-                                        ).withValues(alpha: 0.4 * t),
-                                        blurRadius: 30 * t,
-                                      ),
-                                    ],
-                                  ),
+  Widget _buildBrandLogo() {
+    final cursor = _cursorOn ? '|' : '';
+    final tagline = '$_taglineTyped$cursor';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(begin: 0, end: 1),
+          duration: const Duration(milliseconds: 1400),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, _) {
+            final scale = 0.92 + (t * 0.08);
+            final letterSpacing = lerpDouble(14, -1.2, t)!;
+            final blur = (1.0 - t) * 8.0;
+
+            return Transform.scale(
+              scale: scale,
+              child: Opacity(
+                opacity: t,
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Elegant circular cricketer player logo (matching launch style, without CN letters overlay!)
+                      Container(
+                        width: 140,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.transparent,
+                          boxShadow: [
+                            // Intense gold lighting splash behind brand logo
+                            BoxShadow(
+                              color: const Color(
+                                0xFFFFD700,
+                              ).withValues(alpha: 0.3 * t),
+                              blurRadius: 20 * t,
+                              spreadRadius: 1 * t,
                             ),
-                            // Main white logo text
-                            Text(
-                              'CrickNova',
-                              style: OnboardingTextStyles.serif(
-                                color: const Color(0xFFFAFAF9),
-                                fontSize: 52,
-                                fontWeight: FontWeight.w300,
-                                letterSpacing: letterSpacing,
-                              ),
+                            BoxShadow(
+                              color: const Color(
+                                0xFFD4AF37,
+                              ).withValues(alpha: 0.2 * t),
+                              blurRadius: 30 * t,
+                              spreadRadius: 3 * t,
                             ),
                           ],
                         ),
+                        child: Image.asset(
+                          'assets/images/splash_player.png',
+                          fit: BoxFit.contain,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              Text(
-                tagline,
-                textAlign: TextAlign.center,
-                style: OnboardingTextStyles.uiSans(
-                  color: OnboardingColors.textMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 3,
+                      const SizedBox(height: 24),
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Soft gold glow behind the logo
+                          Text(
+                            'CrickNova',
+                            style:
+                                OnboardingTextStyles.serif(
+                                  color: const Color(
+                                    0xFFD4AF37,
+                                  ).withValues(alpha: 0.2 * t),
+                                  fontSize: 52,
+                                  fontWeight: FontWeight.w300,
+                                  letterSpacing: letterSpacing,
+                                ).copyWith(
+                                  shadows: [
+                                    Shadow(
+                                      color: const Color(
+                                        0xFFD4AF37,
+                                      ).withValues(alpha: 0.4 * t),
+                                      blurRadius: 30 * t,
+                                    ),
+                                  ],
+                                ),
+                          ),
+                          // Main white logo text
+                          Text(
+                            'CrickNova',
+                            style: OnboardingTextStyles.serif(
+                              color: const Color(0xFFFAFAF9),
+                              fontSize: 52,
+                              fontWeight: FontWeight.w300,
+                              letterSpacing: letterSpacing,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        Text(
+          tagline,
+          textAlign: TextAlign.center,
+          style: OnboardingTextStyles.uiSans(
+            color: OnboardingColors.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 3,
           ),
         ),
-      ),
+      ],
     );
   }
 }

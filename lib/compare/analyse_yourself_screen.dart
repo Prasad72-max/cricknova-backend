@@ -452,7 +452,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: const Text(
-            "You've used all your Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
+            "You've used all your Cricknova Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
             style: TextStyle(color: Colors.white70, height: 1.5),
           ),
           actions: [
@@ -640,7 +640,7 @@ Do not give rating/score.
                   style: TextStyle(color: Colors.white),
                 ),
                 content: const Text(
-                  "Your Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
+                  "Your Cricknova Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
                   style: TextStyle(color: Colors.white70),
                 ),
                 actions: [
@@ -721,7 +721,7 @@ Do not give rating/score.
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: const Text(
-          "You've reached your monthly Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
+          "You've reached your monthly Cricknova Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
           style: TextStyle(color: Colors.white70, height: 1.5),
         ),
         actions: [
@@ -871,7 +871,7 @@ Do not give rating/score.
       backgroundColor: const Color(0xFF0B0E11),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B0E11),
-        title: Text(_isBowlingMode ? 'Bowling Analyse' : 'Analyse Yourself'),
+        title: Text(_isBowlingMode ? 'Bowling Analyse' : 'Cricknova Analyse Yourself'),
         foregroundColor: Colors.white,
       ),
       body: Stack(
@@ -1450,7 +1450,7 @@ class _CompareColumnCard extends StatelessWidget {
     final shot = summary.shotSelection?.trim();
     final key = summary.mistakeOrImprovement?.trim();
 
-    // If we couldn't extract fields, show the first 2 big points like Mistake Detection.
+    // If we couldn't extract fields, show the first 2 big points like Cricknova Mistake Detection.
     if ((stance == null || stance.isEmpty) &&
         (shot == null || shot.isEmpty) &&
         (key == null || key.isEmpty) &&

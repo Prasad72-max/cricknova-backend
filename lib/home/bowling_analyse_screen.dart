@@ -41,7 +41,7 @@ class BowlingAnalyseScreen extends StatelessWidget {
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
             tabs: [
-              Tab(text: "Mistake Detection"),
+              Tab(text: "Cricknova Mistake Detection"),
               Tab(text: "Compare Vid"),
             ],
           ),
@@ -58,10 +58,10 @@ class BowlingAnalyseScreen extends StatelessWidget {
             children: [
               _BowlingActionCard(
                 icon: Icons.sports_baseball_rounded,
-                title: "Bowling Mistake Detection",
+                title: "Cricknova Mistake Detection",
                 subtitle:
                     "Upload your bowling clip and get bowling-specific mistakes with fix drills.",
-                buttonText: "Start Mistake Detection",
+                buttonText: "Start Cricknova Mistake Detection",
                 locked: !mistakeUnlocked,
                 lockCaption: "Unlock elite bowling AI with Pro or Ultra.",
                 onTap: () {

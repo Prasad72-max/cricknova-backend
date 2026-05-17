@@ -8192,7 +8192,7 @@ class _UploadScreenState extends State<UploadScreen>
             }
             await PremiumService.consumeMistake();
             await _maybeShowUsageLimitReached(
-              featureName: "Mistake Detection",
+              featureName: "Cricknova Mistake Detection",
               current: PremiumService.mistakeUsed,
               limit: PremiumService.mistakeLimit,
               entrySource: "mistake_usage_limit",
@@ -8682,7 +8682,7 @@ Do not add intro or conclusion.
                             ),
                             child: ClipOval(
                               child: Image.asset(
-                                "assets/logo.png",
+                                "assets/images/splash_player.png",
                                 width: 48,
                                 height: 48,
                                 fit: BoxFit.cover,
@@ -9201,8 +9201,8 @@ Do not add intro or conclusion.
                                               const SizedBox(height: 2),
                                               Text(
                                                 _isBowlingMode
-                                                    ? "Bowling Mistake Detection Report"
-                                                    : "Mistake Detection Report",
+                                                    ? "Cricknova Mistake Detection Report"
+                                                    : "Cricknova Mistake Detection Report",
                                                 style: const TextStyle(
                                                   color: Colors.white70,
                                                   fontSize: 12.5,

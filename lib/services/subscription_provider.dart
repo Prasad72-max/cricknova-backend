@@ -134,10 +134,11 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
               .collection('subscriptions')
               .doc(user.uid)
               .get(const GetOptions(source: Source.serverAndCache));
-      final DocumentSnapshot<Map<String, dynamic>> userSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get(const GetOptions(source: Source.serverAndCache));
+      final DocumentSnapshot<Map<String, dynamic>> userSnapshot =
+          await _firestore
+              .collection('users')
+              .doc(user.uid)
+              .get(const GetOptions(source: Source.serverAndCache));
 
       if (!subscriptionSnapshot.exists && !userSnapshot.exists) {
         _resetPremiumState();
@@ -146,7 +147,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       final Map<String, dynamic> subscriptionData =
           subscriptionSnapshot.data() ?? <String, dynamic>{};
-      final Map<String, dynamic> userData = userSnapshot.data() ?? <String, dynamic>{};
+      final Map<String, dynamic> userData =
+          userSnapshot.data() ?? <String, dynamic>{};
       final Map<String, dynamic> data = <String, dynamic>{
         ...userData,
         ...subscriptionData,
@@ -222,8 +224,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         throw Exception(response.error!.message);
       }
 
-      final List<GooglePlaySubscriptionPlan> plans =
-          <GooglePlaySubscriptionPlan>[];
+      final Map<String, GooglePlaySubscriptionPlan> plansByBasePlan =
+          <String, GooglePlaySubscriptionPlan>{};
 
       for (final ProductDetails product in response.productDetails) {
         if (product is! GooglePlayProductDetails ||
@@ -242,18 +244,44 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
           continue;
         }
 
-        plans.add(
-          GooglePlaySubscriptionPlan.fromGooglePlayProductDetails(
-            product,
-            offerDetails.basePlanId,
-          ),
-        );
+        final GooglePlaySubscriptionPlan candidate =
+            GooglePlaySubscriptionPlan.fromGooglePlayProductDetails(
+              product,
+              offerDetails.basePlanId,
+              offerId: offerDetails.offerId,
+              offerTags: offerDetails.offerTags,
+              hasFreeTrial: offerDetails.pricingPhases.any(
+                (phase) => phase.priceAmountMicros == 0,
+              ),
+            );
+        final GooglePlaySubscriptionPlan? existing =
+            plansByBasePlan[candidate.basePlanId];
+        if (existing == null || candidate.isBetterOfferThan(existing)) {
+          plansByBasePlan[candidate.basePlanId] = candidate;
+        }
       }
 
-      plans.sort(
-        (GooglePlaySubscriptionPlan a, GooglePlaySubscriptionPlan b) =>
-            a.sortOrder.compareTo(b.sortOrder),
+      final List<GooglePlaySubscriptionPlan> plans =
+          plansByBasePlan.values.toList()..sort(
+            (GooglePlaySubscriptionPlan a, GooglePlaySubscriptionPlan b) =>
+                a.sortOrder.compareTo(b.sortOrder),
+          );
+
+      final Set<String> expectedBasePlans = <String>{
+        monthlyPlanId,
+        sixMonthPlanId,
+        oneYearPlanId,
+        oneYearElitePlanId,
+      };
+      final Set<String> missingBasePlans = expectedBasePlans.difference(
+        plansByBasePlan.keys.toSet(),
       );
+      if (missingBasePlans.isNotEmpty) {
+        debugPrint(
+          'Google Play missing base plans for $premiumProductId: '
+          '${missingBasePlans.join(', ')}',
+        );
+      }
 
       _plans = plans;
 
@@ -727,17 +755,19 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       case monthlyPlanId:
         return isIndiaPlan
             ? (chat: 200, mistake: 15, compare: 0)
-            : (chat: 200, mistake: 15, compare: 0);
+            : (chat: 250, mistake: 15, compare: 15);
       case sixMonthPlanId:
-        return (chat: 1200, mistake: 30, compare: 0);
+        return isIndiaPlan
+            ? (chat: 1200, mistake: 30, compare: 0)
+            : (chat: 1500, mistake: 30, compare: 30);
       case oneYearPlanId:
         return isIndiaPlan
             ? (chat: 3000, mistake: 60, compare: 60)
-            : (chat: 3000, mistake: 60, compare: 60);
+            : (chat: 5000, mistake: 60, compare: 60);
       case oneYearElitePlanId:
         return isIndiaPlan
             ? (chat: 5000, mistake: 150, compare: 150)
-            : (chat: 7000, mistake: 150, compare: 150);
+            : (chat: 999999, mistake: 150, compare: 150);
       default:
         return (chat: 0, mistake: 0, compare: 0);
     }
@@ -767,9 +797,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   String _parseBillingState(Map<String, dynamic> data) {
-    final dynamic raw = data['subscription_state'] ??
-        data['billing_state'] ??
-        data['state'];
+    final dynamic raw =
+        data['subscription_state'] ?? data['billing_state'] ?? data['state'];
     if (raw is String && raw.trim().isNotEmpty) {
       return raw.trim().toUpperCase();
     }
@@ -870,14 +899,20 @@ class GooglePlaySubscriptionPlan {
     required this.billingLabel,
     required this.aiLimit,
     required this.offerToken,
+    required this.offerId,
+    required this.offerTags,
+    required this.hasFreeTrial,
     required this.productDetails,
     required this.sortOrder,
   });
 
   factory GooglePlaySubscriptionPlan.fromGooglePlayProductDetails(
     GooglePlayProductDetails productDetails,
-    String basePlanId,
-  ) {
+    String basePlanId, {
+    required String? offerId,
+    required List<String> offerTags,
+    required bool hasFreeTrial,
+  }) {
     final String billingLabel = _billingLabelForPlan(basePlanId);
     final int aiLimit = _aiLimitForPlan(basePlanId);
 
@@ -890,6 +925,9 @@ class GooglePlaySubscriptionPlan {
       billingLabel: billingLabel,
       aiLimit: aiLimit,
       offerToken: productDetails.offerToken,
+      offerId: offerId,
+      offerTags: offerTags,
+      hasFreeTrial: hasFreeTrial,
       productDetails: productDetails,
       sortOrder: _sortOrderForPlan(basePlanId),
     );
@@ -903,12 +941,30 @@ class GooglePlaySubscriptionPlan {
   final String billingLabel;
   final int aiLimit;
   final String? offerToken;
+  final String? offerId;
+  final List<String> offerTags;
+  final bool hasFreeTrial;
   final GooglePlayProductDetails productDetails;
   final int sortOrder;
 
   String get currencyCode => productDetails.currencyCode;
 
   String get displayPrice => '$priceLabel/$billingLabel';
+
+  bool isBetterOfferThan(GooglePlaySubscriptionPlan other) {
+    if (hasFreeTrial != other.hasFreeTrial) {
+      return hasFreeTrial;
+    }
+
+    final bool taggedOffer = offerId != null || offerTags.isNotEmpty;
+    final bool otherTaggedOffer =
+        other.offerId != null || other.offerTags.isNotEmpty;
+    if (taggedOffer != otherTaggedOffer) {
+      return !taggedOffer;
+    }
+
+    return false;
+  }
 
   static String _titleForPlan(String basePlanId) {
     switch (basePlanId) {

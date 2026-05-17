@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/widgets.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'premium_service.dart';
+import 'subscription_provider.dart';
 
 class PlayBillingService with WidgetsBindingObserver {
   PlayBillingService._();
@@ -28,7 +30,7 @@ class PlayBillingService with WidgetsBindingObserver {
   );
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
-  List<ProductDetails> _products = const <ProductDetails>[];
+  List<GooglePlayProductDetails> _products = const <GooglePlayProductDetails>[];
   bool _initialized = false;
   bool _storeAvailable = false;
   String? _lastError;
@@ -39,7 +41,7 @@ class PlayBillingService with WidgetsBindingObserver {
   bool get isStoreAvailable => _storeAvailable;
   String? get lastError => _lastError;
 
-  ProductDetails? get proProductDetails {
+  GooglePlayProductDetails? get proProductDetails {
     for (final product in _products) {
       if (product.id == proProductId) return product;
     }
@@ -129,19 +131,20 @@ class PlayBillingService with WidgetsBindingObserver {
       return false;
     }
 
-    final ProductDetails? product = proProductDetails;
-    if (product == null) {
+    final _PlayBillingOffer? offer = _offerForPremiumPlanId(planId);
+    if (offer == null) {
       _lastError =
-          "Play product '$proProductId' was not found. Match this ID in Play Console.";
+          "Play product '$proProductId' or base plan for '$planId' was not found. Check Play Console base plan IDs.";
       return false;
     }
 
     purchasePendingNotifier.value = true;
     _lastError = null;
 
-    final PurchaseParam purchaseParam = PurchaseParam(
-      productDetails: product,
+    final GooglePlayPurchaseParam purchaseParam = GooglePlayPurchaseParam(
+      productDetails: offer.productDetails,
       applicationUserName: FirebaseAuth.instance.currentUser?.uid,
+      offerToken: offer.offerToken,
     );
 
     final bool launched = await _inAppPurchase.buyNonConsumable(
@@ -168,19 +171,91 @@ class PlayBillingService with WidgetsBindingObserver {
   Future<void> _refreshCatalog() async {
     _storeAvailable = await _inAppPurchase.isAvailable();
     if (!_storeAvailable) {
-      _products = const <ProductDetails>[];
+      _products = const <GooglePlayProductDetails>[];
       return;
     }
 
     final ProductDetailsResponse response = await _inAppPurchase
         .queryProductDetails(_productIds);
-    _products = response.productDetails;
+    final List<GooglePlayProductDetails> googleProducts =
+        <GooglePlayProductDetails>[];
+    for (final ProductDetails product in response.productDetails) {
+      if (product is GooglePlayProductDetails && product.id == proProductId) {
+        googleProducts.add(product);
+      }
+    }
+    _products = googleProducts;
 
     if (response.error != null) {
       _lastError = response.error!.message;
     } else if (response.notFoundIDs.contains(proProductId)) {
       _lastError =
           "Google Play product '$proProductId' is missing from the store catalog.";
+    }
+  }
+
+  _PlayBillingOffer? _offerForPremiumPlanId(String planId) {
+    final String basePlanId = _basePlanIdForPremiumPlanId(planId);
+    _PlayBillingOffer? fallback;
+
+    for (final GooglePlayProductDetails product in _products) {
+      final offers = product.productDetails.subscriptionOfferDetails;
+      if (offers == null || offers.isEmpty) continue;
+
+      final int? subscriptionIndex = product.subscriptionIndex;
+      if (subscriptionIndex != null &&
+          subscriptionIndex >= 0 &&
+          subscriptionIndex < offers.length &&
+          offers[subscriptionIndex].basePlanId == basePlanId) {
+        return _PlayBillingOffer(
+          productDetails: product,
+          offerToken: offers[subscriptionIndex].offerIdToken,
+        );
+      }
+
+      for (final offer in offers) {
+        if (offer.basePlanId != basePlanId) continue;
+        fallback ??= _PlayBillingOffer(
+          productDetails: product,
+          offerToken: offer.offerIdToken,
+        );
+
+        final offerId = (offer.offerId ?? '').toLowerCase();
+        final hasTrialTag = offer.offerTags.any(
+          (tag) => tag.toLowerCase().contains('trial'),
+        );
+        final hasFreeTrialPhase = offer.pricingPhases.any(
+          (phase) => phase.priceAmountMicros == 0,
+        );
+        if (offerId.contains('trial') || hasTrialTag || hasFreeTrialPhase) {
+          return _PlayBillingOffer(
+            productDetails: product,
+            offerToken: offer.offerIdToken,
+          );
+        }
+      }
+    }
+
+    return fallback;
+  }
+
+  String _basePlanIdForPremiumPlanId(String planId) {
+    switch (planId) {
+      case 'IN_299':
+      case 'INTL_6M':
+        return SubscriptionProvider.sixMonthPlanId;
+      case 'IN_499':
+      case 'INTL_YEARLY':
+        return SubscriptionProvider.oneYearPlanId;
+      case 'IN_1999':
+      case 'INTL_ULTRA':
+      case 'INT_ULTRA':
+      case 'ULTRA':
+        return SubscriptionProvider.oneYearElitePlanId;
+      case 'IN_99':
+      case 'INTL_MONTHLY':
+      default:
+        return SubscriptionProvider.monthlyPlanId;
     }
   }
 
@@ -269,4 +344,14 @@ class PlayBillingService with WidgetsBindingObserver {
       // Access is already persisted locally; completion can be retried later.
     }
   }
+}
+
+class _PlayBillingOffer {
+  const _PlayBillingOffer({
+    required this.productDetails,
+    required this.offerToken,
+  });
+
+  final GooglePlayProductDetails productDetails;
+  final String offerToken;
 }

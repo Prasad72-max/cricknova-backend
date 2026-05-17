@@ -29,6 +29,18 @@ PLAN_LIMITS = {
         "compare_limit": 150,
         "duration_days": 365,
     },
+    "INTL_MONTHLY": {
+        "compare_limit": 15,
+        "duration_days": 30,
+    },
+    "INTL_6M": {
+        "compare_limit": 30,
+        "duration_days": 180,
+    },
+    "INTL_YEARLY": {
+        "compare_limit": 60,
+        "duration_days": 365,
+    },
     "INT_ULTRA": {
         "compare_limit": 150,
         "duration_days": 365,
