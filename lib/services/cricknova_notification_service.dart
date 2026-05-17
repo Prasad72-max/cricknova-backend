@@ -31,6 +31,7 @@ class CrickNovaNotificationService {
   static const int _inactivityId = 1103;
   static const int _eveningReminderId = 1104;
   static const int _leaderboardAlertId = 1105;
+  static const int _trialEndingSoonId = 1106;
   static const int _analysisCheckBaseId = 1200;
 
   final FlutterLocalNotificationsPlugin _localNotifications =
@@ -43,6 +44,8 @@ class CrickNovaNotificationService {
   String _optInKey(String uid) => 'notifications_opt_in_$uid';
   String _promptSeenKey(String uid) => 'notifications_prompt_seen_$uid';
   String _lastOpenKey(String uid) => 'notifications_last_open_$uid';
+  String _trialReminderOptInKey(String uid) => 'trial_reminder_opt_in_$uid';
+  String _trialReminderLastKey(String uid) => 'trial_reminder_last_$uid';
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -100,7 +103,10 @@ class CrickNovaNotificationService {
   Future<void> _configureLocalTimezone() async {
     try {
       final timezoneInfo = await FlutterTimezone.getLocalTimezone();
-      final location = tz.getLocation(timezoneInfo.identifier);
+      final String timezoneId = timezoneInfo.identifier == 'Asia/Calcutta'
+          ? 'Asia/Kolkata'
+          : timezoneInfo.identifier;
+      final location = tz.getLocation(timezoneId);
       tz.setLocalLocation(location);
     } catch (e) {
       debugPrint('NOTIFICATIONS timezone setup failed: $e');
@@ -115,6 +121,19 @@ class CrickNovaNotificationService {
   Future<bool> isOptedIn(String uid) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_optInKey(uid)) ?? false;
+  }
+
+  Future<bool> isTrialReminderEnabled(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_trialReminderOptInKey(uid)) ?? true;
+  }
+
+  Future<void> setTrialReminderEnabled(String uid, bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_trialReminderOptInKey(uid), enabled);
+    if (!enabled) {
+      await _localNotifications.cancel(id: _trialEndingSoonId);
+    }
   }
 
   Future<bool> enableForUser(String uid) async {
@@ -133,6 +152,9 @@ class CrickNovaNotificationService {
       await cancelEngagementNotifications();
       return false;
     }
+
+    // Default trial reminder to enabled when the user opts into notifications.
+    await prefs.setBool(_trialReminderOptInKey(uid), true);
 
     await _persistFcmToken(await _messaging.getToken());
     await handleAppOpened(uid);
@@ -271,6 +293,53 @@ class CrickNovaNotificationService {
   Future<void> cancelEngagementNotifications() async {
     await _localNotifications.cancel(id: _inactivityId);
     await _localNotifications.cancel(id: _eveningReminderId);
+  }
+
+  Future<void> cancelTrialEndingReminder() async {
+    await _localNotifications.cancel(id: _trialEndingSoonId);
+  }
+
+  Future<void> scheduleTrialEndingReminder({
+    required String uid,
+    required DateTime trialEndsAt,
+    required String planId,
+  }) async {
+    if (!await isOptedIn(uid)) return;
+    if (!await isTrialReminderEnabled(uid)) return;
+
+    await initialize();
+
+    final now = tz.TZDateTime.now(tz.local);
+    final reminderAt = tz.TZDateTime.from(
+      trialEndsAt,
+      tz.local,
+    ).subtract(const Duration(days: 1));
+    if (!reminderAt.isAfter(now)) return;
+
+    final priceSuffix = switch (planId) {
+      'IN_499' => '₹499/year',
+      'INTL_YEARLY' => '\$59.99/year',
+      _ => 'your plan',
+    };
+
+    final prefs = await SharedPreferences.getInstance();
+    final lastKey = _trialReminderLastKey(uid);
+    final last = prefs.getString(lastKey);
+    if (last == reminderAt.toIso8601String()) {
+      return; // already scheduled for this reminder time
+    }
+    await prefs.setString(lastKey, reminderAt.toIso8601String());
+
+    await _localNotifications.zonedSchedule(
+      id: _trialEndingSoonId,
+      title: 'CrickNova: Trial ends tomorrow',
+      body:
+          'Your free trial ends tomorrow. Unless you cancel, billing will start at $priceSuffix.',
+      scheduledDate: reminderAt,
+      notificationDetails: _notificationDetails(),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'trial_ending',
+    );
   }
 
   Future<void> _scheduleInactivityReminder() async {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,7 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_screen.dart';
+import '../onboarding/cricknova_onboarding_store.dart';
+import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
+import '../services/premium_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.startupFuture});
@@ -143,8 +147,55 @@ class _SplashScreenState extends State<SplashScreen> {
     final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
 
     if (user != null) {
-      return _SplashNavigationTarget.online(MainNavigation(userName: userName));
+      // ── 3-way check for signed-in users ──────────────────────────────────
+      //
+      // Case 1: Firestore users doc EXISTS → fully registered returning user.
+      //         Load fresh premium and go to app.
+      //
+      // Case 2: No Firestore doc BUT local onboarding is COMPLETED.
+      //         This happens after account-deletion + re-onboarding + re-login:
+      //         the backend hasn't recreated the users doc yet, but the user
+      //         already went through onboarding.  Send to pre-paywall.
+      //
+      // Case 3: No Firestore doc AND onboarding NOT done → truly new account.
+      //         Show onboarding from the welcome step.
+      // ─────────────────────────────────────────────────────────────────────
+      final bool firestoreExists = await _firestoreUserExists(user.uid);
+
+      if (firestoreExists) {
+        // Case 1 — returning user
+        try {
+          await PremiumService.ensureFreshState();
+        } catch (_) {}
+        return _SplashNavigationTarget.online(
+          MainNavigation(userName: userName),
+        );
+      }
+
+      final bool localOnboardingDone =
+          await CricknovaOnboardingStore.isCompleted(user.uid);
+
+      if (localOnboardingDone) {
+        // Case 2 — onboarding done locally but no Firestore doc yet
+        //           (e.g., after account-deletion → re-onboarding → re-login)
+        return _SplashNavigationTarget.online(
+          CricknovaPrePaywallFlowScreen(
+            userName: userName,
+            allowSkipToApp: false,
+          ),
+        );
+      }
+
+      // Case 3 — truly brand-new sign-in, show onboarding
+      await prefs.setBool(_onboardingSeenKey, true);
+      return _SplashNavigationTarget.online(
+        CricknovaOnboardingScreen(
+          userName: userName,
+          skipGetStarted: false,
+        ),
+      );
     }
+
     if (!onboardingSeen) {
       await prefs.setBool(_onboardingSeenKey, true);
       return const _SplashNavigationTarget.online(
@@ -154,6 +205,18 @@ class _SplashScreenState extends State<SplashScreen> {
     return const _SplashNavigationTarget.online(
       LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
     );
+  }
+
+  Future<bool> _firestoreUserExists(String uid) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.serverAndCache));
+      return snap.exists;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> _hasInternetConnection() async {

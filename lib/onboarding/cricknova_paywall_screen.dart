@@ -2,11 +2,10 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 
 import '../navigation/main_navigation.dart';
@@ -15,7 +14,6 @@ import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
 import '../services/subscription_provider.dart';
 import '../services/trial_access_service.dart';
-import 'onboarding_ui_tokens.dart';
 
 class CricknovaPaywallScreen extends StatefulWidget {
   final String userName;
@@ -36,10 +34,7 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
-  ProductDetails? _yearlyProduct;
-  String? _yearlyOfferToken;
   bool _purchasePending = false;
-  bool _billingReady = false;
   bool _showConfetti = false;
   String? _billingError;
   int _stepIndex = 0;
@@ -68,7 +63,6 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       },
     );
     unawaited(_loadTrialAvailability());
-    unawaited(_initializeBilling());
   }
 
   @override
@@ -79,40 +73,6 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     super.dispose();
   }
 
-  Future<void> _initializeBilling() async {
-    final available = await _inAppPurchase.isAvailable();
-    if (!available) {
-      if (!mounted) return;
-      setState(() {
-        _billingReady = false;
-        _billingError = 'Google Play Billing is unavailable on this device.';
-      });
-      return;
-    }
-
-    final ProductDetailsResponse response = await _inAppPurchase
-        .queryProductDetails(const <String>{_yearlyProductId});
-    ProductDetails? product;
-    for (final item in response.productDetails) {
-      if (item.id == _yearlyProductId) {
-        product = item;
-        break;
-      }
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _yearlyOfferToken = _resolveYearlyOfferToken(product);
-      _billingReady = product != null && _yearlyOfferToken != null;
-      _yearlyProduct = product;
-      _billingError = product == null
-          ? "Product '$_yearlyProductId' not found in Play Console."
-          : (_yearlyOfferToken == null
-                ? 'Yearly base plan offer token not found for $_yearlyProductId.'
-                : null);
-    });
-  }
-
   Future<void> _loadTrialAvailability() async {
     final bool available = await TrialAccessService.isTrialAvailable();
     if (!mounted) return;
@@ -120,93 +80,6 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       _isTrialAvailable = available;
       _trialLoading = false;
     });
-  }
-
-  String? _resolveYearlyOfferToken(ProductDetails? product) {
-    if (product is! GooglePlayProductDetails) {
-      return null;
-    }
-    final offers = product.productDetails.subscriptionOfferDetails;
-    if (offers == null || offers.isEmpty) {
-      return null;
-    }
-
-    // Prefer the yearly + free trial offer if configured.
-    for (final offer in offers) {
-      final base = offer.basePlanId.toLowerCase();
-      final offerId = (offer.offerId ?? '').toLowerCase();
-      final hasTrialTag = offer.offerTags.any(
-        (tag) => tag.toLowerCase().contains('trial'),
-      );
-      final hasFreeTrialPhase = offer.pricingPhases.any(
-        (phase) => phase.priceAmountMicros == 0,
-      );
-      if (base.contains('year') &&
-          (offerId.contains('trial') || hasTrialTag || hasFreeTrialPhase)) {
-        return offer.offerIdToken;
-      }
-    }
-
-    // Fallback to any yearly base plan offer.
-    for (final offer in offers) {
-      final base = offer.basePlanId.toLowerCase();
-      if (base.contains('year')) {
-        return offer.offerIdToken;
-      }
-    }
-
-    // Final fallback to current default index from Play details.
-    final subscriptionIndex = product.subscriptionIndex;
-    if (subscriptionIndex != null &&
-        subscriptionIndex >= 0 &&
-        subscriptionIndex < offers.length) {
-      return offers[subscriptionIndex].offerIdToken;
-    }
-
-    return offers.first.offerIdToken;
-  }
-
-  Future<void> _startTrial() async {
-    HapticFeedback.lightImpact();
-    if (_purchasePending) return;
-    if (!_billingReady || _yearlyProduct == null || _yearlyOfferToken == null) {
-      setState(() {
-        _billingError =
-            _billingError ?? 'Billing is still loading. Please try again.';
-      });
-      return;
-    }
-    setState(() {
-      _purchasePending = true;
-      _billingError = null;
-    });
-    final launched = await _inAppPurchase.buyNonConsumable(
-      purchaseParam: GooglePlayPurchaseParam(
-        productDetails: _yearlyProduct!,
-        offerToken: _yearlyOfferToken!,
-        applicationUserName: null,
-      ),
-    );
-    if (!launched && mounted) {
-      setState(() {
-        _purchasePending = false;
-        _billingError = 'Could not launch Google Play checkout.';
-      });
-    }
-    // Fallback: if user cancels billing sheet and no update comes, reset state
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && _purchasePending) {
-        setState(() {
-          _purchasePending = false;
-        });
-      }
-    });
-  }
-
-  String _lockedBasePlanId() {
-    return _lockedPlan == _PlanChoice.monthly
-        ? SubscriptionProvider.monthlyPlanId
-        : SubscriptionProvider.oneYearPlanId;
   }
 
   Future<void> _startLockedPurchase() async {
@@ -220,9 +93,29 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     try {
       final subscriptionProvider = context.read<SubscriptionProvider>();
       await subscriptionProvider.fetchProducts();
-      final selectedPlan = subscriptionProvider.planForBasePlanId(
-        _lockedBasePlanId(),
+      final bool wantsYearly = _lockedPlan == _PlanChoice.yearly;
+      final bool allowTrial = wantsYearly && _isTrialAvailable;
+      final bool requireTrial = wantsYearly && _isTrialAvailable;
+      final String basePlanId = wantsYearly
+          ? SubscriptionProvider.oneYearPlanId
+          : SubscriptionProvider.monthlyPlanId;
+
+      var selectedPlan = subscriptionProvider.planForBasePlanId(
+        basePlanId,
+        allowFreeTrial: allowTrial,
+        requireFreeTrial: requireTrial,
       );
+
+      // Fallback: If free trial offer was requested but not found or not eligible,
+      // fall back to direct paid subscription so the user is never blocked.
+      if (selectedPlan == null && requireTrial) {
+        selectedPlan = subscriptionProvider.planForBasePlanId(
+          basePlanId,
+          allowFreeTrial: false,
+          requireFreeTrial: false,
+        );
+      }
+
       if (selectedPlan == null) {
         throw StateError(
           subscriptionProvider.lastError ??
@@ -230,7 +123,11 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
         );
       }
 
-      final launched = await subscriptionProvider.purchasePlan(selectedPlan);
+      final launched = await subscriptionProvider.purchasePlan(
+        selectedPlan,
+        allowFreeTrial: selectedPlan.hasFreeTrial,
+        requireFreeTrial: selectedPlan.hasFreeTrial,
+      );
       if (!launched && mounted) {
         setState(() {
           _purchasePending = false;
@@ -257,6 +154,22 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
   }
 
   Future<void> _enterApp() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (!doc.exists) {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'name': widget.userName,
+            'source': 'google_auth',
+          }, SetOptions(merge: true));
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(
         builder: (_) => MainNavigation(userName: widget.userName),
@@ -370,10 +283,6 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     );
   }
 
-  String _yearlyPlanIdForRegion(PricingRegion region) {
-    return region == PricingRegion.india ? 'IN_499' : 'INTL_YEARLY';
-  }
-
   String _yearlyPriceLabel(PricingRegion region) {
     return region == PricingRegion.india
         ? 'Just ₹499.00 per year (₹41/mo)'
@@ -482,9 +391,33 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
 
     final bool isIndia = region == PricingRegion.india;
     final String priceLabel = isIndia ? '₹499/year' : '\$59.99/year';
-    final String footerLabel = isIndia
-        ? '3 days free, then ₹499/year (₹41/mo)'
-        : '3 days free, then \$59.99/year (\$5.00/mo)';
+    final bool selectedYearly = _lockedPlan == _PlanChoice.yearly;
+    
+    final String footerLabel;
+    final String actionLabel;
+    final String headerTitle;
+    
+    if (selectedYearly) {
+      if (_isTrialAvailable) {
+        footerLabel = isIndia
+            ? '3 days free, then ₹499/year (₹41/mo)'
+            : '3 days free, then \$59.99/year (\$5.00/mo)';
+        actionLabel = 'Start My 3-Day Free Trial';
+        headerTitle = 'Start your 3-day FREE trial to continue.';
+      } else {
+        footerLabel = isIndia
+            ? 'Billed today at ₹499/year (₹41/mo)'
+            : 'Billed today at \$59.99/year (\$5.00/mo)';
+        actionLabel = 'Subscribe Now';
+        headerTitle = 'Unlock Premium Access to continue.';
+      }
+    } else {
+      footerLabel = isIndia ? 'Billed today at ₹99/month' : 'Billed today at \$8.99/mo';
+      actionLabel = 'Unlock Monthly Access';
+      headerTitle = _isTrialAvailable
+          ? 'Start your 3-day FREE trial to continue.'
+          : 'Unlock Premium Access to continue.';
+    }
 
     final DateTime bd = DateTime.now().add(const Duration(days: 3));
     const List<String> months = [
@@ -505,136 +438,143 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     final String billingLabel =
         'You\'ll be charged on $billingDate unless you cancel anytime before.';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const SizedBox(height: 10),
-        Text(
-          'Start your 3-day FREE trial to continue.',
-          style: GoogleFonts.cormorantGaramond(
-            color: Colors.white,
-            fontSize: 54,
-            fontWeight: FontWeight.w700,
-            height: 1.0,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          const SizedBox(height: 10),
+          Text(
+            headerTitle,
+            style: GoogleFonts.cormorantGaramond(
+              color: Colors.white,
+              fontSize: 54,
+              fontWeight: FontWeight.w700,
+              height: 1.0,
+            ),
           ),
-        ),
-        const SizedBox(height: 36),
-        _DarkTimeline(billingLabel: billingLabel),
-        const SizedBox(height: 32),
-        Column(
-          children: [
-            _DarkPlanOption(
-              title: 'Monthly',
-              price: isIndia ? '₹99/month' : '\$8.99/mo',
-              selected: _lockedPlan == _PlanChoice.monthly,
-              onTap: () {
-                setState(() {
-                  _lockedPlan = _PlanChoice.monthly;
-                });
-              },
-            ),
-            const SizedBox(height: 14),
-            _DarkPlanOption(
-              title: 'Yearly',
-              price: priceLabel,
-              selected: _lockedPlan == _PlanChoice.yearly,
-              showTrial: true,
-              onTap: () {
-                setState(() {
-                  _lockedPlan = _PlanChoice.yearly;
-                });
-              },
-            ),
+          const SizedBox(height: 36),
+          if (selectedYearly && _isTrialAvailable) ...[
+            _DarkTimeline(billingLabel: billingLabel),
+            const SizedBox(height: 32),
           ],
-        ),
-        const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Icon(
-              Icons.check_circle_rounded,
-              color: Color(0xFFFFD700),
-              size: 16,
+          Column(
+            children: [
+              _DarkPlanOption(
+                title: 'Monthly',
+                price: isIndia ? '₹99/month' : '\$8.99/mo',
+                selected: _lockedPlan == _PlanChoice.monthly,
+                onTap: () {
+                  setState(() {
+                    _lockedPlan = _PlanChoice.monthly;
+                  });
+                },
+              ),
+              const SizedBox(height: 14),
+              _DarkPlanOption(
+                title: 'Yearly',
+                price: priceLabel,
+                selected: _lockedPlan == _PlanChoice.yearly,
+                showTrial: _isTrialAvailable,
+                onTap: () {
+                  setState(() {
+                    _lockedPlan = _PlanChoice.yearly;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (selectedYearly && _isTrialAvailable) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFFFFD700),
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'No Payment Due Now',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
+            const SizedBox(height: 24),
+          ],
+          SizedBox(
+            width: double.infinity,
+            height: 60,
+            child: ElevatedButton(
+              onPressed: _purchasePending ? null : _startLockedPurchase,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFFD700),
+                foregroundColor: Colors.black,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                textStyle: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              child: _purchasePending
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: Colors.black,
+                      ),
+                    )
+                  : Text(actionLabel),
+            ),
+          ),
+          const SizedBox(height: 24),
+          if (_billingError != null) ...<Widget>[
+            const SizedBox(height: 8),
             Text(
-              'No Payment Due Now',
+              _billingError!,
+              textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                color: Colors.white,
-                fontSize: 17,
+                color: const Color(0xFFD32F2F),
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: 60,
-          child: ElevatedButton(
-            onPressed: _purchasePending ? null : _startTrial,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFD700),
-              foregroundColor: Colors.black,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-              ),
-              textStyle: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              footerLabel,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: const Color(0xFFAAAAAA),
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            child: _purchasePending
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      color: Colors.black,
-                    ),
-                  )
-                : const Text('Start My 3-Day Free Trial'),
           ),
-        ),
-        const SizedBox(height: 24),
-        if (_billingError != null) ...<Widget>[
-          const SizedBox(height: 8),
-          Text(
-            _billingError!,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              color: const Color(0xFFD32F2F),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              'Device-based trial protection is active.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF777777),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
-        const SizedBox(height: 12),
-        Center(
-          child: Text(
-            footerLabel,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              color: const Color(0xFFAAAAAA),
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: Text(
-            'Device-based trial protection is active.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              color: const Color(0xFF777777),
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -754,32 +694,23 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
   }
 
   Future<void> _unlockPremiumAndEnterApp() async {
-    final PricingRegion region = PricingLocationService.currentRegion;
-    final String planId = _yearlyPlanIdForRegion(region);
-
-    if (PremiumService.isPremiumActive && PremiumService.plan == planId) {
-      if (!mounted) return;
-      await _enterApp();
-      return;
-    }
-
     try {
-      await TrialAccessService.markTrialUsed(
-        userId: FirebaseAuth.instance.currentUser?.uid,
-      );
-
-      // Persist yearly plan unlock for this user (Firestore + local cache)
-      await PremiumService.setPremiumTrue(
-        planId: planId,
-        chatLimit: region == PricingRegion.india ? 3000 : 5000,
-        mistakeLimit: 60,
-        diffLimit: region == PricingRegion.india ? 50 : 60,
-      );
+      if (_lockedPlan == _PlanChoice.yearly) {
+        await TrialAccessService.markTrialUsed(
+          userId: FirebaseAuth.instance.currentUser?.uid,
+        );
+      }
     } catch (_) {
-      // Fallback to local activation so user gets access immediately.
-      await PremiumService.updateStatus(true, planId: planId);
+      // Trial protection is best-effort; subscription activation is handled by
+      // SubscriptionProvider after Google Play purchase verification.
     }
 
+    if (!mounted) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      await PremiumService.syncFromFirestore(user.uid);
+    }
     if (!mounted) return;
     setState(() => _showConfetti = true);
     await Future<void>.delayed(const Duration(milliseconds: 900));

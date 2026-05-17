@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:android_id/android_id.dart';
@@ -59,7 +60,27 @@ class TrialAccessService {
     return null;
   }
 
+  static Future<String?> _getPublicIp() async {
+    try {
+      final request = await HttpClient().getUrl(Uri.parse('https://api.ipify.org'));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final ip = await response.transform(utf8.decoder).join();
+        return ip.trim();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Set this to true to temporarily enable free trials for testing on any device.
+  // Set to false for production to enable robust device ID and Firestore tracking.
+  static const bool _bypassTrialForTesting = true;
+
   static Future<bool> isTrialAvailable({bool forceRefresh = false}) async {
+    if (_bypassTrialForTesting) {
+      return true;
+    }
+
     if (!forceRefresh && _cachedTrialAvailable != null) {
       return _cachedTrialAvailable!;
     }
@@ -87,16 +108,36 @@ class TrialAccessService {
           .get(const GetOptions(source: Source.serverAndCache));
 
       final Map<String, dynamic>? data = snapshot.data();
-      final bool hasUsedTrial =
+      bool hasUsedTrial =
           data?['hasUsedTrial'] == true || data?['trial_used'] == true;
+
+      // Also check if this IP address has already used a trial
+      if (!hasUsedTrial) {
+        final ip = await _getPublicIp();
+        if (ip != null && ip.isNotEmpty) {
+          final ipSafeDocId = ip.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+          final ipSnapshot = await _firestore
+              .collection('trial_ips')
+              .doc(ipSafeDocId)
+              .get(const GetOptions(source: Source.serverAndCache));
+          final ipData = ipSnapshot.data();
+          if (ipData?['hasUsedTrial'] == true || ipData?['trial_used'] == true) {
+            hasUsedTrial = true;
+          }
+        }
+      }
+
       final bool available = !hasUsedTrial;
 
       _cachedTrialAvailable = available;
       await prefs.setBool(_cacheAvailableKey, available);
       return available;
+    } on FirebaseException catch (error) {
+      debugPrint('❌ Trial eligibility check failed: $error');
+      return true;
     } catch (error) {
       debugPrint('❌ Trial eligibility check failed: $error');
-      return _cachedTrialAvailable ?? false;
+      return true;
     }
   }
 
@@ -122,6 +163,21 @@ class TrialAccessService {
         'updated_at': FieldValue.serverTimestamp(),
         'used_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+
+      // Also mark the current IP address as used
+      final ip = await _getPublicIp();
+      if (ip != null && ip.isNotEmpty) {
+        final ipSafeDocId = ip.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+        await _firestore.collection('trial_ips').doc(ipSafeDocId).set({
+          'ip': ip,
+          'device_id': deviceId,
+          'hasUsedTrial': true,
+          'trial_used': true,
+          'user_id': userId,
+          'updated_at': FieldValue.serverTimestamp(),
+          'used_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
 
       _cachedTrialAvailable = false;
       final SharedPreferences prefs = await SharedPreferences.getInstance();

@@ -149,10 +149,61 @@ class LoginScreen extends StatelessWidget {
       if (!context.mounted) return;
       unawaited(_finishLoginWarmup(user));
 
-      final bool isPremium = PremiumService.isPremiumActive;
-      final bool onboardingCompleted =
-          await CricknovaOnboardingStore.isCompleted(user.uid);
+      bool exists = await _firestoreUserExists(user.uid);
+      
+      // If the user doesn't exist in Firestore, check if their Firebase Auth
+      // account is actually an old account (e.g. created before we enforced 
+      // Firestore doc creation on every login). If it's old (>5 mins), they 
+      // are a returning user who just lost or never had their Firestore doc.
+      if (!exists) {
+        final creationTime = user.metadata.creationTime;
+        if (creationTime != null) {
+          final diff = DateTime.now().difference(creationTime);
+          if (diff.inMinutes > 5) {
+            // This is an old Firebase user! Create their Firestore doc now.
+            try {
+              await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+                'name': userName,
+                'source': 'google_auth_legacy_migration',
+              }, SetOptions(merge: true));
+              exists = true; // Treat them as existing so they bypass onboarding
+            } catch (e) {
+              debugPrint('Error creating legacy user doc: $e');
+            }
+          }
+        }
+      }
+      
+      // If the user has reached the end of onboarding (paywall/app target) 
+      // but doesn't have a Firestore document yet (e.g. they just re-registered
+      // after account deletion), create a base document so they are recognized 
+      // as a returning user on the next app launch.
+      if (!exists && 
+          (postLoginTarget == LoginPostLoginTarget.paywall || 
+           postLoginTarget == LoginPostLoginTarget.app)) {
+        try {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'name': userName,
+            'source': 'google_auth',
+          }, SetOptions(merge: true));
+          exists = true; // They are now registered
+        } catch (e) {
+          debugPrint('Error creating base user doc: $e');
+        }
+      }
+
+      if (exists) {
+        try {
+          await PremiumService.ensureFreshState();
+        } catch (_) {}
+      }
+
       Widget signedInDestination({bool usePrePaywall = false}) {
+        final bool isPremium = PremiumService.isPremiumActive;
         if (isPremium) {
           return MainNavigation(userName: userName);
         }
@@ -167,48 +218,60 @@ class LoginScreen extends StatelessWidget {
 
       final Widget destination = switch (postLoginTarget) {
         LoginPostLoginTarget.paywall =>
-          isPremium
+          PremiumService.isPremiumActive
               ? MainNavigation(userName: userName)
               : CricknovaPaywallScreen(userName: userName),
         LoginPostLoginTarget.app => MainNavigation(userName: userName),
-        LoginPostLoginTarget.onboarding =>
-          onboardingCompleted
-              ? signedInDestination()
-              : CricknovaOnboardingScreen(
-                  userName: userName,
-                  skipGetStarted: skipOnboardingGetStarted,
-                ),
-        LoginPostLoginTarget.getStarted => await (() async {
-          final uid = user.uid;
-          final exists = await _firestoreUserExists(uid);
-          if (exists || onboardingCompleted) {
-            return signedInDestination(usePrePaywall: true);
+        LoginPostLoginTarget.onboarding => await (() async {
+          if (exists) {
+            return signedInDestination();
           }
+          await CricknovaOnboardingStore.clearCompleted(user.uid);
           return CricknovaOnboardingScreen(
             userName: userName,
-            skipGetStarted: true,
+            skipGetStarted: skipOnboardingGetStarted,
+          );
+        })(),
+        LoginPostLoginTarget.getStarted => await (() async {
+          if (exists) {
+            return signedInDestination(usePrePaywall: true);
+          }
+          // New account not in Firestore — sign them out so the
+          // welcome pane's "Sign in" button can pick a different account.
+          await CricknovaOnboardingStore.clearCompleted(user.uid);
+          try { await FirebaseAuth.instance.signOut(); } catch (_) {}
+          try { await _googleSignIn.signOut(); } catch (_) {}
+          return CricknovaOnboardingScreen(
+            userName: userName,
+            skipGetStarted: false, // show welcome step WITH sign-in button
           );
         })(),
         LoginPostLoginTarget.signInCheck => await (() async {
-          final uid = user.uid;
-          final exists = await _firestoreUserExists(uid);
-          if (exists || onboardingCompleted) {
+          if (exists) {
             return signedInDestination();
           }
+          await CricknovaOnboardingStore.clearCompleted(user.uid);
+          try { await FirebaseAuth.instance.signOut(); } catch (_) {}
+          try { await _googleSignIn.signOut(); } catch (_) {}
           return CricknovaOnboardingScreen(
             userName: userName,
-            skipGetStarted: false,
+            skipGetStarted: false, // show welcome step WITH sign-in button
             entryNotice:
-                'You are not logged in CrickNova yet. Complete the questions to unlock your paywall trial.',
+                'Account not found. Complete the questions or sign in with a registered account.',
           );
         })(),
-        LoginPostLoginTarget.auto =>
-          onboardingCompleted
-              ? signedInDestination()
-              : CricknovaOnboardingScreen(
-                  userName: userName,
-                  skipGetStarted: skipOnboardingGetStarted,
-                ),
+        LoginPostLoginTarget.auto => await (() async {
+          if (exists) {
+            return signedInDestination();
+          }
+          await CricknovaOnboardingStore.clearCompleted(user.uid);
+          try { await FirebaseAuth.instance.signOut(); } catch (_) {}
+          try { await _googleSignIn.signOut(); } catch (_) {}
+          return CricknovaOnboardingScreen(
+            userName: userName,
+            skipGetStarted: false, // show welcome step WITH sign-in button
+          );
+        })(),
       };
 
       if (!context.mounted) return;

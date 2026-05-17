@@ -100,6 +100,9 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final SubscriptionProvider provider = context.read<SubscriptionProvider>();
     final bool isActive = provider.activeBasePlanId == plan.basePlanId;
+    final bool isYearlyTrialCapable =
+        plan.basePlanId == SubscriptionProvider.oneYearPlanId &&
+        plan.hasFreeTrial;
 
     return Card(
       child: Padding(
@@ -156,9 +159,17 @@ class _PlanCard extends StatelessWidget {
               child: FilledButton(
                 onPressed: provider.isPurchasePending
                     ? null
-                    : () => provider.purchasePlan(plan),
+                    : () => provider.purchasePlan(
+                        plan,
+                        allowFreeTrial: isYearlyTrialCapable,
+                        requireFreeTrial: isYearlyTrialCapable,
+                      ),
                 child: Text(
-                  isActive ? 'Subscribed' : 'Subscribe with Google Play',
+                  isActive
+                      ? 'Subscribed'
+                      : isYearlyTrialCapable
+                      ? 'Start 3-day free trial'
+                      : 'Subscribe with Google Play',
                 ),
               ),
             ),

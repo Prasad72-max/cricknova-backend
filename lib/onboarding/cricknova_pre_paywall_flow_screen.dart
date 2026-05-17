@@ -274,17 +274,34 @@ class _CricknovaPrePaywallFlowScreenState
     try {
       final subscriptionProvider = context.read<SubscriptionProvider>();
       await subscriptionProvider.fetchProducts();
-      final selectedPlan = subscriptionProvider.planForBasePlanId(
+      var selectedPlan = subscriptionProvider.planForBasePlanId(
         SubscriptionProvider.oneYearPlanId,
+        allowFreeTrial: _isTrialAvailable,
+        requireFreeTrial: _isTrialAvailable,
       );
-      if (selectedPlan == null) {
-        throw StateError(
-          subscriptionProvider.lastError ??
-              'This Google Play plan is not available right now.',
+      
+      // Fallback: If free trial offer was requested but not found or not eligible,
+      // fall back to direct paid subscription so the user is never blocked.
+      if (selectedPlan == null && _isTrialAvailable) {
+        selectedPlan = subscriptionProvider.planForBasePlanId(
+          SubscriptionProvider.oneYearPlanId,
+          allowFreeTrial: false,
+          requireFreeTrial: false,
         );
       }
 
-      final launched = await subscriptionProvider.purchasePlan(selectedPlan);
+      if (selectedPlan == null) {
+        throw StateError(
+          subscriptionProvider.lastError ??
+              'This subscription option is not available right now.',
+        );
+      }
+
+      final launched = await subscriptionProvider.purchasePlan(
+        selectedPlan,
+        allowFreeTrial: selectedPlan.hasFreeTrial,
+        requireFreeTrial: selectedPlan.hasFreeTrial,
+      );
       if (mounted) {
         setState(() => _billingLaunching = false);
       }
@@ -323,7 +340,7 @@ class _CricknovaPrePaywallFlowScreenState
     return '${months[billingDate.month - 1]} ${billingDate.day}, ${billingDate.year}';
   }
 
-  void _goToApp() {
+  Future<void> _goToApp() async {
     final user = FirebaseAuth.instance.currentUser;
     final displayName = user?.displayName?.trim();
     final resolvedName = (displayName != null && displayName.isNotEmpty)
@@ -331,6 +348,22 @@ class _CricknovaPrePaywallFlowScreenState
         : widget.userName.trim().isEmpty
         ? 'Player'
         : widget.userName.trim();
+        
+    if (user != null) {
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        if (!doc.exists) {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'name': resolvedName,
+            'source': 'google_auth',
+          }, SetOptions(merge: true));
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => MainNavigation(userName: resolvedName)),
       (route) => false,
@@ -945,6 +978,51 @@ class _TrialStep extends StatelessWidget {
     if (trialLoading) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.black),
+      );
+    }
+
+    if (!trialAvailable) {
+      return Container(
+        color: const Color(0xFF05080C),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    const SizedBox(width: 44),
+                    const Spacer(),
+                    _HeaderIconButton(
+                      icon: Icons.close_rounded,
+                      onTap: () => Navigator.of(context).maybePop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: _LockedTrialCard(
+                    teal: teal,
+                    onViewDirectPlans: onViewDirectPlans,
+                  ),
+                ),
+                if (billingError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    billingError!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFD32F2F),
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       );
     }
 

@@ -202,17 +202,6 @@ class PlayBillingService with WidgetsBindingObserver {
       final offers = product.productDetails.subscriptionOfferDetails;
       if (offers == null || offers.isEmpty) continue;
 
-      final int? subscriptionIndex = product.subscriptionIndex;
-      if (subscriptionIndex != null &&
-          subscriptionIndex >= 0 &&
-          subscriptionIndex < offers.length &&
-          offers[subscriptionIndex].basePlanId == basePlanId) {
-        return _PlayBillingOffer(
-          productDetails: product,
-          offerToken: offers[subscriptionIndex].offerIdToken,
-        );
-      }
-
       for (final offer in offers) {
         if (offer.basePlanId != basePlanId) continue;
         fallback ??= _PlayBillingOffer(
@@ -233,6 +222,18 @@ class PlayBillingService with WidgetsBindingObserver {
             offerToken: offer.offerIdToken,
           );
         }
+      }
+
+      final int? subscriptionIndex = product.subscriptionIndex;
+      if (fallback == null &&
+          subscriptionIndex != null &&
+          subscriptionIndex >= 0 &&
+          subscriptionIndex < offers.length &&
+          offers[subscriptionIndex].basePlanId == basePlanId) {
+        fallback = _PlayBillingOffer(
+          productDetails: product,
+          offerToken: offers[subscriptionIndex].offerIdToken,
+        );
       }
     }
 

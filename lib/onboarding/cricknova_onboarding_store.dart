@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CricknovaOnboardingStore {
@@ -113,6 +114,24 @@ class CricknovaOnboardingStore {
       return;
     }
     await saveProgress(uid, answers, completed: done);
+    
+    // Upload onboarding answers and timestamps to Firestore
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'onboardingAnswers': answers,
+        'firstQuestionTime': answers['first_question_time'],
+        'lastQuestionTime': answers['last_question_time'],
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {}
+
     await clearPending();
+  }
+
+  static Future<void> clearCompleted(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_completedPrefix$uid');
+    await prefs.remove('$_versionPrefix$uid');
+    await prefs.remove('$_answersPrefix$uid');
   }
 }

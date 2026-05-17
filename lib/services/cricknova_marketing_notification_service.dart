@@ -28,8 +28,7 @@ class CrickNovaMarketingNotificationService {
   static const int _practiceNotificationId = 2102;
 
   static const String _refreshTaskName = 'cricknova_marketing_refresh';
-  static const String _refreshUniqueName =
-      'cricknova_marketing_refresh_unique';
+  static const String _refreshUniqueName = 'cricknova_marketing_refresh_unique';
   static const String _activeUidKey = 'marketing_notifications_active_uid';
   static const String _testerTopic = 'cricknova_testers';
 
@@ -52,7 +51,9 @@ class CrickNovaMarketingNotificationService {
     tz.initializeTimeZones();
     await _configureLocalTimezone();
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const darwinSettings = DarwinInitializationSettings();
     const settings = InitializationSettings(
       android: androidSettings,
@@ -85,7 +86,10 @@ class CrickNovaMarketingNotificationService {
   Future<void> _configureLocalTimezone() async {
     try {
       final timezoneInfo = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timezoneInfo.identifier));
+      final String timezoneId = timezoneInfo.identifier == 'Asia/Calcutta'
+          ? 'Asia/Kolkata'
+          : timezoneInfo.identifier;
+      tz.setLocalLocation(tz.getLocation(timezoneId));
     } catch (e) {
       debugPrint('MARKETING NOTIFICATIONS timezone setup failed: $e');
     }
@@ -94,17 +98,13 @@ class CrickNovaMarketingNotificationService {
   Future<void> _registerWorker() async {
     if (_workerRegistered) return;
 
-    await Workmanager().initialize(
-      crickNovaMarketingCallbackDispatcher,
-    );
+    await Workmanager().initialize(crickNovaMarketingCallbackDispatcher);
     await Workmanager().registerPeriodicTask(
       _refreshUniqueName,
       _refreshTaskName,
       frequency: const Duration(hours: 12),
       existingWorkPolicy: ExistingPeriodicWorkPolicy.update,
-      constraints: Constraints(
-        networkType: NetworkType.notRequired,
-      ),
+      constraints: Constraints(networkType: NetworkType.notRequired),
     );
     _workerRegistered = true;
   }
@@ -140,7 +140,8 @@ class CrickNovaMarketingNotificationService {
       uid: uid,
       date: practiceDate,
       slotLabel: 'practice',
-      avoidId: lunchDate.year == practiceDate.year &&
+      avoidId:
+          lunchDate.year == practiceDate.year &&
               lunchDate.month == practiceDate.month &&
               lunchDate.day == practiceDate.day
           ? lunchTemplate.id
@@ -210,17 +211,8 @@ class CrickNovaMarketingNotificationService {
     );
   }
 
-  tz.TZDateTime _nextSlot(
-    tz.TZDateTime now, {
-    required int hour,
-  }) {
-    var candidate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-    );
+  tz.TZDateTime _nextSlot(tz.TZDateTime now, {required int hour}) {
+    var candidate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hour);
     if (!candidate.isAfter(now)) {
       candidate = candidate.add(const Duration(days: 1));
     }
@@ -233,20 +225,21 @@ class CrickNovaMarketingNotificationService {
     required String slotLabel,
     int? avoidId,
   }) {
-    final seedSource =
-        '$uid|${date.year}-${date.month}-${date.day}|$slotLabel';
+    final seedSource = '$uid|${date.year}-${date.month}-${date.day}|$slotLabel';
     final seed = seedSource.codeUnits.fold<int>(
       0,
       (accumulator, element) => (accumulator * 31 + element) & 0x7fffffff,
     );
     final random = math.Random(seed);
-    var template = crickNovaNotifications[
-        random.nextInt(crickNovaNotifications.length)];
+    var template =
+        crickNovaNotifications[random.nextInt(crickNovaNotifications.length)];
 
     if (avoidId != null && crickNovaNotifications.length > 1) {
       while (template.id == avoidId) {
-        template = crickNovaNotifications[
-            random.nextInt(crickNovaNotifications.length)];
+        template =
+            crickNovaNotifications[random.nextInt(
+              crickNovaNotifications.length,
+            )];
       }
     }
     return template;

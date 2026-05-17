@@ -720,7 +720,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
         history_block = "\n".join(history_lines).strip()
 
         prompt = f'''
-You are CrickNova Coach, a real cricket coach powered by Gemini.
+You are CrickNova Coach, a real cricket coach powered by CrickNova AI.
 
 Answer the user's actual question in natural coaching language.
 Do not use a fixed 4-point template unless the user explicitly asks for points.

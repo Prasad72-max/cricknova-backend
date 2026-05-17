@@ -9,6 +9,7 @@ import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'pricing_location_service.dart';
 import 'premium_service.dart';
+import 'trial_access_service.dart';
 
 class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
   SubscriptionProvider({
@@ -30,6 +31,9 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   static const String _lastSelectedBasePlanKey =
       'google_play_last_selected_base_plan';
+  static const String _lastSelectedHasFreeTrialKey =
+      'google_play_last_selected_has_free_trial';
+  static const String _lastSelectedAtKey = 'google_play_last_selected_at';
 
   final InAppPurchase _inAppPurchase;
   final FirebaseFirestore _firestore;
@@ -38,6 +42,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
 
   List<GooglePlaySubscriptionPlan> _plans = <GooglePlaySubscriptionPlan>[];
+  final Map<String, GooglePlaySubscriptionPlan> _noTrialPlansByBasePlan =
+      <String, GooglePlaySubscriptionPlan>{};
   bool _isStoreAvailable = false;
   bool _isLoading = false;
   bool _isPurchasePending = false;
@@ -162,6 +168,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       );
       final String? planId = data['plan'] as String?;
       final String billingState = _parseBillingState(data);
+      final DateTime now = DateTime.now();
       final bool onHold =
           billingState == 'ACCOUNT_HOLD' || billingState == 'PAST_DUE';
       final bool inGrace = billingState == 'IN_GRACE_PERIOD';
@@ -174,12 +181,15 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       final DateTime? trialRevokeAt = _parseDate(
         data['trial_revoke_at'] ?? data['trialRevokeAt'],
       );
+      final bool graceActive =
+          inGrace && (graceUntil == null || now.isBefore(graceUntil));
+      final bool graceExpired =
+          inGrace && graceUntil != null && !now.isBefore(graceUntil);
       final bool premium =
           !onHold &&
-          (inGrace ||
-              (expiry != null &&
-                  DateTime.now().isBefore(expiry) &&
-                  aiUsed < aiLimit) ||
+          !graceExpired &&
+          (graceActive ||
+              (expiry != null && now.isBefore(expiry) && aiUsed < aiLimit) ||
               data['isPremium'] == true ||
               data['premium'] == true);
 
@@ -226,6 +236,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       final Map<String, GooglePlaySubscriptionPlan> plansByBasePlan =
           <String, GooglePlaySubscriptionPlan>{};
+      final Map<String, GooglePlaySubscriptionPlan> noTrialPlansByBasePlan =
+          <String, GooglePlaySubscriptionPlan>{};
 
       for (final ProductDetails product in response.productDetails) {
         if (product is! GooglePlayProductDetails ||
@@ -233,31 +245,50 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
           continue;
         }
 
-        final int? subscriptionIndex = product.subscriptionIndex;
-        if (subscriptionIndex == null) {
+        final offerDetailsList =
+            product.productDetails.subscriptionOfferDetails;
+        if (offerDetailsList == null || offerDetailsList.isEmpty) {
           continue;
         }
 
-        final offerDetails =
-            product.productDetails.subscriptionOfferDetails?[subscriptionIndex];
-        if (offerDetails == null) {
-          continue;
-        }
+        for (final offerDetails in offerDetailsList) {
+          final bool hasFreeTrial = offerDetails.pricingPhases.any(
+            (phase) => phase.priceAmountMicros == 0,
+          ) ||
+          (offerDetails.offerId ?? '').toLowerCase().contains('trial') ||
+          offerDetails.offerTags.any(
+            (tag) => tag.toLowerCase().contains('trial'),
+          );
+          debugPrint(
+            'Google Play offer: '
+            'basePlanId=${offerDetails.basePlanId}, '
+            'offerId=${offerDetails.offerId}, '
+            'offerTags=${offerDetails.offerTags.join(',')}, '
+            'hasFreeTrial=$hasFreeTrial',
+          );
+          final GooglePlaySubscriptionPlan candidate =
+              GooglePlaySubscriptionPlan.fromGooglePlayProductDetails(
+                product,
+                offerDetails.basePlanId,
+                offerId: offerDetails.offerId,
+                offerToken: offerDetails.offerIdToken,
+                offerTags: offerDetails.offerTags,
+                hasFreeTrial: hasFreeTrial,
+              );
+          final GooglePlaySubscriptionPlan? existing =
+              plansByBasePlan[candidate.basePlanId];
+          if (existing == null || candidate.isBetterOfferThan(existing)) {
+            plansByBasePlan[candidate.basePlanId] = candidate;
+          }
 
-        final GooglePlaySubscriptionPlan candidate =
-            GooglePlaySubscriptionPlan.fromGooglePlayProductDetails(
-              product,
-              offerDetails.basePlanId,
-              offerId: offerDetails.offerId,
-              offerTags: offerDetails.offerTags,
-              hasFreeTrial: offerDetails.pricingPhases.any(
-                (phase) => phase.priceAmountMicros == 0,
-              ),
-            );
-        final GooglePlaySubscriptionPlan? existing =
-            plansByBasePlan[candidate.basePlanId];
-        if (existing == null || candidate.isBetterOfferThan(existing)) {
-          plansByBasePlan[candidate.basePlanId] = candidate;
+          if (!candidate.hasFreeTrial) {
+            final GooglePlaySubscriptionPlan? existingNoTrial =
+                noTrialPlansByBasePlan[candidate.basePlanId];
+            if (existingNoTrial == null ||
+                candidate.isBetterOfferThan(existingNoTrial)) {
+              noTrialPlansByBasePlan[candidate.basePlanId] = candidate;
+            }
+          }
         }
       }
 
@@ -284,6 +315,9 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       _plans = plans;
+      _noTrialPlansByBasePlan
+        ..clear()
+        ..addAll(noTrialPlansByBasePlan);
 
       if (response.notFoundIDs.contains(premiumProductId)) {
         _setError(
@@ -304,7 +338,11 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<bool> purchasePlan(GooglePlaySubscriptionPlan plan) async {
+  Future<bool> purchasePlan(
+    GooglePlaySubscriptionPlan plan, {
+    bool allowFreeTrial = true,
+    bool requireFreeTrial = false,
+  }) async {
     _ensurePurchaseSubscription();
     _clearError();
     try {
@@ -316,10 +354,23 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       final GooglePlaySubscriptionPlan? latestPlan = planForBasePlanId(
         plan.basePlanId,
+        allowFreeTrial: allowFreeTrial,
+        requireFreeTrial: requireFreeTrial,
       );
       if (latestPlan == null) {
+        if (requireFreeTrial) {
+          throw Exception(
+            'A free-trial offer is not available for this Google account. Please use a new eligible tester account or choose the yearly subscription.',
+          );
+        } else {
+          throw Exception(
+            'Base plan ${plan.basePlanId} was not returned by Google Play for product $premiumProductId.',
+          );
+        }
+      }
+      if (requireFreeTrial && !latestPlan.hasFreeTrial) {
         throw Exception(
-          'Base plan ${plan.basePlanId} was not returned by Google Play for product $premiumProductId.',
+          'Google Play returned a paid offer instead of the 3-day free trial. Please use a new eligible tester account or check the trial offer eligibility.',
         );
       }
       if (latestPlan.offerToken == null || latestPlan.offerToken!.isEmpty) {
@@ -330,6 +381,14 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString(_lastSelectedBasePlanKey, latestPlan.basePlanId);
+      await prefs.setBool(
+        _lastSelectedHasFreeTrialKey,
+        allowFreeTrial && latestPlan.hasFreeTrial,
+      );
+      await prefs.setString(
+        _lastSelectedAtKey,
+        DateTime.now().toIso8601String(),
+      );
       _pendingSelectedBasePlanId = latestPlan.basePlanId;
 
       _isPurchasePending = true;
@@ -340,6 +399,9 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         'productId=${latestPlan.productId}, '
         'basePlanId=${latestPlan.basePlanId}, '
         'price=${latestPlan.priceLabel}, '
+        'hasFreeTrial=${latestPlan.hasFreeTrial}, '
+        'offerId=${latestPlan.offerId}, '
+        'offerTags=${latestPlan.offerTags.join(',')}, '
         'offerToken=${latestPlan.offerToken}',
       );
 
@@ -368,7 +430,23 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  GooglePlaySubscriptionPlan? planForBasePlanId(String basePlanId) {
+  GooglePlaySubscriptionPlan? planForBasePlanId(
+    String basePlanId, {
+    bool allowFreeTrial = true,
+    bool requireFreeTrial = false,
+  }) {
+    if (requireFreeTrial) {
+      for (final GooglePlaySubscriptionPlan plan in _plans) {
+        if (plan.basePlanId == basePlanId && plan.hasFreeTrial) {
+          return plan;
+        }
+      }
+      return null;
+    }
+    if (!allowFreeTrial) {
+      final plan = _noTrialPlansByBasePlan[basePlanId];
+      if (plan != null) return plan;
+    }
     for (final GooglePlaySubscriptionPlan plan in _plans) {
       if (plan.basePlanId == basePlanId) {
         return plan;
@@ -445,9 +523,13 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         return;
       }
 
-      final DateTime expiryDate =
-          verification.expiryDate ??
-          _fallbackExpiryForPlan(verification.basePlanId!);
+      final bool isIntroTrial =
+          verification.hasFreeTrial && verification.basePlanId == oneYearPlanId;
+      final DateTime expiryDate = isIntroTrial
+          ? DateTime.now().add(const Duration(days: 3))
+          : verification.expiryDate ??
+                _fallbackExpiryForPlan(verification.basePlanId!);
+      final String subscriptionState = isIntroTrial ? 'TRIAL_ACTIVE' : 'ACTIVE';
 
       final int aiLimit = _aiLimitForPlan(verification.basePlanId!);
 
@@ -456,6 +538,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         aiLimit: aiLimit,
         expiryDate: expiryDate,
         purchaseToken: verification.purchaseToken!,
+        subscriptionState: subscriptionState,
       );
 
       final String premiumPlanId = _premiumServicePlanIdForBasePlan(
@@ -471,7 +554,12 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         chatLimit: premiumLimits.chat,
         mistakeLimit: premiumLimits.mistake,
         compareLimit: premiumLimits.compare,
+        subscriptionState: subscriptionState,
       );
+
+      if (isIntroTrial) {
+        await TrialAccessService.markTrialUsed(userId: _auth.currentUser?.uid);
+      }
 
       await PremiumService.applyExternalPremiumState(
         premium: true,
@@ -479,6 +567,10 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         chatLimit: premiumLimits.chat,
         mistakeLimit: premiumLimits.mistake,
         compareLimit: premiumLimits.compare,
+        billing: subscriptionState,
+        state: isIntroTrial
+            ? SubscriptionAccessState.trialActive
+            : SubscriptionAccessState.active,
       );
 
       _activeBasePlanId = verification.basePlanId;
@@ -515,6 +607,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       );
       basePlanId ??= await _loadLastSelectedBasePlanId();
       final DateTime? expiryDate = _extractExpiryDate(purchaseJson);
+      final bool hasFreeTrial = await _loadRecentSelectedHasFreeTrial();
 
       // TODO: Replace this placeholder with a secure backend verification call
       // that validates the purchase token with Google Play Developer API and
@@ -526,6 +619,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         purchaseToken: purchaseToken,
         basePlanId: basePlanId,
         expiryDate: expiryDate,
+        hasFreeTrial: hasFreeTrial,
       );
     } catch (error, stackTrace) {
       debugPrint('verifyPurchase failed: $error');
@@ -539,6 +633,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
     required int aiLimit,
     required DateTime expiryDate,
     required String purchaseToken,
+    required String subscriptionState,
   }) async {
     final User? user = _auth.currentUser;
     if (user == null) {
@@ -550,8 +645,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       'ai_limit': aiLimit,
       'ai_used': 0,
       'expiry': Timestamp.fromDate(expiryDate),
-      'subscription_state': 'ACTIVE',
-      'billing_state': 'ACTIVE',
+      'subscription_state': subscriptionState,
+      'billing_state': subscriptionState,
       'source': 'google_play',
       'product_id': premiumProductId,
       'purchase_token': purchaseToken,
@@ -566,6 +661,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
     required int chatLimit,
     required int mistakeLimit,
     required int compareLimit,
+    required String subscriptionState,
   }) async {
     final User? user = _auth.currentUser;
     if (user == null) {
@@ -578,8 +674,8 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
     await _firestore.collection('subscriptions').doc(user.uid).set({
       'isPremium': true,
       'premium': true,
-      'subscription_state': 'ACTIVE',
-      'billing_state': 'ACTIVE',
+      'subscription_state': subscriptionState,
+      'billing_state': subscriptionState,
       'plan': premiumPlanId,
       'chatLimit': chatLimit,
       'mistakeLimit': mistakeLimit,
@@ -603,6 +699,29 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       return null;
     }
     return saved;
+  }
+
+  Future<bool> _loadRecentSelectedHasFreeTrial() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String? rawSelectedAt = prefs.getString(_lastSelectedAtKey);
+    final DateTime? selectedAt = rawSelectedAt == null
+        ? null
+        : DateTime.tryParse(rawSelectedAt);
+    if (selectedAt == null) {
+      return false;
+    }
+
+    final bool selectedRecently =
+        DateTime.now()
+            .difference(selectedAt)
+            .abs()
+            .compareTo(const Duration(hours: 1)) <=
+        0;
+    if (!selectedRecently) {
+      return false;
+    }
+
+    return prefs.getBool(_lastSelectedHasFreeTrialKey) ?? false;
   }
 
   String? _extractBasePlanIdFromPurchase(
@@ -910,6 +1029,7 @@ class GooglePlaySubscriptionPlan {
     GooglePlayProductDetails productDetails,
     String basePlanId, {
     required String? offerId,
+    required String offerToken,
     required List<String> offerTags,
     required bool hasFreeTrial,
   }) {
@@ -924,7 +1044,7 @@ class GooglePlaySubscriptionPlan {
       priceLabel: productDetails.price,
       billingLabel: billingLabel,
       aiLimit: aiLimit,
-      offerToken: productDetails.offerToken,
+      offerToken: offerToken,
       offerId: offerId,
       offerTags: offerTags,
       hasFreeTrial: hasFreeTrial,
@@ -1032,10 +1152,12 @@ class PurchaseVerificationResult {
     this.purchaseToken,
     this.basePlanId,
     this.expiryDate,
+    this.hasFreeTrial = false,
   });
 
   final bool isValid;
   final String? purchaseToken;
   final String? basePlanId;
   final DateTime? expiryDate;
+  final bool hasFreeTrial;
 }

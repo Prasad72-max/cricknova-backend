@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:CrickNova_Ai/config/api_config.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'cricknova_notification_service.dart';
 
 enum SubscriptionAccessState {
   unknown,
@@ -65,7 +66,7 @@ class PremiumService {
   static bool get shouldShowBillingBanner => isInGracePeriod;
   static String? get billingBannerMessage {
     if (isInGracePeriod) {
-      return 'Payment failed! Please update your balance within 48 hours to avoid losing Pro access.';
+      return 'Payment failed! Please update your balance within 3 days to avoid losing Pro access.';
     }
     if (isAccountOnHold) {
       return 'Account on Hold. Please settle your ₹499 payment to continue your training.';
@@ -634,6 +635,25 @@ class PremiumService {
         uid: uid,
         at: trialRevokeAt ?? graceUntil ?? holdUntil ?? expiryDate,
       );
+
+      // Local reminder: 1 day before trial ends (Day-2 of a 3-day trial).
+      try {
+        if (resolvedState == SubscriptionAccessState.trialActive &&
+            expiryDate != null) {
+          await CrickNovaNotificationService.instance
+              .scheduleTrialEndingReminder(
+                uid: uid,
+                trialEndsAt: expiryDate!,
+                planId: planId,
+              );
+        } else {
+          // Cancel if the user is no longer in trial.
+          await CrickNovaNotificationService.instance
+              .cancelTrialEndingReminder();
+        }
+      } catch (_) {
+        // Best-effort only.
+      }
 
       isLoaded = true;
       _lastLoadedUid = uid;

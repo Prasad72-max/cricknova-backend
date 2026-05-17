@@ -1037,6 +1037,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                     height: 1.5,
                   ),
                 ),
+                if (PremiumService.isPremiumActive) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 22),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            "ELITE STATUS WARNING:\nYou have an active Elite Subscription. Removing your account will permanently cancel your Elite status and forfeit any remaining time. This cannot be recovered.",
+                            style: GoogleFonts.poppins(
+                              color: Colors.redAccent.shade100,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 22),
                 Row(
                   children: [

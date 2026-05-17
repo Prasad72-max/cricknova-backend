@@ -436,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           content: Text(
-            'Let CrickNova AI send playful match-day nudges, analysis-complete alerts, and personal-best hype moments. No spam. Just smart cricket reminders.',
+            'We\'ll use notifications for things like analysis-complete alerts, practice nudges, and (if you start a free trial) a reminder 1 day before your trial ends. You can turn these off anytime in your phone settings.',
             style: GoogleFonts.poppins(color: Colors.white70, height: 1.5),
           ),
           actions: [

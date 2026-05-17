@@ -13,6 +13,8 @@ import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
 import '../services/subscription_provider.dart';
 import '../navigation/main_navigation.dart';
+import '../services/trial_access_service.dart';
+import '../onboarding/cricknova_paywall_screen.dart';
 
 Future<void> showPremiumSuccessScreen(
   BuildContext context, {
@@ -1047,6 +1049,7 @@ class _PremiumEntryHighlight {
 
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
+  static bool _hasShownTrialPopupSession = false;
   late PricingRegion _resolvedPricingRegion;
   bool _isRegionLoading = true;
 
@@ -1086,6 +1089,106 @@ class _PremiumScreenState extends State<PremiumScreen>
     _loadShimmerPreference();
     _startCountdownTicker();
     unawaited(_resolvePricingRegion());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isPremiumTabVisible) {
+        _checkAndOfferTrial();
+      }
+    });
+  }
+
+  Future<void> _checkAndOfferTrial() async {
+    if (PremiumService.isPremiumActive) return;
+    if (_hasShownTrialPopupSession) return;
+    
+    // Check if eligible
+    final bool isEligible = await TrialAccessService.isTrialAvailable();
+    if (!isEligible) return;
+    if (!mounted) return;
+    
+    // Double check visibility
+    if (!_isPremiumTabVisible) return;
+
+    _hasShownTrialPopupSession = true;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final String resolvedName = user?.displayName?.trim().isNotEmpty == true 
+        ? user!.displayName!.trim() 
+        : "Player";
+
+    await showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B1220).withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.bolt_rounded, color: Color(0xFF38BDF8), size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  "Special Offer",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  "You are eligible for a 3-Day Free Trial of CrickNova Elite! Get unlimited AI analysis, DRS, and Speed Detection for free.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: const Color(0xFF38BDF8),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CricknovaPaywallScreen(userName: resolvedName),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "Claim 3-Day Trial",
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    "Maybe Later",
+                    style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   bool get _isPremiumTabVisible {
@@ -1097,6 +1200,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   void _handleTabVisibilityChange() {
     if (_isPremiumTabVisible) {
       _startCountdownTicker();
+      _checkAndOfferTrial();
       return;
     }
     _countdownTimer?.cancel();
@@ -1430,6 +1534,10 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   Future<void> _showPlayBillingSheet() async {
     if (!mounted) return;
+    final String? selectedPrice = _lastPlanPrice;
+    final bool isYearlyPlan =
+        selectedPrice == "₹499" || selectedPrice == "\$59.99";
+    final bool isINR = selectedPrice?.startsWith("₹") == true;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1525,7 +1633,10 @@ class _PremiumScreenState extends State<PremiumScreen>
     }
   }
 
-  Future<void> _startGooglePlayCheckout() async {
+  Future<void> _startGooglePlayCheckout({
+    bool allowFreeTrial = false,
+    bool requireFreeTrial = false,
+  }) async {
     final String? basePlanId = _selectedGooglePlayBasePlanId();
     if (basePlanId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1542,20 +1653,30 @@ class _PremiumScreenState extends State<PremiumScreen>
         .read<SubscriptionProvider>();
     await subscriptionProvider.fetchProducts();
     final GooglePlaySubscriptionPlan? selectedPlan = subscriptionProvider
-        .planForBasePlanId(basePlanId);
+        .planForBasePlanId(
+          basePlanId,
+          allowFreeTrial: allowFreeTrial,
+          requireFreeTrial: requireFreeTrial,
+        );
 
     if (selectedPlan == null) {
       if (!mounted) return;
       final String message =
           subscriptionProvider.lastError ??
-          "This Google Play plan is not available right now.";
+          (requireFreeTrial
+              ? "The 3-day free trial is not available for this Google account. Try a new eligible tester account or choose the yearly subscription."
+              : "This Google Play plan is not available right now.");
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
       return;
     }
 
-    final bool launched = await subscriptionProvider.purchasePlan(selectedPlan);
+    final bool launched = await subscriptionProvider.purchasePlan(
+      selectedPlan,
+      allowFreeTrial: allowFreeTrial,
+      requireFreeTrial: requireFreeTrial,
+    );
     if (!mounted) return;
 
     if (launched) {
@@ -2244,234 +2365,233 @@ class _PremiumScreenState extends State<PremiumScreen>
                   Padding(
                     padding: const EdgeInsets.all(24),
                     child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title.toUpperCase(),
-                        style: GoogleFonts.poppins(
-                          color: accentColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.6,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title.toUpperCase(),
+                          style: GoogleFonts.poppins(
+                            color: accentColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.6,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        price,
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontSize: 36,
-                          fontWeight: FontWeight.w900,
-                          height: 1.08,
+                        const SizedBox(height: 8),
+                        Text(
+                          price,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            height: 1.08,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        height: 4,
-                        width: 96,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          gradient: LinearGradient(
-                            colors: [
-                              accentColor,
-                              accentColor.withValues(alpha: 0.12),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 4,
+                          width: 96,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            gradient: LinearGradient(
+                              colors: [
+                                accentColor,
+                                accentColor.withValues(alpha: 0.12),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accentColor.withValues(alpha: 0.34),
+                                blurRadius: 14,
+                              ),
                             ],
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: accentColor.withValues(alpha: 0.34),
-                              blurRadius: 14,
-                            ),
-                          ],
                         ),
-                      ),
-                      if (planKey == "\$109.99")
-                        const Padding(
-                          padding: EdgeInsets.only(top: 10),
-                          child: Text(
-                            "Elite international access for less than \$0.31 per day",
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                        if (planKey == "\$109.99")
+                          const Padding(
+                            padding: EdgeInsets.only(top: 10),
+                            child: Text(
+                              "Elite international access for less than \$0.31 per day",
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
-                        ),
-                      if (price == "₹1999")
-                        const Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            "Less than ₹5 per day",
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
+                        if (price == "₹1999")
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8),
+                            child: Text(
+                              "Less than ₹5 per day",
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                              ),
                             ),
                           ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 22),
+                          child: Divider(
+                            color: Colors.white.withValues(alpha: 0.10),
+                            height: 1,
+                          ),
                         ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 22),
-                        child: Divider(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          height: 1,
-                        ),
-                      ),
-                      TweenAnimationBuilder<double>(
-                        tween: Tween(begin: 0.0, end: 1.0),
-                        duration: const Duration(milliseconds: 1400),
-                        curve: Curves.easeOutCubic,
-                        builder: (context, value, child) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              for (int i = 0; i < features.length; i++)
-                                Builder(
-                                  builder: (context) {
-                                    final isHighlighted =
-                                        _shouldHighlightFeature(features[i]);
-                                    return Opacity(
-                                      opacity: (value * 2.5 - (i * 0.1)).clamp(
-                                        0.0,
-                                        1.0,
-                                      ),
-                                      child: Transform.translate(
-                                        offset: Offset(
-                                          0,
-                                          15 *
-                                              (1 -
-                                                  (value * 2.5 - (i * 0.1))
-                                                      .clamp(0.0, 1.0)),
-                                        ),
-                                        child: Container(
-                                          margin: const EdgeInsets.only(
-                                            bottom: 10,
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 1400),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, value, child) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (int i = 0; i < features.length; i++)
+                                  Builder(
+                                    builder: (context) {
+                                      final isHighlighted =
+                                          _shouldHighlightFeature(features[i]);
+                                      return Opacity(
+                                        opacity: (value * 2.5 - (i * 0.1))
+                                            .clamp(0.0, 1.0),
+                                        child: Transform.translate(
+                                          offset: Offset(
+                                            0,
+                                            15 *
+                                                (1 -
+                                                    (value * 2.5 - (i * 0.1))
+                                                        .clamp(0.0, 1.0)),
                                           ),
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: isHighlighted ? 10 : 0,
-                                            vertical: isHighlighted ? 8 : 0,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isHighlighted
-                                                ? const Color(
-                                                    0xFF38BDF8,
-                                                  ).withValues(alpha: 0.12)
-                                                : Colors.transparent,
-                                            borderRadius: BorderRadius.circular(
-                                              12,
+                                          child: Container(
+                                            margin: const EdgeInsets.only(
+                                              bottom: 10,
                                             ),
-                                            border: Border.all(
+                                            padding: EdgeInsets.symmetric(
+                                              horizontal: isHighlighted
+                                                  ? 10
+                                                  : 0,
+                                              vertical: isHighlighted ? 8 : 0,
+                                            ),
+                                            decoration: BoxDecoration(
                                               color: isHighlighted
                                                   ? const Color(
                                                       0xFF38BDF8,
-                                                    ).withValues(alpha: 0.45)
+                                                    ).withValues(alpha: 0.12)
                                                   : Colors.transparent,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Icon(
-                                                isHighlighted
-                                                    ? Icons
-                                                          .arrow_circle_right_rounded
-                                                    : Icons
-                                                          .check_circle_rounded,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              border: Border.all(
                                                 color: isHighlighted
-                                                    ? const Color(0xFF7DD3FC)
-                                                    : accentColor,
-                                                size: 20,
+                                                    ? const Color(
+                                                        0xFF38BDF8,
+                                                      ).withValues(alpha: 0.45)
+                                                    : Colors.transparent,
                                               ),
-                                              const SizedBox(width: 14),
-                                              Flexible(
-                                                child: Text(
-                                                  features[i],
-                                                  style: TextStyle(
-                                                    color: Colors.white
-                                                        .withValues(
-                                                          alpha: isHighlighted
-                                                              ? 1.0
-                                                              : 0.88,
-                                                        ),
-                                                    fontSize: 15,
-                                                    fontWeight: isHighlighted
-                                                        ? FontWeight.w800
-                                                        : FontWeight.w500,
-                                                    height: 1.4,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Icon(
+                                                  isHighlighted
+                                                      ? Icons
+                                                            .arrow_circle_right_rounded
+                                                      : Icons
+                                                            .check_circle_rounded,
+                                                  color: isHighlighted
+                                                      ? const Color(0xFF7DD3FC)
+                                                      : accentColor,
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: 14),
+                                                Flexible(
+                                                  child: Text(
+                                                    features[i],
+                                                    style: TextStyle(
+                                                      color: Colors.white
+                                                          .withValues(
+                                                            alpha: isHighlighted
+                                                                ? 1.0
+                                                                : 0.88,
+                                                          ),
+                                                      fontSize: 15,
+                                                      fontWeight: isHighlighted
+                                                          ? FontWeight.w800
+                                                          : FontWeight.w500,
+                                                      height: 1.4,
+                                                    ),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      GestureDetector(
-                        onTap: () async {
-                          HapticFeedback.mediumImpact();
-                          if (!mounted) return;
+                                      );
+                                    },
+                                  ),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        GestureDetector(
+                          onTap: () async {
+                            HapticFeedback.mediumImpact();
+                            if (!mounted) return;
 
-                          setState(() {
-                            _animatingPlan = planKey;
-                          });
-                          _lastPlanPrice = planKey;
+                            setState(() {
+                              _animatingPlan = planKey;
+                            });
+                            _lastPlanPrice = planKey;
 
-                          try {
-                            await _showPlayBillingSheet();
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                _animatingPlan = null;
-                              });
+                            try {
+                              await _showPlayBillingSheet();
+                            } finally {
+                              if (mounted) {
+                                setState(() {
+                                  _animatingPlan = null;
+                                });
+                              }
                             }
-                          }
-                        },
-                        child: AnimatedScale(
-                          scale: _animatingPlan == planKey ? 0.96 : 1.0,
-                          duration: const Duration(milliseconds: 160),
-                          curve: Curves.easeOut,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  accentColor.withValues(alpha: 0.95),
-                                  accentColor.withValues(alpha: 0.70),
+                          },
+                          child: AnimatedScale(
+                            scale: _animatingPlan == planKey ? 0.96 : 1.0,
+                            duration: const Duration(milliseconds: 160),
+                            curve: Curves.easeOut,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    accentColor.withValues(alpha: 0.95),
+                                    accentColor.withValues(alpha: 0.70),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: accentColor.withValues(alpha: 0.28),
+                                    blurRadius: 22,
+                                    offset: const Offset(0, 8),
+                                  ),
                                 ],
                               ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: accentColor.withValues(alpha: 0.28),
-                                  blurRadius: 22,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: Text(
-                                isCurrentPlan ? "Current Plan" : "Upgrade",
-                                style: GoogleFonts.poppins(
-                                  color: Colors.black,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.2,
+                              child: Center(
+                                child: Text(
+                                  isCurrentPlan ? "Current Plan" : "Upgrade",
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.black,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.2,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                   ),
                 ],
               ),

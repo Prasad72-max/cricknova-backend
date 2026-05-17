@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:in_app_review/in_app_review.dart';
 import 'package:hive/hive.dart';
@@ -404,6 +405,9 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
         final name = _nameController.text.trim();
         if (step.storageKey == null || name.isEmpty) return;
         setState(() {
+          if (!_answers.containsKey('first_question_time')) {
+            _answers['first_question_time'] = DateTime.now().toIso8601String();
+          }
           _answers[step.storageKey!] = name;
           _selectedOption = name;
         });
@@ -422,6 +426,9 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
         final selected = _selectedOption;
         if (step.storageKey == null || selected == null) return;
         setState(() {
+          if (!_answers.containsKey('first_question_time')) {
+            _answers['first_question_time'] = DateTime.now().toIso8601String();
+          }
           _answers[step.storageKey!] = selected;
         });
         _goNext();
@@ -431,6 +438,10 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
 
   Future<void> _completeOnboarding() async {
     setState(() {
+      if (!_answers.containsKey('first_question_time')) {
+        _answers['first_question_time'] = DateTime.now().toIso8601String();
+      }
+      _answers['last_question_time'] = DateTime.now().toIso8601String();
       _isCompleting = true;
     });
 
@@ -446,6 +457,16 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
         _answers,
         completed: true,
       );
+
+      // Upload onboarding answers and timestamps to Firestore
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'onboardingAnswers': _answers,
+          'firstQuestionTime': _answers['first_question_time'],
+          'lastQuestionTime': _answers['last_question_time'],
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (_) {}
     }
 
     if (!mounted) return;
