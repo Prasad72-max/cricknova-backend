@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:hive/hive.dart';
 
 class CricknovaOnboardingStore {
   CricknovaOnboardingStore._();
@@ -133,5 +134,38 @@ class CricknovaOnboardingStore {
     await prefs.remove('$_completedPrefix$uid');
     await prefs.remove('$_versionPrefix$uid');
     await prefs.remove('$_answersPrefix$uid');
+  }
+
+  static Future<void> syncOnboardingNameFromFirestore(String uid) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.serverAndCache));
+      if (!snap.exists) return;
+
+      final data = snap.data();
+      if (data == null) return;
+
+      String? name;
+
+      final onboarding = data['onboardingAnswers'] as Map<String, dynamic>?;
+      if (onboarding != null) {
+        name = onboarding['display_name']?.toString().trim();
+      }
+
+      if (name == null || name.isEmpty) {
+        name = data['display_name']?.toString().trim() ?? data['name']?.toString().trim();
+      }
+
+      if (name != null && name.isNotEmpty && name.toLowerCase() != 'player') {
+        final box = await Hive.openBox("local_stats_$uid");
+        await box.put("profileName", name);
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString("profileName_$uid", name);
+        await prefs.setString("userName_$uid", name);
+      }
+    } catch (_) {}
   }
 }

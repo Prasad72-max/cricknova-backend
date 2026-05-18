@@ -507,8 +507,12 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     final box = await Hive.openBox('local_stats_$uid');
     await box.put('profileName', trimmed);
+    await prefs.setString('profileName_$uid', trimmed);
+    await prefs.setString('userName_$uid', trimmed);
+    // Legacy fallbacks
     await prefs.setString('profileName', trimmed);
     await prefs.setString('userName', trimmed);
+    MainNavigation.userNameNotifier.value = trimmed;
   }
 
   @override

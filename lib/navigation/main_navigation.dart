@@ -21,6 +21,7 @@ class MainNavigation extends StatefulWidget {
   final String userName;
   final int initialIndex;
   static final ValueNotifier<int> activeTabNotifier = ValueNotifier<int>(0);
+  static final ValueNotifier<String> userNameNotifier = ValueNotifier<String>('Player');
 
   const MainNavigation({
     super.key,
@@ -76,6 +77,8 @@ class _MainNavigationState extends State<MainNavigation>
     _index = widget.initialIndex;
     WidgetsBinding.instance.addObserver(this);
     PremiumService.premiumNotifier.addListener(_handlePremiumStateChanged);
+    MainNavigation.userNameNotifier.value = widget.userName;
+    MainNavigation.userNameNotifier.addListener(_handleUserNameChanged);
     _lastPremiumActive = PremiumService.isPremiumActive;
     _lastBillingState = PremiumService.billingState;
     _lastAccessState = PremiumService.accessState;
@@ -203,9 +206,23 @@ class _MainNavigationState extends State<MainNavigation>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     PremiumService.premiumNotifier.removeListener(_handlePremiumStateChanged);
+    MainNavigation.userNameNotifier.removeListener(_handleUserNameChanged);
     _stopMinuteTimer();
     _flushUsageMinutes();
     super.dispose();
+  }
+
+  void _handleUserNameChanged() {
+    if (!mounted) return;
+    final nextName = MainNavigation.userNameNotifier.value;
+    if (nextName != userName) {
+      setState(() {
+        userName = nextName;
+        if (_screenCache.isNotEmpty) {
+          _screenCache[0] = _buildScreenAt(0);
+        }
+      });
+    }
   }
 
   Future<void> loadUser() async {
@@ -214,24 +231,23 @@ class _MainNavigationState extends State<MainNavigation>
     String? name;
     try {
       final box = await Hive.openBox("local_stats_$uid");
-      name = box.get("profileName") as String?;
+      name = (box.get("profileName") as String?)?.trim();
     } catch (_) {}
-    if (name == null || name.trim().isEmpty) {
+    if (name == null || name.isEmpty) {
       final prefs = await SharedPreferences.getInstance();
-      name = prefs.getString("profileName");
+      name = prefs.getString("profileName_$uid")?.trim();
     }
-    final String nextUserName = (name != null && name.trim().isNotEmpty)
-        ? name.trim()
+    if (name == null || name.isEmpty) {
+      name = user?.displayName?.trim();
+    }
+    if (uid == "guest" && (name == null || name.isEmpty)) {
+      final prefs = await SharedPreferences.getInstance();
+      name = prefs.getString("profileName")?.trim();
+    }
+    final String nextUserName = (name != null && name.isNotEmpty && name.toLowerCase() != "player")
+        ? name
         : widget.userName;
-    if (nextUserName == userName) {
-      return;
-    }
-    setState(() {
-      userName = nextUserName;
-      if (_screenCache.isNotEmpty) {
-        _screenCache[0] = _buildScreenAt(0);
-      }
-    });
+    MainNavigation.userNameNotifier.value = nextUserName;
   }
 
   Future<void> _evaluatePremiumAlerts() async {

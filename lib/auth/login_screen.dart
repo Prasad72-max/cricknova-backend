@@ -128,6 +128,7 @@ class LoginScreen extends StatelessWidget {
 
       try {
         await CricknovaOnboardingStore.promotePendingToUser(user.uid);
+        await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
         await CricknovaOnboardingStore.markCompleted(user.uid);
       } catch (_) {}
 

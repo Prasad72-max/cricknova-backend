@@ -843,18 +843,20 @@ class _ProfileScreenState extends State<ProfileScreen>
     remainingXP = nextMilestone - totalXP;
     if (remainingXP < 0) remainingXP = 0;
 
-    // 👤 Load profile name. Onboarding stores this in SharedPreferences/Hive,
-    // so use it as the profile default before asking the user again.
     final hiveName = (box.get("profileName") as String?)?.trim();
+    final uidProfileName = prefs.getString("profileName_$uid")?.trim();
+    final uidUserName = prefs.getString("userName_$uid")?.trim();
+    final authName = user?.displayName?.trim();
     final onboardingProfileName = prefs.getString("profileName")?.trim();
     final onboardingUserName = prefs.getString("userName")?.trim();
-    final authName = user?.displayName?.trim();
     final resolvedName =
         [
           hiveName,
-          onboardingProfileName,
-          onboardingUserName,
+          uidProfileName,
+          uidUserName,
           authName,
+          if (uid == 'guest') onboardingProfileName,
+          if (uid == 'guest') onboardingUserName,
         ].whereType<String>().firstWhere(
           (name) => name.isNotEmpty && name.toLowerCase() != "player",
           orElse: () => "",
@@ -897,16 +899,38 @@ class _ProfileScreenState extends State<ProfileScreen>
     final box = await _getStatsBox(uid);
     final prefs = await SharedPreferences.getInstance();
     await box.put("profileName", trimmed);
+    await prefs.setString("profileName_$uid", trimmed);
+    await prefs.setString("userName_$uid", trimmed);
+    // Legacy fallbacks
     await prefs.setString("profileName", trimmed);
     await prefs.setString("userName", trimmed);
+    MainNavigation.userNameNotifier.value = trimmed;
     _savedName = trimmed;
     _isEditingProfile = false;
     _nameDirty = false;
 
+    // Perform Firebase Auth and Firestore network updates in the background (optimistically)
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      user.updateDisplayName(trimmed).catchError((_) {});
+      FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'display_name': trimmed,
+        'name': trimmed,
+        'onboardingAnswers': {
+          'display_name': trimmed,
+        }
+      }, SetOptions(merge: true)).catchError((e) {
+        debugPrint("Firestore name sync error: $e");
+      });
+    }
+
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Profile updated!")));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Profile updated!"),
+        duration: Duration(milliseconds: 800),
+      ),
+    );
     setState(() {});
   }
 
@@ -1416,8 +1440,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         const SizedBox(height: 15),
                         Text(
-                          nameController.text.isNotEmpty
-                              ? nameController.text
+                          _savedName.isNotEmpty
+                              ? _savedName
                               : "Player",
                           style: GoogleFonts.orbitron(
                             color: Colors.white,
@@ -2052,7 +2076,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
 
               // 📜 LEGAL & APP INFO

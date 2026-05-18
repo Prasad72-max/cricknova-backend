@@ -167,6 +167,9 @@ class _SplashScreenState extends State<SplashScreen> {
         try {
           await PremiumService.ensureFreshState();
         } catch (_) {}
+        try {
+          await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
+        } catch (_) {}
         return _SplashNavigationTarget.online(
           MainNavigation(userName: userName),
         );

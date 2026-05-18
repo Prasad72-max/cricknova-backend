@@ -95,8 +95,12 @@ class _PostLoginWelcomeScreenState extends State<PostLoginWelcomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     final box = await Hive.openBox("local_stats_$uid");
     await box.put("profileName", nickname);
+    await prefs.setString("profileName_$uid", nickname);
+    await prefs.setString("userName_$uid", nickname);
+    // Legacy fallbacks
     await prefs.setString("profileName", nickname);
     await prefs.setString("userName", nickname);
+    MainNavigation.userNameNotifier.value = nickname;
 
     if (!mounted) return;
     setState(() {

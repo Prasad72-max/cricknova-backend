@@ -98,6 +98,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     if (!mounted) return;
 
     await CricknovaOnboardingStore.promotePendingToUser(user.uid);
+    await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
     await CricknovaOnboardingStore.markCompleted(user.uid);
     if (!mounted) return;
     if (PremiumService.isPremiumActive) {

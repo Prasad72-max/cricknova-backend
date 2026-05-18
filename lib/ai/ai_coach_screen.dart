@@ -13,6 +13,7 @@ import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
 import 'chat_sessions_provider.dart';
 import '../widgets/premium_blur_lock.dart';
+import '../navigation/main_navigation.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? payloadContext;
@@ -108,6 +109,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
     uri = Uri.parse("${ApiConfig.baseUrl}/coach/chat");
     _chatProvider = ChatSessionsProvider()..init();
     _loadResolvedUserName();
+    MainNavigation.userNameNotifier.addListener(_onUserNameChanged);
 
     Future.microtask(() async {
       if (!PremiumService.isLoaded) {
@@ -141,10 +143,16 @@ class _AICoachScreenState extends State<AICoachScreen> {
   @override
   void dispose() {
     PremiumService.premiumNotifier.removeListener(_onPremiumChanged);
+    MainNavigation.userNameNotifier.removeListener(_onUserNameChanged);
     _chatProvider.dispose();
     controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onUserNameChanged() {
+    if (!mounted) return;
+    _loadResolvedUserName();
   }
 
   void _onPremiumChanged() {
@@ -170,23 +178,29 @@ class _AICoachScreenState extends State<AICoachScreen> {
     final user = FirebaseAuth.instance.currentUser;
     String nextName = "Player";
     if (user != null) {
+      String? name;
       try {
         final box = await Hive.openBox("local_stats_${user.uid}");
-        final profileName = box.get("profileName") as String?;
-        if (profileName != null && profileName.trim().isNotEmpty) {
-          nextName = profileName.trim();
-        } else if (user.displayName != null &&
-            user.displayName!.trim().isNotEmpty) {
-          nextName = user.displayName!.trim().split(" ").first;
-        } else if ((user.email ?? "").contains("@")) {
-          nextName = user.email!.split("@").first;
-        }
-      } catch (_) {
-        final prefs = await SharedPreferences.getInstance();
-        final profileName = prefs.getString("profileName");
-        if (profileName != null && profileName.trim().isNotEmpty) {
-          nextName = profileName.trim();
-        }
+        name = (box.get("profileName") as String?)?.trim();
+      } catch (_) {}
+
+      if (name == null || name.isEmpty) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          name = prefs.getString("profileName_${user.uid}")?.trim();
+        } catch (_) {}
+      }
+
+      if (name == null || name.isEmpty) {
+        name = user.displayName?.trim();
+      }
+
+      // Removed global fallback to prevent name leak
+
+      if (name != null && name.isNotEmpty && name.toLowerCase() != "player") {
+        nextName = name.split(" ").first;
+      } else if ((user.email ?? "").contains("@")) {
+        nextName = user.email!.split("@").first;
       }
     }
     if (!mounted) return;

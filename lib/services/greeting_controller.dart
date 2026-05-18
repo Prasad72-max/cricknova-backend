@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 enum GreetingTimeSlot { morning, afternoon, evening, midnight }
 
@@ -36,14 +37,20 @@ class GreetingController {
   static Future<void> cacheUserName(String userName) async {
     final trimmed = userName.trim();
     if (trimmed.isEmpty) return;
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profileNameKey, trimmed);
+    await prefs.setString('${_profileNameKey}_$uid', trimmed);
+    await prefs.setString(_profileNameKey, trimmed); // legacy fallback
   }
 
   static Future<String> loadCachedUserName({String fallback = 'Player'}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
     final prefs = await SharedPreferences.getInstance();
-    final cached = prefs.getString(_profileNameKey)?.trim();
-    if (cached != null && cached.isNotEmpty) return cached;
+    final cachedUid = prefs.getString('${_profileNameKey}_$uid')?.trim();
+    if (cachedUid != null && cachedUid.isNotEmpty) return cachedUid;
+
+    final cachedLegacy = prefs.getString(_profileNameKey)?.trim();
+    if (cachedLegacy != null && cachedLegacy.isNotEmpty) return cachedLegacy;
     return fallback;
   }
 
