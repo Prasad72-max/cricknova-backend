@@ -34,10 +34,10 @@ class CricknovaOnboardingScreen extends StatefulWidget {
       _CricknovaOnboardingScreenState();
 }
 
-class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
+class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
+    with WidgetsBindingObserver {
   static const Color _bg = Color(0xFF0C0C0C);
   static const Color _gold = Color(0xFFD4AF37);
-
   final Map<String, String> _answers = <String, String>{};
   final TextEditingController _nameController = TextEditingController();
 
@@ -279,6 +279,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _stepIndex = widget.skipGetStarted ? 1 : 0;
     _restoreInputValueForCurrentStep();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -290,10 +291,13 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _analysisTimer?.cancel();
     _nameController.dispose();
     super.dispose();
   }
+
+
 
   bool _canPopSystem() {
     return _stepIndex == 0 && !_isCompleting;
@@ -319,6 +323,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
           _stepIndex += 1;
           _selectedOption = null;
         });
+
       });
     }
   }
@@ -484,6 +489,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen> {
         : widget.userName.trim();
 
     await _saveProfileName(resolvedName);
+    if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
@@ -2809,6 +2815,9 @@ class _HardTruthStatCard extends StatelessWidget {
   }
 }
 
+
+
+
 class _WelcomePane extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onSignIn;
@@ -2921,10 +2930,10 @@ class _WelcomePane extends StatelessWidget {
                             vertical: 36,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF111111),
+                            color: const Color(0xB3111111),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: const Color(0xFF1E1E1E),
+                              color: const Color(0x33D4AF37),
                               width: 0.5,
                             ),
                           ),
@@ -3066,9 +3075,9 @@ class _WelcomeStatCard extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 130),
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 23),
       decoration: BoxDecoration(
-        color: const Color(0xFF111111),
+        color: const Color(0xB3111111),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E1E1E), width: 0.5),
+        border: Border.all(color: const Color(0x26D4AF37), width: 0.5),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,

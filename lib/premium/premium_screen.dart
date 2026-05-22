@@ -14,7 +14,7 @@ import '../services/pricing_location_service.dart';
 import '../services/subscription_provider.dart';
 import '../navigation/main_navigation.dart';
 import '../services/trial_access_service.dart';
-import '../onboarding/cricknova_paywall_screen.dart';
+import '../onboarding/cricknova_paywall_reel_screen.dart';
 
 Future<void> showPremiumSuccessScreen(
   BuildContext context, {
@@ -1099,20 +1099,20 @@ class _PremiumScreenState extends State<PremiumScreen>
   Future<void> _checkAndOfferTrial() async {
     if (PremiumService.isPremiumActive) return;
     if (_hasShownTrialPopupSession) return;
-    
+
     // Check if eligible
     final bool isEligible = await TrialAccessService.isTrialAvailable();
     if (!isEligible) return;
     if (!mounted) return;
-    
+
     // Double check visibility
     if (!_isPremiumTabVisible) return;
 
     _hasShownTrialPopupSession = true;
 
     final user = FirebaseAuth.instance.currentUser;
-    final String resolvedName = user?.displayName?.trim().isNotEmpty == true 
-        ? user!.displayName!.trim() 
+    final String resolvedName = user?.displayName?.trim().isNotEmpty == true
+        ? user!.displayName!.trim()
         : "Player";
 
     await showDialog(
@@ -1127,12 +1127,18 @@ class _PremiumScreenState extends State<PremiumScreen>
             decoration: BoxDecoration(
               color: const Color(0xFF0B1220).withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+              border: Border.all(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.3),
+              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.bolt_rounded, color: Color(0xFF38BDF8), size: 48),
+                const Icon(
+                  Icons.bolt_rounded,
+                  color: Color(0xFF38BDF8),
+                  size: 48,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   "Special Offer",
@@ -1146,7 +1152,11 @@ class _PremiumScreenState extends State<PremiumScreen>
                 const Text(
                   "You are eligible for a 3-Day Free Trial of CrickNova Elite! Get unlimited AI analysis, DRS, and Speed Detection for free.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -1165,13 +1175,18 @@ class _PremiumScreenState extends State<PremiumScreen>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CricknovaPaywallScreen(userName: resolvedName),
+                          builder: (_) => CricknovaPaywallReelScreen(
+                            userName: resolvedName,
+                          ),
                         ),
                       );
                     },
                     child: const Text(
                       "Claim 3-Day Trial",
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ),
@@ -1180,7 +1195,10 @@ class _PremiumScreenState extends State<PremiumScreen>
                   onPressed: () => Navigator.pop(context),
                   child: const Text(
                     "Maybe Later",
-                    style: TextStyle(color: Colors.white54, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

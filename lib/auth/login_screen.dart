@@ -9,7 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
 import '../onboarding/cricknova_onboarding_screen.dart';
-import '../onboarding/cricknova_paywall_screen.dart';
+import '../onboarding/cricknova_paywall_reel_screen.dart';
 import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/premium_service.dart';
@@ -128,7 +128,9 @@ class LoginScreen extends StatelessWidget {
 
       try {
         await CricknovaOnboardingStore.promotePendingToUser(user.uid);
-        await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
+        await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(
+          user.uid,
+        );
         await CricknovaOnboardingStore.markCompleted(user.uid);
       } catch (_) {}
 
@@ -151,10 +153,10 @@ class LoginScreen extends StatelessWidget {
       unawaited(_finishLoginWarmup(user));
 
       bool exists = await _firestoreUserExists(user.uid);
-      
+
       // If the user doesn't exist in Firestore, check if their Firebase Auth
-      // account is actually an old account (e.g. created before we enforced 
-      // Firestore doc creation on every login). If it's old (>5 mins), they 
+      // account is actually an old account (e.g. created before we enforced
+      // Firestore doc creation on every login). If it's old (>5 mins), they
       // are a returning user who just lost or never had their Firestore doc.
       if (!exists) {
         final creationTime = user.metadata.creationTime;
@@ -163,12 +165,15 @@ class LoginScreen extends StatelessWidget {
           if (diff.inMinutes > 5) {
             // This is an old Firebase user! Create their Firestore doc now.
             try {
-              await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-                'createdAt': FieldValue.serverTimestamp(),
-                'updatedAt': FieldValue.serverTimestamp(),
-                'name': userName,
-                'source': 'google_auth_legacy_migration',
-              }, SetOptions(merge: true));
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .set({
+                    'createdAt': FieldValue.serverTimestamp(),
+                    'updatedAt': FieldValue.serverTimestamp(),
+                    'name': userName,
+                    'source': 'google_auth_legacy_migration',
+                  }, SetOptions(merge: true));
               exists = true; // Treat them as existing so they bypass onboarding
             } catch (e) {
               debugPrint('Error creating legacy user doc: $e');
@@ -176,21 +181,24 @@ class LoginScreen extends StatelessWidget {
           }
         }
       }
-      
-      // If the user has reached the end of onboarding (paywall/app target) 
+
+      // If the user has reached the end of onboarding (paywall/app target)
       // but doesn't have a Firestore document yet (e.g. they just re-registered
-      // after account deletion), create a base document so they are recognized 
+      // after account deletion), create a base document so they are recognized
       // as a returning user on the next app launch.
-      if (!exists && 
-          (postLoginTarget == LoginPostLoginTarget.paywall || 
-           postLoginTarget == LoginPostLoginTarget.app)) {
+      if (!exists &&
+          (postLoginTarget == LoginPostLoginTarget.paywall ||
+              postLoginTarget == LoginPostLoginTarget.app)) {
         try {
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-            'name': userName,
-            'source': 'google_auth',
-          }, SetOptions(merge: true));
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+                'name': userName,
+                'source': 'google_auth',
+              }, SetOptions(merge: true));
           exists = true; // They are now registered
         } catch (e) {
           debugPrint('Error creating base user doc: $e');
@@ -214,14 +222,14 @@ class LoginScreen extends StatelessWidget {
             allowSkipToApp: false,
           );
         }
-        return CricknovaPaywallScreen(userName: userName);
+        return CricknovaPaywallReelScreen(userName: userName);
       }
 
       final Widget destination = switch (postLoginTarget) {
         LoginPostLoginTarget.paywall =>
           PremiumService.isPremiumActive
               ? MainNavigation(userName: userName)
-              : CricknovaPaywallScreen(userName: userName),
+              : CricknovaPaywallReelScreen(userName: userName),
         LoginPostLoginTarget.app => MainNavigation(userName: userName),
         LoginPostLoginTarget.onboarding => await (() async {
           if (exists) {
@@ -240,8 +248,12 @@ class LoginScreen extends StatelessWidget {
           // New account not in Firestore — sign them out so the
           // welcome pane's "Sign in" button can pick a different account.
           await CricknovaOnboardingStore.clearCompleted(user.uid);
-          try { await FirebaseAuth.instance.signOut(); } catch (_) {}
-          try { await _googleSignIn.signOut(); } catch (_) {}
+          try {
+            await FirebaseAuth.instance.signOut();
+          } catch (_) {}
+          try {
+            await _googleSignIn.signOut();
+          } catch (_) {}
           return CricknovaOnboardingScreen(
             userName: userName,
             skipGetStarted: false, // show welcome step WITH sign-in button
@@ -252,8 +264,12 @@ class LoginScreen extends StatelessWidget {
             return signedInDestination();
           }
           await CricknovaOnboardingStore.clearCompleted(user.uid);
-          try { await FirebaseAuth.instance.signOut(); } catch (_) {}
-          try { await _googleSignIn.signOut(); } catch (_) {}
+          try {
+            await FirebaseAuth.instance.signOut();
+          } catch (_) {}
+          try {
+            await _googleSignIn.signOut();
+          } catch (_) {}
           return CricknovaOnboardingScreen(
             userName: userName,
             skipGetStarted: false, // show welcome step WITH sign-in button
@@ -266,8 +282,12 @@ class LoginScreen extends StatelessWidget {
             return signedInDestination();
           }
           await CricknovaOnboardingStore.clearCompleted(user.uid);
-          try { await FirebaseAuth.instance.signOut(); } catch (_) {}
-          try { await _googleSignIn.signOut(); } catch (_) {}
+          try {
+            await FirebaseAuth.instance.signOut();
+          } catch (_) {}
+          try {
+            await _googleSignIn.signOut();
+          } catch (_) {}
           return CricknovaOnboardingScreen(
             userName: userName,
             skipGetStarted: false, // show welcome step WITH sign-in button

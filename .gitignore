@@ -23,6 +23,8 @@ nohup.out
 uploaded_videos/
 uploads/
 *.mp4
+!assets/videos/paywall_intro_reel.mp4
+!assets/videos/onboarding_welcome_loop.mp4
 *.mov
 temp_*.mp4
 

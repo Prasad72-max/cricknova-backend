@@ -16,6 +16,7 @@ import '../services/trial_access_service.dart';
 import '../auth/login_screen.dart';
 import 'cricknova_game_snapshot_view.dart';
 import 'cricknova_onboarding_store.dart';
+import 'cricknova_paywall_reel_screen.dart';
 import 'onboarding_ui_tokens.dart';
 
 class CricknovaPrePaywallFlowScreen extends StatefulWidget {
@@ -33,14 +34,14 @@ class CricknovaPrePaywallFlowScreen extends StatefulWidget {
       _CricknovaPrePaywallFlowScreenState();
 }
 
-enum _PrePaywallStep { login, comparison, snapshot, hook, trust, trial }
+enum _PrePaywallStep { login, reel, comparison, snapshot, hook, trust, trial }
 
 enum _PlanChoice { yearly, monthly }
 
 class _CricknovaPrePaywallFlowScreenState
     extends State<CricknovaPrePaywallFlowScreen>
     with TickerProviderStateMixin {
-  _PrePaywallStep _step = _PrePaywallStep.hook;
+  _PrePaywallStep _step = _PrePaywallStep.reel;
 
   late final AnimationController _bellPulse;
   bool _includeSnapshot = false;
@@ -92,16 +93,18 @@ class _CricknovaPrePaywallFlowScreenState
     if (user == null) return 0;
     if (_includeSnapshot) {
       return switch (_step) {
-        _PrePaywallStep.comparison => 0,
-        _PrePaywallStep.snapshot => 1,
-        _PrePaywallStep.hook => 2,
-        _PrePaywallStep.trust => 3,
-        _PrePaywallStep.trial => 4,
+        _PrePaywallStep.reel => 0,
+        _PrePaywallStep.comparison => 1,
+        _PrePaywallStep.snapshot => 2,
+        _PrePaywallStep.hook => 3,
+        _PrePaywallStep.trust => 4,
+        _PrePaywallStep.trial => 5,
         _PrePaywallStep.login => 0,
       };
     }
     return switch (_step) {
-      _PrePaywallStep.comparison => 0,
+      _PrePaywallStep.reel => 0,
+      _PrePaywallStep.comparison => 1,
       _PrePaywallStep.snapshot => 1,
       _PrePaywallStep.hook => 2,
       _PrePaywallStep.trust => 3,
@@ -113,13 +116,14 @@ class _CricknovaPrePaywallFlowScreenState
   int get _dotCount {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return 1;
-    return _includeSnapshot ? 5 : 4;
+    return _includeSnapshot ? 6 : 5;
   }
 
   void _next() {
     setState(() {
       _step = switch (_step) {
         _PrePaywallStep.login => _PrePaywallStep.login,
+        _PrePaywallStep.reel => _PrePaywallStep.comparison,
         _PrePaywallStep.comparison =>
           _PrePaywallStep.trial, // Skip directly to pricing
         _PrePaywallStep.snapshot => _PrePaywallStep.trial, // Skip to pricing
@@ -148,6 +152,14 @@ class _CricknovaPrePaywallFlowScreenState
       Navigator.of(context).maybePop();
       return;
     }
+    if (_step == _PrePaywallStep.reel) {
+      if (widget.allowSkipToApp) {
+        _goToApp();
+        return;
+      }
+      Navigator.of(context).maybePop();
+      return;
+    }
     if (_step == _PrePaywallStep.hook) {
       if (_includeSnapshot) {
         setState(() => _step = _PrePaywallStep.snapshot);
@@ -164,6 +176,7 @@ class _CricknovaPrePaywallFlowScreenState
     setState(() {
       _step = switch (_step) {
         _PrePaywallStep.login => _PrePaywallStep.login,
+        _PrePaywallStep.reel => _PrePaywallStep.reel,
         _PrePaywallStep.comparison => _PrePaywallStep.comparison,
         _PrePaywallStep.snapshot => _PrePaywallStep.comparison,
         _PrePaywallStep.hook =>
@@ -196,7 +209,8 @@ class _CricknovaPrePaywallFlowScreenState
     setState(() {
       _snapshotAnswers = out;
       _includeSnapshot = out.isNotEmpty && !_forceSkipSnapshot;
-      if (FirebaseAuth.instance.currentUser != null) {
+      if (FirebaseAuth.instance.currentUser != null &&
+          _step != _PrePaywallStep.reel) {
         _step = _PrePaywallStep.comparison;
       }
     });
@@ -236,7 +250,9 @@ class _CricknovaPrePaywallFlowScreenState
     setState(() {
       _forceSkipSnapshot = true;
       _includeSnapshot = false;
-      _step = _PrePaywallStep.comparison;
+      if (_step != _PrePaywallStep.reel) {
+        _step = _PrePaywallStep.comparison;
+      }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -279,7 +295,7 @@ class _CricknovaPrePaywallFlowScreenState
         allowFreeTrial: _isTrialAvailable,
         requireFreeTrial: _isTrialAvailable,
       );
-      
+
       // Fallback: If free trial offer was requested but not found or not eligible,
       // fall back to direct paid subscription so the user is never blocked.
       if (selectedPlan == null && _isTrialAvailable) {
@@ -348,17 +364,23 @@ class _CricknovaPrePaywallFlowScreenState
         : widget.userName.trim().isEmpty
         ? 'Player'
         : widget.userName.trim();
-        
+
     if (user != null) {
       try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (!doc.exists) {
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-            'name': resolvedName,
-            'source': 'google_auth',
-          }, SetOptions(merge: true));
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+                'name': resolvedName,
+                'source': 'google_auth',
+              }, SetOptions(merge: true));
         }
       } catch (_) {}
     }
@@ -380,13 +402,15 @@ class _CricknovaPrePaywallFlowScreenState
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final stepKey = ValueKey<String>('step_${_step.name}');
     final loggedIn = FirebaseAuth.instance.currentUser != null;
+    final bool isReelStep = _step == _PrePaywallStep.reel;
+    final Color activeAccent = isReelStep ? const Color(0xFFFFD700) : _teal;
 
     return Scaffold(
-      backgroundColor: _bg,
+      backgroundColor: isReelStep ? const Color(0xFF080808) : _bg,
       body: SafeArea(
         child: Stack(
           children: [
-            Positioned.fill(child: _BackdropGlow(teal: _teal)),
+            Positioned.fill(child: _BackdropGlow(teal: activeAccent)),
             Padding(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
               child: Column(
@@ -399,7 +423,11 @@ class _CricknovaPrePaywallFlowScreenState
                         onTap: _back,
                       ),
                       const Spacer(),
-                      _StepDots(active: _index, count: _dotCount, teal: _teal),
+                      _StepDots(
+                        active: _index,
+                        count: _dotCount,
+                        teal: activeAccent,
+                      ),
                       const Spacer(),
                       if (widget.allowSkipToApp && loggedIn)
                         TextButton(
@@ -459,6 +487,10 @@ class _CricknovaPrePaywallFlowScreenState
                               ),
                             );
                           },
+                        ),
+                        _PrePaywallStep.reel => CricknovaPaywallReelView(
+                          key: stepKey,
+                          onContinue: _next,
                         ),
                         _PrePaywallStep.snapshot => _SnapshotStep(
                           key: stepKey,
