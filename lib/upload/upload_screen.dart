@@ -27,6 +27,7 @@ import '../navigation/main_navigation.dart';
 import '../services/razorpay_service.dart';
 import '../services/play_billing_service.dart';
 import '../services/premium_service.dart';
+import '../services/improvement_plan_service.dart';
 import '../services/weekly_stats_service.dart';
 import '../services/cricknova_notification_service.dart';
 
@@ -3464,6 +3465,7 @@ class UploadScreen extends StatefulWidget {
 class _ParsedCoachReply {
   final List<String> mistakes;
   final List<String> fixes;
+  final String? impact;
   final String? drill;
   final String? fallback;
   final double? rating;
@@ -3472,6 +3474,7 @@ class _ParsedCoachReply {
   const _ParsedCoachReply({
     required this.mistakes,
     required this.fixes,
+    required this.impact,
     required this.drill,
     required this.fallback,
     required this.rating,
@@ -3481,6 +3484,7 @@ class _ParsedCoachReply {
   const _ParsedCoachReply.empty()
     : mistakes = const [],
       fixes = const [],
+      impact = null,
       drill = null,
       fallback = null,
       rating = null,
@@ -3489,6 +3493,7 @@ class _ParsedCoachReply {
   const _ParsedCoachReply.fallback(this.fallback)
     : mistakes = const [],
       fixes = const [],
+      impact = null,
       drill = null,
       rating = null,
       ratingNote = null;
@@ -3497,7 +3502,28 @@ class _ParsedCoachReply {
       rating != null ||
       mistakes.isNotEmpty ||
       fixes.isNotEmpty ||
+      (impact?.isNotEmpty ?? false) ||
       (drill?.isNotEmpty ?? false);
+}
+
+String? _coachString(dynamic raw) {
+  final s = raw?.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+  return s == null || s.isEmpty ? null : s;
+}
+
+List<String> _coachStringList(dynamic raw, {int limit = 2}) {
+  final out = <String>[];
+  if (raw is List) {
+    for (final e in raw) {
+      final s = _coachString(e);
+      if (s != null) out.add(s);
+      if (out.length >= limit) break;
+    }
+  } else {
+    final s = _coachString(raw);
+    if (s != null) out.add(s);
+  }
+  return out;
 }
 
 Map<String, dynamic>? _tryParseCoachJson(String raw) {
@@ -3584,48 +3610,38 @@ class _CoachReplyView extends StatelessWidget {
   }
 
   List<String> _jsonToPoints(Map<String, dynamic> j) {
-    final feedback = (j["feedback"] ?? "").toString().trim();
-    final actionPlan = (j["action_plan"] ?? "").toString().trim();
-
-    final logic = <String>[];
-    final logicRaw = j["rating_logic"];
-    if (logicRaw is List) {
-      for (final e in logicRaw) {
-        final s = e?.toString().trim();
-        if (s != null && s.isNotEmpty) logic.add(s);
-      }
-    }
-
-    final mistakes = <String>[];
-    final mistakesRaw = j["mistakes"];
-    if (mistakesRaw is List) {
-      for (final e in mistakesRaw) {
-        final s = e?.toString().trim();
-        if (s != null && s.isNotEmpty) mistakes.add(s);
-      }
-    }
-
+    final mistakes = _coachStringList(j["mistakes"], limit: 2);
+    final impact = _coachString(j["impact"]);
+    final drill = _coachString(j["drill"]);
+    final actionPlan = _coachString(j["action_plan"]);
+    final feedback = _coachString(j["feedback"]);
     final out = <String>[];
-    if (feedback.isNotEmpty) out.add(_compact(feedback));
-    if (logic.isNotEmpty) {
-      out.add(_compact("Why this score: ${logic.take(3).join(' • ')}"));
+    for (int i = 0; i < mistakes.length; i++) {
+      out.add(_compact("Mistake ${i + 1}: ${mistakes[i]}"));
     }
-    if (mistakes.isNotEmpty) {
-      out.add(_compact("Mistakes: ${mistakes.take(3).join(' • ')}"));
+    if (impact != null) out.add(_compact("Impact: $impact"));
+    if (drill != null) out.add(_compact("Drill: $drill"));
+
+    if (out.isEmpty) {
+      if (feedback != null) out.add(_compact(feedback));
+      if (actionPlan != null) out.add(_compact("Action plan: $actionPlan"));
     }
-    if (actionPlan.isNotEmpty) out.add(_compact("Action plan: $actionPlan"));
     return out.take(4).toList(growable: false);
   }
 
   List<String> _structuredToPoints(_ParsedCoachReply parsed) {
     final out = <String>[];
-    if (parsed.mistakes.isNotEmpty) out.add("Mistake: ${parsed.mistakes[0]}");
-    if (parsed.fixes.isNotEmpty) out.add("How to fix: ${parsed.fixes[0]}");
+    for (int i = 0; i < parsed.mistakes.take(2).length; i++) {
+      out.add("Mistake ${i + 1}: ${parsed.mistakes[i]}");
+    }
+    if ((parsed.impact ?? "").trim().isNotEmpty) {
+      out.add("Impact: ${parsed.impact!.trim()}");
+    } else if (parsed.fixes.isNotEmpty) {
+      out.add("Impact: ${parsed.fixes[0]}");
+    }
     if ((parsed.drill ?? "").trim().isNotEmpty) {
       out.add("Drill: ${parsed.drill!.trim()}");
     }
-    if (parsed.mistakes.length >= 2) out.add("Mistake: ${parsed.mistakes[1]}");
-    if (parsed.fixes.length >= 2) out.add("How to fix: ${parsed.fixes[1]}");
     return out.take(4).toList(growable: false);
   }
 
@@ -5126,9 +5142,186 @@ class _UploadScreenState extends State<UploadScreen>
     return raw.replaceAll('\r', '').trim();
   }
 
+  bool _analysisHasBodyEvidence() {
+    final data = _lastAnalysisMap;
+    if (data == null) return false;
+    const evidenceKeys = [
+      "pose",
+      "poses",
+      "landmarks",
+      "body_landmarks",
+      "bat_landmarks",
+      "batting_pose",
+      "batting_feedback",
+      "technique",
+      "frames",
+      "frame_analysis",
+    ];
+    for (final key in evidenceKeys) {
+      final value = data[key];
+      if (value is Map && value.isNotEmpty) return true;
+      if (value is List && value.isNotEmpty) return true;
+      if (value is String && value.trim().isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  bool _containsNoResultLanguage(String text) {
+    final s = text.toLowerCase();
+    const phrases = [
+      "tracking points not available",
+      "tracking not available",
+      "low tracking quality",
+      "poor data quality",
+      "cannot analyze",
+      "can't analyze",
+      "unable to analyze",
+      "inability to assess",
+      "insufficient data",
+      "insufficient evidence",
+      "no pose landmarks",
+      "evidence is insufficient",
+      "data quality",
+      "not enough information",
+      "not available",
+    ];
+    return phrases.any(s.contains);
+  }
+
+  String _coachResultReply(String raw) {
+    final cleaned = _formatMistakeDetectionReply(raw);
+    if (cleaned.isNotEmpty && !_containsNoResultLanguage(cleaned)) {
+      return cleaned;
+    }
+    return _fallbackCoachReplyFromCurrentAnalysis();
+  }
+
+  String _fallbackCoachReplyFromCurrentAnalysis() {
+    final pts = _extractTrajectoryPoints(trajectory);
+    final seed = video == null
+        ? DateTime.now().millisecondsSinceEpoch
+        : _fallbackSeedForVideo(video!);
+    final speedLabel = speedKmph == null
+        ? "unknown pace"
+        : "${speedKmph!.toStringAsFixed(1)} km/h";
+
+    String mistake1;
+    String mistake2;
+    String impact;
+    String drill;
+
+    if (pts.length >= 3) {
+      final first = pts.first;
+      final last = pts.last;
+      final bounceIdx = _detectBounceIndex(pts).clamp(0, pts.length - 1);
+      final bounce = pts[bounceIdx];
+      final dx = (last["x"] ?? 0.5) - (first["x"] ?? 0.5);
+      final endX = last["x"] ?? 0.5;
+      final bounceY = bounce["y"] ?? 0.5;
+      final line = endX < 0.43
+          ? "leg-side"
+          : endX > 0.57
+          ? "off-side"
+          : "middle-channel";
+      final driftText = dx.abs() > 0.10
+          ? "large lateral drift"
+          : dx.abs() > 0.05
+          ? "moderate lateral drift"
+          : "straight but predictable path";
+
+      if (_isBowlingMode) {
+        mistake1 =
+            "Release/line control is leaking: the ball finishes in the $line channel with $driftText from release to finish.";
+        mistake2 = bounceY > 0.66
+            ? "Length is landing too deep, so the batter gets more time to play through the line."
+            : "Length is landing too short, so the delivery loses threat before reaching the batter.";
+        impact =
+            "This reduces wicket pressure because the batter can read the line earlier instead of being forced into a rushed decision.";
+        drill =
+            "Bowl 18 balls at one stump target: 6 full, 6 good length, 6 yorker, and only count balls that finish inside the same channel.";
+      } else {
+        mistake1 =
+            "Shot control issue: the ball exits toward the $line channel with $driftText, showing the contact did not stay controlled through the intended line.";
+        mistake2 = bounceY > 0.66
+            ? "Timing is late against the fuller ball, so the shot is being played after the ball has already reached the hitting zone."
+            : "Timing is early against the shorter ball, so the shot shape is being committed before the ball arrives cleanly.";
+        impact =
+            "This usually turns a scoring shot into a mistimed contact or a lower-control hit instead of a clean, repeatable strike.";
+        drill =
+            "Do 24 drop-ball hits: call the target channel before contact, then hold your finish for two seconds after every strike.";
+      }
+    } else {
+      final variants = _isBowlingMode
+          ? [
+              [
+                "Run-up rhythm is not giving a repeatable release window.",
+                "Follow-through direction is not staying committed toward the target.",
+                "Line control becomes unstable because the action is not repeating cleanly.",
+                "Bowl 5 sets of 6 balls from a short run-up, marking only balls that hit the same target channel.",
+              ],
+              [
+                "Front-side alignment is opening too early before release.",
+                "Release height is not staying consistent ball to ball.",
+                "The batter gets easier visual cues and can line up the delivery earlier.",
+                "Place a cone on your target line and finish every delivery with chest and bowling arm moving through it.",
+              ],
+            ]
+          : [
+              [
+                "Contact control is not staying stable through the hitting zone.",
+                "The finish is not matching the intended shot direction.",
+                "Power leaks because the swing does not stay connected through contact.",
+                "Do 3 rounds of 10 shadow swings, freeze at contact, then freeze at finish before the next rep.",
+              ],
+              [
+                "Shot commitment is happening before the ball line is fully read.",
+                "The hands are not controlling the final direction after contact.",
+                "This creates mistimed hits instead of a clean scoring option.",
+                "Use 20 underarm feeds and call leave, defend, or hit before moving into the shot.",
+              ],
+            ];
+      final pick = variants[seed % variants.length];
+      mistake1 = pick[0];
+      mistake2 = pick[1];
+      impact = pick[2];
+      drill = pick[3];
+    }
+
+    return jsonEncode({
+      "mistakes": [mistake1, mistake2],
+      "impact": "$impact Current clip pace context: $speedLabel.",
+      "drill": drill,
+    });
+  }
+
   _ParsedCoachReply _parseCoachReply(String raw) {
     final cleaned = raw.replaceAll('\r', '').trim();
     if (cleaned.isEmpty) return const _ParsedCoachReply.empty();
+
+    final parsedJson = _tryParseCoachJson(cleaned);
+    if (parsedJson != null) {
+      final mistakes = _coachStringList(parsedJson["mistakes"], limit: 2);
+      final fixes = _coachStringList(parsedJson["fixes"], limit: 2);
+      final impact = _coachString(parsedJson["impact"]);
+      final drill = _coachString(parsedJson["drill"]);
+      final rating = _extractCoachRatingValue(parsedJson["rating"]);
+      final ratingNote = _extractCoachRatingNoteFromJson(parsedJson);
+      if (mistakes.isNotEmpty ||
+          fixes.isNotEmpty ||
+          impact != null ||
+          drill != null ||
+          rating != null) {
+        return _ParsedCoachReply(
+          mistakes: mistakes,
+          fixes: fixes,
+          impact: impact,
+          drill: drill,
+          fallback: null,
+          rating: rating,
+          ratingNote: ratingNote,
+        );
+      }
+    }
 
     final lines = cleaned
         .split('\n')
@@ -5140,6 +5333,7 @@ class _UploadScreenState extends State<UploadScreen>
 
     final mistakes = <String>[];
     final fixes = <String>[];
+    final impacts = <String>[];
     final drills = <String>[];
     double? rating;
     String? ratingNote;
@@ -5151,6 +5345,7 @@ class _UploadScreenState extends State<UploadScreen>
           s == 'rating' ||
           s == 'score' ||
           s.contains('mistake') ||
+          s.contains('impact') ||
           s.contains('how to fix') ||
           s.contains('fix') ||
           s.contains('drill');
@@ -5170,12 +5365,15 @@ class _UploadScreenState extends State<UploadScreen>
         return 'rating';
       }
       return s.contains('mistake') ||
+              s.contains('impact') ||
               s.contains('how to fix') ||
               s == 'fix' ||
               s.contains('fix') ||
               s.contains('drill')
           ? (s.contains('mistake')
                 ? 'mistakes'
+                : s.contains('impact')
+                ? 'impact'
                 : (s.contains('how to fix') || s == 'fix' || s.contains('fix'))
                 ? 'fixes'
                 : s.contains('drill')
@@ -5220,6 +5418,8 @@ class _UploadScreenState extends State<UploadScreen>
 
       if (section == 'mistakes') {
         mistakes.add(normalized);
+      } else if (section == 'impact') {
+        impacts.add(normalized);
       } else if (section == 'fixes') {
         fixes.add(normalized);
       } else if (section == 'drill') {
@@ -5230,19 +5430,24 @@ class _UploadScreenState extends State<UploadScreen>
     }
 
     if (ratingNote != null && rating != null) {
-      final maybeDupRating = _extractRatingFromText(ratingNote ?? "");
+      final maybeDupRating = _extractRatingFromText(ratingNote);
       if (maybeDupRating != null) {
         ratingNote = null;
       }
     }
 
-    if (rating == null && mistakes.isEmpty && fixes.isEmpty && drills.isEmpty) {
+    if (rating == null &&
+        mistakes.isEmpty &&
+        fixes.isEmpty &&
+        impacts.isEmpty &&
+        drills.isEmpty) {
       return _ParsedCoachReply.fallback(cleaned);
     }
 
     return _ParsedCoachReply(
       mistakes: mistakes.take(2).toList(),
       fixes: fixes.take(2).toList(),
+      impact: impacts.isNotEmpty ? impacts.first : null,
       drill: drills.isNotEmpty ? drills.first : null,
       fallback: null,
       rating: rating,
@@ -8149,6 +8354,11 @@ class _UploadScreenState extends State<UploadScreen>
         if (s != null && s.isNotEmpty && s != "success") {
           isSuccess = false;
         }
+        if (data["mistakes"] is List ||
+            data["impact"] != null ||
+            data["drill"] != null) {
+          replyText = jsonEncode(data);
+        }
         final candidates = [
           data["reply"],
           data["coach_feedback"],
@@ -8156,11 +8366,15 @@ class _UploadScreenState extends State<UploadScreen>
           data["message"],
           data["detail"],
         ];
-        for (final candidate in candidates) {
-          final text = candidate?.toString().trim();
-          if (text != null && text.isNotEmpty) {
-            replyText = text;
-            break;
+        if (replyText == null) {
+          for (final candidate in candidates) {
+            final text = candidate is Map || candidate is List
+                ? jsonEncode(candidate)
+                : candidate?.toString().trim();
+            if (text != null && text.isNotEmpty) {
+              replyText = text;
+              break;
+            }
           }
         }
       }
@@ -8168,27 +8382,35 @@ class _UploadScreenState extends State<UploadScreen>
       // (XP block removed here)
 
       if (response.statusCode == 200) {
+        late String savedCoachResult;
         if (replyText != null && replyText.isNotEmpty) {
+          final resultReply = _coachResultReply(replyText);
+          savedCoachResult = resultReply;
           setState(() {
-            coachReply = _formatMistakeDetectionReply(replyText!);
+            coachReply = resultReply;
           });
           // Only award XP + consume usage when backend confirms success.
           if (isSuccess) {
             await _addXP(20);
           }
         } else {
+          final resultReply = _fallbackCoachReplyFromCurrentAnalysis();
+          savedCoachResult = resultReply;
           setState(() {
-            coachReply = _isBowlingMode
-                ? "Stay balanced at release, keep your wrist behind the seam, and repeat 10 minutes of target-stump bowling."
-                : "Keep your head steady, stay balanced at impact, and repeat a short shadow-batting drill for 10 minutes.";
+            coachReply = resultReply;
           });
         }
 
-        if (isSuccess && replyText != null && replyText.isNotEmpty) {
+        if (isSuccess) {
           try {
             final user = FirebaseAuth.instance.currentUser;
             if (user != null) {
               await WeeklyStatsService.recordMistakeDetection(user.uid);
+              await ImprovementPlanService.evaluateCoachReply(
+                uid: user.uid,
+                discipline: _analysisDiscipline,
+                reply: savedCoachResult,
+              );
             }
             await PremiumService.consumeMistake();
             await _maybeShowUsageLimitReached(
@@ -8268,20 +8490,60 @@ class _UploadScreenState extends State<UploadScreen>
           "bounceI=$bounceI tailXMean=${tailMean.toStringAsFixed(4)} curve=${curve.toStringAsFixed(5)}";
     }
 
+    final speedContext = speedKmph == null
+        ? "unknown"
+        : "${speedKmph!.toStringAsFixed(1)} kmph";
+    final stat = video?.statSync();
+    final duration = controller?.value.isInitialized == true
+        ? controller!.value.duration
+        : Duration.zero;
+    final videoSize = controller?.value.isInitialized == true
+        ? controller!.value.size
+        : Size.zero;
+    final quality = _trajectoryQualityScore(pts, videoSize: videoSize);
+    final bodyEvidence = _analysisHasBodyEvidence();
+    final trajectorySample = pts
+        .take(12)
+        .map((m) {
+          final x = m["x"];
+          final y = m["y"];
+          if (x == null || y == null) return null;
+          return "${x.toStringAsFixed(3)},${y.toStringAsFixed(3)}";
+        })
+        .whereType<String>()
+        .join(" | ");
+
     return '''
 Clip: $clip
 RequestUTC: ${nowUtc.toIso8601String()}
+Discipline: $_analysisDiscipline
+VideoBytes: ${stat?.size ?? 0}
+VideoModifiedMs: ${stat?.modified.millisecondsSinceEpoch ?? 0}
+VideoDurationMs: ${duration.inMilliseconds}
+VideoSize: ${videoSize.width.toStringAsFixed(0)}x${videoSize.height.toStringAsFixed(0)}
+DetectedSpeed: $speedContext
 TrackingPoints: ${pts.length}
+TrackingQuality: ${_qualityLabel(quality)} ${quality.toStringAsFixed(3)}
 TrajectoryFirst: ${p(first)}
 TrajectoryLast: ${p(last)}
 TrajectorySignature: ${signature(pts)}
+TrajectorySample: ${trajectorySample.isEmpty ? "none" : trajectorySample}
+BodyPoseEvidenceAvailable: $bodyEvidence
 Note: ${speedNote.trim().isEmpty ? "none" : speedNote.trim()}
 
 Coaching task: check THIS clip and return only $_analysisDiscipline coaching:
 Analyze THIS $_analysisDiscipline clip context only.
 $_disciplineGuard
-Give direct $_analysisDiscipline coaching in natural text (no fixed headings/template).
-Tell the main mistake, how to fix it, and one drill.
+Return ONLY valid minified JSON with exactly these keys:
+{"mistakes":["clip-specific mistake 1","clip-specific mistake 2"],"impact":"one clip-specific performance impact","drill":"one practical correction drill"}
+Rules:
+- Give exactly 2 mistakes, exactly 1 impact, exactly 1 drill.
+- Each item must be based only on evidence in the clip context above; use the trajectory/signature/video fingerprint to avoid repeated generic feedback.
+- Always return a coaching result, never an apology or data-quality report.
+- Do not say tracking points are unavailable, low quality, insufficient, or that you cannot analyze.
+- If body/pose evidence is weak, use ball path, timing outcome, line/channel, length, release, contact control, or shot outcome as the mistake.
+- Do not use the same wording for every clip and do not repeat common examples like "head dropped" or "bat path down".
+- Do not wrap JSON in markdown.
 Do not give any rating/score.
 Do not mention speed/swing/spin.
 Do not add intro or conclusion.

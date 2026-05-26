@@ -260,6 +260,31 @@ class CrickNovaNotificationService {
     );
   }
 
+  Future<void> scheduleImprovementOverdueReminder({
+    required String uid,
+    required String discipline,
+    required String mistake,
+    required DateTime dueAt,
+  }) async {
+    if (!await isOptedIn(uid)) return;
+    await initialize();
+
+    final reminderAt = tz.TZDateTime.from(dueAt, tz.local);
+    if (!reminderAt.isAfter(tz.TZDateTime.now(tz.local))) return;
+    final id = 1900 + '${uid}_${discipline}_$mistake'.hashCode.abs() % 700;
+    final skill = discipline == 'bowling' ? 'bowling' : 'batting';
+    await _localNotifications.zonedSchedule(
+      id: id,
+      title: 'CrickNova: 35-day check',
+      body:
+          'Your $skill mistake window is closing. Upload a fresh clip and prove the fix.',
+      scheduledDate: reminderAt,
+      notificationDetails: _notificationDetails(),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'improvement_path',
+    );
+  }
+
   Future<void> maybeNotifyPersonalBest(double speedKmph) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || !await isOptedIn(uid)) return;

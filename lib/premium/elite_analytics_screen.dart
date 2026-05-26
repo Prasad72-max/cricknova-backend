@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../services/weekly_stats_service.dart';
+import 'improvement_plan_screen.dart';
 
 class EliteAnalyticsScreen extends StatefulWidget {
   const EliteAnalyticsScreen({super.key});
@@ -133,9 +134,12 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
             pw.Bullet(text: "App opens: ${stats.appOpens}"),
             pw.Bullet(text: "Active days: $activeDays / 7"),
             pw.Bullet(text: "CrickNova Coach chats: ${stats.aiChats}"),
-            pw.Bullet(text: "Cricknova Analyse Yourself uses: ${stats.analyseAi}"),
             pw.Bullet(
-              text: "Cricknova Mistake Detection uses: ${stats.mistakeDetection}",
+              text: "Cricknova Analyse Yourself uses: ${stats.analyseAi}",
+            ),
+            pw.Bullet(
+              text:
+                  "Cricknova Mistake Detection uses: ${stats.mistakeDetection}",
             ),
             if (stats.appMinutes > 0)
               pw.Bullet(text: "Time in app: ${_fmtUsage(stats.appMinutes)}"),
@@ -239,43 +243,136 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
     final stats = _stats;
     final activeDays = stats == null ? 0 : _activeDays(stats, _daily);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF020617),
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
         backgroundColor: const Color(0xFF020617),
-        title: Text(
-          "Weekly Usage Report",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF020617),
+          title: Text(
+            "Elite Monthly Report",
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          bottom: TabBar(
+            isScrollable: true,
+            indicatorColor: const Color(0xFFFFD86B),
+            labelColor: const Color(0xFFFFD86B),
+            unselectedLabelColor: Colors.white60,
+            labelStyle: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+            tabs: const [
+              Tab(icon: Icon(Icons.dashboard_rounded), text: "Summary"),
+              Tab(icon: Icon(Icons.calendar_month_rounded), text: "Daily"),
+              Tab(icon: Icon(Icons.picture_as_pdf_rounded), text: "PDF"),
+              Tab(icon: Icon(Icons.route_rounded), text: "35-Day Mastery"),
+            ],
+          ),
         ),
-      ),
-      body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFFD86B)),
-            )
-          : RefreshIndicator(
-              color: const Color(0xFFFFD86B),
-              backgroundColor: const Color(0xFF0F172A),
-              onRefresh: _loadWeeklyUsage,
-              child: ListView(
-                padding: const EdgeInsets.all(20),
+        body: _loading
+            ? const Center(
+                child: CircularProgressIndicator(color: Color(0xFFFFD86B)),
+              )
+            : TabBarView(
                 children: [
-                  if (stats != null) ...[
-                    _UsageSummaryRow(stats: stats, activeDays: activeDays),
-                    const SizedBox(height: 16),
-                    _DailyUsageCard(stats: stats, daily: _daily),
-                    const SizedBox(height: 18),
-                    _PdfActionCard(
-                      generating: _generating,
-                      savedPath: _savedPath,
-                      onGenerate: _generatePdfReport,
-                      onDownload: _savedPath == null
-                          ? null
-                          : () => _shareReport(_savedPath!),
+                  RefreshIndicator(
+                    color: const Color(0xFFFFD86B),
+                    backgroundColor: const Color(0xFF0F172A),
+                    onRefresh: _loadWeeklyUsage,
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        if (stats != null) ...[
+                          _EliteReportIntroCard(activeDays: activeDays),
+                          const SizedBox(height: 16),
+                          _UsageSummaryRow(
+                            stats: stats,
+                            activeDays: activeDays,
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
+                  RefreshIndicator(
+                    color: const Color(0xFFFFD86B),
+                    backgroundColor: const Color(0xFF0F172A),
+                    onRefresh: _loadWeeklyUsage,
+                    child: ListView(
+                      padding: const EdgeInsets.all(20),
+                      children: [
+                        if (stats != null)
+                          _DailyUsageCard(stats: stats, daily: _daily),
+                      ],
+                    ),
+                  ),
+                  ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      _PdfActionCard(
+                        generating: _generating,
+                        savedPath: _savedPath,
+                        onGenerate: _generatePdfReport,
+                        onDownload: _savedPath == null
+                            ? null
+                            : () => _shareReport(_savedPath!),
+                      ),
+                    ],
+                  ),
+                  const ImprovementPlanScreen(embedded: true),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _EliteReportIntroCard extends StatelessWidget {
+  final int activeDays;
+
+  const _EliteReportIntroCard({required this.activeDays});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFFFFD86B).withValues(alpha: 0.18),
+            Colors.white.withValues(alpha: 0.06),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: const Color(0xFFFFD86B).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Who said you cannot improve?",
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Rohit, Sachin, and every serious player kept correcting small mistakes. Your report is proof, not decoration: $activeDays active days already counted.",
+            style: GoogleFonts.poppins(
+              color: Colors.white70,
+              fontSize: 12.8,
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -305,7 +402,10 @@ class _UsageSummaryRow extends StatelessWidget {
         const SizedBox(height: 10),
         Row(
           children: [
-            _StatChip(label: "Cricknova Chat Coach", value: stats.aiChats.toString()),
+            _StatChip(
+              label: "Cricknova Chat Coach",
+              value: stats.aiChats.toString(),
+            ),
             const SizedBox(width: 10),
             _StatChip(label: "Analyse", value: stats.analyseAi.toString()),
             const SizedBox(width: 10),
