@@ -24,6 +24,14 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<key>NSCameraUsageDescription</key>
+		<string>CrickNova records your Live Nets session so AI coaching can analyze your batting.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>CrickNova records session audio and lets you talk to the live AI coach.</string>
+		<key>NSSpeechRecognitionUsageDescription</key>
+		<string>CrickNova uses speech recognition so you can talk to the live AI coach during nets.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>CrickNova saves completed Live Nets videos to your gallery.</string>
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>
 		<key>UIMainStoryboardFile</key>

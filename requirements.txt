@@ -6,6 +6,7 @@ numpy
 opencv-python-headless
 razorpay
 google-generativeai
+google-genai
 google-cloud-firestore
 firebase-admin
 gunicorn

@@ -1047,6 +1047,88 @@ class _PremiumEntryHighlight {
   final List<String> keywords;
 }
 
+class _LiveNetsPack {
+  const _LiveNetsPack({
+    required this.minutes,
+    required this.price,
+    required this.badge,
+  });
+
+  final int minutes;
+  final int price;
+  final String badge;
+}
+
+class _LiveNetsPackCard extends StatelessWidget {
+  const _LiveNetsPackCard({required this.pack, required this.onTap});
+
+  final _LiveNetsPack pack;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = pack.minutes == 60 ? '1 Hour' : '${pack.minutes} Mins';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.035),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.42),
+                  ),
+                ),
+                child: Text(
+                  pack.badge,
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFF00E5FF),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '₹${pack.price}',
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFF00E5FF),
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PremiumScreenState extends State<PremiumScreen>
     with SingleTickerProviderStateMixin {
   static bool _hasShownTrialPopupSession = false;
@@ -1552,10 +1634,6 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   Future<void> _showPlayBillingSheet() async {
     if (!mounted) return;
-    final String? selectedPrice = _lastPlanPrice;
-    final bool isYearlyPlan =
-        selectedPrice == "₹499" || selectedPrice == "\$59.99";
-    final bool isINR = selectedPrice?.startsWith("₹") == true;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1900,6 +1978,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                 if (!isIndia) const _InternationalPremiumHero(),
                 _currentPlanOverviewCard(),
                 if (highlight != null) _entryHighlightCard(highlight),
+                if (isIndia) _liveNetsPayAsYouGoSection(),
                 ...(isIndia
                     ? (directPlansOnly
                           ? indiaDirectPlans()
@@ -1944,6 +2023,110 @@ class _PremiumScreenState extends State<PremiumScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _liveNetsPayAsYouGoSection() {
+    final packs = const [
+      _LiveNetsPack(minutes: 3, price: 29, badge: 'Quick Net'),
+      _LiveNetsPack(minutes: 10, price: 89, badge: 'Match Prep'),
+      _LiveNetsPack(minutes: 30, price: 299, badge: 'Deep Work'),
+      _LiveNetsPack(minutes: 60, price: 599, badge: 'Full Hour'),
+    ];
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0E1A),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFF00E5FF).withValues(alpha: 0.42),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.bolt_rounded, color: Color(0xFF00E5FF)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pay-As-You-Go Live Nets',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Buy only live AI net time. Normal subscription plans stay separate below.',
+            style: GoogleFonts.poppins(color: Colors.white60, fontSize: 12.5),
+          ),
+          const SizedBox(height: 14),
+          GridView.count(
+            crossAxisCount: 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.1,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              for (final pack in packs)
+                _LiveNetsPackCard(
+                  pack: pack,
+                  onTap: () => _startLivePackCheckout(pack),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startLivePackCheckout(_LiveNetsPack pack) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in before purchasing Live Nets time.'),
+        ),
+      );
+      return;
+    }
+
+    await FirebaseFirestore.instance
+        .collection('live_nets_checkout_intents')
+        .add({
+          'uid': user.uid,
+          'minutes': pack.minutes,
+          'seconds': pack.minutes * 60,
+          'milliseconds': pack.minutes * 60 * 1000,
+          'amount_inr': pack.price,
+          'status': 'pending',
+          'created_at': FieldValue.serverTimestamp(),
+        });
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Live Nets ${pack.minutes} min pack queued for checkout.',
+        ),
       ),
     );
   }

@@ -19,6 +19,7 @@ import '../navigation/main_navigation.dart';
 import '../services/pricing_location_service.dart';
 import '../services/premium_service.dart';
 import '../services/subscription_provider.dart';
+import '../live/live_nets_tab.dart';
 import 'faq_screen.dart';
 import 'legal_info_screen.dart';
 
@@ -105,7 +106,10 @@ class _SubscriptionHub extends StatelessWidget {
       price: '\$8.99/month',
       region: 'Global',
       icon: Icons.star_border_rounded,
-      features: ['250 Cricknova Chat Coach', '15 Cricknova Analyse Yourself (Batting/Bowling)'],
+      features: [
+        '250 Cricknova Chat Coach',
+        '15 Cricknova Analyse Yourself (Batting/Bowling)',
+      ],
     ),
     _SubscriptionPlanSpec(
       planId: 'INTL_6M',
@@ -476,7 +480,8 @@ class _PlanComparisonSheet extends StatelessWidget {
       (
         'Cricknova Analyse Yourself (Batting/Bowling)',
         plan.features.any(
-          (feature) => feature.contains('Cricknova Analyse Yourself (Batting/Bowling)'),
+          (feature) =>
+              feature.contains('Cricknova Analyse Yourself (Batting/Bowling)'),
         ),
       ),
       (
@@ -913,15 +918,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       user.updateDisplayName(trimmed).catchError((_) {});
-      FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'display_name': trimmed,
-        'name': trimmed,
-        'onboardingAnswers': {
-          'display_name': trimmed,
-        }
-      }, SetOptions(merge: true)).catchError((e) {
-        debugPrint("Firestore name sync error: $e");
-      });
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({
+            'display_name': trimmed,
+            'name': trimmed,
+            'onboardingAnswers': {'display_name': trimmed},
+          }, SetOptions(merge: true))
+          .catchError((e) {
+            debugPrint("Firestore name sync error: $e");
+          });
     }
 
     if (!mounted) return;
@@ -1068,12 +1075,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                     decoration: BoxDecoration(
                       color: Colors.redAccent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                      border: Border.all(
+                        color: Colors.redAccent.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 22),
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.redAccent,
+                          size: 22,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -1440,9 +1453,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         const SizedBox(height: 15),
                         Text(
-                          _savedName.isNotEmpty
-                              ? _savedName
-                              : "Player",
+                          _savedName.isNotEmpty ? _savedName : "Player",
                           style: GoogleFonts.orbitron(
                             color: Colors.white,
                             fontSize: 23,
@@ -1931,6 +1942,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               ),
 
               const SizedBox(height: 20),
+
+              const LiveNetsAccessCard(),
 
               // SUPPORT & RATING
               cardContainer(
