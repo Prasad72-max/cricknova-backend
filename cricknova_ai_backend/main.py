@@ -35,7 +35,23 @@ app = FastAPI(
 )
 
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-LIVE_MODEL_NAME = os.getenv("LIVE_GEMINI_MODEL", "gemini-2.0-flash-live-001")
+LIVE_FALLBACK_MODEL = "gemini-2.0-flash-live-001"
+_LIVE_MODEL_WHITELIST = {
+    "gemini-2.0-flash-live-001",
+    "models/gemini-2.0-flash-live-001",
+    "gemini-3.1-flash-live-preview",
+    "models/gemini-3.1-flash-live-preview",
+}
+
+
+def _resolve_live_model_name() -> str:
+    raw = (os.getenv("LIVE_GEMINI_MODEL") or LIVE_FALLBACK_MODEL).strip()
+    if raw in _LIVE_MODEL_WHITELIST:
+        return raw
+    return LIVE_FALLBACK_MODEL
+
+
+LIVE_MODEL_NAME = _resolve_live_model_name()
 LIVE_SYSTEM_INSTRUCTION = """Context & Role:
 You are "CrickNova AI", an elite cricket coach giving short real-time feedback from the non-striker's end.
 Keep every response under 25 words.
@@ -82,7 +98,10 @@ def _live_gemini() -> Client:
     if _live_gemini_client is None:
         if not GOOGLE_API_KEY:
             raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
-        _live_gemini_client = Client(api_key=GOOGLE_API_KEY)
+        _live_gemini_client = Client(
+            api_key=GOOGLE_API_KEY,
+            http_options={"api_version": "v1alpha"},
+        )
     return _live_gemini_client
 
 

@@ -24,7 +24,8 @@ app = FastAPI(title="CrickNova AI Backend")
 def alive():
     return {
         "alive": True,
-        "file": "spacefoco_backend.py"
+        "file": "spacefoco_backend.py",
+        "live_model": LIVE_MODEL_NAME,
     }
 from fastapi import UploadFile, File, HTTPException, Request, Form
 from cricknova_engine.processing.routes.payment_verify import router as subscription_router
@@ -137,7 +138,23 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return []
 
 
-LIVE_MODEL_NAME = os.getenv("LIVE_GEMINI_MODEL", "gemini-2.0-flash-live-001")
+LIVE_FALLBACK_MODEL = "gemini-2.0-flash-live-001"
+_LIVE_MODEL_WHITELIST = {
+    "gemini-2.0-flash-live-001",
+    "models/gemini-2.0-flash-live-001",
+    "gemini-3.1-flash-live-preview",
+    "models/gemini-3.1-flash-live-preview",
+}
+
+
+def _resolve_live_model_name() -> str:
+    raw = (os.getenv("LIVE_GEMINI_MODEL") or LIVE_FALLBACK_MODEL).strip()
+    if raw in _LIVE_MODEL_WHITELIST:
+        return raw
+    return LIVE_FALLBACK_MODEL
+
+
+LIVE_MODEL_NAME = _resolve_live_model_name()
 LIVE_SYSTEM_INSTRUCTION = """Context & Role:
 You are "CrickNova AI", an elite cricket coach giving short real-time feedback from the non-striker's end.
 Keep every response under 25 words.
@@ -185,7 +202,10 @@ def _live_gemini() -> Client:
         api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
-        _live_gemini_client = Client(api_key=api_key)
+        _live_gemini_client = Client(
+            api_key=api_key,
+            http_options={"api_version": "v1alpha"},
+        )
     return _live_gemini_client
 
 

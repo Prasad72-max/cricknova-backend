@@ -14,7 +14,23 @@ from google.genai import types
 
 app = FastAPI(title="CrickNova Live Nets Backend")
 
-MODEL_NAME = os.getenv("LIVE_GEMINI_MODEL", "gemini-2.0-flash-live-001")
+LIVE_FALLBACK_MODEL = "gemini-2.0-flash-live-001"
+_LIVE_MODEL_WHITELIST = {
+    "gemini-2.0-flash-live-001",
+    "models/gemini-2.0-flash-live-001",
+    "gemini-3.1-flash-live-preview",
+    "models/gemini-3.1-flash-live-preview",
+}
+
+
+def _resolve_live_model_name() -> str:
+    raw = (os.getenv("LIVE_GEMINI_MODEL") or LIVE_FALLBACK_MODEL).strip()
+    if raw in _LIVE_MODEL_WHITELIST:
+        return raw
+    return LIVE_FALLBACK_MODEL
+
+
+MODEL_NAME = _resolve_live_model_name()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 SYSTEM_INSTRUCTION = """Context & Role:
@@ -46,7 +62,10 @@ def gemini() -> Client:
     if _gemini_client is None:
         if not GOOGLE_API_KEY:
             raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
-        _gemini_client = Client(api_key=GOOGLE_API_KEY)
+        _gemini_client = Client(
+            api_key=GOOGLE_API_KEY,
+            http_options={"api_version": "v1alpha"},
+        )
     return _gemini_client
 
 
