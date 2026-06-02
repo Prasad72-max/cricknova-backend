@@ -212,6 +212,21 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
 
     try:
         async with gemini().aio.live.connect(model=MODEL_NAME, config=config) as session:
+            await websocket.send_json(
+                {
+                    "type": "connected",
+                    "model": MODEL_NAME,
+                }
+            )
+            with suppress(Exception):
+                await session.send(
+                    input=(
+                        "Start live cricket detection now. Watch every incoming frame "
+                        "and respond only with short coaching feedback when you detect "
+                        "a mistake or a great shot."
+                    ),
+                    end_of_turn=True,
+                )
             tasks = [
                 asyncio.create_task(
                     _billing_guard(websocket, stop, start_ns, starting_balance_ms)

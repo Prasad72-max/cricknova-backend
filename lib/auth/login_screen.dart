@@ -9,8 +9,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
 import '../onboarding/cricknova_onboarding_screen.dart';
-import '../onboarding/cricknova_paywall_reel_screen.dart';
-import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
+import '../onboarding/cricknova_paywall_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/premium_service.dart';
 
@@ -211,25 +210,19 @@ class LoginScreen extends StatelessWidget {
         } catch (_) {}
       }
 
-      Widget signedInDestination({bool usePrePaywall = false}) {
+      Widget signedInDestination() {
         final bool isPremium = PremiumService.isPremiumActive;
         if (isPremium) {
           return MainNavigation(userName: userName);
         }
-        if (usePrePaywall) {
-          return CricknovaPrePaywallFlowScreen(
-            userName: userName,
-            allowSkipToApp: false,
-          );
-        }
-        return CricknovaPaywallReelScreen(userName: userName);
+        return CricknovaPaywallScreen(userName: userName);
       }
 
       final Widget destination = switch (postLoginTarget) {
         LoginPostLoginTarget.paywall =>
           PremiumService.isPremiumActive
               ? MainNavigation(userName: userName)
-              : CricknovaPaywallReelScreen(userName: userName),
+              : CricknovaPaywallScreen(userName: userName),
         LoginPostLoginTarget.app => MainNavigation(userName: userName),
         LoginPostLoginTarget.onboarding => await (() async {
           if (exists) {
@@ -243,7 +236,7 @@ class LoginScreen extends StatelessWidget {
         })(),
         LoginPostLoginTarget.getStarted => await (() async {
           if (exists) {
-            return signedInDestination(usePrePaywall: true);
+            return signedInDestination();
           }
           // New account not in Firestore — sign them out so the
           // welcome pane's "Sign in" button can pick a different account.

@@ -24,6 +24,7 @@ import '../analysis/analyzing_videos_screen.dart';
 import '../models/pending_video.dart';
 import '../premium/premium_screen.dart';
 import '../navigation/main_navigation.dart';
+import '../services/app_analytics.dart';
 import '../services/razorpay_service.dart';
 import '../services/play_billing_service.dart';
 import '../services/premium_service.dart';
@@ -3806,7 +3807,7 @@ class _UploadScreenState extends State<UploadScreen>
       ? "Bowling-only: identify bowling mistakes using run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. Never give batting mistakes, bat path, shot, stance, or batting footwork advice."
       : "Batting-only: identify batting mistakes using stance, head position, balance, bat path, timing, shot control, and batting footwork. Never give bowling mistakes, run-up, release point, seam/wrist, line/length, or bowling advice.";
   String get _analysisTitle =>
-      _isBowlingMode ? "Upload Bowling Video" : "Upload Training Video";
+      _isBowlingMode ? "Upload Bowling Video" : "Analyze My Cricket Video";
 
   // 🔥 Button Animation Helpers
   double _drsScale = 1.0;
@@ -5198,9 +5199,12 @@ class _UploadScreenState extends State<UploadScreen>
 
   String _fallbackCoachReplyFromCurrentAnalysis() {
     final pts = _extractTrajectoryPoints(trajectory);
-    final seed = video == null
-        ? DateTime.now().millisecondsSinceEpoch
-        : _fallbackSeedForVideo(video!);
+    // Use current time as seed so bowling ALWAYS gives different output each run
+    final seed = _isBowlingMode
+        ? DateTime.now().microsecondsSinceEpoch
+        : (video == null
+              ? DateTime.now().millisecondsSinceEpoch
+              : _fallbackSeedForVideo(video!));
     final speedLabel = speedKmph == null
         ? "unknown pace"
         : "${speedKmph!.toStringAsFixed(1)} km/h";
@@ -5230,15 +5234,48 @@ class _UploadScreenState extends State<UploadScreen>
           : "straight but predictable path";
 
       if (_isBowlingMode) {
-        mistake1 =
-            "Release/line control is leaking: the ball finishes in the $line channel with $driftText from release to finish.";
-        mistake2 = bounceY > 0.66
-            ? "Length is landing too deep, so the batter gets more time to play through the line."
-            : "Length is landing too short, so the delivery loses threat before reaching the batter.";
-        impact =
-            "This reduces wicket pressure because the batter can read the line earlier instead of being forced into a rushed decision.";
-        drill =
-            "Bowl 18 balls at one stump target: 6 full, 6 good length, 6 yorker, and only count balls that finish inside the same channel.";
+        // Rotate through 4 bowling-specific analysis angles
+        final variant = seed % 4;
+        if (variant == 0) {
+          mistake1 =
+              "Release/line control is leaking: the ball finishes in the $line channel with $driftText from release to finish.";
+          mistake2 = bounceY > 0.66
+              ? "Length is landing too full, giving the batter easy access to drive through the line."
+              : "Length is too short, allowing the batter time to rock back and free their arms.";
+          impact =
+              "This reduces wicket pressure because the batter can read the line earlier and commit to a scoring shot.";
+          drill =
+              "Bowl 18 balls at one stump target: 6 full, 6 good length, 6 yorker — count only balls finishing in the same channel.";
+        } else if (variant == 1) {
+          mistake1 =
+              "Front-foot landing is collapsing before the arm comes over, which is cutting off hip rotation too early.";
+          mistake2 =
+              "The wrist position at release is too flat, reducing the chance of late movement off the surface.";
+          impact =
+              "Flat seam presentation means the ball isn't doing anything off the pitch, making it easier to score from.";
+          drill =
+              "Shadow bowl 10 slow-motion deliveries in front of a mirror: pause at the top of the action and check wrist angle before releasing.";
+        } else if (variant == 2) {
+          mistake1 =
+              "Run-up rhythm is inconsistent — the gather step before delivery is either too long or too short across deliveries.";
+          mistake2 = bounceY > 0.66
+              ? "The follow-through is drifting toward fine leg instead of pointing at the target stump."
+              : "Follow-through is stopping short and not driving past the crease, reducing power transfer.";
+          impact =
+              "An inconsistent action means the batter sees different release windows, making length more predictable.";
+          drill =
+              "Mark your gather spot on the crease with tape and bowl 20 balls ensuring your front foot lands exactly on that mark every time.";
+        } else {
+          mistake1 =
+              "The bowling arm is swinging too wide in the arc instead of coming close to the ear, causing the ball to push wide consistently.";
+          mistake2 = bounceY > 0.66
+              ? "Length is full-toss territory too often — the release point is dropping before the arm fully extends."
+              : "The ball is being directed at the body too predictably — missing the outside edge zone entirely.";
+          impact =
+              "A wide arm arc removes the threat of late swing and makes the ball shape obvious from the hand early.";
+          drill =
+              "Bowl 15 deliveries with a towel tucked under your bowling arm: if it falls before release, the arm is swinging too wide.";
+        }
       } else {
         mistake1 =
             "Shot control issue: the ball exits toward the $line channel with $driftText, showing the contact did not stay controlled through the intended line.";
@@ -5251,40 +5288,66 @@ class _UploadScreenState extends State<UploadScreen>
             "Do 24 drop-ball hits: call the target channel before contact, then hold your finish for two seconds after every strike.";
       }
     } else {
-      final variants = _isBowlingMode
-          ? [
-              [
-                "Run-up rhythm is not giving a repeatable release window.",
-                "Follow-through direction is not staying committed toward the target.",
-                "Line control becomes unstable because the action is not repeating cleanly.",
-                "Bowl 5 sets of 6 balls from a short run-up, marking only balls that hit the same target channel.",
-              ],
-              [
-                "Front-side alignment is opening too early before release.",
-                "Release height is not staying consistent ball to ball.",
-                "The batter gets easier visual cues and can line up the delivery earlier.",
-                "Place a cone on your target line and finish every delivery with chest and bowling arm moving through it.",
-              ],
-            ]
-          : [
-              [
-                "Contact control is not staying stable through the hitting zone.",
-                "The finish is not matching the intended shot direction.",
-                "Power leaks because the swing does not stay connected through contact.",
-                "Do 3 rounds of 10 shadow swings, freeze at contact, then freeze at finish before the next rep.",
-              ],
-              [
-                "Shot commitment is happening before the ball line is fully read.",
-                "The hands are not controlling the final direction after contact.",
-                "This creates mistimed hits instead of a clean scoring option.",
-                "Use 20 underarm feeds and call leave, defend, or hit before moving into the shot.",
-              ],
-            ];
-      final pick = variants[seed % variants.length];
-      mistake1 = pick[0];
-      mistake2 = pick[1];
-      impact = pick[2];
-      drill = pick[3];
+      if (_isBowlingMode) {
+        // 5 bowling fallback variants — rotated by time
+        final bowlingVariants = [
+          [
+            "Run-up rhythm is not giving a repeatable release window.",
+            "Follow-through direction is not staying committed toward the target.",
+            "Line control becomes unstable because the action is not repeating cleanly.",
+            "Bowl 5 sets of 6 balls from a short run-up, marking only balls that hit the same target channel.",
+          ],
+          [
+            "Front-side alignment is opening too early before release.",
+            "Release height is not staying consistent delivery to delivery.",
+            "The batter gets easier visual cues and can line up the delivery earlier.",
+            "Place a cone on your target line and finish every delivery with chest and bowling arm moving through it.",
+          ],
+          [
+            "The wrist is not staying behind the ball at the point of release.",
+            "The non-bowling arm is not pulling down powerfully enough to drive the hip through.",
+            "Flat release means no late movement, making the ball easy to time through the line.",
+            "Practice wrist-snap drills: 20 slow deliveries focusing only on snapping fingers over the top of the ball at release.",
+          ],
+          [
+            "Gather step is too long, causing the body to overbalance before the arm comes through.",
+            "The back foot landing is not side-on enough, causing the hips to open too early.",
+            "Early hip opening telegraphs the line to the batter before the ball is released.",
+            "Bowl 3 sets of 8 from a standing start: focus only on keeping the back foot parallel to the crease on landing.",
+          ],
+          [
+            "The bowling arm is not staying high enough in the arc — it's dropping below the ear level.",
+            "Seam presentation is inconsistent, making it harder to generate controlled movement.",
+            "Lower arm trajectory causes the ball to arrive at a flatter angle, removing bounce and carry.",
+            "Tape a ruler to your side and bowl 15 slow-motion deliveries: check the arm passes above shoulder height every time.",
+          ],
+        ];
+        final pick = bowlingVariants[seed % bowlingVariants.length];
+        mistake1 = pick[0];
+        mistake2 = pick[1];
+        impact = pick[2];
+        drill = pick[3];
+      } else {
+        final battingVariants = [
+          [
+            "Contact control is not staying stable through the hitting zone.",
+            "The finish is not matching the intended shot direction.",
+            "Power leaks because the swing does not stay connected through contact.",
+            "Do 3 rounds of 10 shadow swings, freeze at contact, then freeze at finish before the next rep.",
+          ],
+          [
+            "Shot commitment is happening before the ball line is fully read.",
+            "The hands are not controlling the final direction after contact.",
+            "This creates mistimed hits instead of a clean scoring option.",
+            "Use 20 underarm feeds and call leave, defend, or hit before moving into the shot.",
+          ],
+        ];
+        final pick = battingVariants[seed % battingVariants.length];
+        mistake1 = pick[0];
+        mistake2 = pick[1];
+        impact = pick[2];
+        drill = pick[3];
+      }
     }
 
     return jsonEncode({
@@ -7502,6 +7565,14 @@ class _UploadScreenState extends State<UploadScreen>
 
   Future<bool> pickAndUpload() async {
     debugPrint("UPLOAD_SCREEN → pickAndUpload start");
+    unawaited(
+      AppAnalytics.log(
+        'upload_clicked',
+        parameters: {
+          'source': _isBowlingMode ? 'bowling_upload' : 'upload_screen',
+        },
+      ),
+    );
 
     final canUpload = await _ensureFreeDailyVideoUploadAvailable();
     if (!canUpload) return false;
@@ -7509,12 +7580,28 @@ class _UploadScreenState extends State<UploadScreen>
     final picker = ImagePicker();
     final picked = await picker.pickVideo(source: ImageSource.gallery);
     if (picked == null) return false;
+    unawaited(
+      AppAnalytics.log(
+        'video_selected',
+        parameters: {
+          'source': _isBowlingMode ? 'bowling_upload' : 'upload_screen',
+        },
+      ),
+    );
 
     final recordedUpload = await _recordFreeDailyVideoUpload();
     if (!recordedUpload) return false;
 
     final pickedFile = File(picked.path);
     video = await _copyVideoToAnalysisStorage(pickedFile);
+    unawaited(
+      AppAnalytics.markVideoUpload(
+        source: _isBowlingMode ? 'bowling_upload' : 'upload_screen',
+        discipline: _analysisDiscipline,
+        sessionType: _selectedSessionType,
+        localPath: video?.path,
+      ),
+    );
 
     controller?.removeListener(_pauseUploadedVideoAtEnd);
     controller?.dispose();
@@ -7543,6 +7630,12 @@ class _UploadScreenState extends State<UploadScreen>
     }
     _startAnalysisExperience();
     _startFactCycling();
+    unawaited(
+      AppAnalytics.log(
+        'analysis_started',
+        parameters: {'discipline': _analysisDiscipline},
+      ),
+    );
 
     final analysisStartTime = DateTime.now();
 
@@ -7601,6 +7694,12 @@ class _UploadScreenState extends State<UploadScreen>
       if (response.statusCode != 200) throw Exception("UPLOAD_FAILED");
 
       await _incrementTotalVideos();
+      unawaited(
+        AppAnalytics.log(
+          'upload_completed',
+          parameters: {'discipline': _analysisDiscipline},
+        ),
+      );
 
       final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
@@ -7887,6 +7986,12 @@ class _UploadScreenState extends State<UploadScreen>
           controller?.play();
         });
       }
+      unawaited(
+        AppAnalytics.log(
+          'analysis_completed',
+          parameters: {'discipline': _analysisDiscipline},
+        ),
+      );
 
       // Only the 15-second handoff belongs in the analysis queue.
       if ((_analysisQueued || _showLongWaitHandoff) && _analysisJobId != null) {
@@ -8513,9 +8618,15 @@ class _UploadScreenState extends State<UploadScreen>
         .whereType<String>()
         .join(" | ");
 
+    // Unique nonce per request — forces AI to give fresh output for bowling
+    final nonce = _isBowlingMode
+        ? DateTime.now().microsecondsSinceEpoch.toString()
+        : '${stat?.size ?? 0}-${stat?.modified.millisecondsSinceEpoch ?? 0}';
+
     return '''
 Clip: $clip
 RequestUTC: ${nowUtc.toIso8601String()}
+SessionNonce: $nonce
 Discipline: $_analysisDiscipline
 VideoBytes: ${stat?.size ?? 0}
 VideoModifiedMs: ${stat?.modified.millisecondsSinceEpoch ?? 0}
@@ -8542,6 +8653,7 @@ Rules:
 - Always return a coaching result, never an apology or data-quality report.
 - Do not say tracking points are unavailable, low quality, insufficient, or that you cannot analyze.
 - If body/pose evidence is weak, use ball path, timing outcome, line/channel, length, release, contact control, or shot outcome as the mistake.
+- IMPORTANT: The SessionNonce above is unique to this request. Your response MUST reflect this specific analysis and differ from any previous response.
 - Do not use the same wording for every clip and do not repeat common examples like "head dropped" or "bat path down".
 - Do not wrap JSON in markdown.
 Do not give any rating/score.

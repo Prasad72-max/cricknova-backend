@@ -13,8 +13,9 @@ import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
 import '../services/subscription_provider.dart';
 import '../navigation/main_navigation.dart';
+import '../live/live_nets_tab.dart';
 import '../services/trial_access_service.dart';
-import '../onboarding/cricknova_paywall_reel_screen.dart';
+import '../onboarding/cricknova_paywall_screen.dart';
 
 Future<void> showPremiumSuccessScreen(
   BuildContext context, {
@@ -1060,10 +1061,15 @@ class _LiveNetsPack {
 }
 
 class _LiveNetsPackCard extends StatelessWidget {
-  const _LiveNetsPackCard({required this.pack, required this.onTap});
+  const _LiveNetsPackCard({
+    required this.pack,
+    required this.onTap,
+    required this.isStarting,
+  });
 
   final _LiveNetsPack pack;
   final VoidCallback onTap;
+  final bool isStarting;
 
   @override
   Widget build(BuildContext context) {
@@ -1072,7 +1078,7 @@ class _LiveNetsPackCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
+        onTap: isStarting ? null : onTap,
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -1103,7 +1109,7 @@ class _LiveNetsPackCard extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 12),
               Text(
                 title,
                 style: GoogleFonts.poppins(
@@ -1119,6 +1125,25 @@ class _LiveNetsPackCard extends StatelessWidget {
                   color: const Color(0xFF00E5FF),
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E5FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    isStarting ? 'Starting...' : 'Buy Now',
+                    style: GoogleFonts.poppins(
+                      color: Colors.black,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -1146,6 +1171,7 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   bool _pendingPlayBillingSuccessPopup = false;
   bool _wasPremium = false;
+  bool _startingLivePack = false;
 
   final Map<String, GlobalKey> _planKeys = <String, GlobalKey>{
     "₹99": GlobalKey(),
@@ -1257,9 +1283,8 @@ class _PremiumScreenState extends State<PremiumScreen>
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CricknovaPaywallReelScreen(
-                            userName: resolvedName,
-                          ),
+                          builder: (_) =>
+                              CricknovaPaywallScreen(userName: resolvedName),
                         ),
                       );
                     },
@@ -2082,13 +2107,14 @@ class _PremiumScreenState extends State<PremiumScreen>
             crossAxisCount: 2,
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
-            childAspectRatio: 1.1,
+            childAspectRatio: 0.92,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
               for (final pack in packs)
                 _LiveNetsPackCard(
                   pack: pack,
+                  isStarting: _startingLivePack,
                   onTap: () => _startLivePackCheckout(pack),
                 ),
             ],
@@ -2099,6 +2125,7 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   Future<void> _startLivePackCheckout(_LiveNetsPack pack) async {
+    if (_startingLivePack) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2109,26 +2136,59 @@ class _PremiumScreenState extends State<PremiumScreen>
       return;
     }
 
-    await FirebaseFirestore.instance
-        .collection('live_nets_checkout_intents')
-        .add({
-          'uid': user.uid,
-          'minutes': pack.minutes,
-          'seconds': pack.minutes * 60,
-          'milliseconds': pack.minutes * 60 * 1000,
-          'amount_inr': pack.price,
-          'status': 'pending',
-          'created_at': FieldValue.serverTimestamp(),
-        });
+    setState(() => _startingLivePack = true);
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('live_nets_checkout_intents')
+          .add({
+            'uid': user.uid,
+            'minutes': pack.minutes,
+            'seconds': pack.minutes * 60,
+            'milliseconds': pack.minutes * 60 * 1000,
+            'amount_inr': pack.price,
+            'status': 'test_unlocked',
+            'test_mode': true,
+            'created_at': FieldValue.serverTimestamp(),
+            'updated_at': FieldValue.serverTimestamp(),
+          });
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'live_seconds_remaining': FieldValue.increment(pack.minutes * 60),
+        'live_milliseconds_remaining': FieldValue.increment(
+          pack.minutes * 60 * 1000,
+        ),
+        'last_live_pack_minutes': pack.minutes,
+        'last_live_pack_amount_inr': pack.price,
+        'last_live_pack_test_mode': true,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await PremiumService.refreshLiveEdgeBalance(uid: user.uid);
+      PremiumService.premiumNotifier.forceNotify();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to start CrickNova Edge: $error')),
+      );
+      return;
+    } finally {
+      if (mounted) {
+        setState(() => _startingLivePack = false);
+      }
+    }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Live Nets ${pack.minutes} min pack queued for checkout.',
+          'Live Nets ${pack.minutes} min pack added. Starting Live Nets.',
         ),
       ),
     );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const LiveNetsTab()));
   }
 
   // 🌈 Neon Tab Button

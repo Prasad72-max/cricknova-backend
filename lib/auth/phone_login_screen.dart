@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
-import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
+import '../onboarding/cricknova_paywall_screen.dart';
 import '../services/premium_service.dart';
 
 class PhoneLoginScreen extends StatefulWidget {
@@ -112,7 +112,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => CricknovaPrePaywallFlowScreen(userName: userName),
+        builder: (_) => CricknovaPaywallScreen(userName: userName),
       ),
       (_) => false,
     );

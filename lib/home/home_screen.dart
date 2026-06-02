@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/cricknova_notification_service.dart';
+import '../services/app_analytics.dart';
 import '../services/greeting_controller.dart';
 import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
@@ -131,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _resumeHomeAnimations();
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(AppAnalytics.log('home_opened'));
       unawaited(_initRealtimeQuickStatsListeners());
       unawaited(_prepareInitialHomeState());
       unawaited(_prepareEliteWelcomeHeader());
@@ -874,15 +876,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Column(
                     children: [
                       _actionCard(
-                        title: "Upload Training Video",
-                        subtitle:
-                            "Elite AI reads speed, swing, spin, DRS & batting flaws",
+                        title: "Analyze My Cricket Video",
+                        subtitle: "Upload Video & Get AI Analysis",
                         icon: Icons.cloud_upload_rounded,
                         iconGradient: const [
                           Color(0xFF7FDBFF),
                           Color(0xFF2B77FF),
                         ],
                         onTap: () {
+                          unawaited(
+                            AppAnalytics.log(
+                              'upload_clicked',
+                              parameters: {'source': 'home'},
+                            ),
+                          );
                           Navigator.of(context)
                               .push(
                                 MaterialPageRoute(

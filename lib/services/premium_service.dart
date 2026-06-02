@@ -86,6 +86,9 @@ class PremiumService {
   static int chatLimit = 0;
   static int mistakeLimit = 0;
   static int compareLimit = 0;
+  static int liveMillisecondsRemaining = 0;
+
+  static bool get hasCrickNovaEdgeAccess => liveMillisecondsRemaining > 0;
 
   // Init guard
   static bool isLoaded = false;
@@ -114,6 +117,7 @@ class PremiumService {
     int chatLimit,
     int mistakeLimit,
     int compareLimit,
+    int liveMillisecondsRemaining,
     DateTime? expiryDate,
     DateTime? startedDate,
     DateTime? graceUntil,
@@ -133,6 +137,7 @@ class PremiumService {
       chatLimit: chatLimit,
       mistakeLimit: mistakeLimit,
       compareLimit: compareLimit,
+      liveMillisecondsRemaining: liveMillisecondsRemaining,
       expiryDate: expiryDate,
       startedDate: startedDate,
       graceUntil: graceUntil,
@@ -160,6 +165,43 @@ class PremiumService {
     compareUsed = 0;
     _usageDirty = false;
     _lastLocalUsageUpdate = null;
+  }
+
+  static int _intField(Map<String, dynamic> data, List<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is num) return value.toInt();
+      if (value is String) {
+        final parsed = int.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+    }
+    return 0;
+  }
+
+  static Future<void> refreshLiveEdgeBalance({String? uid}) async {
+    final resolvedUid = uid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (resolvedUid == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(resolvedUid)
+          .get(const GetOptions(source: Source.server));
+      final data = doc.data() ?? const <String, dynamic>{};
+      final milliseconds = _intField(data, const [
+        "live_milliseconds_remaining",
+        "liveMillisecondsRemaining",
+      ]);
+      final seconds = _intField(data, const [
+        "live_seconds_remaining",
+        "liveSecondsRemaining",
+      ]);
+      liveMillisecondsRemaining = milliseconds > 0
+          ? milliseconds
+          : seconds * 1000;
+    } catch (_) {
+      // Keep the last known value; this only drives navigation/display.
+    }
   }
 
   static String _stringField(
@@ -432,11 +474,14 @@ class PremiumService {
     final bool switchedUser = _lastLoadedUid != null && _lastLoadedUid != uid;
     if (switchedUser) {
       _resetUsageState();
+      liveMillisecondsRemaining = 0;
     }
 
     final completer = Completer<void>();
     _loadInFlight = completer.future;
     try {
+      await refreshLiveEdgeBalance(uid: uid);
+
       final doc = await FirebaseFirestore.instance
           .collection("subscriptions")
           .doc(uid)
@@ -672,6 +717,7 @@ class PremiumService {
   static Future<void> _runSingleLoad(String uid, {bool force = false}) async {
     if (_lastLoadedUid != null && _lastLoadedUid != uid) {
       _resetUsageState();
+      liveMillisecondsRemaining = 0;
     }
     if (!force && isLoaded && _lastLoadedUid == uid) {
       return;
@@ -916,6 +962,7 @@ class PremiumService {
     chatLimit = 0;
     mistakeLimit = 0;
     compareLimit = 0;
+    liveMillisecondsRemaining = 0;
     billingState = "UNKNOWN";
     accessState = SubscriptionAccessState.free;
     expiryDate = null;

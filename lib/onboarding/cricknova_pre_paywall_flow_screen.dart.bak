@@ -1043,10 +1043,7 @@ class _TrialStep extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _HeaderIconButton(
-                      icon: Icons.arrow_back_rounded,
-                      onTap: onBack,
-                    ),
+                    const SizedBox(width: 44),
                     const Spacer(),
                     _HeaderIconButton(
                       icon: Icons.close_rounded,

@@ -1,4 +1,8 @@
+// ignore_for_file: unused_element, unused_element_parameter
+
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -8,14 +12,20 @@ import 'package:hive/hive.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
 
 import '../auth/login_screen.dart';
+import '../config/api_config.dart';
 import '../navigation/main_navigation.dart';
+import '../services/app_analytics.dart';
 import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
+import 'cricknova_paywall_screen.dart';
 import 'cricknova_onboarding_store.dart';
 import 'onboarding_ui_tokens.dart';
+import 'cricknova_trial_upload_pane.dart';
 
 class CricknovaOnboardingScreen extends StatefulWidget {
   final String userName;
@@ -96,6 +106,12 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     }
   }
 
+  String get _weeklyHoursLabel {
+    final rawHours = _answers['net_hours'] ?? '';
+    final hours = rawHours.replaceFirst(RegExp(r'^[A-D]\.\s+'), '');
+    return hours.isEmpty ? '5-12 hrs' : hours;
+  }
+
   int get _decadeTotalHours => (_weeklyAvgHours * 52 * 10).round();
 
   int get _totalActiveDays => (_decadeTotalHours / 15).round();
@@ -105,10 +121,30 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
 
   int get _fullDaysWasted => (_technicalDebtHours / 24).round();
 
-  List<_QuestionNode> get _questionNodes => _questionBankFor(_roleValue);
+  static const Set<String> _requiredQuestionIds = <String>{
+    'q2', // Do you know why you fail?
+    'q6', // Do you track performance data?
+    'q7', // Scout evaluation
+    'q10', // Confidence question
+    'q18', // Ready to improve?
+  };
+
+  List<_QuestionNode> get _questionNodes {
+    final bank = _questionBankFor(_roleValue);
+    return bank
+        .where((n) => _requiredQuestionIds.contains(n.id))
+        .toList(growable: false);
+  }
 
   List<_FlowStep> get _steps {
     final steps = <_FlowStep>[
+      _FlowStep.trialUpload(
+        id: 'see_action',
+        kicker: 'See CrickNova In Action',
+        title: 'See CrickNova In Action',
+        body: 'Upload a cricket video. Get instant insights.',
+        ctaLabel: 'Continue',
+      ),
       _FlowStep.message(
         id: 'welcome',
         kicker: 'The Welcome',
@@ -124,24 +160,6 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         body: 'Add the name you want us to use throughout your roadmap.',
         storageKey: 'display_name',
         ctaLabel: 'Continue',
-      ),
-      _FlowStep.message(
-        id: 'truth',
-        kicker: 'The Hard Truth',
-        title: '$_firstName, be honest...',
-        body:
-            'After sweating for hours in the nets, why does your technique abandon you under match pressure?',
-        ctaLabel: 'I need the answer',
-        spotlight: true,
-      ),
-      _FlowStep.message(
-        id: 'reality',
-        kicker: 'The Solution',
-        title:
-            'Because wrong practice doesn\'t make you perfect; it makes your mistakes permanent.',
-        body:
-            'Our AI sees what the human eye misses. Every ball is now a data point for your success.',
-        ctaLabel: 'Show me the system',
       ),
       _FlowStep.choice(
         id: 'identity',
@@ -162,22 +180,13 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         options: _abcd('< 5 hrs', '5-12 hrs', '12-25 hrs', '25+ hrs'),
       ),
       _FlowStep.shock(
-        id: 'shock',
+        id: 'practice_waste',
         kicker: 'TIME-WASTAGE REALITY',
-        title: '$_firstName, Value Your Dreams in Time! ⏳',
+        title: '$_firstName, your practice needs feedback.',
         body:
-            'In the next 10 years, you will spend ${_formatNumber(_decadeTotalHours)} Hours solely on practice. That is $_totalActiveDays FULL DAYS of your life! Practicing without CrickNova data means ${_formatNumber(_technicalDebtHours)} of these hours (${_formatNumber(_technicalDebtHours ~/ 24)} days) could be wasted on wrong habits or unoptimized drills. Choose CrickNova Premium to save these precious days.',
-        footnote: '',
-        ctaLabel: 'Save My $_totalActiveDays Days',
-      ),
-      _FlowStep.message(
-        id: 'pivot',
-        kicker: 'The Pivot',
-        title:
-            'We are here to save that time and turn every hour into a "Result".',
-        body:
-            "\"We are here to save that time.\"\n\n\"Every hour now becomes a Result.\"\n\n\"This is your 35-day blueprint.\"",
-        ctaLabel: 'Build my blueprint',
+            'Without objective feedback, many players repeat the same mistakes for months.',
+        footnote: 'This is why your first AI analysis matters.',
+        ctaLabel: 'Turn Practice Into Progress',
       ),
     ];
 
@@ -193,83 +202,29 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           options: node.options,
         ),
       );
-      if (node.summaryAfter != null) {
-        steps.add(
-          _FlowStep.summary(
-            id: 'summary_${node.id}',
-            kicker: node.summaryAfter!.label,
-            title: node.summaryAfter!.title,
-            body: node.summaryAfter!.body,
-            ctaLabel: 'Continue',
-            imagePath: node.summaryAfter!.imagePath,
-          ),
-        );
-      }
-      if (node.id == 'q7') {
-        steps.add(
-          _FlowStep.rating(
-            id: 'cricknova_rating',
-            kicker: 'CrickNova Boost',
-            title: 'Feeling the CrickNova boost?',
-            body:
-                'If this flow is giving you that next-level training spark, rate CrickNova AI and help more players find it.',
-            ctaLabel: 'Rate Now',
-          ),
-        );
-      }
     }
 
     steps.addAll(<_FlowStep>[
       _FlowStep.analysis(
-        id: 'analysis',
-        kicker: 'The AI Analysis',
-        title:
-            'Analyzing 18 critical flaws... Designing your 35-day professional roadmap.',
-      ),
-      _FlowStep.review(
-        id: 'trust_card',
-        kicker: 'The Trust Card',
-        title: "You're in the right place.",
-        body:
-            "Over 1,200 athletes have bridged the gap between 'Potential' and 'Performance' using this exact blueprint.",
-        ctaLabel: 'See my roadmap',
+        id: 'ugly_truth_loading',
+        kicker: 'Building Your Reveal',
+        title: 'Reading your cricket profile...',
       ),
       _FlowStep.finalCta(
-        id: 'final_cta',
-        kicker: 'The Final Verdict',
-        title: 'YOUR 35-DAY ROADMAP IS READY.',
-        body:
-            'Based on your training volume, you are on track to waste ${_formatNumber(_technicalDebtHours)} hours (${_formatNumber(_technicalDebtHours ~/ 24)} days) on the wrong drills. Our 35-day plan will fix your 18 flaws and increase your selection probability by 30%.',
-        ctaLabel: 'START MY 35-DAY TRANSFORMATION',
+        id: 'ugly_truth_final',
+        kicker: 'The Ugly Truth',
+        title: 'The Ugly Truth',
+        body: '',
+        ctaLabel: 'Show Me My Game',
+      ),
+      _FlowStep.featureProof(
+        id: 'feature_proof',
+        kicker: 'Your First AI Proof',
+        title: 'CrickNova found the next fix.',
+        body: '',
+        ctaLabel: 'Continue',
       ),
     ]);
-
-    if (steps.length >= 30) {
-      steps.insert(
-        30,
-        _FlowStep.namaste(
-          id: 'namaste',
-          kicker: 'GRATITUDE',
-          title: 'Thanks for Trusting Us, $_firstName.',
-          body:
-              'Thanks for choosing CrickNova AI. From this moment on, you are no longer just a player. You are a game changer.',
-          userName: _firstName,
-          ctaLabel: 'Reveal My Strategy',
-        ),
-      );
-    } else {
-      steps.add(
-        _FlowStep.namaste(
-          id: 'namaste',
-          kicker: 'GRATITUDE',
-          title: 'Thanks for Trusting Us, $_firstName.',
-          body:
-              'Thanks for choosing CrickNova AI. From this moment on, you are no longer just a player. You are a game changer.',
-          userName: _firstName,
-          ctaLabel: 'Reveal My Strategy',
-        ),
-      );
-    }
 
     return steps;
   }
@@ -287,6 +242,8 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
       FocusManager.instance.primaryFocus?.unfocus();
     });
     _handleAutoAdvanceForStep();
+    unawaited(AppAnalytics.log('onboarding_started'));
+    unawaited(AppAnalytics.markOnboardingStatus(completed: false));
   }
 
   @override
@@ -296,8 +253,6 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     _nameController.dispose();
     super.dispose();
   }
-
-
 
   bool _canPopSystem() {
     return _stepIndex == 0 && !_isCompleting;
@@ -323,7 +278,6 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           _stepIndex += 1;
           _selectedOption = null;
         });
-
       });
     }
   }
@@ -332,7 +286,8 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     _analysisTimer?.cancel();
     if (_stepIndex == 0) return;
     setState(() {
-      if (_currentStep.kind == _FlowStepKind.review) {
+      if (_currentStep.kind == _FlowStepKind.review ||
+          _currentStep.kind == _FlowStepKind.finalCta) {
         _hasAdvancedPastAnalysis = false;
       }
       _stepIndex -= 1;
@@ -423,7 +378,17 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         return;
       case _FlowStepKind.analysis:
         return;
+      case _FlowStepKind.trialUpload:
+        _goNext();
+        return;
       case _FlowStepKind.finalCta:
+        if (_stepIndex >= _steps.length - 1) {
+          await _completeOnboarding();
+          return;
+        }
+        _goNext();
+        return;
+      case _FlowStepKind.featureProof:
         await _completeOnboarding();
         return;
       case _FlowStepKind.choice:
@@ -436,6 +401,10 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           }
           _answers[step.storageKey!] = selected;
         });
+        if (_stepIndex >= _steps.length - 1) {
+          await _completeOnboarding();
+          return;
+        }
         _goNext();
         return;
     }
@@ -449,6 +418,10 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
       _answers['last_question_time'] = DateTime.now().toIso8601String();
       _isCompleting = true;
     });
+    unawaited(AppAnalytics.log('onboarding_completed'));
+    unawaited(
+      AppAnalytics.markOnboardingStatus(completed: true, answers: _answers),
+    );
 
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
@@ -466,9 +439,13 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
       // Upload onboarding answers and timestamps to Firestore
       try {
         await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'onboardingCompleted': true,
+          'onboarding_completed': true,
+          'onboardingStatus': 'completed',
           'onboardingAnswers': _answers,
           'firstQuestionTime': _answers['first_question_time'],
           'lastQuestionTime': _answers['last_question_time'],
+          'onboardingCompletedAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       } catch (_) {}
@@ -491,16 +468,26 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     await _saveProfileName(resolvedName);
     if (!mounted) return;
 
+    if (FirebaseAuth.instance.currentUser == null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) =>
+              const LoginScreen(postLoginTarget: LoginPostLoginTarget.paywall),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await PremiumService.ensureFreshState();
+    } catch (_) {}
+    if (!mounted) return;
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => _RoadmapScreen(
-          userName: resolvedName,
-          roleValue: _roleValue,
-          weeklyHours: _weeklyAvgHours.round(),
-          dataPointCount: 35,
-          technicalDebtHours: _technicalDebtHours,
-          fullDaysWasted: _fullDaysWasted,
-        ),
+        builder: (_) => PremiumService.isPremiumActive
+            ? MainNavigation(userName: resolvedName)
+            : CricknovaPaywallScreen(userName: resolvedName),
       ),
     );
   }
@@ -681,6 +668,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           totalActiveDays: _totalActiveDays,
           bodyWidget: _OpportunityCostWidget(
             userName: _firstName,
+            weeklyHoursLabel: _weeklyHoursLabel,
             decadeTotalHours: _decadeTotalHours,
             totalActiveDays: _totalActiveDays,
           ),
@@ -747,6 +735,9 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           onContinue: _onContinue,
         );
       case _FlowStepKind.analysis:
+        if (step.id == 'ugly_truth_loading') {
+          return _UglyTruthLoadingPane(key: ValueKey(step.id));
+        }
         return _AnalysisPane(
           key: ValueKey(step.id),
           kicker: step.kicker!,
@@ -780,7 +771,28 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           ctaLabel: step.ctaLabel!,
           onContinue: _onContinue,
         );
+      case _FlowStepKind.trialUpload:
+        return CricknovaTrialUploadPane(
+          key: ValueKey(step.id),
+          kicker: step.kicker!,
+          title: step.title!,
+          body: step.body!,
+          ctaLabel: step.ctaLabel!,
+          onContinue: _onContinue,
+        );
+      case _FlowStepKind.featureProof:
+        return _FeatureProofPane(
+          key: ValueKey(step.id),
+          userName: _firstName,
+          onContinue: _onContinue,
+        );
       case _FlowStepKind.finalCta:
+        if (step.id == 'ugly_truth_final') {
+          return _UglyTruthFinalPane(
+            key: ValueKey(step.id),
+            onContinue: _onContinue,
+          );
+        }
         return _FinalCtaPane(
           key: ValueKey(step.id),
           kicker: step.kicker!,
@@ -805,6 +817,8 @@ enum _FlowStepKind {
   review,
   finalCta,
   namaste,
+  trialUpload,
+  featureProof,
 }
 
 class _FlowStep {
@@ -1005,6 +1019,23 @@ class _FlowStep {
     );
   }
 
+  factory _FlowStep.trialUpload({
+    required String id,
+    required String kicker,
+    required String title,
+    required String body,
+    required String ctaLabel,
+  }) {
+    return _FlowStep._(
+      kind: _FlowStepKind.trialUpload,
+      id: id,
+      kicker: kicker,
+      title: title,
+      body: body,
+      ctaLabel: ctaLabel,
+    );
+  }
+
   factory _FlowStep.finalCta({
     required String id,
     required String kicker,
@@ -1014,6 +1045,23 @@ class _FlowStep {
   }) {
     return _FlowStep._(
       kind: _FlowStepKind.finalCta,
+      id: id,
+      kicker: kicker,
+      title: title,
+      body: body,
+      ctaLabel: ctaLabel,
+    );
+  }
+
+  factory _FlowStep.featureProof({
+    required String id,
+    required String kicker,
+    required String title,
+    required String body,
+    required String ctaLabel,
+  }) {
+    return _FlowStep._(
+      kind: _FlowStepKind.featureProof,
       id: id,
       kicker: kicker,
       title: title,
@@ -1334,11 +1382,9 @@ final List<_QuestionNode> _batsmanQuestions = <_QuestionNode>[
   _QuestionNode(
     id: 'q18',
     blockLabel: 'Final Commitment',
-    question:
-        'Are you ready to see the ugly truth through CrickNova AI and fix it forever?',
-    helper:
-        'The truth is painful for one moment. Staying average hurts for years.',
-    options: _abcd('I\'m ready', 'Scared', 'Maybe', 'No'),
+    question: 'Are you ready to know the ugly truth?',
+    helper: 'A clear view of your game is the first step toward improvement.',
+    options: _abcd('I\'m ready', 'Show me', 'Curious', 'Not yet'),
     summaryAfter: _summary6,
   ),
 ];
@@ -1540,10 +1586,9 @@ final List<_QuestionNode> _bowlerQuestions = <_QuestionNode>[
   _QuestionNode(
     id: 'q18',
     blockLabel: 'Final Commitment',
-    question:
-        'Are you ready to see the ugly truth in your bowling and fix it forever?',
-    helper: 'Truth hurts once. Wasted years hurt longer.',
-    options: _abcd("I'm ready", 'Scared', 'Maybe', 'No'),
+    question: 'Are you ready to know the ugly truth?',
+    helper: 'Your release has answers your eye cannot always catch.',
+    options: _abcd("I'm ready", 'Show me', 'Curious', 'Not yet'),
     summaryAfter: _summary6,
   ),
 ];
@@ -1738,10 +1783,9 @@ final List<_QuestionNode> _allRounderQuestions = <_QuestionNode>[
   _QuestionNode(
     id: 'q18',
     blockLabel: 'Final Commitment',
-    question:
-        'Are you ready to see the ugly truth in both parts of your game and fix it forever?',
-    helper: 'You cannot dominate what you refuse to measure.',
-    options: _abcd("I'm ready", 'Scared', 'Maybe', 'No'),
+    question: 'Are you ready to know the ugly truth?',
+    helper: 'Your all-round value grows when both skills are measured.',
+    options: _abcd("I'm ready", 'Show me', 'Curious', 'Not yet'),
     summaryAfter: _summary6,
   ),
 ];
@@ -1931,10 +1975,9 @@ final List<_QuestionNode> _wicketKeeperQuestions = <_QuestionNode>[
   _QuestionNode(
     id: 'q18',
     blockLabel: 'Final Commitment',
-    question:
-        'Are you ready to see the ugly truth in your keeping and fix it forever?',
-    helper: 'Measured truth is the start of elite hands.',
-    options: _abcd("I'm ready", 'Scared', 'Maybe', 'No'),
+    question: 'Are you ready to know the ugly truth?',
+    helper: 'Glove work improves fastest when small movements become visible.',
+    options: _abcd("I'm ready", 'Show me', 'Curious', 'Not yet'),
     summaryAfter: _summary6,
   ),
 ];
@@ -2815,9 +2858,6 @@ class _HardTruthStatCard extends StatelessWidget {
   }
 }
 
-
-
-
 class _WelcomePane extends StatelessWidget {
   final VoidCallback onContinue;
   final VoidCallback onSignIn;
@@ -3342,11 +3382,13 @@ class _ShockPaneState extends State<_ShockPane> {
 
 class _OpportunityCostWidget extends StatefulWidget {
   final String userName;
+  final String weeklyHoursLabel;
   final int decadeTotalHours;
   final int totalActiveDays;
 
   const _OpportunityCostWidget({
     required this.userName,
+    required this.weeklyHoursLabel,
     required this.decadeTotalHours,
     required this.totalActiveDays,
   });
@@ -3395,9 +3437,9 @@ class _OpportunityCostWidgetState extends State<_OpportunityCostWidget>
               return Opacity(
                 opacity: pulse,
                 child: Text(
-                  '⏳ TIME IS RUNNING',
+                  'PRACTICE FEEDBACK',
                   style: _LuxuryTypography.label(
-                    color: const Color(0xFFFF4500),
+                    color: const Color(0xFFFFF06A),
                     fontSize: 12,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 2.5,
@@ -3421,12 +3463,12 @@ class _OpportunityCostWidgetState extends State<_OpportunityCostWidget>
           ),
           const SizedBox(height: 8),
           Text(
-            _formatNumber(widget.totalActiveDays),
+            widget.weeklyHoursLabel,
             textAlign: TextAlign.center,
             style:
                 _LuxuryTypography.body(
                   color: const Color(0xFFFFF06A),
-                  fontSize: 72,
+                  fontSize: 52,
                   fontWeight: FontWeight.w900,
                   height: 0.92,
                 ).copyWith(
@@ -3438,7 +3480,7 @@ class _OpportunityCostWidgetState extends State<_OpportunityCostWidget>
           ),
           const SizedBox(height: 6),
           _HighlightedCopy(
-            text: 'DAYS AT STAKE',
+            text: 'EVERY WEEK',
             style: _LuxuryTypography.label(
               color: const Color(0xCCFFFFFF),
               fontSize: 12,
@@ -3454,13 +3496,13 @@ class _OpportunityCostWidgetState extends State<_OpportunityCostWidget>
           ),
           const SizedBox(height: 12),
           Text(
-            'Every unstructured net session drains your potential. Stop guessing.',
+            'You train ${widget.weeklyHoursLabel} every week.',
             textAlign: TextAlign.center,
             style: _LuxuryTypography.body(
-              color: const Color(0xFFFF4500),
-              fontSize: 13,
+              color: Colors.white,
+              fontSize: 18,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
+              height: 1.35,
             ),
           ),
           const SizedBox(height: 18),
@@ -3478,9 +3520,11 @@ class _OpportunityCostWidgetState extends State<_OpportunityCostWidget>
               const SizedBox(width: 10),
               Expanded(
                 child: _RealityStatCard(
-                  label: 'ACTIVE DAYS',
-                  value: _formatNumber(widget.totalActiveDays),
-                  suffix: 'days',
+                  label: 'RISK HOURS',
+                  value: _formatNumber(
+                    (widget.decadeTotalHours * 0.25).round(),
+                  ),
+                  suffix: 'hrs',
                   accent: const Color(0xFFD4AF37),
                 ),
               ),
@@ -3499,12 +3543,12 @@ class _OpportunityCostWidgetState extends State<_OpportunityCostWidget>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  'In the next 10 years, you will spend ${_formatNumber(widget.decadeTotalHours)} Hours solely on practice. That is ${_formatNumber(widget.totalActiveDays)} FULL DAYS of your life! Practicing without CrickNova data means ${_formatNumber((widget.decadeTotalHours * 0.25).round())} of these hours (${_formatNumber(((widget.decadeTotalHours * 0.25) / 24).round())} days) could be wasted on wrong habits or unoptimized drills. Choose CrickNova Premium to save these precious days.',
+                  'Without objective feedback,\nmany players repeat the same mistakes for months.\n\nCrickNova helps turn practice into measurable improvement.',
                   style: _LuxuryTypography.body(
                     color: const Color(0xEFFFFFFF),
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w500,
-                    height: 1.58,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    height: 1.55,
                   ),
                 ),
               ],
@@ -6654,6 +6698,981 @@ class _RoadmapMistakeLineView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UglyTruthLoadingPane extends StatefulWidget {
+  const _UglyTruthLoadingPane({super.key});
+
+  @override
+  State<_UglyTruthLoadingPane> createState() => _UglyTruthLoadingPaneState();
+}
+
+class _UglyTruthLoadingPaneState extends State<_UglyTruthLoadingPane> {
+  static const List<String> _items = <String>[
+    'Practice volume checked',
+    'Role profile matched',
+    'Feedback gaps identified',
+    'Video insight engine prepared',
+    'Your reveal is ready',
+  ];
+
+  Timer? _timer;
+  int _visibleCount = 0;
+  int _statusIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 460), (_) {
+      if (!mounted) return;
+      setState(() {
+        _visibleCount = math.min(_items.length, _visibleCount + 1);
+        _statusIndex = (_statusIndex + 1) % _items.length;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PaneShell(
+      kicker: 'PREPARING YOUR REVEAL',
+      title: 'Building the ugly truth...',
+      body: 'A few signals are being lined up before you enter CrickNova.',
+      footer: Text(
+        _items[_statusIndex],
+        textAlign: TextAlign.center,
+        style: _LuxuryTypography.label(
+          color: const Color(0xFFD4AF37),
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.4,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: 92,
+            height: 92,
+            child: CircularProgressIndicator(
+              strokeWidth: 5,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                _CricknovaOnboardingScreenState._gold,
+              ),
+              backgroundColor: Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          const SizedBox(height: 34),
+          ...List<Widget>.generate(_items.length, (index) {
+            final done = index < _visibleCount;
+            return AnimatedOpacity(
+              duration: const Duration(milliseconds: 220),
+              opacity: done ? 1 : 0.34,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: done ? 0.07 : 0.035),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: done
+                        ? const Color(0x55D4AF37)
+                        : Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      done
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: done
+                          ? const Color(0xFFD4AF37)
+                          : Colors.white.withValues(alpha: 0.38),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _items[index],
+                        style: _LuxuryTypography.body(
+                          color: Colors.white.withValues(
+                            alpha: done ? 0.92 : 0.55,
+                          ),
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _UglyTruthFinalPane extends StatelessWidget {
+  final VoidCallback onContinue;
+
+  const _UglyTruthFinalPane({super.key, required this.onContinue});
+
+  @override
+  Widget build(BuildContext context) {
+    const paragraphs = <String>[
+      'Most cricketers do not fail because they lack talent.',
+      'They fail because they repeat the same mistakes for months without realizing it.',
+      'More hours do not automatically create improvement.',
+      'More practice does not always create better results.',
+      'Feedback creates improvement.',
+      'The players who improve fastest are usually not the ones who train the most.',
+      'They are the ones who understand what needs fixing.',
+      'CrickNova was built to help you see what your eyes cannot.',
+      'Every video contains information.',
+      'Your next improvement may already be hidden inside your training footage.',
+    ];
+    const chips = <String>[
+      'Speed',
+      'Technique',
+      'Movement',
+      'Mistakes',
+      'Opportunities',
+    ];
+
+    return _PaneShell(
+      kicker: 'FINAL REALIZATION',
+      title: 'The Ugly Truth',
+      body: '',
+      footer: _PulseButton(
+        label: 'Show Me My Game',
+        onPressed: onContinue,
+        color: _CricknovaOnboardingScreenState._gold,
+        textColor: Colors.black,
+      ),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.055),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0x33D4AF37)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  for (final text in paragraphs) ...[
+                    Text(
+                      text,
+                      style: _LuxuryTypography.body(
+                        color: Colors.white.withValues(alpha: 0.88),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        height: 1.52,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: chips
+                        .map(
+                          (chip) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0x1FD4AF37),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: const Color(0x55D4AF37),
+                              ),
+                            ),
+                            child: Text(
+                              chip,
+                              style: _LuxuryTypography.label(
+                                color: const Color(0xFFD4AF37),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FeatureProofPane extends StatefulWidget {
+  final String userName;
+  final VoidCallback onContinue;
+
+  const _FeatureProofPane({
+    super.key,
+    required this.userName,
+    required this.onContinue,
+  });
+
+  @override
+  State<_FeatureProofPane> createState() => _FeatureProofPaneState();
+}
+
+class _OnboardingMistakeReport {
+  final List<String> mistakes;
+  final String? impact;
+  final String? drill;
+
+  const _OnboardingMistakeReport({
+    required this.mistakes,
+    required this.impact,
+    required this.drill,
+  });
+
+  bool get hasStructured =>
+      mistakes.isNotEmpty ||
+      (impact?.trim().isNotEmpty ?? false) ||
+      (drill?.trim().isNotEmpty ?? false);
+
+  List<String> get points {
+    final out = <String>[];
+    for (var i = 0; i < mistakes.take(2).length; i++) {
+      out.add('Mistake ${i + 1}: ${mistakes[i]}');
+    }
+    if ((impact ?? '').trim().isNotEmpty) out.add('Impact: ${impact!.trim()}');
+    if ((drill ?? '').trim().isNotEmpty) out.add('Drill: ${drill!.trim()}');
+    return out.take(4).toList(growable: false);
+  }
+
+  String toPromptJson() => jsonEncode({
+    'mistakes': mistakes.take(2).toList(growable: false),
+    if ((impact ?? '').trim().isNotEmpty) 'impact': impact!.trim(),
+    if ((drill ?? '').trim().isNotEmpty) 'drill': drill!.trim(),
+  });
+
+  static String? _clean(dynamic raw) {
+    final text = raw?.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  static List<String> _list(dynamic raw, {int limit = 2}) {
+    final out = <String>[];
+    if (raw is List) {
+      for (final item in raw) {
+        final text = _clean(item);
+        if (text != null) out.add(text);
+        if (out.length >= limit) break;
+      }
+    } else {
+      final text = _clean(raw);
+      if (text != null) out.add(text);
+    }
+    return out.take(limit).toList(growable: false);
+  }
+
+  factory _OnboardingMistakeReport.fromMap(Map<String, dynamic> data) {
+    var mistakes = _list(data['mistakes'], limit: 2);
+    if (mistakes.isEmpty) {
+      mistakes = _list(
+        data['mistake'] ??
+            data['main_mistake'] ??
+            data['critical_mistake'] ??
+            data['biggest_mistake'],
+        limit: 2,
+      );
+    }
+    return _OnboardingMistakeReport(
+      mistakes: mistakes,
+      impact: _clean(data['impact'] ?? data['consequence'] ?? data['effect']),
+      drill: _clean(data['drill'] ?? data['drills'] ?? data['action_plan']),
+    );
+  }
+
+  static _OnboardingMistakeReport? fromJsonString(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        final report = _OnboardingMistakeReport.fromMap(
+          Map<String, dynamic>.from(decoded),
+        );
+        return report.hasStructured ? report : null;
+      }
+    } catch (_) {}
+    return null;
+  }
+}
+
+class _FeatureProofPaneState extends State<_FeatureProofPane> {
+  static const Color _gold = Color(0xFFD4AF37);
+  static const Color _danger = Color(0xFFFF5A5F);
+  static const Color _teal = Color(0xFF10B981);
+
+  VideoPlayerController? _controller;
+  bool _loaded = false;
+  bool _hasUploadedVideo = false;
+  bool _showCoach = false;
+  bool _coachLoading = false;
+  _OnboardingMistakeReport? _report;
+  _OnboardingMistakeReport? _coachReport;
+  String? _coachError;
+  String? _analysisJson;
+  String? _speed;
+  String? _swing;
+  String? _spin;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTrialProof();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadTrialProof() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final path = prefs.getString('trial_video_path');
+      final report = _OnboardingMistakeReport.fromJsonString(
+        prefs.getString('trial_real_mistake_report'),
+      );
+      final analysisJson = prefs.getString('trial_real_analysis_json');
+      final speed = prefs.getString('trial_real_speed')?.trim();
+      final swing = prefs.getString('trial_real_swing')?.trim();
+      final spin = prefs.getString('trial_real_spin')?.trim();
+
+      final hasVideo =
+          path != null && path.isNotEmpty && File(path).existsSync();
+      VideoPlayerController? controller;
+      if (hasVideo) {
+        controller = VideoPlayerController.file(File(path));
+        await controller.initialize();
+        await controller.setLooping(true);
+        await controller.play();
+      }
+
+      if (!mounted) {
+        await controller?.dispose();
+        return;
+      }
+      setState(() {
+        _controller = controller;
+        _hasUploadedVideo = hasVideo;
+        _showCoach = !hasVideo;
+        _report = report;
+        _analysisJson = analysisJson;
+        _speed = speed?.isEmpty == true ? null : speed;
+        _swing = swing?.isEmpty == true ? null : swing;
+        _spin = spin?.isEmpty == true ? null : spin;
+        _loaded = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loaded = true;
+        _hasUploadedVideo = false;
+        _showCoach = true;
+      });
+    }
+  }
+
+  Future<void> _populateCoachChat(_OnboardingMistakeReport report) async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
+      final box = await Hive.openBox("chat_sessions_$uid");
+      final raw = (box.get("sessions") as List?)?.cast<Map>() ?? const <Map>[];
+      final sessions = raw
+          .map((entry) => Map<String, dynamic>.from(entry))
+          .toList(growable: true);
+      const title = 'CrickNova Mistake Fix';
+      if (sessions.any((session) => session['title'] == title)) return;
+
+      final chatId =
+          'onboarding_mistake_fix_${DateTime.now().millisecondsSinceEpoch}';
+      sessions.insert(0, {
+        'chat_id': chatId,
+        'user_id': uid,
+        'title': title,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+        'messages': [
+          {'role': 'user', 'content': _mistakePrompt(report)},
+          {'role': 'coach', 'content': report.points.join('\n')},
+        ],
+      });
+      await box.put('sessions', sessions);
+    } catch (_) {}
+  }
+
+  String _mistakePrompt(_OnboardingMistakeReport report) {
+    return '''
+CrickNova detected this real mistake report from my uploaded cricket video:
+${report.toPromptJson()}
+
+Return exactly this format using the same real mistakes:
+Mistake 1: ...
+Mistake 2: ...
+Impact: ...
+Drill: ...
+''';
+  }
+
+  Map<String, dynamic>? _jsonFromText(String raw) {
+    var text = raw.trim();
+    if (text.startsWith('```')) {
+      text = text.replaceAll('```json', '').replaceAll('```', '').trim();
+    }
+    final start = text.indexOf('{');
+    final end = text.lastIndexOf('}');
+    if (start == -1 || end == -1 || end <= start) return null;
+    try {
+      final decoded = jsonDecode(text.substring(start, end + 1));
+      return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  _OnboardingMistakeReport _reportFromCoachText(String raw) {
+    final parsedJson = _jsonFromText(raw);
+    if (parsedJson != null) {
+      final parsed = _OnboardingMistakeReport.fromMap(parsedJson);
+      if (parsed.hasStructured) return parsed;
+    }
+
+    final lines = raw
+        .split(RegExp(r'\n+'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
+    final mistakes = <String>[];
+    String? impact;
+    String? drill;
+    for (final line in lines) {
+      final lower = line.toLowerCase();
+      final value = line.replaceFirst(RegExp(r'^[\-•\d\.\s]*'), '');
+      if (lower.startsWith('mistake') && mistakes.length < 2) {
+        mistakes.add(
+          value
+              .replaceFirst(
+                RegExp(r'^mistake\s*\d*\s*[:\-]\s*', caseSensitive: false),
+                '',
+              )
+              .trim(),
+        );
+      } else if (lower.startsWith('impact')) {
+        impact = value
+            .replaceFirst(
+              RegExp(r'^impact\s*[:\-]\s*', caseSensitive: false),
+              '',
+            )
+            .trim();
+      } else if (lower.startsWith('drill')) {
+        drill = value
+            .replaceFirst(
+              RegExp(r'^drill\s*[:\-]\s*', caseSensitive: false),
+              '',
+            )
+            .trim();
+      }
+    }
+    return _OnboardingMistakeReport(
+      mistakes: mistakes.take(2).toList(growable: false),
+      impact: impact,
+      drill: drill,
+    );
+  }
+
+  Future<void> _showCoachFix() async {
+    final report = _report;
+    if (report == null || !report.hasStructured) {
+      setState(() {
+        _showCoach = true;
+        _coachError =
+            'CrickNova did not receive a structured mistake report for this uploaded clip.';
+      });
+      return;
+    }
+
+    setState(() {
+      _showCoach = true;
+      _coachLoading = true;
+      _coachError = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken(true);
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}/coach/chat'),
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+              if (user != null) 'X-USER-ID': user.uid,
+            },
+            body: jsonEncode({
+              'user_id': user?.uid ?? 'guest',
+              'message':
+                  '${_mistakePrompt(report)}\nRaw video analysis JSON, if useful:\n${_analysisJson ?? '{}'}',
+            }),
+          )
+          .timeout(const Duration(seconds: 45));
+
+      if (response.statusCode != 200) {
+        throw Exception('Coach returned ${response.statusCode}');
+      }
+      final decoded = jsonDecode(response.body);
+      String rawReply = '';
+      if (decoded is String) {
+        rawReply = decoded;
+      } else if (decoded is Map) {
+        if (decoded['mistakes'] != null ||
+            decoded['impact'] != null ||
+            decoded['drill'] != null) {
+          rawReply = jsonEncode(decoded);
+        } else {
+          for (final key in const [
+            'reply',
+            'coach_feedback',
+            'difference',
+            'message',
+          ]) {
+            final value = decoded[key]?.toString().trim();
+            if (value != null && value.isNotEmpty) {
+              rawReply = value;
+              break;
+            }
+          }
+        }
+      }
+      final coachReport = _reportFromCoachText(rawReply);
+      if (!coachReport.hasStructured) {
+        throw Exception('Coach response was not structured.');
+      }
+      if (!mounted) return;
+      setState(() {
+        _coachReport = coachReport;
+        _coachLoading = false;
+      });
+      unawaited(_populateCoachChat(coachReport));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _coachLoading = false;
+        _coachError =
+            'Coach fix is not available right now. The real mistake report is still shown above.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final footerLabel = !_loaded
+        ? 'Loading'
+        : _showCoach
+        ? 'Continue to Premium'
+        : 'Show Coach Fix';
+
+    return _PaneShell(
+      kicker: _showCoach ? 'CRICKNOVA CHAT COACH' : 'MISTAKE DETECTION',
+      title: _showCoach
+          ? 'Chat Coach turns the mistake into a fix.'
+          : 'Your real mistake report is ready.',
+      body: '',
+      footer: _PulseButton(
+        label: footerLabel,
+        onPressed: !_loaded
+            ? null
+            : _showCoach
+            ? widget.onContinue
+            : _showCoachFix,
+        color: _gold,
+        textColor: Colors.black,
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 320),
+        child: !_loaded
+            ? const _FeatureProofLoading(key: ValueKey('loading'))
+            : _showCoach
+            ? _CoachProofCard(
+                key: const ValueKey('coach'),
+                sourceReport: _report,
+                coachReport: _coachReport,
+                loading: _coachLoading,
+                error: _coachError,
+                hasVideo: _hasUploadedVideo,
+              )
+            : _MistakeProofCard(
+                key: const ValueKey('mistake'),
+                controller: _controller,
+                report: _report,
+                speed: _speed,
+                swing: _swing,
+                spin: _spin,
+              ),
+      ),
+    );
+  }
+}
+
+class _FeatureProofLoading extends StatelessWidget {
+  const _FeatureProofLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 260,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0x22D4AF37)),
+      ),
+      child: const CircularProgressIndicator(color: Color(0xFFD4AF37)),
+    );
+  }
+}
+
+class _MistakeProofCard extends StatelessWidget {
+  final VideoPlayerController? controller;
+  final _OnboardingMistakeReport? report;
+  final String? speed;
+  final String? swing;
+  final String? spin;
+
+  const _MistakeProofCard({
+    super.key,
+    required this.controller,
+    required this.report,
+    required this.speed,
+    required this.swing,
+    required this.spin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final initialized = controller?.value.isInitialized == true;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 270,
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0x33FF5A5F)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (initialized)
+                Center(
+                  child: AspectRatio(
+                    aspectRatio: controller!.value.aspectRatio,
+                    child: VideoPlayer(controller!),
+                  ),
+                )
+              else
+                const Center(
+                  child: Icon(
+                    Icons.video_camera_back_rounded,
+                    color: Color(0x44FFFFFF),
+                    size: 54,
+                  ),
+                ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.08),
+                      Colors.black.withValues(alpha: 0.86),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16,
+                child: _ProofBanner(
+                  icon: Icons.warning_amber_rounded,
+                  color: _FeatureProofPaneState._danger,
+                  label: report?.hasStructured == true
+                      ? 'REAL MISTAKE REPORT'
+                      : 'REPORT NOT AVAILABLE',
+                  title: report?.hasStructured == true
+                      ? report!.points.first
+                      : 'The uploaded clip did not return structured mistake data.',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (report?.hasStructured == true) ...[
+          _StructuredReportList(points: report!.points),
+          const SizedBox(height: 14),
+        ],
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (speed != null) _MetricPill(label: 'Speed', value: speed!),
+            if (swing != null) _MetricPill(label: 'Swing', value: swing!),
+            if (spin != null) _MetricPill(label: 'Spin', value: spin!),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CoachProofCard extends StatelessWidget {
+  final _OnboardingMistakeReport? sourceReport;
+  final _OnboardingMistakeReport? coachReport;
+  final bool loading;
+  final String? error;
+  final bool hasVideo;
+
+  const _CoachProofCard({
+    super.key,
+    required this.sourceReport,
+    required this.coachReport,
+    required this.loading,
+    required this.error,
+    required this.hasVideo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0x3310B981)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ProofBanner(
+            icon: Icons.auto_awesome_rounded,
+            color: _FeatureProofPaneState._teal,
+            label: hasVideo ? 'AUTO-SENT TO CHAT COACH' : 'AI CHAT COACH',
+            title: hasVideo
+                ? 'Your real mistake report was sent to Chat Coach.'
+                : 'Ask your cricket coach anything, anytime.',
+          ),
+          const SizedBox(height: 16),
+          _ChatBubble(
+            isCoach: false,
+            text: hasVideo && sourceReport?.hasStructured == true
+                ? 'How do I fix this report?\n${sourceReport!.points.join('\n')}'
+                : 'How can CrickNova Chat Coach help improve my cricket?',
+          ),
+          const SizedBox(height: 10),
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
+              ),
+            )
+          else if (coachReport?.hasStructured == true)
+            _StructuredReportList(points: coachReport!.points)
+          else if (error != null)
+            _ChatBubble(isCoach: true, text: error!)
+          else
+            const _ChatBubble(
+              isCoach: true,
+              text:
+                  'Chat Coach converts your analysis into clear mistakes, impact, and one drill to repeat.',
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StructuredReportList extends StatelessWidget {
+  final List<String> points;
+
+  const _StructuredReportList({required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: points
+          .map(
+            (point) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ChatBubble(isCoach: true, text: point),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+class _ProofBanner extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final String title;
+
+  const _ProofBanner({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: _LuxuryTypography.label(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: _LuxuryTypography.body(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricPill extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MetricPill({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0x14D4AF37),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0x44D4AF37)),
+      ),
+      child: Text(
+        '$label: $value',
+        style: _LuxuryTypography.label(
+          color: const Color(0xFFD4AF37),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.6,
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatBubble extends StatelessWidget {
+  final bool isCoach;
+  final String text;
+
+  const _ChatBubble({required this.isCoach, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: isCoach ? Alignment.centerLeft : Alignment.centerRight,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 330),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isCoach ? const Color(0xFF102019) : const Color(0xFF1C1C1F),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(isCoach ? 4 : 18),
+            bottomRight: Radius.circular(isCoach ? 18 : 4),
+          ),
+          border: Border.all(
+            color: isCoach ? const Color(0x5510B981) : const Color(0x22FFFFFF),
+          ),
+        ),
+        child: Text(
+          text,
+          style: _LuxuryTypography.body(
+            color: Colors.white.withValues(alpha: 0.9),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            height: 1.38,
+          ),
+        ),
+      ),
     );
   }
 }

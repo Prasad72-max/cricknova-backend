@@ -11,7 +11,7 @@ import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_screen.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
-import '../onboarding/cricknova_pre_paywall_flow_screen.dart';
+import '../onboarding/cricknova_paywall_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/premium_service.dart';
 
@@ -182,10 +182,7 @@ class _SplashScreenState extends State<SplashScreen> {
         // Case 2 — onboarding done locally but no Firestore doc yet
         //           (e.g., after account-deletion → re-onboarding → re-login)
         return _SplashNavigationTarget.online(
-          CricknovaPrePaywallFlowScreen(
-            userName: userName,
-            allowSkipToApp: false,
-          ),
+          CricknovaPaywallScreen(userName: userName),
         );
       }
 

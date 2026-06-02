@@ -5,12 +5,14 @@ import 'package:hive/hive.dart';
 
 import '../home/home_screen.dart';
 import '../ai/ai_coach_screen.dart';
-import '../premium/premium_screen.dart';
 import '../profile/profile_screen.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
+import '../services/app_analytics.dart';
 import 'dart:async';
 import '../insights/insights_screen.dart';
+import '../premium/premium_screen.dart';
+import '../live/live_nets_tab.dart';
 
 abstract class MainNavigationController {
   void setTab(int index);
@@ -21,7 +23,9 @@ class MainNavigation extends StatefulWidget {
   final String userName;
   final int initialIndex;
   static final ValueNotifier<int> activeTabNotifier = ValueNotifier<int>(0);
-  static final ValueNotifier<String> userNameNotifier = ValueNotifier<String>('Player');
+  static final ValueNotifier<String> userNameNotifier = ValueNotifier<String>(
+    'Player',
+  );
 
   const MainNavigation({
     super.key,
@@ -69,6 +73,7 @@ class _MainNavigationState extends State<MainNavigation>
       _index = index;
     });
     MainNavigation.activeTabNotifier.value = _index;
+    unawaited(AppAnalytics.logScreenOpen(_screenNameForIndex(_index)));
   }
 
   @override
@@ -92,6 +97,7 @@ class _MainNavigationState extends State<MainNavigation>
     _screenCache = _buildScreenCache(_lastKnownTabCount);
 
     MainNavigation.activeTabNotifier.value = _index;
+    unawaited(AppAnalytics.logScreenOpen(_screenNameForIndex(_index)));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_bootstrapSession());
     });
@@ -103,9 +109,19 @@ class _MainNavigationState extends State<MainNavigation>
 
   int get _coachTabIndex => 2;
 
-  int get _profileTabIndex {
-    return PremiumService.isPremiumActive ? 3 : 4;
-  }
+  /// Premium tab only shown to free users (index 3 when visible).
+  bool get _showPremiumTab =>
+      PremiumService.isLoaded &&
+      !PremiumService.isPremiumActive &&
+      !_showEdgeTab;
+
+  bool get _showEdgeTab =>
+      PremiumService.isLoaded && PremiumService.hasCrickNovaEdgeAccess;
+
+  int get _premiumTabIndex => 3; // only valid when _showPremiumTab
+  int get _edgeTabIndex => 3; // only valid when _showEdgeTab
+
+  int get _profileTabIndex => (_showPremiumTab || _showEdgeTab) ? 4 : 3;
 
   void _handlePremiumStateChanged() {
     if (!mounted) return;
@@ -115,6 +131,7 @@ class _MainNavigationState extends State<MainNavigation>
         PremiumService.billingState != _lastBillingState ||
         PremiumService.accessState != _lastAccessState;
     final int nextTabCount = _tabCount();
+    final int previousTabCount = _lastKnownTabCount;
     final bool tabCountChanged = nextTabCount != _lastKnownTabCount;
 
     if (!premiumChanged && !billingChanged && !tabCountChanged) {
@@ -128,6 +145,12 @@ class _MainNavigationState extends State<MainNavigation>
     _lastKnownTabCount = nextTabCount;
     final maxIndex = nextTabCount - 1;
     setState(() {
+      if (previousTabCount == 4 &&
+          nextTabCount == 5 &&
+          _index == 3 &&
+          widget.initialIndex >= 4) {
+        _index = 4;
+      }
       if (_index > maxIndex) {
         _index = maxIndex;
       }
@@ -196,6 +219,7 @@ class _MainNavigationState extends State<MainNavigation>
 
     // Don't block the first few frames; load username opportunistically.
     unawaited(loadUser());
+    unawaited(PremiumService.restoreOnLaunch());
     Future<void>.delayed(const Duration(seconds: 4), () {
       if (!mounted) return;
       unawaited(_evaluatePremiumAlerts());
@@ -244,7 +268,8 @@ class _MainNavigationState extends State<MainNavigation>
       final prefs = await SharedPreferences.getInstance();
       name = prefs.getString("profileName")?.trim();
     }
-    final String nextUserName = (name != null && name.isNotEmpty && name.toLowerCase() != "player")
+    final String nextUserName =
+        (name != null && name.isNotEmpty && name.toLowerCase() != "player")
         ? name
         : widget.userName;
     MainNavigation.userNameNotifier.value = nextUserName;
@@ -421,48 +446,74 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   int _tabCount() {
-    return PremiumService.isPremiumActive ? 4 : 5;
+    // Free without live time: Home + Insights + Coach + Premium + Profile = 5
+    // Any user with live time: Home + Insights + Coach + Edge + Profile = 5
+    // Paid without live time: Home + Insights + Coach + Profile = 4
+    return (_showPremiumTab || _showEdgeTab) ? 5 : 4;
   }
 
   Widget _buildScreenAt(int index) {
     if (index == 0) {
-      return HomeScreen(key: const ValueKey("home"), userName: userName);
+      return HomeScreen(key: const ValueKey('home'), userName: userName);
     }
     if (index == 1) {
-      return const InsightsScreen(key: ValueKey("insights"));
+      return const InsightsScreen(key: ValueKey('insights'));
     }
     if (index == _coachTabIndex) {
-      return const AICoachScreen(key: ValueKey("CrickNovacoach"));
+      return const AICoachScreen(key: ValueKey('CrickNovacoach'));
     }
-    if (!PremiumService.isPremiumActive && index == 3) {
-      return const PremiumScreen(entrySource: "tab", key: ValueKey("premium"));
+    if (_showPremiumTab && index == _premiumTabIndex) {
+      return const PremiumScreen(
+        key: ValueKey('premium_tab'),
+        entrySource: 'features',
+      );
     }
-    return const ProfileScreen(key: ValueKey("profile"));
+    if (_showEdgeTab && index == _edgeTabIndex) {
+      return const LiveNetsTab(key: ValueKey('cricknova_edge_tab'));
+    }
+    return const ProfileScreen(key: ValueKey('profile'));
+  }
+
+  String _screenNameForIndex(int index) {
+    if (index == 0) return 'Home';
+    if (index == 1) return 'Insights';
+    if (index == _coachTabIndex) return 'CrickNova Coach';
+    if (_showPremiumTab && index == _premiumTabIndex) return 'Premium';
+    if (_showEdgeTab && index == _edgeTabIndex) return 'CrickNova Edge';
+    if (index == _profileTabIndex) return 'Profile';
+    return 'Tab $index';
   }
 
   @override
   Widget build(BuildContext context) {
     final navItems = <_NavTabData>[
-      _NavTabData(label: "Home", icon: Icons.home_outlined, index: 0),
-      _NavTabData(label: "Insights", icon: Icons.insights_outlined, index: 1),
+      _NavTabData(label: 'Home', icon: Icons.home_outlined, index: 0),
+      _NavTabData(label: 'Insights', icon: Icons.insights_outlined, index: 1),
       _NavTabData(
-        label: "CrickNova Coach",
+        label: 'Coach',
         icon: Icons.auto_awesome_outlined,
         index: _coachTabIndex,
       ),
-    ];
-    if (!PremiumService.isPremiumActive) {
-      navItems.add(
-        _NavTabData(label: "Premium", icon: Icons.star_outline, index: 3),
-      );
-    }
-    navItems.add(
+      if (_showPremiumTab)
+        _NavTabData(
+          label: 'Premium',
+          icon: Icons.workspace_premium_rounded,
+          index: _premiumTabIndex,
+          isPremium: true,
+        ),
+      if (_showEdgeTab)
+        _NavTabData(
+          label: 'Edge',
+          icon: Icons.bolt_rounded,
+          index: _edgeTabIndex,
+          isEdge: true,
+        ),
       _NavTabData(
-        label: "Profile",
+        label: 'Profile',
         icon: Icons.person_outline,
         index: _profileTabIndex,
       ),
-    );
+    ];
 
     return Scaffold(
       body: IndexedStack(
@@ -496,16 +547,23 @@ class _MainNavigationState extends State<MainNavigation>
 
   Widget _buildNavTab(_NavTabData item) {
     final bool isActive = _index == item.index;
-    final color = isActive ? Colors.amber : Colors.white60;
+    final Color activeColor = item.isEdge
+        ? const Color(0xFF00E5FF)
+        : item.isPremium
+        ? const Color(0xFFD4AF37)
+        : Colors.amber;
+    final Color idleColor = item.isEdge
+        ? const Color(0xFF00E5FF).withValues(alpha: 0.72)
+        : item.isPremium
+        ? const Color(0xFFD4AF37).withValues(alpha: 0.7)
+        : Colors.white60;
+    final Color color = isActive ? activeColor : idleColor;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
           if (item.index == _index) return;
-          debugPrint(
-            "BOTTOM_NAV tap=${item.index} isPremium=${PremiumService.isPremiumActive}",
-          );
           if (!mounted) return;
           setTab(item.index);
         },
@@ -513,6 +571,7 @@ class _MainNavigationState extends State<MainNavigation>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Active indicator dot
               SizedBox(
                 height: 7,
                 child: Center(
@@ -521,12 +580,12 @@ class _MainNavigationState extends State<MainNavigation>
                     height: 3,
                     width: isActive ? 24 : 0,
                     decoration: BoxDecoration(
-                      color: Colors.amber,
+                      color: activeColor,
                       borderRadius: BorderRadius.circular(4),
                       boxShadow: isActive
-                          ? const [
+                          ? [
                               BoxShadow(
-                                color: Colors.amber,
+                                color: activeColor.withValues(alpha: 0.55),
                                 blurRadius: 8,
                                 spreadRadius: 1,
                               ),
@@ -536,7 +595,30 @@ class _MainNavigationState extends State<MainNavigation>
                   ),
                 ),
               ),
-              Icon(item.icon, color: color, size: isActive ? 22 : 20),
+
+              // Icon — paid feature tabs get a compact glowing badge treatment
+              if ((item.isPremium || item.isEdge) && !isActive)
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: activeColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: activeColor.withValues(alpha: 0.45),
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(item.icon, color: activeColor, size: 16),
+                    ),
+                  ],
+                )
+              else
+                Icon(item.icon, color: color, size: isActive ? 22 : 20),
+
               const SizedBox(height: 3),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -549,7 +631,11 @@ class _MainNavigationState extends State<MainNavigation>
                     style: TextStyle(
                       color: color,
                       fontSize: 11,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: item.isPremium || item.isEdge
+                          ? FontWeight.w800
+                          : isActive
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                     ),
                   ),
                 ),
@@ -566,11 +652,15 @@ class _NavTabData {
   final String label;
   final IconData icon;
   final int index;
+  final bool isPremium;
+  final bool isEdge;
 
   const _NavTabData({
     required this.label,
     required this.icon,
     required this.index,
+    this.isPremium = false,
+    this.isEdge = false,
   });
 }
 

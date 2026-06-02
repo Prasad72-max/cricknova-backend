@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:hive/hive.dart';
 
+import '../services/app_analytics.dart';
+
 class CricknovaOnboardingStore {
   CricknovaOnboardingStore._();
 
@@ -115,16 +117,21 @@ class CricknovaOnboardingStore {
       return;
     }
     await saveProgress(uid, answers, completed: done);
-    
+
     // Upload onboarding answers and timestamps to Firestore
     try {
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'onboardingCompleted': done,
+        'onboarding_completed': done,
+        'onboardingStatus': done ? 'completed' : 'started',
         'onboardingAnswers': answers,
         'firstQuestionTime': answers['first_question_time'],
         'lastQuestionTime': answers['last_question_time'],
+        if (done) 'onboardingCompletedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (_) {}
+    await AppAnalytics.markOnboardingStatus(completed: done, answers: answers);
 
     await clearPending();
   }
@@ -155,7 +162,9 @@ class CricknovaOnboardingStore {
       }
 
       if (name == null || name.isEmpty) {
-        name = data['display_name']?.toString().trim() ?? data['name']?.toString().trim();
+        name =
+            data['display_name']?.toString().trim() ??
+            data['name']?.toString().trim();
       }
 
       if (name != null && name.isNotEmpty && name.toLowerCase() != 'player') {

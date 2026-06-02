@@ -750,8 +750,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   bool get _isProfileTabVisible =>
-      MainNavigation.activeTabNotifier.value ==
-      (PremiumService.isPremiumActive ? 3 : 4);
+      MainNavigation.activeTabNotifier.value == 3;
 
   void _handleTabVisibilityChange() {
     if (_isProfileTabVisible) {

@@ -94,8 +94,9 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       final subscriptionProvider = context.read<SubscriptionProvider>();
       await subscriptionProvider.fetchProducts();
       final bool wantsYearly = _lockedPlan == _PlanChoice.yearly;
+      // Yearly always gets free trial offer; monthly is always direct payment
       final bool allowTrial = wantsYearly && _isTrialAvailable;
-      final bool requireTrial = wantsYearly && _isTrialAvailable;
+      final bool requireTrial = false; // never hard-require – fall back gracefully
       final String basePlanId = wantsYearly
           ? SubscriptionProvider.oneYearPlanId
           : SubscriptionProvider.monthlyPlanId;
@@ -106,9 +107,8 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
         requireFreeTrial: requireTrial,
       );
 
-      // Fallback: If free trial offer was requested but not found or not eligible,
-      // fall back to direct paid subscription so the user is never blocked.
-      if (selectedPlan == null && requireTrial) {
+      // Fallback: if trial offer not found for yearly, use direct paid plan
+      if (selectedPlan == null) {
         selectedPlan = subscriptionProvider.planForBasePlanId(
           basePlanId,
           allowFreeTrial: false,
@@ -125,8 +125,8 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
 
       final launched = await subscriptionProvider.purchasePlan(
         selectedPlan,
-        allowFreeTrial: selectedPlan.hasFreeTrial,
-        requireFreeTrial: selectedPlan.hasFreeTrial,
+        allowFreeTrial: allowTrial && selectedPlan.hasFreeTrial,
+        requireFreeTrial: false,
       );
       if (!launched && mounted) {
         setState(() {
@@ -190,13 +190,7 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
   }
 
   Future<void> _goToStep(int index) async {
-    if (index < 0 || index > 3) return;
-    setState(() => _stepIndex = index);
-    await _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 380),
-      curve: Curves.easeOutCubic,
-    );
+    // No-op: single-step paywall
   }
 
   Widget _buildTopBar() {
@@ -212,73 +206,24 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
           ),
         ),
         const Spacer(),
-        if (_stepIndex == 0)
-          const SizedBox(width: 40, height: 40)
-        else if (_stepIndex == 1)
-          InkWell(
-            onTap: () => _goToStep(_stepIndex - 1),
-            borderRadius: BorderRadius.circular(999),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              ),
-              child: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
+        InkWell(
+          onTap: _enterApp,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
-          )
-        else
-          Row(
-            children: [
-              InkWell(
-                onTap: () => _goToStep(_stepIndex - 1),
-                borderRadius: BorderRadius.circular(999),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                ),
-              ),
-              InkWell(
-                onTap: _enterApp,
-                borderRadius: BorderRadius.circular(999),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.close_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
+            child: const Icon(
+              Icons.close_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
           ),
+        ),
       ],
     );
   }
@@ -390,126 +335,128 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     }
 
     final bool isIndia = region == PricingRegion.india;
-    final String priceLabel = isIndia ? '₹499/year' : '\$59.99/year';
     final bool selectedYearly = _lockedPlan == _PlanChoice.yearly;
-    
-    final String footerLabel;
-    final String actionLabel;
-    final String headerTitle;
-    
-    if (selectedYearly) {
-      if (_isTrialAvailable) {
-        footerLabel = isIndia
+    final bool isYearlyTrial = selectedYearly && _isTrialAvailable;
+
+    final String headerTitle = isYearlyTrial
+        ? 'Start your 3-day\nFREE trial to\ncontinue.'
+        : 'Unlock Premium\nAccess to\ncontinue.';
+
+    final String actionLabel = isYearlyTrial
+        ? 'Start My 3-Day Free Trial'
+        : selectedYearly
+            ? 'Subscribe – ₹499/year'
+            : 'Unlock Monthly Access';
+
+    final String footerLabel = isYearlyTrial
+        ? (isIndia
             ? '3 days free, then ₹499/year (₹41/mo)'
-            : '3 days free, then \$59.99/year (\$5.00/mo)';
-        actionLabel = 'Start My 3-Day Free Trial';
-        headerTitle = 'Start your 3-day FREE trial to continue.';
-      } else {
-        footerLabel = isIndia
-            ? 'Billed today at ₹499/year (₹41/mo)'
-            : 'Billed today at \$59.99/year (\$5.00/mo)';
-        actionLabel = 'Subscribe Now';
-        headerTitle = 'Unlock Premium Access to continue.';
-      }
-    } else {
-      footerLabel = isIndia ? 'Billed today at ₹99/month' : 'Billed today at \$8.99/mo';
-      actionLabel = 'Unlock Monthly Access';
-      headerTitle = _isTrialAvailable
-          ? 'Start your 3-day FREE trial to continue.'
-          : 'Unlock Premium Access to continue.';
-    }
+            : '3 days free, then \$59.99/year (\$5.00/mo)')
+        : selectedYearly
+            ? (isIndia
+                ? 'Billed today at ₹499/year (₹41/mo)'
+                : 'Billed today at \$59.99/year (\$5.00/mo)')
+            : (isIndia ? 'Billed today at ₹99/month' : 'Billed today at \$8.99/mo');
 
     final DateTime bd = DateTime.now().add(const Duration(days: 3));
     const List<String> months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     final String billingDate = '${months[bd.month - 1]} ${bd.day}, ${bd.year}';
     final String billingLabel =
         'You\'ll be charged on $billingDate unless you cancel anytime before.';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(bottom: 24),
-      child: Column(
+    final String priceLabel = selectedYearly
+        ? (isIndia ? '₹499/year' : '\$59.99/year')
+        : (isIndia ? '₹99/month' : '\$8.99/mo');
+
+    final double screenHeight = MediaQuery.of(context).size.height;
+    final double scale = (screenHeight / 900.0).clamp(0.68, 1.0);
+
+    final double headerFontSize = 42 * scale;
+    final double gapHeaderToTimeline = 24 * scale;
+    final double gapAfterTimeline = 28 * scale;
+    final double gapAfterCard1 = 20 * scale;
+    final double gapAfterCard2 = 28 * scale;
+    final double gapAfterNoPayment = 24 * scale;
+    final double ctaHeight = 64 * scale;
+    final double ctaFontSize = 18 * scale;
+    final double gapAfterCta = 24 * scale;
+    final double footerFontSize = 15 * scale;
+    final double protectionFontSize = 13 * scale;
+    final double gapFooterToProtection = 12 * scale;
+    final double bottomGap = 36 * scale;
+
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const SizedBox(height: 10),
+          // Big header (made smaller and responsive)
           Text(
             headerTitle,
             style: GoogleFonts.cormorantGaramond(
               color: Colors.white,
-              fontSize: 54,
+              fontSize: headerFontSize,
               fontWeight: FontWeight.w700,
-              height: 1.0,
+              height: 1.1,
             ),
           ),
-          const SizedBox(height: 36),
-          if (selectedYearly && _isTrialAvailable) ...[
-            _DarkTimeline(billingLabel: billingLabel),
-            const SizedBox(height: 32),
-          ],
-          Column(
-            children: [
-              _DarkPlanOption(
-                title: 'Monthly',
-                price: isIndia ? '₹99/month' : '\$8.99/mo',
-                selected: _lockedPlan == _PlanChoice.monthly,
-                onTap: () {
-                  setState(() {
-                    _lockedPlan = _PlanChoice.monthly;
-                  });
-                },
-              ),
-              const SizedBox(height: 14),
-              _DarkPlanOption(
-                title: 'Yearly',
-                price: priceLabel,
-                selected: _lockedPlan == _PlanChoice.yearly,
-                showTrial: _isTrialAvailable,
-                onTap: () {
-                  setState(() {
-                    _lockedPlan = _PlanChoice.yearly;
-                  });
-                },
-              ),
-            ],
+          SizedBox(height: gapHeaderToTimeline),
+          // Timeline (only show for yearly plan with trial)
+          if (selectedYearly && _isTrialAvailable)
+            _DarkTimeline(
+              billingLabel: billingLabel,
+              isYearly: selectedYearly,
+              priceLabel: priceLabel,
+            ),
+          if (selectedYearly && _isTrialAvailable)
+            SizedBox(height: gapAfterTimeline)
+          else
+            SizedBox(height: 16 * scale),
+          // Monthly card
+          _PaywallPlanCard(
+            title: 'Monthly',
+            price: isIndia ? '₹99/month' : '\$8.99/mo',
+            selected: _lockedPlan == _PlanChoice.monthly,
+            showTrial: false,
+            onTap: () => setState(() => _lockedPlan = _PlanChoice.monthly),
           ),
-          const SizedBox(height: 20),
-          if (selectedYearly && _isTrialAvailable) ...[
+          SizedBox(height: gapAfterCard1),
+          // Yearly card
+          _PaywallPlanCard(
+            title: 'Yearly',
+            price: isIndia ? '₹499/year' : '\$59.99/year',
+            selected: _lockedPlan == _PlanChoice.yearly,
+            showTrial: _isTrialAvailable,
+            onTap: () => setState(() => _lockedPlan = _PlanChoice.yearly),
+          ),
+          // Extra spacing for yearly plan to make screen bigger
+          SizedBox(height: gapAfterCard2),
+          // No Payment Due Now
+          if (isYearlyTrial) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                const Icon(
-                  Icons.check_circle_rounded,
-                  color: Color(0xFFFFD700),
-                  size: 16,
-                ),
-                const SizedBox(width: 6),
+                Icon(Icons.check_circle_rounded,
+                    color: const Color(0xFFFFD700), size: 20 * scale),
+                const SizedBox(width: 8),
                 Text(
                   'No Payment Due Now',
                   style: GoogleFonts.inter(
                     color: Colors.white,
-                    fontSize: 17,
+                    fontSize: 17 * scale,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-          ],
+            SizedBox(height: gapAfterNoPayment),
+          ] else
+            const SizedBox(height: 4),
+          // CTA Button
           SizedBox(
             width: double.infinity,
-            height: 60,
+            height: ctaHeight,
             child: ElevatedButton(
               onPressed: _purchasePending ? null : _startLockedPurchase,
               style: ElevatedButton.styleFrom(
@@ -517,10 +464,10 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
                 foregroundColor: Colors.black,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 textStyle: GoogleFonts.inter(
-                  fontSize: 18,
+                  fontSize: ctaFontSize,
                   fontWeight: FontWeight.w900,
                 ),
               ),
@@ -536,9 +483,9 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
                   : Text(actionLabel),
             ),
           ),
-          const SizedBox(height: 24),
-          if (_billingError != null) ...<Widget>[
-            const SizedBox(height: 8),
+          // Extra spacing after button for yearly plan
+          SizedBox(height: gapAfterCta),
+          if (_billingError != null) ...[
             Text(
               _billingError!,
               textAlign: TextAlign.center,
@@ -548,34 +495,35 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
                 fontWeight: FontWeight.w600,
               ),
             ),
+            const SizedBox(height: 6),
           ],
-          const SizedBox(height: 12),
           Center(
             child: Text(
               footerLabel,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 color: const Color(0xFFAAAAAA),
-                fontSize: 15,
+                fontSize: footerFontSize,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: gapFooterToProtection),
           Center(
             child: Text(
               'Device-based trial protection is active.',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 color: const Color(0xFF777777),
-                fontSize: 14,
+                fontSize: protectionFontSize,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
+          // Extra bottom spacing for yearly plan
+          SizedBox(height: bottomGap),
         ],
-      ),
-    );
+      );
   }
 
   @override
@@ -583,6 +531,13 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     return ValueListenableBuilder<PricingRegion>(
       valueListenable: PricingLocationService.regionNotifier,
       builder: (BuildContext context, PricingRegion region, _) {
+        final double screenHeight = MediaQuery.of(context).size.height;
+        final double scale = (screenHeight / 900.0).clamp(0.68, 1.0);
+        final double outerTopGap = 12 * scale;
+        final double outerBottomPadding = 18 * scale;
+        final double outerHorizontalPadding = 18 * scale;
+        final double spacingBelowTopBar = 12 * scale;
+
         return Scaffold(
           backgroundColor: _bg,
           body: Stack(
@@ -594,43 +549,21 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
                 ),
               SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+                  padding: EdgeInsets.fromLTRB(
+                    outerHorizontalPadding,
+                    outerTopGap,
+                    outerHorizontalPadding,
+                    outerBottomPadding,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       _buildTopBar(),
-                      const SizedBox(height: 8),
+                      SizedBox(height: spacingBelowTopBar),
                       Expanded(
-                        child: PageView(
-                          controller: _pageController,
+                        child: SingleChildScrollView(
                           physics: const NeverScrollableScrollPhysics(),
-                          children: <Widget>[
-                            _buildHookStep(region),
-                            _buildMockupStep(region),
-                            _buildTrustStep(region),
-                            _buildCommitmentStep(region),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Center(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: List<Widget>.generate(4, (int i) {
-                            final active = i == _stepIndex;
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 220),
-                              width: active ? 18 : 8,
-                              height: 8,
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(
-                                color: active
-                                    ? const Color(0xFFFFD700)
-                                    : Colors.white24,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                            );
-                          }),
+                          child: _buildCommitmentStep(region),
                         ),
                       ),
                     ],
@@ -1160,26 +1093,39 @@ class _TrustBellVisual extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class _DarkTimeline extends StatelessWidget {
   final String billingLabel;
-  const _DarkTimeline({required this.billingLabel});
+  final bool isYearly;
+  final String priceLabel;
+
+  const _DarkTimeline({
+    required this.billingLabel,
+    required this.isYearly,
+    required this.priceLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final double screenHeight = MediaQuery.of(context).size.height;
+    final double scale = (screenHeight / 900.0).clamp(0.68, 1.0);
+    final double itemSpacing = 20 * scale;
+    final double iconBoxSize = 48 * scale;
+    final double lineLeft = (iconBoxSize / 2) - 1;
+
     return Stack(
       children: [
         Positioned(
-          left: 17,
+          left: lineLeft,
           top: 18,
           bottom: 18,
           child: Container(
             width: 2,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFFFFD700),
-                  const Color(0xFFFFD700),
-                  const Color(0xFF2A2A2A),
+                  Color(0xFFFFD700),
+                  Color(0xFFFFD700),
+                  Color(0xFF2A2A2A),
                 ],
               ),
             ),
@@ -1187,24 +1133,22 @@ class _DarkTimeline extends StatelessWidget {
         ),
         Column(
           children: [
-            const _DarkTimelineItem(
+            _DarkTimelineItem(
               iconData: Icons.lock_open_rounded,
-              iconBg: Color(0xFFFFD700),
+              iconBg: const Color(0xFFFFD700),
               iconColor: Colors.white,
               title: 'Today',
-              subtitle:
-                  'Unlock all premium features like AI batting analysis, bowling coach, and more.',
+              subtitle: 'Unlock all premium features like AI batting analysis, bowling coach, and more.',
             ),
-            const SizedBox(height: 24),
-            const _DarkTimelineItem(
+            SizedBox(height: itemSpacing),
+            _DarkTimelineItem(
               iconData: Icons.notifications_active_rounded,
-              iconBg: Color(0xFFFFD700),
+              iconBg: const Color(0xFFFFD700),
               iconColor: Colors.white,
               title: 'In 2 Days – Reminder',
-              subtitle:
-                  'We\'ll send you a reminder that your trial is ending soon.',
+              subtitle: 'We\'ll send you a reminder that your trial is ending soon.',
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: itemSpacing),
             _DarkTimelineItem(
               iconData: Icons.workspace_premium_rounded,
               iconBg: Colors.black,
@@ -1239,20 +1183,29 @@ class _DarkTimelineItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double screenHeight = MediaQuery.of(context).size.height;
+    final double scale = (screenHeight / 900.0).clamp(0.68, 1.0);
+    final double iconBoxSize = 48 * scale;
+    final double iconSize = 24 * scale;
+    final double titleFontSize = 20 * scale;
+    final double subtitleFontSize = 15 * scale;
+    final double titleToSubtitleGap = 4 * scale;
+    final double horizontalGap = 16 * scale;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 36,
-          height: 36,
+          width: iconBoxSize,
+          height: iconBoxSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: iconBg,
             border: border,
           ),
-          child: Icon(iconData, color: iconColor, size: 18),
+          child: Icon(iconData, color: iconColor, size: iconSize),
         ),
-        const SizedBox(width: 16),
+        SizedBox(width: horizontalGap),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.only(top: 2),
@@ -1263,16 +1216,16 @@ class _DarkTimelineItem extends StatelessWidget {
                   title,
                   style: GoogleFonts.inter(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: titleFontSize,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 4),
+                SizedBox(height: titleToSubtitleGap),
                 Text(
                   subtitle,
                   style: GoogleFonts.inter(
                     color: const Color(0xFFAAAAAA),
-                    fontSize: 13,
+                    fontSize: subtitleFontSize,
                     fontWeight: FontWeight.w500,
                     height: 1.4,
                   ),
@@ -2175,6 +2128,300 @@ class _ConfettiPiece {
     required this.size,
     required this.color,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paywall Plan Card — fills Expanded height, slightly bigger than compact
+// ─────────────────────────────────────────────────────────────────────────────
+class _PaywallPlanCard extends StatelessWidget {
+  final String title;
+  final String price;
+  final bool selected;
+  final bool showTrial;
+  final VoidCallback? onTap;
+
+  const _PaywallPlanCard({
+    required this.title,
+    required this.price,
+    required this.selected,
+    this.showTrial = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final double screenHeight = MediaQuery.of(context).size.height;
+    final double scale = (screenHeight / 900.0).clamp(0.68, 1.0);
+
+    final double cardHeight = 96 * scale;
+    final double paddingHorizontal = 20 * scale;
+    final double paddingVertical = 14 * scale;
+    final double titleFontSize = 19 * scale;
+    final double priceFontSize = 28 * scale;
+    final double radioSize = 36 * scale;
+    final double checkIconSize = 20 * scale;
+    final double badgeTop = -11 * scale;
+    final double badgeFontSize = 11 * scale;
+    final double titleToPriceGap = 6 * scale;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            width: double.infinity,
+            height: cardHeight,
+            padding: EdgeInsets.symmetric(horizontal: paddingHorizontal, vertical: paddingVertical),
+            decoration: BoxDecoration(
+              color: selected
+                  ? const Color(0xFF1A1500)
+                  : const Color(0xFF181818),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected ? const Color(0xFFFFD700) : Colors.white24,
+                width: selected ? 2.0 : 1.2,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.10),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: titleFontSize,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      SizedBox(height: titleToPriceGap),
+                      Text(
+                        price,
+                        style: GoogleFonts.inter(
+                          color: selected
+                              ? const Color(0xFFFFD700)
+                              : Colors.white,
+                          fontSize: priceFontSize,
+                          fontWeight: FontWeight.w800,
+                          height: 1.0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Radio circle
+                Container(
+                  width: radioSize,
+                  height: radioSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? const Color(0xFFFFD700)
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFFFFD700)
+                          : Colors.white38,
+                      width: 2,
+                    ),
+                  ),
+                  child: selected
+                      ? Icon(Icons.check, size: checkIconSize, color: Colors.black)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          // 3 DAYS FREE badge
+          if (showTrial)
+            Positioned(
+              top: badgeTop,
+              right: 14,
+              child: Container(
+                padding:
+                    EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 5 * scale),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(999),
+                  border:
+                      Border.all(color: const Color(0xFFFFD700), width: 1.5),
+                ),
+                child: Text(
+                  '3 DAYS FREE',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: badgeFontSize,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Big Plan Card — full-height, large text, used in the commitment step
+// ─────────────────────────────────────────────────────────────────────────────
+class _BigPlanCard extends StatelessWidget {
+  final String title;
+  final String price;
+  final String subtitle;
+  final bool selected;
+  final bool showTrial;
+  final VoidCallback? onTap;
+
+  const _BigPlanCard({
+    required this.title,
+    required this.price,
+    required this.subtitle,
+    required this.selected,
+    this.showTrial = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            width: double.infinity,
+            height: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+            decoration: BoxDecoration(
+              color: selected
+                  ? const Color(0xFF1E1A0E)
+                  : const Color(0xFF181818),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: selected ? const Color(0xFFFFD700) : Colors.white24,
+                width: selected ? 2.2 : 1.2,
+              ),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFFFD700).withValues(alpha: 0.12),
+                        blurRadius: 20,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Left: Title + price + subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        price,
+                        style: GoogleFonts.inter(
+                          color: selected
+                              ? const Color(0xFFFFD700)
+                              : Colors.white,
+                          fontSize: 42,
+                          fontWeight: FontWeight.w800,
+                          height: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.inter(
+                          color: Colors.white54,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Right: radio circle
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selected
+                        ? const Color(0xFFFFD700)
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFFFFD700)
+                          : Colors.white38,
+                      width: 2,
+                    ),
+                  ),
+                  child: selected
+                      ? const Icon(Icons.check, size: 18, color: Colors.black)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+          // 3 DAYS FREE badge
+          if (showTrial)
+            Positioned(
+              top: -12,
+              right: 14,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: const Color(0xFFFFD700), width: 1.5),
+                ),
+                child: Text(
+                  '3 DAYS FREE',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

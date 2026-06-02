@@ -14,10 +14,10 @@ import 'package:CrickNova_Ai/app_router.dart';
 import 'package:CrickNova_Ai/models/pending_video.dart';
 import 'package:CrickNova_Ai/services/background_analysis_service.dart';
 import 'package:CrickNova_Ai/services/backend_warmup_service.dart';
+import 'package:CrickNova_Ai/services/app_analytics.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -130,6 +130,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
       debugPrint("🔐 AUTH: stable user uid=${user.uid}");
       try {
+        unawaited(AppAnalytics.ensureUserTrackingDefaults());
         if (!PremiumService.isLoaded) {
           await PremiumService.restoreOnLaunch();
         } else {
@@ -181,6 +182,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       create: (_) => SubscriptionProvider(),
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
+        navigatorObservers: [FirestoreScreenObserver()],
         debugShowCheckedModeBanner: false,
         themeMode: _themeMode,
 
