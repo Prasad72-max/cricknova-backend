@@ -550,6 +550,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       );
       await controller.initialize().timeout(const Duration(seconds: 12));
       localController = controller;
+      _camera = controller;
+      if (mounted) {
+        setState(() {
+          _status = 'Camera ready';
+        });
+      }
 
       final dir = await getApplicationDocumentsDirectory();
       final sessionDir = Directory(p.join(dir.path, 'live_nets_sessions'));
@@ -575,7 +581,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       );
 
       _socket = socket;
-      _camera = controller;
       if (mounted) {
         setState(() {
           _status = 'Starting live detection';
@@ -638,6 +643,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     final message = error.toString();
     if (message.contains('Timeout')) {
       return 'CrickNova AI took too long to respond. Please try again.';
+    }
+    if (message.contains('FIRESTORE') || message.contains('DATABASE')) {
+      return 'CrickNova backend started, but live data storage is not ready yet.';
     }
     if (message.contains('SocketException')) {
       return 'Could not reach the live AI backend. Check internet and backend deployment.';
@@ -704,6 +712,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
     if (decoded['type'] == 'termination') {
       await _endSession();
+    }
+    if (decoded['type'] == 'error') {
+      final reason = decoded['reason']?.toString() ?? 'Unknown backend error';
+      if (mounted) {
+        setState(() {
+          _connectError = reason;
+          _connecting = false;
+          _status = 'Backend error';
+        });
+      }
+      await _cleanupForRetry();
     }
   }
 

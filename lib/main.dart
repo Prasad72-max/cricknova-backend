@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:CrickNova_Ai/splash/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:CrickNova_Ai/services/play_billing_service.dart';
 import 'package:CrickNova_Ai/services/cricknova_marketing_notification_service.dart';
 import 'package:CrickNova_Ai/services/cricknova_notification_service.dart';
@@ -18,6 +19,7 @@ import 'package:CrickNova_Ai/services/app_analytics.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +34,13 @@ Future<void> main() async {
 
 Future<void> _initializeStartup() async {
   if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp();
+    if (kIsWeb) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } else {
+      await Firebase.initializeApp();
+    }
   }
 
   FirebaseMessaging.onBackgroundMessage(

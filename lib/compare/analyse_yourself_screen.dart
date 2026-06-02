@@ -389,12 +389,12 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
 
   Future<String> _videoSignature(File file) async {
     const chunk = 64 * 1024;
-    int fnv1a64(int hash, List<int> bytes) {
-      const int prime = 0x100000001B3;
+    int fnv1a32(int hash, List<int> bytes) {
+      const int prime = 16777619;
       int h = hash;
       for (final b in bytes) {
         h ^= (b & 0xFF);
-        h = (h * prime) & 0xFFFFFFFFFFFFFFFF;
+        h = (h * prime) & 0xFFFFFFFF;
       }
       return h;
     }
@@ -405,15 +405,15 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       final len = stat.size;
       final headLen = len < chunk ? len : chunk;
       final head = await raf.read(headLen);
-      int h = 0xCBF29CE484222325; // offset basis
-      h = fnv1a64(h, head);
+      int h = 2166136261; // FNV-1a 32-bit offset basis
+      h = fnv1a32(h, head);
       if (len > chunk) {
         await raf.setPosition(math.max(0, len - chunk));
         final tail = await raf.read(chunk);
-        h = fnv1a64(h, tail);
+        h = fnv1a32(h, tail);
       }
-      h = fnv1a64(h, utf8.encode(len.toString()));
-      return h.toUnsigned(64).toRadixString(16);
+      h = fnv1a32(h, utf8.encode(len.toString()));
+      return h.toUnsigned(32).toRadixString(16);
     } finally {
       await raf.close();
     }

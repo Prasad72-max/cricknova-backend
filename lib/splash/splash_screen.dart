@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
@@ -137,6 +138,23 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<_SplashNavigationTarget> _prepareNavigationTarget() async {
     await widget.startupFuture;
+
+    if (kIsWeb) {
+      final user = FirebaseAuth.instance.currentUser;
+      final userName = user?.displayName ?? 'Player';
+      if (user != null) {
+        try {
+          await PremiumService.ensureFreshState();
+        } catch (_) {}
+        return _SplashNavigationTarget.online(
+          MainNavigation(userName: userName),
+        );
+      }
+      return const _SplashNavigationTarget.online(
+        LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+      );
+    }
+
     final hasInternet = await _hasInternetConnection();
     if (!hasInternet) {
       return const _SplashNavigationTarget.offline();
@@ -168,7 +186,9 @@ class _SplashScreenState extends State<SplashScreen> {
           await PremiumService.ensureFreshState();
         } catch (_) {}
         try {
-          await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
+          await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(
+            user.uid,
+          );
         } catch (_) {}
         return _SplashNavigationTarget.online(
           MainNavigation(userName: userName),
@@ -189,10 +209,7 @@ class _SplashScreenState extends State<SplashScreen> {
       // Case 3 — truly brand-new sign-in, show onboarding
       await prefs.setBool(_onboardingSeenKey, true);
       return _SplashNavigationTarget.online(
-        CricknovaOnboardingScreen(
-          userName: userName,
-          skipGetStarted: false,
-        ),
+        CricknovaOnboardingScreen(userName: userName, skipGetStarted: false),
       );
     }
 
@@ -220,6 +237,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<bool> _hasInternetConnection() async {
+    if (kIsWeb) {
+      return true;
+    }
     try {
       final result = await InternetAddress.lookup(
         'example.com',

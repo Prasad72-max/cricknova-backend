@@ -10,21 +10,49 @@ from firebase_admin import auth as firebase_auth, credentials as firebase_creden
 # -----------------------------
 
 _firestore_client = None
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_PACKAGE_ROOT = os.path.abspath(os.path.join(_MODULE_DIR, "..", "..", ".."))
+
+_SERVICE_ACCOUNT_CANDIDATES = (
+    os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
+    "firebase_key.json",
+    "cricknova-5f94f-firebase-adminsdk-fbsvc-b04d97bba6.json",
+    "firebase_service_account.json",
+)
+
+def _resolve_candidate_path(path: str | None):
+    if not path:
+        return None
+    if os.path.isabs(path) and os.path.exists(path):
+        return path
+
+    search_roots = (
+        os.getcwd(),
+        _MODULE_DIR,
+        _PACKAGE_ROOT,
+    )
+    for root in search_roots:
+        candidate = os.path.join(root, path)
+        if os.path.exists(candidate):
+            return candidate
+
+    return path if os.path.exists(path) else None
 
 def get_firestore_client():
     global _firestore_client
     if _firestore_client:
         return _firestore_client
 
-    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    for cred_path in _SERVICE_ACCOUNT_CANDIDATES:
+        resolved = _resolve_candidate_path(cred_path)
+        if resolved:
+            credentials = service_account.Credentials.from_service_account_file(resolved)
+            _firestore_client = firestore.Client(credentials=credentials)
+            return _firestore_client
 
-    if cred_path and os.path.exists(cred_path):
-        credentials = service_account.Credentials.from_service_account_file(cred_path)
-        _firestore_client = firestore.Client(credentials=credentials)
-    else:
-        # fallback for local development
-        credentials = service_account.Credentials.from_service_account_file("firebase_key.json")
-        _firestore_client = firestore.Client(credentials=credentials)
+    raise RuntimeError(
+        "Firestore credentials not found. Set GOOGLE_APPLICATION_CREDENTIALS or ship a service account JSON file."
+    )
 
     return _firestore_client
 
@@ -40,11 +68,16 @@ def init_firebase_admin():
     if _firebase_initialized:
         return
 
-    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if cred_path and os.path.exists(cred_path):
-        cred = firebase_credentials.Certificate(cred_path)
-    else:
-        cred = firebase_credentials.Certificate("firebase_key.json")
+    cred = None
+    for cred_path in _SERVICE_ACCOUNT_CANDIDATES:
+        resolved = _resolve_candidate_path(cred_path)
+        if resolved:
+            cred = firebase_credentials.Certificate(resolved)
+            break
+    if cred is None:
+        raise RuntimeError(
+            "Firebase admin credentials not found. Set GOOGLE_APPLICATION_CREDENTIALS or ship a service account JSON file."
+        )
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)

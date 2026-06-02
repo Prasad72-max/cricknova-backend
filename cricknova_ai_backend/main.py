@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from google.cloud import firestore
 from google.genai import Client
 from google.genai import types
+from cricknova_engine.processing.firestore_db import get_firestore_client
 
 app = FastAPI(
     title="CrickNova AI Backend",
@@ -50,7 +51,7 @@ _live_gemini_client: Client | None = None
 def _live_db() -> firestore.Client:
     global _live_firestore_client
     if _live_firestore_client is None:
-        _live_firestore_client = firestore.Client()
+        _live_firestore_client = get_firestore_client()
     return _live_firestore_client
 
 
@@ -194,36 +195,36 @@ async def _live_from_gemini(client_ws: WebSocket, live_session: Any, stop: async
 
 @app.websocket("/ws/live-nets/{user_id}")
 async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
-    await websocket.accept()
-    starting_balance_ms = await _get_live_balance_ms(user_id)
-    if starting_balance_ms <= 0:
-        await websocket.send_json({"type": "termination", "reason": "NO_LIVE_BALANCE"})
-        await websocket.close(code=4003)
-        return
-
-    await websocket.send_json(
-        {
-            "type": "ready",
-            "live_milliseconds_remaining": starting_balance_ms,
-            "live_seconds_remaining": _legacy_seconds(starting_balance_ms),
-        }
-    )
-
-    stop = asyncio.Event()
-    start_ns = time.monotonic_ns()
-    billed = False
-
-    config = types.LiveConnectConfig(
-        response_modalities=["AUDIO", "TEXT"],
-        system_instruction=LIVE_SYSTEM_INSTRUCTION,
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
-            )
-        ),
-    )
-
     try:
+        await websocket.accept()
+        starting_balance_ms = await _get_live_balance_ms(user_id)
+        if starting_balance_ms <= 0:
+            await websocket.send_json({"type": "termination", "reason": "NO_LIVE_BALANCE"})
+            await websocket.close(code=4003)
+            return
+
+        await websocket.send_json(
+            {
+                "type": "ready",
+                "live_milliseconds_remaining": starting_balance_ms,
+                "live_seconds_remaining": _legacy_seconds(starting_balance_ms),
+            }
+        )
+
+        stop = asyncio.Event()
+        start_ns = time.monotonic_ns()
+        billed = False
+
+        config = types.LiveConnectConfig(
+            response_modalities=["AUDIO", "TEXT"],
+            system_instruction=LIVE_SYSTEM_INSTRUCTION,
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
+                )
+            ),
+        )
+
         async with _live_gemini().aio.live.connect(model=LIVE_MODEL_NAME, config=config) as session:
             await websocket.send_json(
                 {
@@ -261,10 +262,21 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
             await _charge_live_elapsed_ms(user_id, elapsed_ms)
             billed = True
     except WebSocketDisconnect:
-        stop.set()
+        with suppress(Exception):
+            stop.set()
+    except Exception as exc:
+        with suppress(Exception):
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "reason": f"Live AI backend error: {exc}",
+                }
+            )
+            await websocket.close(code=1011)
     finally:
-        stop.set()
-        if not billed:
+        with suppress(Exception):
+            stop.set()
+        if "starting_balance_ms" in locals() and "start_ns" in locals() and not billed:
             elapsed_ms = min(
                 starting_balance_ms,
                 (time.monotonic_ns() - start_ns) // 1_000_000,
