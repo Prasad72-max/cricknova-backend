@@ -296,6 +296,20 @@ async def _live_from_gemini(client_ws: WebSocket, live_session: Any, stop: async
             await client_ws.send_json({"type": "transcript", "text": text})
 
 
+def _mark_task_failure(stop: asyncio.Event, task: asyncio.Task) -> None:
+    if stop.is_set():
+        return
+    try:
+        exc = task.exception()
+    except asyncio.CancelledError:
+        return
+    except Exception:
+        stop.set()
+        return
+    if exc is not None:
+        stop.set()
+
+
 @app.websocket("/ws/live-nets/{user_id}")
 async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
     try:
@@ -351,13 +365,15 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                 asyncio.create_task(_live_from_flutter(websocket, session, stop)),
                 asyncio.create_task(_live_from_gemini(websocket, session, stop)),
             ]
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            stop.set()
-            for task in pending:
+            for task in tasks:
+                task.add_done_callback(lambda t, s=stop: _mark_task_failure(s, t))
+
+            await stop.wait()
+            for task in tasks:
                 task.cancel()
-            for task in done:
-                with suppress(WebSocketDisconnect):
-                    task.result()
+            for task in tasks:
+                with suppress(asyncio.CancelledError, WebSocketDisconnect):
+                    await task
             elapsed_ms = min(
                 starting_balance_ms,
                 (time.monotonic_ns() - start_ns) // 1_000_000,

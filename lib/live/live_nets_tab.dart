@@ -499,6 +499,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   bool _connecting = true;
   bool _ending = false;
   bool _paused = false;
+  bool _streamStarted = false;
   String? _connectError;
   String _status = 'Connecting';
   Timer? _connectWatchdog;
@@ -600,6 +601,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           _status = 'AI live';
         });
       }
+      _streamStarted = true;
       _cancelConnectWatchdog();
 
       await _startSpeechLoop();
@@ -711,7 +713,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       }
     }
     if (decoded['type'] == 'termination') {
-      await _endSession();
+      await _finishFromServer(decoded['reason']?.toString());
     }
     if (decoded['type'] == 'error') {
       final reason = decoded['reason']?.toString() ?? 'Unknown backend error';
@@ -739,8 +741,13 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     await box.put(sessionId, existing);
   }
 
-  Future<void> _finishFromServer() async {
-    await _endSession();
+  Future<void> _finishFromServer([String? reason]) async {
+    await _endSession(
+      navigateToReview: _streamStarted &&
+          (_startedAt == null ||
+              DateTime.now().difference(_startedAt!).inSeconds >= 5),
+      serverReason: reason,
+    );
   }
 
   Future<void> _retryStart() async {
@@ -801,7 +808,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     } catch (_) {}
   }
 
-  Future<void> _endSession() async {
+  Future<void> _endSession({
+    bool navigateToReview = true,
+    String? serverReason,
+  }) async {
     if (_ending) return;
     final user = FirebaseAuth.instance.currentUser;
     _ending = true;
@@ -836,14 +846,27 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => ReviewPlayerScreen(
-          videoPath: _recordedPath ?? '',
-          sessionId: _sessionId ?? '',
+    if (navigateToReview) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ReviewPlayerScreen(
+            videoPath: _recordedPath ?? '',
+            sessionId: _sessionId ?? '',
+          ),
         ),
-      ),
-    );
+      );
+      return;
+    }
+
+    await _cleanupForRetry();
+    if (!mounted) return;
+    setState(() {
+      _ending = false;
+      _connectError = serverReason?.isNotEmpty == true
+          ? serverReason
+          : 'Live session stopped before it could fully start.';
+      _status = 'Disconnected';
+    });
   }
 
   @override
