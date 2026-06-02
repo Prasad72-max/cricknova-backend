@@ -137,7 +137,7 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return []
 
 
-LIVE_MODEL_NAME = "gemini-live-2.5-flash-native-audio"
+LIVE_MODEL_NAME = os.getenv("LIVE_GEMINI_MODEL", "gemini-2.0-flash-live-001")
 LIVE_SYSTEM_INSTRUCTION = """Context & Role:
 You are "CrickNova AI", an elite cricket coach giving short real-time feedback from the non-striker's end.
 Keep every response under 25 words.
@@ -333,13 +333,8 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         billed = False
 
         config = types.LiveConnectConfig(
-            response_modalities=["AUDIO", "TEXT"],
+            response_modalities=["TEXT"],
             system_instruction=LIVE_SYSTEM_INSTRUCTION,
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
-                )
-            ),
         )
 
         async with _live_gemini().aio.live.connect(model=LIVE_MODEL_NAME, config=config) as session:

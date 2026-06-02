@@ -14,7 +14,7 @@ from google.genai import types
 
 app = FastAPI(title="CrickNova Live Nets Backend")
 
-MODEL_NAME = "gemini-live-2.5-flash-native-audio"
+MODEL_NAME = os.getenv("LIVE_GEMINI_MODEL", "gemini-2.0-flash-live-001")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 SYSTEM_INSTRUCTION = """Context & Role:
@@ -201,13 +201,8 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
     billed = False
 
     config = types.LiveConnectConfig(
-        response_modalities=["AUDIO", "TEXT"],
+        response_modalities=["TEXT"],
         system_instruction=SYSTEM_INSTRUCTION,
-        speech_config=types.SpeechConfig(
-            voice_config=types.VoiceConfig(
-                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Puck")
-            )
-        ),
     )
 
     try:
