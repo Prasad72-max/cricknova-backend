@@ -462,25 +462,44 @@ def _mark_task_failure(stop: asyncio.Event, task: asyncio.Task) -> None:
 
 @app.websocket("/ws/live-nets/{user_id}")
 async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
+    # Initialize stop event immediately to prevent UnboundLocalError in exception blocks
+    stop = asyncio.Event()
+
     # Set SKIP_BILLING=true on Render to bypass balance check during testing
     SKIP_BILLING = os.getenv("SKIP_BILLING", "false").lower() in ("true", "1", "yes")
     # Default dev balance: 30 minutes
     DEV_BALANCE_MS = 30 * 60 * 1000
+    starting_balance_ms = 0
+    billed = False
+    start_ns = time.monotonic_ns()
 
     try:
         await websocket.accept()
-        starting_balance_ms = await _get_live_balance_ms(user_id)
-        print(f"💰 User={user_id} balance={starting_balance_ms}ms SKIP_BILLING={SKIP_BILLING}")
-
-        if starting_balance_ms <= 0:
-            if SKIP_BILLING:
-                print("⚠️ Balance is 0 but SKIP_BILLING=true — giving dev balance")
-                starting_balance_ms = DEV_BALANCE_MS
-            else:
-                print("🚫 NO_LIVE_BALANCE — closing connection")
-                await websocket.send_json({"type": "termination", "reason": "NO_LIVE_BALANCE"})
+        
+        if SKIP_BILLING:
+            starting_balance_ms = DEV_BALANCE_MS
+            print(f"💰 User={user_id} using dev balance={starting_balance_ms}ms because SKIP_BILLING=true (Bypassing Firestore)")
+        else:
+            print(f"💰 User={user_id} fetching balance from Firestore...")
+            try:
+                starting_balance_ms = await _get_live_balance_ms(user_id)
+                print(f"💰 User={user_id} balance={starting_balance_ms}ms from Firestore")
+            except Exception as e:
+                print(f"❌ Failed to query Firestore balance for user {user_id}: {e}")
+                import traceback
+                traceback.print_exc()
+                await websocket.send_json({
+                    "type": "error",
+                    "reason": f"Firestore connection error: {e}"
+                })
                 await websocket.close(code=4003)
                 return
+
+        if starting_balance_ms <= 0:
+            print("🚫 NO_LIVE_BALANCE — closing connection")
+            await websocket.send_json({"type": "termination", "reason": "NO_LIVE_BALANCE"})
+            await websocket.close(code=4003)
+            return
 
         await websocket.send_json(
             {
@@ -489,10 +508,6 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                 "live_seconds_remaining": _legacy_seconds(starting_balance_ms),
             }
         )
-
-        stop = asyncio.Event()
-        start_ns = time.monotonic_ns()
-        billed = False
 
         await websocket.send_json(
             {
@@ -596,16 +611,29 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         for task in tasks:
             with suppress(asyncio.CancelledError, WebSocketDisconnect):
                 await task
+
         elapsed_ms = min(
             starting_balance_ms,
             (time.monotonic_ns() - start_ns) // 1_000_000,
         )
-        await _charge_live_elapsed_ms(user_id, elapsed_ms)
+        if not SKIP_BILLING:
+            try:
+                await _charge_live_elapsed_ms(user_id, elapsed_ms)
+                print(f"💰 Successfully charged user {user_id} for {elapsed_ms}ms")
+            except Exception as e:
+                print(f"❌ Failed to charge Firestore balance: {e}")
+        else:
+            print(f"ℹ️ SKIP_BILLING is true, bypassing Firestore charge of {elapsed_ms}ms")
         billed = True
+
     except WebSocketDisconnect:
+        print(f"🔌 WebSocket disconnected for user {user_id}")
         with suppress(Exception):
             stop.set()
     except Exception as exc:
+        print(f"❌ Exception in live_nets_socket: {exc}")
+        import traceback
+        traceback.print_exc()
         with suppress(Exception):
             await websocket.send_json(
                 {
@@ -617,7 +645,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
     finally:
         with suppress(Exception):
             stop.set()
-        if "starting_balance_ms" in locals() and "start_ns" in locals() and not billed:
+        if not SKIP_BILLING and "starting_balance_ms" in locals() and "start_ns" in locals() and not billed:
             elapsed_ms = min(
                 starting_balance_ms,
                 (time.monotonic_ns() - start_ns) // 1_000_000,
