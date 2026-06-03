@@ -283,32 +283,41 @@ async def _analyze_live_frame(
             "Strict Tone Rules: "
             "1. If the player's technique/shot is GOOD: Be extremely happy, proud, and use encouraging, energetic coaching language. "
             "2. If the player makes a MISTAKE/BAD movement: Be extremely strict, rude, harsh, and cruel. Call out the technical flaw sharply without making excuses. "
-            "Format Rule: Respond with exactly ONE complete punchy line/sentence. Do not output single words, bullet points, or lists."
+            "IMPORTANT: You MUST always respond, even if no cricket action is visible — describe what you see and give advice. "
+            "Format Rule: Respond with exactly ONE complete punchy coaching sentence. Do not output single words, bullet points, or lists."
         )
-        response = _vision_gemini().models.generate_content(
-            model=_resolve_vision_model_name(),
-            contents=[
-                types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
-                prompt,
-            ],
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=60,
-            ),
-        )
-        text = (getattr(response, "text", None) or "").strip()
-        if text:
-            return text
-        candidates = getattr(response, "candidates", None) or []
-        for candidate in candidates:
-            content = getattr(candidate, "content", None)
-            if not content:
-                continue
-            for part in getattr(content, "parts", None) or []:
-                part_text = getattr(part, "text", None)
-                if part_text:
-                    return str(part_text).strip()
-        return ""
+        print(f"🏏 Analyzing frame for {spoken_name} | lang={language} | discipline={discipline} | model={_resolve_vision_model_name()}")
+        try:
+            response = _vision_gemini().models.generate_content(
+                model=_resolve_vision_model_name(),
+                contents=[
+                    types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
+                    prompt,
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    max_output_tokens=80,
+                ),
+            )
+            text = (getattr(response, "text", None) or "").strip()
+            if text:
+                print(f"✅ Gemini reply: {text}")
+                return text
+            candidates = getattr(response, "candidates", None) or []
+            for candidate in candidates:
+                content = getattr(candidate, "content", None)
+                if not content:
+                    continue
+                for part in getattr(content, "parts", None) or []:
+                    part_text = getattr(part, "text", None)
+                    if part_text:
+                        print(f"✅ Gemini reply (candidate): {part_text.strip()}")
+                        return str(part_text).strip()
+            print("⚠️ Gemini returned empty response")
+            return ""
+        except Exception as exc:
+            print(f"❌ _analyze_live_frame FAILED: {exc}")
+            return ""
 
     return await asyncio.to_thread(run)
 
@@ -491,10 +500,12 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         async def _analysis_loop() -> None:
             nonlocal latest_frame, analysis_running, last_reply_at
             analysis_running = True
+            print("🚀 _analysis_loop started")
             try:
                 while not stop.is_set():
                     await analysis_event.wait()
                     analysis_event.clear()
+                    print("📸 Frame received, sending to Gemini...")
                     while not stop.is_set() and latest_frame is not None:
                         frame = latest_frame
                         latest_frame = None
@@ -506,9 +517,10 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 discipline=coach_discipline,
                             )
                         except Exception as exc:
-                            print("⚠️ Live vision analysis failed:", exc)
+                            print(f"❌ Analysis loop error: {exc}")
                             reply = ""
                         if reply:
+                            print(f"📢 Sending transcript: {reply}")
                             await websocket.send_json(
                                 {
                                     "type": "transcript",
@@ -518,12 +530,14 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             last_reply_at = time.monotonic()
                         if latest_frame is None:
                             break
-                        await asyncio.sleep(1.2)
+                        await asyncio.sleep(0.5)
             finally:
                 analysis_running = False
+                print("🛑 _analysis_loop ended")
 
         async def _receive_frames() -> None:
             nonlocal latest_frame, coach_name, coach_language, coach_discipline
+            print("🎥 _receive_frames started")
             try:
                 while not stop.is_set():
                     message = await websocket.receive()
@@ -537,10 +551,12 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             coach_name = str(payload.get("name", coach_name)).strip() or coach_name
                             coach_language = str(payload.get("language", coach_language)).strip() or coach_language
                             coach_discipline = str(payload.get("discipline", coach_discipline)).strip() or coach_discipline
+                            print(f"⚙️ Config: name={coach_name} lang={coach_language} discipline={coach_discipline}")
                             continue
                         if kind == "video":
                             frame = base64.b64decode(payload["data"])
-                            if (time.monotonic() - last_reply_at) >= 0.9:
+                            # Accept frame if at least 0.5s since last reply
+                            if (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frame
                                 analysis_event.set()
                         elif kind == "stop":
@@ -548,7 +564,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             return
                         continue
 
-                    if raw and (time.monotonic() - last_reply_at) >= 0.9:
+                    if raw and (time.monotonic() - last_reply_at) >= 0.5:
                         latest_frame = raw
                         analysis_event.set()
             except WebSocketDisconnect:
