@@ -14,10 +14,14 @@ from google.genai import types
 
 app = FastAPI(title="CrickNova Live Nets Backend")
 
-LIVE_FALLBACK_MODEL = "gemini-2.0-flash-live-001"
+LIVE_FALLBACK_MODEL = "gemini-2.5-flash-preview-09-2025"
 _LIVE_MODEL_WHITELIST = {
-    "gemini-2.0-flash-live-001",
-    "models/gemini-2.0-flash-live-001",
+    "gemini-2.5-flash-preview-09-2025",
+    "models/gemini-2.5-flash-preview-09-2025",
+    "gemini-2.5-flash-preview",
+    "models/gemini-2.5-flash-preview",
+    "gemini-flash-latest",
+    "models/gemini-flash-latest",
     "gemini-3.1-flash-live-preview",
     "models/gemini-3.1-flash-live-preview",
 }

@@ -57,7 +57,7 @@ class _SplashScreenState extends State<SplashScreen> {
     _startTaglineTyping();
     _navigationTargetFuture = _prepareNavigationTarget();
     // Keep the final brand splash polished without repeating the player logo.
-    _advanceTimer = Timer(const Duration(milliseconds: 1700), _advance);
+    _advanceTimer = Timer(const Duration(milliseconds: 1100), _advance);
   }
 
   @override

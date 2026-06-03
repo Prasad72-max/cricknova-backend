@@ -489,6 +489,7 @@ class LiveNetsCameraScreen extends StatefulWidget {
 class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
   final Queue<String> _coachSpeechQueue = Queue<String>();
+  final List<String> _captionHistory = <String>[];
   CameraController? _camera;
   WebSocket? _socket;
   Timer? _frameTimer;
@@ -506,6 +507,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Timer? _connectWatchdog;
   Timer? _socketReconnectTimer;
   bool _coachSpeechActive = false;
+  String? _latestCaption;
 
   @override
   void initState() {
@@ -532,6 +534,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     await _tts.setSpeechRate(0.52);
     await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
+    await _tts.setLanguage('en-US');
     await _tts.awaitSpeakCompletion(true);
     try {
       await _tts.setSharedInstance(true);
@@ -712,6 +715,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (decoded['type'] == 'transcript') {
       final text = decoded['text']?.toString().trim() ?? '';
       if (text.isNotEmpty) {
+        _updateCaption(text);
         await _saveMarker(text);
         unawaited(_enqueueCoachSpeech(text));
       }
@@ -749,7 +753,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
 
   Future<void> _enqueueCoachSpeech(String text) async {
     if (_ending) return;
-    _coachSpeechQueue.add(text);
+    for (final finalChunk in _splitSpeech(text)) {
+      _coachSpeechQueue.add(finalChunk);
+    }
     if (_coachSpeechActive) return;
     _coachSpeechActive = true;
     try {
@@ -763,6 +769,35 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     } finally {
       _coachSpeechActive = false;
     }
+  }
+
+  void _updateCaption(String text) {
+    if (!mounted) return;
+    final clean = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.isEmpty) return;
+    setState(() {
+      _latestCaption = clean;
+      _captionHistory.insert(0, clean);
+      while (_captionHistory.length > 3) {
+        _captionHistory.removeLast();
+      }
+    });
+  }
+
+  List<String> _splitSpeech(String text) {
+    final clean = text
+        .replaceAll(RegExp(r'[*_`#>]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (clean.isEmpty) return const <String>[];
+
+    final parts = clean
+        .split(RegExp(r'(?<=[\.\!\?\:;])\s+'))
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) return <String>[clean];
+    return parts;
   }
 
   Future<void> _finishFromServer([String? reason]) async {
@@ -1058,6 +1093,90 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                 ),
               ),
             ),
+          Positioned(
+            left: 18,
+            right: 18,
+            bottom: 96 + MediaQuery.of(context).padding.bottom,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_latestCaption != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.closed_caption_rounded,
+                          color: Color(0xFF00E5FF),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _latestCaption!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_captionHistory.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _captionHistory
+                          .take(3)
+                          .map(
+                            (caption) => Container(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.06),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                ),
+                              ),
+                              child: Text(
+                                caption,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12.5,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Positioned(
             left: 18,
             right: 18,
