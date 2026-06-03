@@ -178,13 +178,29 @@ async def _live_billing_guard(
 
 
 async def _live_from_flutter(client_ws: WebSocket, live_session: Any, stop: asyncio.Event) -> None:
+    frame_count = 0
+
     async def send_video_frame(frame_bytes: bytes) -> None:
-        blob = types.Blob(data=frame_bytes, mime_type="image/jpeg")
-        sender = getattr(live_session, "send_realtime_input", None)
-        if callable(sender):
-            await sender(video=blob)
-            return
-        await live_session.send(input={"data": frame_bytes, "mime_type": "image/jpeg"})
+        nonlocal frame_count
+        frame_count += 1
+        # --- THE FIX: send frame WITH end_of_turn=True so Gemini responds ---
+        # Every frame: send image content and signal end of turn so Gemini
+        # immediately generates a coaching response.
+        try:
+            content = types.Content(
+                parts=[types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg")],
+                role="user",
+            )
+            await live_session.send(input=content, end_of_turn=True)
+        except Exception:
+            # Fallback: plain dict with end_of_turn=True
+            try:
+                await live_session.send(
+                    input={"data": frame_bytes, "mime_type": "image/jpeg"},
+                    end_of_turn=True,
+                )
+            except Exception:
+                pass
 
     while not stop.is_set():
         message = await client_ws.receive()
@@ -199,7 +215,8 @@ async def _live_from_flutter(client_ws: WebSocket, live_session: Any, stop: asyn
                 await send_video_frame(frame)
             elif kind == "audio":
                 audio = base64.b64decode(payload["data"])
-                await live_session.send(input={"data": audio, "mime_type": "audio/pcm"})
+                await live_session.send(input={"data": audio, "mime_type": "audio/pcm"},
+                                        end_of_turn=True)
             elif kind == "user_text":
                 spoken = str(payload.get("text", "")).strip()
                 if spoken:
