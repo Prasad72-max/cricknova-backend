@@ -153,6 +153,14 @@ async def _billing_guard(
 
 
 async def _from_flutter(client_ws: WebSocket, live_session: Any, stop: asyncio.Event) -> None:
+    async def send_video_frame(frame_bytes: bytes) -> None:
+        blob = types.Blob(data=frame_bytes, mime_type="image/jpeg")
+        sender = getattr(live_session, "send_realtime_input", None)
+        if callable(sender):
+            await sender(video=blob)
+            return
+        await live_session.send(input={"data": frame_bytes, "mime_type": "image/jpeg"})
+
     while not stop.is_set():
         message = await client_ws.receive()
         raw = message.get("bytes")
@@ -163,7 +171,7 @@ async def _from_flutter(client_ws: WebSocket, live_session: Any, stop: asyncio.E
             kind = payload.get("type")
             if kind == "video":
                 frame = base64.b64decode(payload["data"])
-                await live_session.send(input={"data": frame, "mime_type": "image/jpeg"})
+                await send_video_frame(frame)
             elif kind == "audio":
                 audio = base64.b64decode(payload["data"])
                 await live_session.send(input={"data": audio, "mime_type": "audio/pcm"})
@@ -177,7 +185,7 @@ async def _from_flutter(client_ws: WebSocket, live_session: Any, stop: asyncio.E
             continue
 
         if raw:
-            await live_session.send(input={"data": raw, "mime_type": "image/jpeg"})
+            await send_video_frame(raw)
 
 
 async def _from_gemini(client_ws: WebSocket, live_session: Any, stop: asyncio.Event) -> None:
@@ -236,8 +244,9 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                 await session.send(
                     input=(
                         "Start live cricket detection now. Watch every incoming frame "
-                        "and respond only with short coaching feedback when you detect "
-                        "a mistake or a great shot."
+                        "and respond with one short coaching line whenever there is a "
+                        "useful mistake, good shot, or setup cue. If the view is clear, "
+                        "say one brief coaching observation right away."
                     ),
                     end_of_turn=True,
                 )

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,7 +12,6 @@ import 'package:hive/hive.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../config/api_config.dart';
 import '../services/premium_service.dart';
@@ -488,7 +488,7 @@ class LiveNetsCameraScreen extends StatefulWidget {
 
 class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  final Queue<String> _coachSpeechQueue = Queue<String>();
   CameraController? _camera;
   WebSocket? _socket;
   Timer? _frameTimer;
@@ -500,12 +500,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   bool _ending = false;
   bool _paused = false;
   bool _streamStarted = false;
-  int _startupRetryCount = 0;
-  bool _suppressSocketClosed = false;
+  int _socketReconnectAttempts = 0;
   String? _connectError;
   String _status = 'Connecting';
   Timer? _connectWatchdog;
-  Timer? _startupRetryTimer;
+  Timer? _socketReconnectTimer;
+  bool _coachSpeechActive = false;
 
   @override
   void initState() {
@@ -530,7 +530,24 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _armConnectWatchdog();
 
     await _tts.setSpeechRate(0.52);
+    await _tts.setVolume(1.0);
     await _tts.setPitch(1.0);
+    await _tts.awaitSpeakCompletion(true);
+    try {
+      await _tts.setSharedInstance(true);
+    } catch (_) {}
+    if (Platform.isIOS) {
+      try {
+        await _tts.setIosAudioCategory(
+          IosTextToSpeechAudioCategory.playback,
+          <IosTextToSpeechAudioCategoryOptions>[
+            IosTextToSpeechAudioCategoryOptions.mixWithOthers,
+            IosTextToSpeechAudioCategoryOptions.defaultToSpeaker,
+          ],
+          IosTextToSpeechAudioMode.spokenAudio,
+        );
+      } catch (_) {}
+    }
 
     try {
       if (mounted) {
@@ -605,10 +622,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
       _streamStarted = true;
-      _startupRetryCount = 0;
+      _socketReconnectAttempts = 0;
       _cancelConnectWatchdog();
 
-      await _startSpeechLoop();
       unawaited(_sendSnapshot());
     } catch (error) {
       _cancelConnectWatchdog();
@@ -659,22 +675,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     return 'Live session could not start: $message';
   }
 
-  Future<void> _startSpeechLoop() async {
-    final available = await _speech.initialize();
-    if (!available) return;
-    await _speech.listen(
-      listenOptions: stt.SpeechListenOptions(
-        listenMode: stt.ListenMode.dictation,
-        partialResults: false,
-      ),
-      onResult: (result) {
-        final text = result.recognizedWords.trim();
-        if (text.isEmpty || _socket == null) return;
-        _socket!.add(jsonEncode({'type': 'user_text', 'text': text}));
-      },
-    );
-  }
-
   Future<void> _sendSnapshot() async {
     final controller = _camera;
     final socket = _socket;
@@ -713,22 +713,24 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       final text = decoded['text']?.toString().trim() ?? '';
       if (text.isNotEmpty) {
         await _saveMarker(text);
-        await _tts.speak(text);
+        unawaited(_enqueueCoachSpeech(text));
       }
     }
     if (decoded['type'] == 'termination') {
       await _finishFromServer(decoded['reason']?.toString());
     }
     if (decoded['type'] == 'error') {
-      final reason = decoded['reason']?.toString() ?? 'Unknown backend error';
+      if (_streamStarted) {
+        _scheduleSocketReconnect();
+        return;
+      }
       if (mounted) {
         setState(() {
-          _connectError = reason;
+          _connectError = 'Live AI could not start. Please try again.';
           _connecting = false;
-          _status = 'Backend error';
+          _status = 'Connection failed';
         });
       }
-      await _cleanupForRetry();
     }
   }
 
@@ -745,6 +747,24 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     await box.put(sessionId, existing);
   }
 
+  Future<void> _enqueueCoachSpeech(String text) async {
+    if (_ending) return;
+    _coachSpeechQueue.add(text);
+    if (_coachSpeechActive) return;
+    _coachSpeechActive = true;
+    try {
+      while (_coachSpeechQueue.isNotEmpty && !_ending) {
+        final next = _coachSpeechQueue.removeFirst();
+        if (next.trim().isEmpty) continue;
+        try {
+          await _tts.speak(next);
+        } catch (_) {}
+      }
+    } finally {
+      _coachSpeechActive = false;
+    }
+  }
+
   Future<void> _finishFromServer([String? reason]) async {
     final startedAt = _startedAt;
     final elapsedSeconds = startedAt == null
@@ -756,7 +776,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         (reason == null ||
             reason == 'UNKNOWN' ||
             !reason.contains('NO_LIVE_BALANCE'))) {
-      await _handleSocketClosed();
+      _scheduleSocketReconnect();
       return;
     }
 
@@ -769,41 +789,78 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   }
 
   Future<void> _handleSocketClosed() async {
-    if (_ending || _suppressSocketClosed) return;
-    final startedAt = _startedAt;
-    final elapsedSeconds = startedAt == null
-        ? 0
-        : DateTime.now().difference(startedAt).inSeconds;
-    final earlyDrop = !_streamStarted || elapsedSeconds < 8;
-
-    if (earlyDrop) {
-      _startupRetryCount += 1;
-      _cancelConnectWatchdog();
-      _startupRetryTimer?.cancel();
-      final delayMs = (1000 * (1 << (_startupRetryCount - 1)))
-          .clamp(1000, 5000);
-      _startupRetryTimer = Timer(Duration(milliseconds: delayMs), () {
-        if (!mounted || _ending) return;
-        unawaited(_retryStart());
+    if (_ending) return;
+    if (!_streamStarted) {
+      await _cleanupForRetry();
+      if (!mounted || _ending) return;
+      setState(() {
+        _connectError = 'Live AI could not start. Please try again.';
+        _connecting = false;
+        _status = 'Connection failed';
       });
       return;
     }
 
+    _scheduleSocketReconnect();
+  }
+
+  void _scheduleSocketReconnect() {
+    if (_ending) return;
+    _socketReconnectTimer?.cancel();
+    _socketReconnectAttempts += 1;
+    final delayMs = (1000 * (1 << (_socketReconnectAttempts - 1)))
+        .clamp(1000, 5000);
     if (mounted) {
       setState(() {
-        _connectError = 'Live connection dropped. Tap Try Again to reconnect.';
-        _connecting = false;
-        _status = 'Disconnected';
+        _status = 'AI live';
       });
     }
-    await _cleanupForRetry();
+    _socketReconnectTimer = Timer(Duration(milliseconds: delayMs), () {
+      if (!mounted || _ending) return;
+      unawaited(_reconnectSocketOnly());
+    });
+  }
+
+  Future<void> _reconnectSocketOnly() async {
+    if (_ending) return;
+    final user = FirebaseAuth.instance.currentUser;
+    final controller = _camera;
+    if (user == null || controller == null || !controller.value.isInitialized) {
+      _scheduleSocketReconnect();
+      return;
+    }
+    if (!controller.value.isRecordingVideo) {
+      _scheduleSocketReconnect();
+      return;
+    }
+
+    try {
+      final socket = await WebSocket.connect(
+        _liveUri(user.uid).toString(),
+      ).timeout(const Duration(seconds: 12));
+      socket.listen(
+        _handleSocketMessage,
+        onDone: _handleSocketClosed,
+        onError: (_) => _handleSocketClosed(),
+      );
+      _socket = socket;
+      _socketReconnectAttempts = 0;
+      if (mounted) {
+        setState(() {
+          _connectError = null;
+          _status = 'AI live';
+        });
+      }
+      unawaited(_sendSnapshot());
+    } catch (_) {
+      _scheduleSocketReconnect();
+    }
   }
 
   Future<void> _retryStart() async {
-    _startupRetryTimer?.cancel();
-    _suppressSocketClosed = true;
+    _socketReconnectTimer?.cancel();
     await _cleanupForRetry();
-    _suppressSocketClosed = false;
+    if (_ending) return;
     if (!mounted) return;
     setState(() {
       _connectError = null;
@@ -815,9 +872,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
 
   Future<void> _cleanupForRetry() async {
     _cancelConnectWatchdog();
+    _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     _frameTimer = null;
-    await _speech.stop();
+    _coachSpeechQueue.clear();
     await _tts.stop();
     try {
       await _socket?.close();
@@ -867,9 +925,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     final user = FirebaseAuth.instance.currentUser;
     _ending = true;
-    _suppressSocketClosed = true;
+    _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
-    await _speech.stop();
     await _tts.stop();
 
     final controller = _camera;
@@ -925,9 +982,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   @override
   void dispose() {
     _connectWatchdog?.cancel();
-    _startupRetryTimer?.cancel();
+    _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
-    _speech.stop();
+    _coachSpeechQueue.clear();
     _tts.stop();
     _socket?.close();
     _camera?.dispose();
