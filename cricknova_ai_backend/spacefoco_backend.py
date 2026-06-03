@@ -27,6 +27,33 @@ def alive():
         "file": "spacefoco_backend.py",
         "live_model": LIVE_MODEL_NAME,
     }
+
+@app.get("/__test_gemini")
+async def test_gemini():
+    try:
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return {"success": False, "error": "No API key configured in environment variables (GOOGLE_API_KEY and GEMINI_API_KEY are empty)"}
+        
+        client = Client(api_key=api_key)
+        # Try a simple text prompt first to check key and client
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents="Say hello in Marathi in exactly 5 words."
+        )
+        return {
+            "success": True,
+            "response": getattr(resp, "text", str(resp)),
+            "resolved_vision_model": _resolve_vision_model_name(),
+            "resolved_live_model": _resolve_live_model_name()
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 from fastapi import UploadFile, File, HTTPException, Request, Form
 from cricknova_engine.processing.routes.payment_verify import router as subscription_router
 from fastapi.middleware.cors import CORSMiddleware
