@@ -26,6 +26,8 @@ def alive():
         "alive": True,
         "file": "spacefoco_backend.py",
         "live_model": LIVE_MODEL_NAME,
+        "skip_billing": os.getenv("SKIP_BILLING", "false").lower() in ("true", "1", "yes"),
+        "has_google_credentials": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")),
     }
 
 @app.get("/__test_gemini")
