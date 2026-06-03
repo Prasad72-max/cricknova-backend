@@ -138,24 +138,36 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return []
 
 
-LIVE_FALLBACK_MODEL = "gemini-live-2.5-flash-preview"
+LIVE_FALLBACK_MODEL = "gemini-2.0-flash-exp"
 _LIVE_MODEL_WHITELIST = {
+    "gemini-2.0-flash-exp",
+    "models/gemini-2.0-flash-exp",
+    "gemini-2.0-flash-live-001",
+    "models/gemini-2.0-flash-live-001",
+    "gemini-2.5-flash-live",
+    "models/gemini-2.5-flash-live",
+    "gemini-3.1-flash-live-preview",
+    "models/gemini-3.1-flash-live-preview",
     "gemini-live-2.5-flash-preview",
     "models/gemini-live-2.5-flash-preview",
     "gemini-flash-latest",
     "models/gemini-flash-latest",
-    "gemini-3.1-flash-live-preview",
-    "models/gemini-3.1-flash-live-preview",
 }
 
-VISION_FALLBACK_MODEL = "gemini-2.5-flash"
+VISION_FALLBACK_MODEL = "gemini-2.0-flash"
 _VISION_MODEL_WHITELIST = {
+    "gemini-2.0-flash",
+    "models/gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "models/gemini-1.5-flash",
     "gemini-2.5-flash",
     "models/gemini-2.5-flash",
     "gemini-2.5-flash-lite",
     "models/gemini-2.5-flash-lite",
     "gemini-2.5-flash-preview-06-17",
     "models/gemini-2.5-flash-preview-06-17",
+    "gemini-3.5-flash",
+    "models/gemini-3.5-flash",
 }
 
 
@@ -264,16 +276,14 @@ async def _analyze_live_frame(
     def run() -> str:
         spoken_name = coach_name.strip() or "Player"
         prompt = (
-            "You are CrickNova AI, an elite cricket coach watching a live training frame. "
-            f"Coach the athlete named {spoken_name}. "
-            f"Respond only in {language}. "
+            f"You are 'CrickNova AI', a tough, high-energy elite cricket coach watching a live training frame for the athlete named {spoken_name}. "
+            f"Your feedback must be a complete coaching line (a full sentence of 10 to 20 words), not just single words. "
+            f"Respond ONLY in {language}. "
             f"{_role_prompt(discipline)} "
-            "Give exactly one short coaching line, under 18 words. "
-            "Address the athlete naturally by name when it fits. "
-            "Avoid filler phrases like 'good stance' unless you can explain the exact reason. "
-            "If the frame shows a mistake, name the main fix. "
-            "If the frame looks good, give a direct confidence boost with a specific reason. "
-            "Do not add bullets, labels, or explanations."
+            "Strict Tone Rules: "
+            "1. If the player's technique/shot is GOOD: Be extremely happy, proud, and use encouraging, energetic coaching language. "
+            "2. If the player makes a MISTAKE/BAD movement: Be extremely strict, rude, harsh, and cruel. Call out the technical flaw sharply without making excuses. "
+            "Format Rule: Respond with exactly ONE complete punchy line/sentence. Do not output single words, bullet points, or lists."
         )
         response = _vision_gemini().models.generate_content(
             model=_resolve_vision_model_name(),

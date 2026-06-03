@@ -175,7 +175,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
     );
     if (!context.mounted) return;
     await _saveEdgePrefs();
-    navigator.pushReplacement(
+    navigator.push(
       MaterialPageRoute(
         builder: (_) => LiveNetsCameraScreen(
           coachName: _coachName,

@@ -34,17 +34,24 @@ app = FastAPI(
     version="1.0.0"
 )
 
+from dotenv import load_dotenv
+load_dotenv()
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-LIVE_FALLBACK_MODEL = "gemini-2.5-flash-preview-09-2025"
+LIVE_FALLBACK_MODEL = "gemini-2.0-flash-exp"
 _LIVE_MODEL_WHITELIST = {
-    "gemini-2.5-flash-preview-09-2025",
-    "models/gemini-2.5-flash-preview-09-2025",
-    "gemini-2.5-flash-preview",
-    "models/gemini-2.5-flash-preview",
-    "gemini-flash-latest",
-    "models/gemini-flash-latest",
+    "gemini-2.0-flash-exp",
+    "models/gemini-2.0-flash-exp",
+    "gemini-2.0-flash-live-001",
+    "models/gemini-2.0-flash-live-001",
+    "gemini-2.5-flash-live",
+    "models/gemini-2.5-flash-live",
     "gemini-3.1-flash-live-preview",
     "models/gemini-3.1-flash-live-preview",
+    "gemini-flash-latest",
+    "models/gemini-flash-latest",
+    "gemini-2.5-flash-preview-09-2025",
+    "models/gemini-2.5-flash-preview-09-2025",
 }
 
 
@@ -246,9 +253,38 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         start_ns = time.monotonic_ns()
         billed = False
 
+        # Read client config first to customize system instruction with correct language
+        player_name = "Player"
+        language = "English"
+        discipline = "Batting"
+        try:
+            config_msg = await asyncio.wait_for(websocket.receive(), timeout=5.0)
+            if config_msg.get("text"):
+                payload = json.loads(config_msg["text"])
+                if payload.get("type") == "client_config":
+                    player_name = str(payload.get("name", player_name)).strip() or player_name
+                    language = str(payload.get("language", language)).strip() or language
+                    discipline = str(payload.get("discipline", discipline)).strip() or discipline
+        except Exception as e:
+            print(f"Failed to receive client_config: {e}")
+
+        # Build dynamic system instruction using the user's preferred language and training mode
+        dynamic_instruction = f"""Context & Role:
+You are "CrickNova AI", a tough, high-energy, elite cricket coach standing at the non-striker's end talking directly into the earbuds of the player named {player_name}.
+You see their live training frames ({discipline}) and give real-time coaching advice.
+Format: Respond with exactly ONE complete punchy coaching line/sentence of 10 to 22 words. Do NOT output single words, bullet points, or formatting.
+
+Strict Tone Rules:
+1. If the shot/movement is GOOD: Be extremely happy, proud, and use encouraging, positive coaching language.
+2. If the shot/movement is a MISTAKE/BAD: Be extremely strict, rude, harsh, and cruel. Point out the technical fault sharply and command an instant fix.
+
+Language Rule:
+You MUST respond only in {language}. For example, if the language is Marathi, speak in Marathi. If Hindi, speak in Hindi. If English, speak in English. Do not use any other language.
+"""
+
         config = types.LiveConnectConfig(
             response_modalities=["TEXT"],
-            system_instruction=LIVE_SYSTEM_INSTRUCTION,
+            system_instruction=dynamic_instruction,
         )
 
         async with _live_gemini().aio.live.connect(model=LIVE_MODEL_NAME, config=config) as session:
