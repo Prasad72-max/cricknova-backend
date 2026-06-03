@@ -7,13 +7,16 @@ import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive/hive.dart';
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
+import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
 import 'review_player_screen.dart';
 
@@ -98,7 +101,66 @@ class LiveNetsTab extends StatefulWidget {
 }
 
 class _LiveNetsTabState extends State<LiveNetsTab> {
+  static const _languagePrefsKey = 'cricknova_edge_language';
+  static const _disciplinePrefsKey = 'cricknova_edge_discipline';
+
+  String _selectedLanguage = 'English';
+  String _selectedDiscipline = 'Batting';
+  String _coachName = 'Player';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadEdgePrefs());
+  }
+
+  Future<void> _loadEdgePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid ?? 'guest';
+    final savedLanguage = prefs.getString(_languagePrefsKey)?.trim();
+    final savedDiscipline = prefs.getString(_disciplinePrefsKey)?.trim();
+    final savedName = [
+      prefs.getString('profileName_$uid')?.trim(),
+      prefs.getString('userName_$uid')?.trim(),
+      prefs.getString('profileName')?.trim(),
+      prefs.getString('userName')?.trim(),
+      MainNavigation.userNameNotifier.value.trim(),
+      user?.displayName?.trim(),
+    ].whereType<String>().firstWhere(
+      (value) => value.isNotEmpty && value.toLowerCase() != 'player',
+      orElse: () => 'Player',
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _selectedLanguage = _normalizeLanguage(savedLanguage);
+      _selectedDiscipline = _normalizeDiscipline(savedDiscipline);
+      _coachName = savedName;
+    });
+  }
+
+  Future<void> _saveEdgePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_languagePrefsKey, _selectedLanguage);
+    await prefs.setString(_disciplinePrefsKey, _selectedDiscipline);
+  }
+
+  String _normalizeLanguage(String? raw) {
+    final value = (raw ?? '').trim().toLowerCase();
+    if (value.contains('hindi')) return 'Hindi';
+    if (value.contains('marathi')) return 'Marathi';
+    return 'English';
+  }
+
+  String _normalizeDiscipline(String? raw) {
+    final value = (raw ?? '').trim().toLowerCase();
+    if (value.contains('bowl')) return 'Bowling';
+    return 'Batting';
+  }
+
   Future<void> _openCareSheet() async {
+    final navigator = Navigator.of(context);
     final start = await showModalBottomSheet<bool>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -111,9 +173,16 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
       barrierDismissible: false,
       builder: (_) => const _LiveCountdown(),
     );
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LiveNetsCameraScreen()),
+    if (!context.mounted) return;
+    await _saveEdgePrefs();
+    navigator.pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => LiveNetsCameraScreen(
+          coachName: _coachName,
+          language: _selectedLanguage,
+          discipline: _selectedDiscipline,
+        ),
+      ),
     );
   }
 
@@ -148,6 +217,19 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      _CoachControlsRow(
+                        language: _selectedLanguage,
+                        discipline: _selectedDiscipline,
+                        onLanguageChanged: (value) {
+                          setState(() => _selectedLanguage = value);
+                          unawaited(_saveEdgePrefs());
+                        },
+                        onDisciplineChanged: (value) {
+                          setState(() => _selectedDiscipline = value);
+                          unawaited(_saveEdgePrefs());
+                        },
+                      ),
+                      const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
@@ -159,10 +241,10 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                             ).withValues(alpha: 0.6),
                           ),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
                               children: [
                                 Icon(
                                   Icons.bolt_rounded,
@@ -176,9 +258,9 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              LiveNetsAccessCard.formatBalance(balanceMs),
+                              const SizedBox(height: 8),
+                              Text(
+                                LiveNetsAccessCard.formatBalance(balanceMs),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 38,
@@ -430,6 +512,107 @@ class _CareBullet extends StatelessWidget {
   }
 }
 
+class _CoachControlsRow extends StatelessWidget {
+  const _CoachControlsRow({
+    required this.language,
+    required this.discipline,
+    required this.onLanguageChanged,
+    required this.onDisciplineChanged,
+  });
+
+  final String language;
+  final String discipline;
+  final ValueChanged<String> onLanguageChanged;
+  final ValueChanged<String> onDisciplineChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ChoiceSection(
+          title: 'Coach Language',
+          children: ['English', 'Hindi', 'Marathi']
+              .map(
+                (value) => ChoiceChip(
+                  label: Text(value),
+                  selected: language == value,
+                  onSelected: (_) => onLanguageChanged(value),
+                  labelStyle: TextStyle(
+                    color: language == value ? Colors.black : Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  selectedColor: const Color(0xFF00E5FF),
+                  backgroundColor: Colors.white.withValues(alpha: 0.05),
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+        const SizedBox(height: 10),
+        _ChoiceSection(
+          title: 'Training Mode',
+          children: ['Batting', 'Bowling']
+              .map(
+                (value) => ChoiceChip(
+                  label: Text(value),
+                  selected: discipline == value,
+                  onSelected: (_) => onDisciplineChanged(value),
+                  labelStyle: TextStyle(
+                    color: discipline == value ? Colors.black : Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  selectedColor: const Color(0xFF00E5FF),
+                  backgroundColor: Colors.white.withValues(alpha: 0.05),
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChoiceSection extends StatelessWidget {
+  const _ChoiceSection({
+    required this.title,
+    required this.children,
+  });
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: children,
+        ),
+      ],
+    );
+  }
+}
+
 class _LiveCountdown extends StatefulWidget {
   const _LiveCountdown();
 
@@ -448,8 +631,10 @@ class _LiveCountdownState extends State<_LiveCountdown> {
         timer.cancel();
         return;
       }
+      SystemSound.play(SystemSoundType.click);
       if (_count == 1) {
         timer.cancel();
+        SystemSound.play(SystemSoundType.click);
         Navigator.pop(context);
       } else {
         setState(() => _count -= 1);
@@ -480,7 +665,16 @@ class _LiveCountdownState extends State<_LiveCountdown> {
 }
 
 class LiveNetsCameraScreen extends StatefulWidget {
-  const LiveNetsCameraScreen({super.key});
+  const LiveNetsCameraScreen({
+    super.key,
+    required this.coachName,
+    required this.language,
+    required this.discipline,
+  });
+
+  final String coachName;
+  final String language;
+  final String discipline;
 
   @override
   State<LiveNetsCameraScreen> createState() => _LiveNetsCameraScreenState();
@@ -508,6 +702,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Timer? _socketReconnectTimer;
   bool _coachSpeechActive = false;
   String? _latestCaption;
+  String _effectiveLanguage = 'English';
 
   @override
   void initState() {
@@ -531,10 +726,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     CameraController? localController;
     _armConnectWatchdog();
 
-    await _tts.setSpeechRate(0.52);
+    _effectiveLanguage = _normalizeLanguage(widget.language);
+
+    await _tts.setSpeechRate(0.50);
     await _tts.setVolume(1.0);
-    await _tts.setPitch(1.0);
-    await _tts.setLanguage('en-US');
+    await _tts.setPitch(0.95);
+    try {
+      await _tts.setLanguage(_languageCodeFor(_effectiveLanguage));
+    } catch (_) {
+      await _tts.setLanguage('en-IN');
+    }
+    unawaited(_applyPreferredVoice(_effectiveLanguage));
     await _tts.awaitSpeakCompletion(true);
     try {
       await _tts.setSharedInstance(true);
@@ -569,7 +771,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       );
       final controller = CameraController(
         selected,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: true,
       );
       await controller.initialize().timeout(const Duration(seconds: 12));
@@ -605,6 +807,14 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       );
 
       _socket = socket;
+      socket.add(
+        jsonEncode({
+          'type': 'client_config',
+          'name': widget.coachName,
+          'language': _effectiveLanguage,
+          'discipline': widget.discipline,
+        }),
+      );
       if (mounted) {
         setState(() {
           _status = 'Starting live detection';
@@ -614,7 +824,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(milliseconds: 850),
+        const Duration(milliseconds: 1300),
         (_) => _sendSnapshot(),
       );
 
@@ -643,6 +853,48 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         _status = 'Connection failed';
       });
     }
+  }
+
+  String _normalizeLanguage(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value.contains('hindi')) return 'Hindi';
+    if (value.contains('marathi')) return 'Marathi';
+    return 'English';
+  }
+
+  String _languageCodeFor(String language) {
+    switch (language) {
+      case 'Hindi':
+        return 'hi-IN';
+      case 'Marathi':
+        return 'mr-IN';
+      case 'English':
+      default:
+        return 'en-IN';
+    }
+  }
+
+  Future<void> _applyPreferredVoice(String language) async {
+    final locale = _languageCodeFor(language);
+    try {
+      final voices = await _tts.getVoices;
+      if (voices is List) {
+        final voice = voices.cast<dynamic>().firstWhere(
+          (item) {
+            if (item is! Map) return false;
+            final localeValue = (item['locale'] ?? '').toString().toLowerCase();
+            return localeValue.startsWith(locale.split('-').first.toLowerCase());
+          },
+          orElse: () => null,
+        );
+        if (voice is Map) {
+          await _tts.setVoice({
+            'name': (voice['name'] ?? '').toString(),
+            'locale': (voice['locale'] ?? locale).toString(),
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   void _armConnectWatchdog() {
@@ -908,6 +1160,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Future<void> _goBack() async {
     if (_ending) return;
     _ending = true;
+    SystemSound.play(SystemSoundType.click);
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     _coachSpeechQueue.clear();
@@ -989,6 +1242,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     final user = FirebaseAuth.instance.currentUser;
     _ending = true;
+    SystemSound.play(SystemSoundType.click);
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     await _tts.stop();

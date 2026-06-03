@@ -239,13 +239,40 @@ def _vision_gemini() -> Client:
     return _live_vision_client
 
 
-async def _analyze_live_frame(frame_bytes: bytes) -> str:
+def _role_prompt(role: str) -> str:
+    role = (role or "").strip().lower()
+    if "bowl" in role:
+        return (
+            "Focus on bowling only. Mention run-up, front arm, wrist position, seam, "
+            "release, line, length, and body alignment. "
+            "Do not use batting advice."
+        )
+    return (
+        "Focus on batting only. Mention stance, head position, balance, bat path, "
+        "timing, footwork, and shot selection. "
+        "Do not use bowling advice."
+    )
+
+
+async def _analyze_live_frame(
+    frame_bytes: bytes,
+    *,
+    coach_name: str = "Player",
+    language: str = "English",
+    discipline: str = "Batting",
+) -> str:
     def run() -> str:
+        spoken_name = coach_name.strip() or "Player"
         prompt = (
             "You are CrickNova AI, an elite cricket coach watching a live training frame. "
+            f"Coach the athlete named {spoken_name}. "
+            f"Respond only in {language}. "
+            f"{_role_prompt(discipline)} "
             "Give exactly one short coaching line, under 18 words. "
+            "Address the athlete naturally by name when it fits. "
+            "Avoid filler phrases like 'good stance' unless you can explain the exact reason. "
             "If the frame shows a mistake, name the main fix. "
-            "If the frame looks good, give a quick confidence boost. "
+            "If the frame looks good, give a direct confidence boost with a specific reason. "
             "Do not add bullets, labels, or explanations."
         )
         response = _vision_gemini().models.generate_content(
@@ -447,6 +474,9 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         analysis_event = asyncio.Event()
         analysis_running = False
         last_reply_at = 0.0
+        coach_name = "Player"
+        coach_language = "English"
+        coach_discipline = "Batting"
 
         async def _analysis_loop() -> None:
             nonlocal latest_frame, analysis_running, last_reply_at
@@ -459,7 +489,12 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                         frame = latest_frame
                         latest_frame = None
                         try:
-                            reply = await _analyze_live_frame(frame)
+                            reply = await _analyze_live_frame(
+                                frame,
+                                coach_name=coach_name,
+                                language=coach_language,
+                                discipline=coach_discipline,
+                            )
                         except Exception as exc:
                             print("⚠️ Live vision analysis failed:", exc)
                             reply = ""
@@ -478,7 +513,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                 analysis_running = False
 
         async def _receive_frames() -> None:
-            nonlocal latest_frame
+            nonlocal latest_frame, coach_name, coach_language, coach_discipline
             try:
                 while not stop.is_set():
                     message = await websocket.receive()
@@ -488,6 +523,11 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                     if text is not None:
                         payload = json.loads(text)
                         kind = payload.get("type")
+                        if kind == "client_config":
+                            coach_name = str(payload.get("name", coach_name)).strip() or coach_name
+                            coach_language = str(payload.get("language", coach_language)).strip() or coach_language
+                            coach_discipline = str(payload.get("discipline", coach_discipline)).strip() or coach_discipline
+                            continue
                         if kind == "video":
                             frame = base64.b64decode(payload["data"])
                             if (time.monotonic() - last_reply_at) >= 0.9:
