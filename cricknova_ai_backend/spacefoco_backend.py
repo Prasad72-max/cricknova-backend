@@ -148,12 +148,29 @@ _LIVE_MODEL_WHITELIST = {
     "models/gemini-3.1-flash-live-preview",
 }
 
+VISION_FALLBACK_MODEL = "gemini-2.5-flash"
+_VISION_MODEL_WHITELIST = {
+    "gemini-2.5-flash",
+    "models/gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "models/gemini-2.5-flash-lite",
+    "gemini-2.5-flash-preview-06-17",
+    "models/gemini-2.5-flash-preview-06-17",
+}
+
 
 def _resolve_live_model_name() -> str:
     raw = (os.getenv("LIVE_GEMINI_MODEL") or LIVE_FALLBACK_MODEL).strip()
     if raw in _LIVE_MODEL_WHITELIST:
         return raw
     return LIVE_FALLBACK_MODEL
+
+
+def _resolve_vision_model_name() -> str:
+    raw = (os.getenv("LIVE_VISION_MODEL") or VISION_FALLBACK_MODEL).strip()
+    if raw in _VISION_MODEL_WHITELIST:
+        return raw
+    return VISION_FALLBACK_MODEL
 
 
 LIVE_MODEL_NAME = _resolve_live_model_name()
@@ -167,6 +184,7 @@ If there is a mistake, mention the main flaw and the instant fix.
 
 _live_firestore_client: firestore.Client | None = None
 _live_gemini_client: Client | None = None
+_live_vision_client: Client | None = None
 
 
 def _live_db() -> firestore.Client:
@@ -209,6 +227,53 @@ def _live_gemini() -> Client:
             http_options={"api_version": "v1alpha"},
         )
     return _live_gemini_client
+
+
+def _vision_gemini() -> Client:
+    global _live_vision_client
+    if _live_vision_client is None:
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
+        _live_vision_client = Client(api_key=api_key)
+    return _live_vision_client
+
+
+async def _analyze_live_frame(frame_bytes: bytes) -> str:
+    def run() -> str:
+        prompt = (
+            "You are CrickNova AI, an elite cricket coach watching a live training frame. "
+            "Give exactly one short coaching line, under 18 words. "
+            "If the frame shows a mistake, name the main fix. "
+            "If the frame looks good, give a quick confidence boost. "
+            "Do not add bullets, labels, or explanations."
+        )
+        response = _vision_gemini().models.generate_content(
+            model=_resolve_vision_model_name(),
+            contents=[
+                types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=60,
+            ),
+        )
+        text = (getattr(response, "text", None) or "").strip()
+        if text:
+            return text
+        candidates = getattr(response, "candidates", None) or []
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            if not content:
+                continue
+            for part in getattr(content, "parts", None) or []:
+                part_text = getattr(part, "text", None)
+                if part_text:
+                    return str(part_text).strip()
+        return ""
+
+    return await asyncio.to_thread(run)
 
 
 async def _get_live_balance_ms(user_id: str) -> int:
@@ -371,63 +436,94 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         start_ns = time.monotonic_ns()
         billed = False
 
-        config = types.LiveConnectConfig(
-            response_modalities=["TEXT"],
-            system_instruction=LIVE_SYSTEM_INSTRUCTION,
+        await websocket.send_json(
+            {
+                "type": "connected",
+                "model": _resolve_vision_model_name(),
+            }
         )
 
-        async with _live_gemini().aio.live.connect(model=LIVE_MODEL_NAME, config=config) as session:
-            await websocket.send_json(
-                {
-                    "type": "connected",
-                    "model": LIVE_MODEL_NAME,
-                }
-            )
-            vision_prompt_sent = False
+        latest_frame: bytes | None = None
+        analysis_event = asyncio.Event()
+        analysis_running = False
+        last_reply_at = 0.0
 
-            async def prompt_model_once() -> None:
-                nonlocal vision_prompt_sent
-                if vision_prompt_sent:
-                    return
-                vision_prompt_sent = True
-                message = (
-                    "You are watching a live cricket training session. "
-                    "Reply with exactly one short coaching line now based on the current frame. "
-                    "If you can see the player, give an immediate technical cue or positive correction. "
-                    "Keep it under 18 words."
-                )
-                with suppress(Exception):
-                    sender = getattr(session, "send_client_content", None)
-                    if callable(sender):
-                        await sender(turns=message, turn_complete=True)
-                        return
-                    await session.send(input=message, end_of_turn=True)
+        async def _analysis_loop() -> None:
+            nonlocal latest_frame, analysis_running, last_reply_at
+            analysis_running = True
+            try:
+                while not stop.is_set():
+                    await analysis_event.wait()
+                    analysis_event.clear()
+                    while not stop.is_set() and latest_frame is not None:
+                        frame = latest_frame
+                        latest_frame = None
+                        try:
+                            reply = await _analyze_live_frame(frame)
+                        except Exception as exc:
+                            print("⚠️ Live vision analysis failed:", exc)
+                            reply = ""
+                        if reply:
+                            await websocket.send_json(
+                                {
+                                    "type": "transcript",
+                                    "text": reply,
+                                }
+                            )
+                            last_reply_at = time.monotonic()
+                        if latest_frame is None:
+                            break
+                        await asyncio.sleep(1.2)
+            finally:
+                analysis_running = False
 
-            await prompt_model_once()
-            tasks = [
-                asyncio.create_task(
-                    _live_billing_guard(websocket, stop, start_ns, starting_balance_ms)
-                ),
-                asyncio.create_task(
-                    _live_from_flutter(websocket, session, stop, prompt_model_once)
-                ),
-                asyncio.create_task(_live_from_gemini(websocket, session, stop)),
-            ]
-            for task in tasks:
-                task.add_done_callback(lambda t, s=stop: _mark_task_failure(s, t))
+        async def _receive_frames() -> None:
+            nonlocal latest_frame
+            try:
+                while not stop.is_set():
+                    message = await websocket.receive()
+                    raw = message.get("bytes")
+                    text = message.get("text")
 
-            await stop.wait()
-            for task in tasks:
-                task.cancel()
-            for task in tasks:
-                with suppress(asyncio.CancelledError, WebSocketDisconnect):
-                    await task
-            elapsed_ms = min(
-                starting_balance_ms,
-                (time.monotonic_ns() - start_ns) // 1_000_000,
-            )
-            await _charge_live_elapsed_ms(user_id, elapsed_ms)
-            billed = True
+                    if text is not None:
+                        payload = json.loads(text)
+                        kind = payload.get("type")
+                        if kind == "video":
+                            frame = base64.b64decode(payload["data"])
+                            if (time.monotonic() - last_reply_at) >= 0.9:
+                                latest_frame = frame
+                                analysis_event.set()
+                        elif kind == "stop":
+                            stop.set()
+                            return
+                        continue
+
+                    if raw and (time.monotonic() - last_reply_at) >= 0.9:
+                        latest_frame = raw
+                        analysis_event.set()
+            except WebSocketDisconnect:
+                stop.set()
+
+        tasks = [
+            asyncio.create_task(
+                _live_billing_guard(websocket, stop, start_ns, starting_balance_ms)
+            ),
+            asyncio.create_task(_analysis_loop()),
+            asyncio.create_task(_receive_frames()),
+        ]
+
+        await stop.wait()
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with suppress(asyncio.CancelledError, WebSocketDisconnect):
+                await task
+        elapsed_ms = min(
+            starting_balance_ms,
+            (time.monotonic_ns() - start_ns) // 1_000_000,
+        )
+        await _charge_live_elapsed_ms(user_id, elapsed_ms)
+        billed = True
     except WebSocketDisconnect:
         with suppress(Exception):
             stop.set()
