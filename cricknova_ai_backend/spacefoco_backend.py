@@ -138,12 +138,10 @@ def build_trajectory(ball_positions, frame_width, frame_height):
     return []
 
 
-LIVE_FALLBACK_MODEL = "gemini-2.5-flash-preview-09-2025"
+LIVE_FALLBACK_MODEL = "gemini-live-2.5-flash-preview"
 _LIVE_MODEL_WHITELIST = {
-    "gemini-2.5-flash-preview-09-2025",
-    "models/gemini-2.5-flash-preview-09-2025",
-    "gemini-2.5-flash-preview",
-    "models/gemini-2.5-flash-preview",
+    "gemini-live-2.5-flash-preview",
+    "models/gemini-live-2.5-flash-preview",
     "gemini-flash-latest",
     "models/gemini-flash-latest",
     "gemini-3.1-flash-live-preview",
@@ -274,7 +272,12 @@ async def _live_billing_guard(
             return
 
 
-async def _live_from_flutter(client_ws: WebSocket, live_session: Any, stop: asyncio.Event) -> None:
+async def _live_from_flutter(
+    client_ws: WebSocket,
+    live_session: Any,
+    stop: asyncio.Event,
+    prompt_once: Any | None = None,
+) -> None:
     async def send_video_frame(frame_bytes: bytes) -> None:
         blob = types.Blob(data=frame_bytes, mime_type="image/jpeg")
         sender = getattr(live_session, "send_realtime_input", None)
@@ -294,6 +297,8 @@ async def _live_from_flutter(client_ws: WebSocket, live_session: Any, stop: asyn
             if kind == "video":
                 frame = base64.b64decode(payload["data"])
                 await send_video_frame(frame)
+                if callable(prompt_once):
+                    await prompt_once()
             elif kind == "audio":
                 audio = base64.b64decode(payload["data"])
                 await live_session.send(input={"data": audio, "mime_type": "audio/pcm"})
@@ -308,6 +313,8 @@ async def _live_from_flutter(client_ws: WebSocket, live_session: Any, stop: asyn
 
         if raw:
             await send_video_frame(raw)
+            if callable(prompt_once):
+                await prompt_once()
 
 
 async def _live_from_gemini(client_ws: WebSocket, live_session: Any, stop: asyncio.Event) -> None:
@@ -376,21 +383,34 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                     "model": LIVE_MODEL_NAME,
                 }
             )
-            with suppress(Exception):
-                await session.send(
-                    input=(
-                        "Start live cricket detection now. Watch every incoming frame "
-                        "and respond with one short coaching line whenever there is a "
-                        "useful mistake, good shot, or setup cue. If the view is clear, "
-                        "say one brief coaching observation right away."
-                    ),
-                    end_of_turn=True,
+            vision_prompt_sent = False
+
+            async def prompt_model_once() -> None:
+                nonlocal vision_prompt_sent
+                if vision_prompt_sent:
+                    return
+                vision_prompt_sent = True
+                message = (
+                    "You are watching a live cricket training session. "
+                    "Reply with exactly one short coaching line now based on the current frame. "
+                    "If you can see the player, give an immediate technical cue or positive correction. "
+                    "Keep it under 18 words."
                 )
+                with suppress(Exception):
+                    sender = getattr(session, "send_client_content", None)
+                    if callable(sender):
+                        await sender(turns=message, turn_complete=True)
+                        return
+                    await session.send(input=message, end_of_turn=True)
+
+            await prompt_model_once()
             tasks = [
                 asyncio.create_task(
                     _live_billing_guard(websocket, stop, start_ns, starting_balance_ms)
                 ),
-                asyncio.create_task(_live_from_flutter(websocket, session, stop)),
+                asyncio.create_task(
+                    _live_from_flutter(websocket, session, stop, prompt_model_once)
+                ),
                 asyncio.create_task(_live_from_gemini(websocket, session, stop)),
             ]
             for task in tasks:

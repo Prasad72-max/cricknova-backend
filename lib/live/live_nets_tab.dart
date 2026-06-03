@@ -905,6 +905,35 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     unawaited(_start());
   }
 
+  Future<void> _goBack() async {
+    if (_ending) return;
+    _ending = true;
+    _socketReconnectTimer?.cancel();
+    _frameTimer?.cancel();
+    _coachSpeechQueue.clear();
+    await _tts.stop();
+
+    final controller = _camera;
+    if (controller != null) {
+      try {
+        if (controller.value.isRecordingVideo) {
+          await controller.stopVideoRecording();
+        }
+      } catch (_) {}
+    }
+
+    try {
+      _socket?.add(jsonEncode({'type': 'stop'}));
+      await _socket?.close();
+    } catch (_) {}
+
+    if (mounted) {
+      await _cleanupForRetry();
+    }
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
+  }
+
   Future<void> _cleanupForRetry() async {
     _cancelConnectWatchdog();
     _socketReconnectTimer?.cancel();
@@ -1043,25 +1072,62 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           Positioned(
             left: 18,
             top: 18 + MediaQuery.of(context).padding.top,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.62),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFF00E5FF).withValues(alpha: 0.55),
+            right: 18,
+            child: Row(
+              children: [
+                Material(
+                  color: Colors.black.withValues(alpha: 0.62),
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: _goBack,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: const Color(0xFF00E5FF).withValues(alpha: 0.55),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: Color(0xFF00E5FF),
+                        size: 20,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              child: Text(
-                remaining == null
-                    ? _status
-                    : LiveNetsAccessCard.formatBalance(remaining),
-                style: const TextStyle(
-                  color: Color(0xFF00E5FF),
-                  fontWeight: FontWeight.w800,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.62),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: const Color(0xFF00E5FF).withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Text(
+                      remaining == null
+                          ? _status
+                          : LiveNetsAccessCard.formatBalance(remaining),
+                      style: const TextStyle(
+                        color: Color(0xFF00E5FF),
+                        fontWeight: FontWeight.w800,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
+              ],
               ),
-            ),
           ),
           if (_connectError != null)
             Positioned(
