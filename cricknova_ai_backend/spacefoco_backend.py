@@ -462,13 +462,25 @@ def _mark_task_failure(stop: asyncio.Event, task: asyncio.Task) -> None:
 
 @app.websocket("/ws/live-nets/{user_id}")
 async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
+    # Set SKIP_BILLING=true on Render to bypass balance check during testing
+    SKIP_BILLING = os.getenv("SKIP_BILLING", "false").lower() in ("true", "1", "yes")
+    # Default dev balance: 30 minutes
+    DEV_BALANCE_MS = 30 * 60 * 1000
+
     try:
         await websocket.accept()
         starting_balance_ms = await _get_live_balance_ms(user_id)
+        print(f"💰 User={user_id} balance={starting_balance_ms}ms SKIP_BILLING={SKIP_BILLING}")
+
         if starting_balance_ms <= 0:
-            await websocket.send_json({"type": "termination", "reason": "NO_LIVE_BALANCE"})
-            await websocket.close(code=4003)
-            return
+            if SKIP_BILLING:
+                print("⚠️ Balance is 0 but SKIP_BILLING=true — giving dev balance")
+                starting_balance_ms = DEV_BALANCE_MS
+            else:
+                print("🚫 NO_LIVE_BALANCE — closing connection")
+                await websocket.send_json({"type": "termination", "reason": "NO_LIVE_BALANCE"})
+                await websocket.close(code=4003)
+                return
 
         await websocket.send_json(
             {
