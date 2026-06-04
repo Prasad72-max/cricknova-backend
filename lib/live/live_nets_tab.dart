@@ -841,7 +841,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       );
       final controller = CameraController(
         selected,
-        ResolutionPreset.high,
+        ResolutionPreset.medium,
         enableAudio: true,
       );
       await controller.initialize().timeout(const Duration(seconds: 12));
@@ -894,7 +894,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(seconds: 10),
+        const Duration(seconds: 8),
         (_) => _sendVideoChunk(),
       );
 
@@ -1033,9 +1033,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
       debugPrint(
-        'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
+        'CrickNova Edge sending 8-second video #$clipIndex: ${bytes.length} bytes',
       );
-      socket.add(bytes);
+      try {
+        socket.add(bytes);
+      } catch (_) {
+        socket.add(jsonEncode({
+          'type': 'video_clip',
+          'clip_index': clipIndex,
+          'data': base64Encode(bytes),
+        }));
+      }
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
       }
@@ -1665,7 +1673,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                             : _coachProcessing
                                 ? 'Coach analysing clip $_chunksSent'
                                 : _chunksSent == 0
-                                    ? 'Live: observing first 10 seconds'
+                                    ? 'Live: observing first 8 seconds'
                                     : 'Live: clips $_chunksSent, feedback $_chunksAnalysed',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1758,7 +1766,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         Expanded(
                           child: Text(
                             _chunksSent == 0
-                                ? 'CrickNova Coach is watching your first 10 seconds...'
+                                ? 'CrickNova Coach is watching your first 8 seconds...'
                                 : 'Coach is reading your movement and preparing feedback...',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,

@@ -380,7 +380,7 @@ def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]
             if ok:
                 sampled.append(encoded.tobytes())
         cap.release()
-        print(f"🎞️ Extracted {len(sampled)} frames from 10-second video fallback")
+        print(f"🎞️ Extracted {len(sampled)} frames from 8-second video fallback")
         return sampled
     except Exception as exc:
         print(f"❌ Video frame fallback failed: {exc}")
@@ -405,12 +405,12 @@ async def _analyze_live_frame(
         original_frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
         frames = original_frames
         if is_video and original_frames:
-            sampled = _sample_video_frames(original_frames[0], max_frames=8)
+            sampled = _sample_video_frames(original_frames[0], max_frames=6)
             if sampled:
                 frames = sampled
                 is_video = False
-                print("🎯 Using sampled frames from 10-second video for Gemini analysis")
-        media_label = "10-second video clip" if is_video else f"{len(frames)} frames from the last 10 seconds"
+                print("🎯 Using sampled frames from 8-second video for Gemini analysis")
+        media_label = "8-second video clip" if is_video else f"{len(frames)} frames from the last 8 seconds"
         prompt = (
             f"Analyse this {media_label} of live cricket training for {spoken_name}. "
             f"Respond ONLY in {coach_language}. Use {spoken_name}'s name naturally when useful. "
@@ -454,7 +454,7 @@ async def _analyze_live_frame(
                 "Use this style: name, what is good, what is wrong, and what to fix. "
                 "If not, say what is visible. No labels, no bullets, no fragments."
             )
-            print("⚠️ Gemini returned empty response, retrying same 10-second batch once")
+            print("⚠️ Gemini returned empty response, retrying same 8-second batch once")
             retry = _vision_gemini().models.generate_content(
                 model=model_name,
                 contents=[retry_prompt, *media_parts],
@@ -498,7 +498,7 @@ async def _analyze_live_frame(
                         for frame in sampled_frames
                     ]
                     sampled_prompt = (
-                        f"These images are sampled in order from the same 10-second cricket video for {spoken_name}. "
+                        f"These images are sampled in order from the same 8-second cricket video for {spoken_name}. "
                         f"Reply only in {coach_language}. "
                         "If cricket action is visible, give one complete coach sentence with one good thing, one bad thing, and one immediate fix. "
                         "If cricket action is not visible, say what is visible and the camera fix. No labels, no bullets."
@@ -517,14 +517,14 @@ async def _analyze_live_frame(
                         return sampled_text
 
             if not is_video and len(frames) > 1:
-                print("⚠️ Gemini batch empty, trying key frames from same 10-second batch")
+                print("⚠️ Gemini batch empty, trying key frames from same 8-second batch")
                 key_frames = [
                     ("last", frames[-1]),
                     ("middle", frames[len(frames) // 2]),
                     ("first", frames[0]),
                 ]
                 single_prompt = (
-                    f"Analyse this key frame from a 10-second live cricket sequence for {spoken_name}. "
+                    f"Analyse this key frame from a 8-second live cricket sequence for {spoken_name}. "
                     f"Reply only in {coach_language}. "
                     "If cricket action is visible, give one real coach feedback line. "
                     "Use this style: name, what is good, what is wrong, and what to fix. "
@@ -841,7 +841,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 clip_index = int(clip_index) if clip_index is not None else None
                             except (TypeError, ValueError):
                                 clip_index = None
-                            print(f"🎬 Live 10-second video #{clip_index} received: {len(clip)} bytes")
+                            print(f"🎬 Live 8-second video #{clip_index} received: {len(clip)} bytes")
                             if clip and (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = clip
                                 latest_is_video = True
@@ -854,7 +854,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 for item in raw_frames
                                 if isinstance(item, str) and item
                             ]
-                            print(f"🎞️ Live 10-second batch received: {len(frames)} frames")
+                            print(f"🎞️ Live 8-second batch received: {len(frames)} frames")
                             if frames and (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frames[-5:]
                                 latest_is_video = False
