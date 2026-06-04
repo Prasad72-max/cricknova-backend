@@ -425,8 +425,8 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
     spoken_name = _spoken_player_name(coach_name)
     coach_language = _normalize_live_language(language)
     role_rules = (
-        "For batting, focus on stance, balance, head position, footwork, bat path, timing, and shot selection.\n"
-        "For bowling, focus on run-up, front arm, wrist position, seam presentation, release point, and follow-through."
+        "For batting, focus on stance, balance, footwork, bat path, timing, and shot selection.\n"
+        "For bowling, focus on run-up, body alignment, wrist position, seam presentation, release point, and follow-through."
     )
     return (
         "You are CrickNova Elite Coach.\n\n"
@@ -437,6 +437,7 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "Never speak in fragments.\n\n"
         "Never reply with short generic praise or one-word feedback without explanation.\n\n"
         "Always explain WHY.\n\n"
+        "Do not make the response revolve around one repeated body part.\n\n"
         "Analyze this cricket training clip.\n\n"
         "Rules:\n"
         "- Only comment on visible actions.\n"
@@ -464,6 +465,29 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         f"Reply language: {coach_language}.\n"
         "Return natural coaching feedback as one flowing coach line."
     )
+
+
+def _is_frame_too_dark(frame_bytes: bytes) -> bool:
+    try:
+        arr = np.frombuffer(frame_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return True
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return float(gray.mean()) < 18.0
+    except Exception:
+        return False
+
+
+def _video_has_visible_action(video_bytes: bytes) -> bool:
+    frames = _sample_video_frames(video_bytes, max_frames=3)
+    if not frames:
+        return False
+    visible = 0
+    for frame in frames:
+        if not _is_frame_too_dark(frame):
+            visible += 1
+    return visible >= 2
 
 
 def _file_state_name(uploaded_file: Any) -> str:
@@ -595,6 +619,9 @@ async def _analyze_live_frame(
                 video_path = None
                 uploaded_file = None
                 try:
+                    if not _video_has_visible_action(bytes(frame_bytes)):
+                        print("VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
+                        return ""
                     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                         tmp.write(bytes(frame_bytes))
                         video_path = tmp.name
@@ -696,6 +723,9 @@ async def _analyze_live_frame(
                 return ""
 
             frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
+            if frames and all(_is_frame_too_dark(frame) for frame in frames if isinstance(frame, (bytes, bytearray))):
+                print("FRAME_SKIPPED_TOO_DARK_OR_BLANK")
+                return ""
             frame_parts = [
                 types.Part.from_bytes(data=frame, mime_type="image/jpeg")
                 for frame in frames

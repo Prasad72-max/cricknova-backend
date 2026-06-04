@@ -1037,7 +1037,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _chunkInFlight = true;
     try {
       final file = await controller.stopVideoRecording();
-      final bytes = await file.readAsBytes();
       _recordedChunkPaths.add(file.path);
       _chunksSent += 1;
       final clipIndex = _chunksSent;
@@ -1048,12 +1047,23 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
       debugPrint(
-        'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
+        'CrickNova Edge preparing 10-second video #$clipIndex: ${file.path}',
       );
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
       }
-      _enqueueVideoChunkForFeedback(bytes, clipIndex);
+      unawaited(() async {
+        try {
+          final bytes = await file.readAsBytes();
+          if (_ending) return;
+          debugPrint(
+            'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
+          );
+          _enqueueVideoChunkForFeedback(bytes, clipIndex);
+        } catch (error) {
+          debugPrint('CrickNova Edge chunk read failed: $error');
+        }
+      }());
       _flushPendingCoachFeedback();
     } catch (error) {
       debugPrint('CrickNova Edge video chunk failed: $error');
