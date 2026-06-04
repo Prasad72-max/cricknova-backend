@@ -311,36 +311,9 @@ def _normalize_live_language(language: str) -> str:
     return "English"
 
 
-def _fallback_coach_line(
-    coach_name: str,
-    language: str,
-    discipline: str,
-    mood: str,
-) -> str:
-    name = _spoken_player_name(coach_name)
-    lang = _normalize_live_language(language)
-    if mood == "praise":
-        if lang == "Hindi":
-            return f"{name}, action clear nahi dikh raha; full body frame mein lao, phir main exact feedback dunga."
-        if lang == "Marathi":
-            return f"{name}, action clear disat nahi; full body frame madhe aan, mag exact feedback deto."
-        return f"{name}, I cannot see a clear cricket action yet; bring your full body into frame."
-    if lang == "Hindi":
-        return f"{name}, cricket action frame mein nahi hai; camera net, pitch, aur body par set karo."
-    if lang == "Marathi":
-        return f"{name}, cricket action frame madhe nahi; camera net, pitch, ani body var set kar."
-    return f"{name}, cricket action is not visible; set the camera on your body before I judge technique."
-
-
-def _clean_live_reply(
-    raw_text: str,
-    *,
-    coach_name: str,
-    language: str,
-    discipline: str,
-) -> tuple[str, str]:
+def _clean_live_reply(raw_text: str) -> tuple[str, str]:
     text = " ".join((raw_text or "").replace("\n", " ").split()).strip()
-    mood = "correction"
+    mood = ""
     upper = text.upper()
     if upper.startswith("[PRAISE]"):
         mood = "praise"
@@ -348,21 +321,6 @@ def _clean_live_reply(
     elif upper.startswith("[CORRECTION]"):
         mood = "correction"
         text = text[12:].strip()
-
-    weak_phrases = (
-        "good",
-        "good stance",
-        "nice",
-        "well played",
-        "keep it up",
-        "good shot",
-    )
-    weak = text.lower().strip(" .!?,") in weak_phrases or len(text.split()) < 7
-    name = _spoken_player_name(coach_name)
-    if weak:
-        return _fallback_coach_line(coach_name, language, discipline, mood), mood
-    if name != "Player" and name.lower() not in text.lower():
-        text = f"{name}, {text[0].lower()}{text[1:]}" if len(text) > 1 else f"{name}, {text}"
     return text, mood
 
 
@@ -377,16 +335,14 @@ async def _analyze_live_frame(
         spoken_name = _spoken_player_name(coach_name)
         coach_language = _normalize_live_language(language)
         prompt = (
-            f"You are CrickNova Edge, a real elite cricket coach watching ONE live camera frame for {spoken_name}. "
-            f"Respond ONLY in {coach_language}. Use {spoken_name}'s name in every line. "
+            f"Analyse this live cricket training frame for {spoken_name} and reply as a real coach. "
+            f"Respond ONLY in {coach_language}. Use {spoken_name}'s name naturally when useful. "
             f"{_role_prompt(discipline)} "
-            "Only coach what is actually visible in the frame. Never invent a cricket mistake. "
-            "If the frame shows a laptop, code editor, room, wall, or no player/cricket action, say the action is not visible and tell the user to set the camera. "
+            "Only talk about what you can actually see in this frame. Do not invent a mistake or praise. "
             "Judge the visible frame honestly. If the action looks good, start with [PRAISE] and sound confident, proud, and calm. "
             "If there is a mistake, start with [CORRECTION] and sound strict, blunt, and demanding, but never use abusive slurs. "
-            "Never say generic lines like good, good stance, nice, keep it up, or well played. "
-            "Name one specific visible technical point and one instant fix. "
-            "Output exactly one complete coach sentence, 12 to 22 words, no bullets, no explanation."
+            "If no cricket action is visible, say only what is visible and what camera setup is needed. "
+            "Give one natural spoken coach line, no bullets, no extra app/status text."
         )
         print(f"🏏 Analyzing frame for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
         try:
@@ -422,12 +378,7 @@ async def _analyze_live_frame(
             return ""
 
     raw = await asyncio.to_thread(run)
-    return _clean_live_reply(
-        raw,
-        coach_name=coach_name,
-        language=language,
-        discipline=discipline,
-    )
+    return _clean_live_reply(raw)
 
 
 async def _get_live_balance_ms(user_id: str) -> int:
