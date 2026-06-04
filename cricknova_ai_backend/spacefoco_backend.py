@@ -183,7 +183,7 @@ _LIVE_MODEL_WHITELIST = {
     "models/gemini-flash-latest",
 }
 
-VISION_FALLBACK_MODEL = "gemini-2.0-flash"
+VISION_FALLBACK_MODEL = "gemini-2.5-flash"
 _VISION_MODEL_WHITELIST = {
     "gemini-2.0-flash",
     "models/gemini-2.0-flash",
@@ -324,6 +324,24 @@ def _clean_live_reply(raw_text: str) -> tuple[str, str]:
     return text, mood
 
 
+def _extract_gemini_text(response: Any) -> str:
+    text = (getattr(response, "text", None) or "").strip()
+    if text:
+        return text
+    candidates = getattr(response, "candidates", None) or []
+    for index, candidate in enumerate(candidates):
+        finish_reason = getattr(candidate, "finish_reason", None)
+        print(f"⚠️ Gemini candidate {index} finish_reason={finish_reason}")
+        content = getattr(candidate, "content", None)
+        if not content:
+            continue
+        for part in getattr(content, "parts", None) or []:
+            part_text = getattr(part, "text", None)
+            if part_text:
+                return str(part_text).strip()
+    return ""
+
+
 async def _analyze_live_frame(
     frame_bytes: bytes,
     *,
@@ -346,32 +364,54 @@ async def _analyze_live_frame(
         )
         print(f"🏏 Analyzing frame for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
         try:
+            model_name = _resolve_vision_model_name()
+            image_part = types.Part.from_bytes(
+                data=frame_bytes,
+                mime_type="image/jpeg",
+            )
+            text_part = types.Part.from_text(text=prompt)
             response = _vision_gemini().models.generate_content(
-                model=_resolve_vision_model_name(),
-                contents=[
-                    types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
-                    prompt,
-                ],
+                model=model_name,
+                contents=types.Content(
+                    role="user",
+                    parts=[text_part, image_part],
+                ),
                 config=types.GenerateContentConfig(
-                    temperature=0.7,
-                    max_output_tokens=80,
+                    temperature=0.35,
+                    max_output_tokens=96,
                 ),
             )
-            text = (getattr(response, "text", None) or "").strip()
+            text = _extract_gemini_text(response)
             if text:
                 print(f"✅ Gemini reply: {text}")
                 return text
-            candidates = getattr(response, "candidates", None) or []
-            for candidate in candidates:
-                content = getattr(candidate, "content", None)
-                if not content:
-                    continue
-                for part in getattr(content, "parts", None) or []:
-                    part_text = getattr(part, "text", None)
-                    if part_text:
-                        print(f"✅ Gemini reply (candidate): {part_text.strip()}")
-                        return str(part_text).strip()
-            print("⚠️ Gemini returned empty response")
+
+            retry_prompt = (
+                f"Look at this exact image and answer in {coach_language}. "
+                "Return one short spoken sentence about what is visible. "
+                "If cricket technique is visible, give cricket feedback. "
+                "If not, say what is visible. No labels, no bullets."
+            )
+            print("⚠️ Gemini returned empty response, retrying same frame once")
+            retry = _vision_gemini().models.generate_content(
+                model=model_name,
+                contents=types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(text=retry_prompt),
+                        image_part,
+                    ],
+                ),
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    max_output_tokens=80,
+                ),
+            )
+            retry_text = _extract_gemini_text(retry)
+            if retry_text:
+                print(f"✅ Gemini retry reply: {retry_text}")
+                return retry_text
+            print("⚠️ Gemini returned empty response after retry")
             return ""
         except Exception as exc:
             print(f"❌ _analyze_live_frame FAILED: {exc}")
@@ -643,6 +683,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             continue
                         if kind == "video":
                             frame = base64.b64decode(payload["data"])
+                            print(f"🎞️ Live frame received: {len(frame)} bytes")
                             # Accept frame if at least 0.5s since last reply
                             if (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frame
@@ -652,9 +693,11 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             return
                         continue
 
-                    if raw and (time.monotonic() - last_reply_at) >= 0.5:
-                        latest_frame = raw
-                        analysis_event.set()
+                    if raw:
+                        print(f"🎞️ Live binary frame received: {len(raw)} bytes")
+                        if (time.monotonic() - last_reply_at) >= 0.5:
+                            latest_frame = raw
+                            analysis_event.set()
             except WebSocketDisconnect:
                 stop.set()
 
