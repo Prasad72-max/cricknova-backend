@@ -371,7 +371,9 @@ async def _analyze_live_frame(
             "Judge the visible movement honestly. If the action looks good, sound confident, proud, and calm. "
             "If there is a mistake, sound strict, blunt, and demanding, but never use abusive slurs. "
             "If no cricket action is visible, say only what is visible and what camera setup is needed. "
-            "Give one natural spoken coach line only. Do not include labels, brackets, bullets, or app/status text."
+            "Give exactly one complete spoken coach sentence. "
+            f"Preferred style: '{spoken_name}, you are doing X well, but Y is wrong; fix Z now.' "
+            "Never reply with fragments, labels, brackets, bullets, or app/status text."
         )
         print(f"🏏 Analyzing {media_label} for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
         try:
@@ -398,9 +400,10 @@ async def _analyze_live_frame(
 
             retry_prompt = (
                 f"Look at this live cricket {'video clip' if is_video else 'sequence'} and answer in {coach_language}. "
-                "Return one short spoken sentence about what is visible. "
+                f"Return one complete coach sentence for {spoken_name}. "
                 "If cricket technique is visible, give cricket feedback. "
-                "If not, say what is visible. No labels, no bullets."
+                "Use this style: name, what is good, what is wrong, and what to fix. "
+                "If not, say what is visible. No labels, no bullets, no fragments."
             )
             print("⚠️ Gemini returned empty response, retrying same 5-second batch once")
             retry = _vision_gemini().models.generate_content(
@@ -448,7 +451,8 @@ async def _analyze_live_frame(
                     f"Analyse this key frame from a 5-second live cricket sequence for {spoken_name}. "
                     f"Reply only in {coach_language}. "
                     "If cricket action is visible, give one real coach feedback line. "
-                    "If not, describe what is visible. No labels, no bullets."
+                    "Use this style: name, what is good, what is wrong, and what to fix. "
+                    "If not, describe what is visible. No labels, no bullets, no fragments."
                 )
                 for label, key_frame in key_frames:
                     key_part = types.Part.from_bytes(
