@@ -1003,6 +1003,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       if (_pendingFrameBatch.length >= 5) {
         final frames = List<String>.from(_pendingFrameBatch);
         _pendingFrameBatch.clear();
+        debugPrint('CrickNova Edge sending 5-second batch: ${frames.length}');
         socket.add(jsonEncode({'type': 'video_batch', 'frames': frames}));
       }
       await File(file.path).delete();

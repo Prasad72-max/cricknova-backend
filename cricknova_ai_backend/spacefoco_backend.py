@@ -432,6 +432,37 @@ async def _analyze_live_frame(
             if alternate_text:
                 print(f"✅ Gemini alternate reply: {alternate_text}")
                 return alternate_text
+
+            if len(frames) > 1:
+                print("⚠️ Gemini batch empty, trying key frames from same 5-second batch")
+                key_frames = [
+                    ("last", frames[-1]),
+                    ("middle", frames[len(frames) // 2]),
+                    ("first", frames[0]),
+                ]
+                single_prompt = (
+                    f"Analyse this key frame from a 5-second live cricket sequence for {spoken_name}. "
+                    f"Reply only in {coach_language}. "
+                    "If cricket action is visible, give one real coach feedback line. "
+                    "If not, describe what is visible. No labels, no bullets."
+                )
+                for label, key_frame in key_frames:
+                    key_part = types.Part.from_bytes(
+                        data=key_frame,
+                        mime_type="image/jpeg",
+                    )
+                    key_response = _vision_gemini().models.generate_content(
+                        model=model_name,
+                        contents=[key_part, single_prompt],
+                        config=types.GenerateContentConfig(
+                            temperature=0.25,
+                            max_output_tokens=80,
+                        ),
+                    )
+                    key_text = _extract_gemini_text(key_response)
+                    if key_text:
+                        print(f"✅ Gemini key-frame reply ({label}): {key_text}")
+                        return key_text
             print("⚠️ Gemini returned empty response after retry")
             return ""
         except Exception as exc:
