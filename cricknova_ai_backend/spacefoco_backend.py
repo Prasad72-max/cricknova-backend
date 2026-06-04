@@ -466,41 +466,44 @@ async def analyze_live_nets_chunk(
     discipline: str = Form("Batting"),
     clip_index: int = Form(0),
 ):
-    video_bytes = await file.read()
-    print(
-        f"🎬 HTTP live chunk user={user_id} clip={clip_index} "
-        f"bytes={len(video_bytes)} lang={language} discipline={discipline}"
-    )
-    reply, mood = await _analyze_live_frame(
-        video_bytes,
-        coach_name=name,
-        language=language,
-        discipline=discipline,
-        is_video=True,
-    )
-    if not reply:
-        print("⚠️ Vision returned empty for live chunk, asking Gemini text coach to explain visible-analysis failure")
-        try:
-            reply = generate_text(
-                system_instruction="You are CrickNova Coach.",
-                user_prompt=(
-                    f"Player name: {name}. Language: {language}. Mode: {discipline}. "
-                    "The live video chunk reached the backend, but visual analysis returned empty. "
-                    "Write one short coach line telling the player to keep training while the camera is checked. "
-                    "Do not mention backend, Gemini, server, API, or technical words."
-                ),
-                max_output_tokens=70,
-                temperature=0.35,
-            )
-            mood = ""
-        except Exception as exc:
-            print(f"❌ Text fallback failed for live chunk: {exc}")
-    return {
-        "status": "success" if reply else "empty",
-        "text": reply,
-        "mood": mood,
-        "clip_index": clip_index,
-    }
+    try:
+        video_bytes = await file.read()
+        print(
+            f"🎬 HTTP live chunk user={user_id} clip={clip_index} "
+            f"bytes={len(video_bytes)} lang={language} discipline={discipline}"
+        )
+        if not video_bytes:
+            return {
+                "status": "failed",
+                "error": "EMPTY_VIDEO_CHUNK",
+                "text": "",
+                "mood": "",
+                "clip_index": clip_index,
+            }
+        reply, mood = await _analyze_live_frame(
+            video_bytes,
+            coach_name=name,
+            language=language,
+            discipline=discipline,
+            is_video=True,
+        )
+        return {
+            "status": "success" if reply else "empty",
+            "text": reply,
+            "mood": mood,
+            "clip_index": clip_index,
+        }
+    except Exception as exc:
+        import traceback
+        print(f"❌ live chunk endpoint failed: {exc}")
+        traceback.print_exc()
+        return {
+            "status": "failed",
+            "error": str(exc),
+            "text": "",
+            "mood": "",
+            "clip_index": clip_index,
+        }
 
 
 async def _get_live_balance_ms(user_id: str) -> int:
