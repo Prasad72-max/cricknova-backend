@@ -717,6 +717,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
   final Queue<String> _coachSpeechQueue = Queue<String>();
   final List<String> _captionHistory = <String>[];
+  final List<String> _pendingFrameBatch = <String>[];
   CameraController? _camera;
   WebSocket? _socket;
   Timer? _frameTimer;
@@ -877,7 +878,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(seconds: 3),
+        const Duration(seconds: 1),
         (_) => _sendSnapshot(),
       );
 
@@ -998,7 +999,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     try {
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
-      socket.add(jsonEncode({'type': 'video', 'data': base64Encode(bytes)}));
+      _pendingFrameBatch.add(base64Encode(bytes));
+      if (_pendingFrameBatch.length >= 5) {
+        final frames = List<String>.from(_pendingFrameBatch);
+        _pendingFrameBatch.clear();
+        socket.add(jsonEncode({'type': 'video_batch', 'frames': frames}));
+      }
       await File(file.path).delete();
     } catch (error) {
       debugPrint('CrickNova Edge snapshot failed: $error');

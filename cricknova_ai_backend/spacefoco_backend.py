@@ -351,7 +351,7 @@ def _extract_gemini_text(response: Any) -> str:
 
 
 async def _analyze_live_frame(
-    frame_bytes: bytes,
+    frame_bytes: bytes | list[bytes],
     *,
     coach_name: str = "Player",
     language: str = "English",
@@ -360,26 +360,28 @@ async def _analyze_live_frame(
     def run() -> str:
         spoken_name = _spoken_player_name(coach_name)
         coach_language = _normalize_live_language(language)
+        frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
         prompt = (
-            f"Analyse this live cricket training frame for {spoken_name} and reply as a real coach. "
+            f"Analyse these {len(frames)} frames from the last 5 seconds of live cricket training for {spoken_name}. "
             f"Respond ONLY in {coach_language}. Use {spoken_name}'s name naturally when useful. "
             f"{_role_prompt(discipline)} "
-            "Only talk about what you can actually see in this frame. Do not invent a mistake or praise. "
-            "Judge the visible frame honestly. If the action looks good, sound confident, proud, and calm. "
+            "Treat the images as a short video sequence in time order. "
+            "Only talk about what you can actually see across these frames. Do not invent a mistake or praise. "
+            "Judge the visible movement honestly. If the action looks good, sound confident, proud, and calm. "
             "If there is a mistake, sound strict, blunt, and demanding, but never use abusive slurs. "
             "If no cricket action is visible, say only what is visible and what camera setup is needed. "
             "Give one natural spoken coach line only. Do not include labels, brackets, bullets, or app/status text."
         )
-        print(f"🏏 Analyzing frame for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
+        print(f"🏏 Analyzing {len(frames)} frame batch for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
         try:
             model_name = _resolve_vision_model_name()
-            image_part = types.Part.from_bytes(
-                data=frame_bytes,
-                mime_type="image/jpeg",
-            )
+            image_parts = [
+                types.Part.from_bytes(data=frame, mime_type="image/jpeg")
+                for frame in frames
+            ]
             response = _vision_gemini().models.generate_content(
                 model=model_name,
-                contents=[image_part, prompt],
+                contents=[prompt, *image_parts],
                 config=types.GenerateContentConfig(
                     temperature=0.35,
                     max_output_tokens=96,
@@ -391,15 +393,15 @@ async def _analyze_live_frame(
                 return text
 
             retry_prompt = (
-                f"Look at this exact image and answer in {coach_language}. "
+                f"Look at these 5-second sequence frames and answer in {coach_language}. "
                 "Return one short spoken sentence about what is visible. "
                 "If cricket technique is visible, give cricket feedback. "
                 "If not, say what is visible. No labels, no bullets."
             )
-            print("⚠️ Gemini returned empty response, retrying same frame once")
+            print("⚠️ Gemini returned empty response, retrying same 5-second batch once")
             retry = _vision_gemini().models.generate_content(
                 model=model_name,
-                contents=[image_part, retry_prompt],
+                contents=[retry_prompt, *image_parts],
                 config=types.GenerateContentConfig(
                     temperature=0.2,
                     max_output_tokens=80,
@@ -417,7 +419,7 @@ async def _analyze_live_frame(
                         role="user",
                         parts=[
                             types.Part.from_text(text=retry_prompt),
-                            image_part,
+                            *image_parts,
                         ],
                     )
                 ],
@@ -634,7 +636,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
             }
         )
 
-        latest_frame: bytes | None = None
+        latest_frame: bytes | list[bytes] | None = None
         analysis_event = asyncio.Event()
         analysis_running = False
         last_reply_at = 0.0
@@ -706,6 +708,17 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             # Accept frame if at least 0.5s since last reply
                             if (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frame
+                                analysis_event.set()
+                        elif kind == "video_batch":
+                            raw_frames = payload.get("frames") or []
+                            frames = [
+                                base64.b64decode(item)
+                                for item in raw_frames
+                                if isinstance(item, str) and item
+                            ]
+                            print(f"🎞️ Live 5-second batch received: {len(frames)} frames")
+                            if frames and (time.monotonic() - last_reply_at) >= 0.5:
+                                latest_frame = frames[-5:]
                                 analysis_event.set()
                         elif kind == "stop":
                             stop.set()
