@@ -892,7 +892,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(seconds: 5),
+        const Duration(seconds: 10),
         (_) => _sendVideoChunk(),
       );
 
@@ -1025,7 +1025,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _chunksSent += 1;
       final clipIndex = _chunksSent;
       debugPrint(
-        'CrickNova Edge sending 5-second video #$clipIndex: ${bytes.length} bytes',
+        'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
       );
       socket.add(jsonEncode({
         'type': 'video_clip',
