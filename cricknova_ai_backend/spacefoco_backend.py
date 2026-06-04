@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import math
+import re
 import time
 import tempfile
 from contextlib import suppress
@@ -314,13 +315,20 @@ def _normalize_live_language(language: str) -> str:
 def _clean_live_reply(raw_text: str) -> tuple[str, str]:
     text = " ".join((raw_text or "").replace("\n", " ").split()).strip()
     mood = ""
-    upper = text.upper()
-    if upper.startswith("[PRAISE]"):
-        mood = "praise"
-        text = text[8:].strip()
-    elif upper.startswith("[CORRECTION]"):
-        mood = "correction"
-        text = text[12:].strip()
+    tag_match = re.match(
+        r"^\s*[\[\(\{]?\s*(praise|correction)\s*[\]\)\}]?\s*[:\-–—,]*\s*",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if tag_match:
+        mood = tag_match.group(1).lower()
+        text = text[tag_match.end():].strip()
+    text = re.sub(
+        r"^\s*[\[\]\(\)\{\,\s]*(praise|correction)?[\]\(\)\{\,\s:;\-–—]*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
     return text, mood
 
 
@@ -357,10 +365,10 @@ async def _analyze_live_frame(
             f"Respond ONLY in {coach_language}. Use {spoken_name}'s name naturally when useful. "
             f"{_role_prompt(discipline)} "
             "Only talk about what you can actually see in this frame. Do not invent a mistake or praise. "
-            "Judge the visible frame honestly. If the action looks good, start with [PRAISE] and sound confident, proud, and calm. "
-            "If there is a mistake, start with [CORRECTION] and sound strict, blunt, and demanding, but never use abusive slurs. "
+            "Judge the visible frame honestly. If the action looks good, sound confident, proud, and calm. "
+            "If there is a mistake, sound strict, blunt, and demanding, but never use abusive slurs. "
             "If no cricket action is visible, say only what is visible and what camera setup is needed. "
-            "Give one natural spoken coach line, no bullets, no extra app/status text."
+            "Give one natural spoken coach line only. Do not include labels, brackets, bullets, or app/status text."
         )
         print(f"🏏 Analyzing frame for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
         try:

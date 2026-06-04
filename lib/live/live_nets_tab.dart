@@ -728,6 +728,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   bool _ending = false;
   bool _paused = false;
   bool _streamStarted = false;
+  bool _snapshotInFlight = false;
   int _socketReconnectAttempts = 0;
   String? _connectError;
   String _status = 'Connecting';
@@ -970,15 +971,21 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         socket == null ||
         _ending ||
         _paused ||
+        _snapshotInFlight ||
         !controller.value.isInitialized) {
       return;
     }
+    _snapshotInFlight = true;
     try {
       final file = await controller.takePicture();
       final bytes = await file.readAsBytes();
       socket.add(jsonEncode({'type': 'video', 'data': base64Encode(bytes)}));
       await File(file.path).delete();
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('CrickNova Edge snapshot failed: $error');
+    } finally {
+      _snapshotInFlight = false;
+    }
   }
 
   Future<void> _handleSocketMessage(dynamic message) async {
@@ -998,7 +1005,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       }
     }
     if (decoded['type'] == 'transcript') {
-      final text = decoded['text']?.toString().trim() ?? '';
+      final text = _cleanCoachTranscript(decoded['text']?.toString() ?? '');
       final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
       if (text.isNotEmpty) {
         _updateCaption(text);
@@ -1022,6 +1029,19 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
     }
+  }
+
+  String _cleanCoachTranscript(String raw) {
+    return raw
+        .replaceFirst(
+          RegExp(
+            r'^\s*[\[\(\{,\s]*(praise|correction)?[\]\)\},\s:;\-–—]*',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   Future<void> _saveMarker(String text) async {
