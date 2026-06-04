@@ -1027,11 +1027,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       debugPrint(
         'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
       );
-      socket.add(jsonEncode({
-        'type': 'video_clip',
-        'clip_index': clipIndex,
-        'data': base64Encode(bytes),
-      }));
+      socket.add(bytes);
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
       }

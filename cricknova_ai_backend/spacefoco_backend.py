@@ -557,6 +557,66 @@ async def _analyze_live_frame(
     return _clean_live_reply(raw)
 
 
+async def _analyze_live_with_mistake_engine(
+    video_bytes: bytes,
+    *,
+    coach_name: str,
+    language: str,
+    discipline: str,
+) -> tuple[str, str]:
+    def run() -> str:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            tmp.write(video_bytes)
+            video_path = tmp.name
+        try:
+            ball_positions = track_ball_positions(video_path)
+            spoken_name = _spoken_player_name(coach_name)
+            coach_language = _normalize_live_language(language)
+            is_bowling = "bowl" in (discipline or "").lower()
+
+            if ball_positions and len(ball_positions) >= 6:
+                swing = detect_swing_x(ball_positions)
+                spin_name, spin_deg = calculate_spin_real(ball_positions)
+                movement_note = (
+                    f"Ball tracking found {len(ball_positions)} positions, swing={swing}, "
+                    f"spin={spin_name}, spin_degrees={spin_deg:.1f}."
+                )
+            else:
+                movement_note = "Ball tracking was not clear, so focus on visible body mechanics and camera setup."
+
+            if is_bowling:
+                role_rules = (
+                    "Give bowling feedback: run-up rhythm, front arm, wrist, release, line, length, and follow-through."
+                )
+            else:
+                role_rules = (
+                    "Give batting feedback: stance, head position, balance, bat path, timing, footwork, and shot control."
+                )
+
+            prompt = (
+                f"Player name: {spoken_name}. Language: {coach_language}. Mode: {discipline}. "
+                f"{movement_note} {role_rules} "
+                "Write exactly one complete coach sentence in the requested language. "
+                "Use this style: name, one good thing, one bad thing, and one immediate fix. "
+                "Do not use labels, brackets, bullets, or fragments."
+            )
+            return generate_text(
+                system_instruction="You are CrickNova Coach giving live net feedback.",
+                user_prompt=prompt,
+                max_output_tokens=90,
+                temperature=0.45,
+            )
+        except Exception as exc:
+            print(f"❌ Mistake engine live fallback failed: {exc}")
+            return ""
+        finally:
+            with suppress(Exception):
+                os.remove(video_path)
+
+    raw = await asyncio.to_thread(run)
+    return _clean_live_reply(raw)
+
+
 async def _get_live_balance_ms(user_id: str) -> int:
     def read() -> int:
         snap = _live_doc(user_id).get()
@@ -785,6 +845,14 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 discipline=coach_discipline,
                                 is_video=is_video,
                             )
+                            if not reply and is_video and isinstance(frame, (bytes, bytearray)):
+                                print("⚠️ Vision Gemini empty, using mistake-engine live fallback")
+                                reply, mood = await _analyze_live_with_mistake_engine(
+                                    bytes(frame),
+                                    coach_name=coach_name,
+                                    language=coach_language,
+                                    discipline=coach_discipline,
+                                )
                         except Exception as exc:
                             print(f"❌ Analysis loop error: {exc}")
                             reply = ""
@@ -866,10 +934,10 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                         continue
 
                     if raw:
-                        print(f"🎞️ Live binary frame received: {len(raw)} bytes")
+                        print(f"🎬 Live binary video received: {len(raw)} bytes")
                         if (time.monotonic() - last_reply_at) >= 0.5:
                             latest_frame = raw
-                            latest_is_video = False
+                            latest_is_video = True
                             latest_clip_index = None
                             analysis_event.set()
             except WebSocketDisconnect:
