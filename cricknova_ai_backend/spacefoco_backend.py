@@ -377,13 +377,9 @@ async def _analyze_live_frame(
                 data=frame_bytes,
                 mime_type="image/jpeg",
             )
-            text_part = types.Part.from_text(text=prompt)
             response = _vision_gemini().models.generate_content(
                 model=model_name,
-                contents=types.Content(
-                    role="user",
-                    parts=[text_part, image_part],
-                ),
+                contents=[image_part, prompt],
                 config=types.GenerateContentConfig(
                     temperature=0.35,
                     max_output_tokens=96,
@@ -403,13 +399,7 @@ async def _analyze_live_frame(
             print("⚠️ Gemini returned empty response, retrying same frame once")
             retry = _vision_gemini().models.generate_content(
                 model=model_name,
-                contents=types.Content(
-                    role="user",
-                    parts=[
-                        types.Part.from_text(text=retry_prompt),
-                        image_part,
-                    ],
-                ),
+                contents=[image_part, retry_prompt],
                 config=types.GenerateContentConfig(
                     temperature=0.2,
                     max_output_tokens=80,
@@ -419,6 +409,27 @@ async def _analyze_live_frame(
             if retry_text:
                 print(f"✅ Gemini retry reply: {retry_text}")
                 return retry_text
+            print("⚠️ Gemini retry empty, trying alternate content layout")
+            alternate = _vision_gemini().models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_text(text=retry_prompt),
+                            image_part,
+                        ],
+                    )
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    max_output_tokens=80,
+                ),
+            )
+            alternate_text = _extract_gemini_text(alternate)
+            if alternate_text:
+                print(f"✅ Gemini alternate reply: {alternate_text}")
+                return alternate_text
             print("⚠️ Gemini returned empty response after retry")
             return ""
         except Exception as exc:
