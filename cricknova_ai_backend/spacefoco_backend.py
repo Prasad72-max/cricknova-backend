@@ -40,13 +40,15 @@ async def test_gemini():
         
         client = Client(api_key=api_key)
         # Try a simple text prompt first to check key and client
+        model_name = _resolve_vision_model_name()
         resp = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=model_name,
             contents="Say hello in Marathi in exactly 5 words."
         )
         return {
             "success": True,
             "response": getattr(resp, "text", str(resp)),
+            "test_model": model_name,
             "resolved_vision_model": _resolve_vision_model_name(),
             "resolved_live_model": _resolve_live_model_name()
         }
@@ -184,7 +186,7 @@ _LIVE_MODEL_WHITELIST = {
     "models/gemini-flash-latest",
 }
 
-VISION_FALLBACK_MODEL = "gemini-2.5-flash"
+VISION_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 _VISION_MODEL_WHITELIST = {
     "gemini-2.0-flash",
     "models/gemini-2.0-flash",
@@ -353,9 +355,11 @@ def _is_usable_gemini_reply(text: str) -> bool:
     clean = " ".join((text or "").split()).strip()
     if not clean:
         return False
-    if len(clean) < 35:
+    if len(clean) < 12:
         return False
-    if len(re.findall(r"\w+", clean, flags=re.UNICODE)) < 7:
+    if len(re.findall(r"\w+", clean, flags=re.UNICODE)) < 3:
+        return False
+    if re.fullmatch(r"[\W_]+", clean, flags=re.UNICODE):
         return False
     return True
 
@@ -367,6 +371,11 @@ def _extract_usable_gemini_text(response: Any) -> str:
     if text:
         print(f"GEMINI_FRAGMENT_RESPONSE text={text}")
     return ""
+
+
+def _is_gemini_quota_error(exc: Exception) -> bool:
+    text = str(exc)
+    return "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower()
 
 
 def _debug_gemini_response(label: str, response: Any, model_name: str) -> None:
@@ -464,15 +473,42 @@ def _wait_for_gemini_file_active(client: Client, uploaded_file: Any) -> Any:
     current = uploaded_file
     for attempt in range(60):
         state_name = _file_state_name(current)
-        print(f"VIDEO_UPLOADED state={state_name or 'UNKNOWN'} attempt={attempt}")
-        if state_name in ("ACTIVE", "FILE_STATE_ACTIVE", ""):
+        uri = getattr(current, "uri", None)
+        print(
+            f"VIDEO_UPLOADED state={state_name or 'UNKNOWN'} "
+            f"attempt={attempt} uri={uri or 'NO_URI'}"
+        )
+        if state_name in ("ACTIVE", "FILE_STATE_ACTIVE"):
             return current
         if state_name in ("FAILED", "FILE_STATE_FAILED"):
             raise RuntimeError(f"Gemini uploaded file failed processing: {current}")
         time.sleep(1)
         if name:
             current = client.files.get(name=name)
+        elif uri and attempt >= 2:
+            return current
     raise TimeoutError("Gemini uploaded video did not become ACTIVE in time")
+
+
+def _file_part_for_gemini(uploaded_file: Any) -> Any:
+    uri = getattr(uploaded_file, "uri", None)
+    mime_type = getattr(uploaded_file, "mime_type", None) or "video/mp4"
+    if uri and hasattr(types.Part, "from_uri"):
+        return types.Part.from_uri(file_uri=uri, mime_type=mime_type)
+    return uploaded_file
+
+
+def _text_part_for_gemini(text: str) -> Any:
+    if hasattr(types.Part, "from_text"):
+        return types.Part.from_text(text=text)
+    return text
+
+
+def _content_from_parts(parts: list[Any]) -> list[Any]:
+    try:
+        return [types.Content(role="user", parts=parts)]
+    except Exception:
+        return parts
 
 
 def _delete_gemini_file(client: Client, uploaded_file: Any) -> None:
@@ -550,13 +586,18 @@ async def _analyze_live_frame(
                     uploaded_file = _upload_gemini_video_file(client, video_path)
                     print(f"VIDEO_UPLOADED file={uploaded_file}")
                     uploaded_file = _wait_for_gemini_file_active(client, uploaded_file)
+                    file_part = _file_part_for_gemini(uploaded_file)
+                    video_contents = _content_from_parts([
+                        file_part,
+                        _text_part_for_gemini(prompt),
+                    ])
 
                     for attempt in range(2):
                         if attempt > 0:
                             print("GEMINI_RETRY video")
                         response = client.models.generate_content(
                             model=model_name,
-                            contents=[uploaded_file, prompt],
+                            contents=video_contents,
                             config=types.GenerateContentConfig(
                                 temperature=0.7,
                                 max_output_tokens=300,
@@ -573,6 +614,8 @@ async def _analyze_live_frame(
                             return text
                     print("GEMINI_EMPTY_RESPONSE video")
                 except Exception as video_exc:
+                    if _is_gemini_quota_error(video_exc):
+                        print(f"GEMINI_QUOTA_EXHAUSTED video model={model_name}: {video_exc}")
                     print(f"❌ VIDEO_ANALYSIS_FAILED: {video_exc}")
                 finally:
                     if uploaded_file is not None:
@@ -588,12 +631,16 @@ async def _analyze_live_frame(
                         types.Part.from_bytes(data=frame, mime_type="image/jpeg")
                         for frame in frames
                     ]
+                    frame_contents = _content_from_parts([
+                        _text_part_for_gemini(prompt),
+                        *frame_parts,
+                    ])
                     for attempt in range(2):
                         if attempt > 0:
                             print("GEMINI_RETRY frames")
                         response = client.models.generate_content(
                             model=model_name,
-                            contents=[prompt, *frame_parts],
+                            contents=frame_contents,
                             config=types.GenerateContentConfig(
                                 temperature=0.7,
                                 max_output_tokens=300,
@@ -616,12 +663,16 @@ async def _analyze_live_frame(
                 types.Part.from_bytes(data=frame, mime_type="image/jpeg")
                 for frame in frames
             ]
+            frame_contents = _content_from_parts([
+                _text_part_for_gemini(prompt),
+                *frame_parts,
+            ])
             for attempt in range(2):
                 if attempt > 0:
                     print("GEMINI_RETRY frames")
                 response = client.models.generate_content(
                     model=model_name,
-                    contents=[prompt, *frame_parts],
+                    contents=frame_contents,
                     config=types.GenerateContentConfig(
                         temperature=0.7,
                         max_output_tokens=300,
@@ -635,6 +686,8 @@ async def _analyze_live_frame(
             print("GEMINI_EMPTY_RESPONSE frames")
             return ""
         except Exception as exc:
+            if _is_gemini_quota_error(exc):
+                print(f"GEMINI_QUOTA_EXHAUSTED model={model_name}: {exc}")
             print(f"❌ _analyze_live_frame FAILED: {exc}")
             return ""
 

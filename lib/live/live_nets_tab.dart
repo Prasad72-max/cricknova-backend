@@ -738,7 +738,8 @@ class _PendingVideoChunk {
 
 class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
-  final Queue<String> _coachSpeechQueue = Queue<String>();
+  final Queue<_PendingCoachFeedback> _coachFeedbackQueue =
+      Queue<_PendingCoachFeedback>();
   final List<String> _captionHistory = <String>[];
   final List<String> _recordedChunkPaths = <String>[];
   CameraController? _camera;
@@ -758,7 +759,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   String _status = 'Connecting';
   Timer? _connectWatchdog;
   Timer? _socketReconnectTimer;
-  bool _coachSpeechActive = false;
+  bool _coachFeedbackActive = false;
+  bool _allowFinalFeedbackDrain = false;
   Completer<void>? _ttsCompletion;
   int _chunksSent = 0;
   int _chunksAnalysed = 0;
@@ -1078,7 +1080,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     int clipIndex,
   ) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _ending) return;
+    if (user == null || (_ending && !_allowFinalFeedbackDrain)) return;
     _feedbackUploadInFlight = true;
     try {
       if (mounted) {
@@ -1146,7 +1148,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
       if (text.isNotEmpty) {
-        await _showCoachFeedback(text, mood: mood);
+        await _showCoachFeedback(text, mood: mood, clipIndex: clipIndex);
       } else {
         debugPrint('CrickNova Edge feedback empty for clip #$clipIndex');
         if (mounted) {
@@ -1168,7 +1170,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _feedbackUploadInFlight = false;
       final queued = _queuedFeedbackChunk;
       _queuedFeedbackChunk = null;
-      if (!_ending && queued != null) {
+      if (queued != null && (!_ending || _allowFinalFeedbackDrain)) {
         unawaited(_uploadVideoChunkForFeedback(queued.bytes, queued.clipIndex));
       }
     }
@@ -1211,7 +1213,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
             clipIndex: clipIndex,
           );
         } else {
-          await _showCoachFeedback(text, mood: mood);
+          await _showCoachFeedback(
+            text,
+            mood: mood,
+            clipIndex: clipIndex,
+          );
         }
       }
     }
@@ -1233,17 +1239,81 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
   }
 
-  Future<void> _showCoachFeedback(String text, {String mood = ''}) async {
-    _updateCaption(text);
-    await _saveMarker(text);
-    unawaited(_enqueueCoachSpeech(text, mood: mood));
+  Future<void> _showCoachFeedback(
+    String text, {
+    String mood = '',
+    int? clipIndex,
+  }) async {
+    final clean = _cleanCoachTranscript(text);
+    if (clean.isEmpty) return;
+    _coachFeedbackQueue.add(
+      _PendingCoachFeedback(
+        text: clean,
+        mood: mood,
+        clipIndex: clipIndex ?? _chunksAnalysed,
+      ),
+    );
+    unawaited(_drainCoachFeedbackQueue());
   }
 
   void _flushPendingCoachFeedback() {
     final pending = _pendingCoachFeedback;
     if (pending == null || pending.clipIndex >= _chunksSent) return;
     _pendingCoachFeedback = null;
-    unawaited(_showCoachFeedback(pending.text, mood: pending.mood));
+    unawaited(
+      _showCoachFeedback(
+        pending.text,
+        mood: pending.mood,
+        clipIndex: pending.clipIndex,
+      ),
+    );
+  }
+
+  Future<void> _drainCoachFeedbackQueue({bool allowWhileEnding = false}) async {
+    if (_coachFeedbackActive) {
+      while (_coachFeedbackActive && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+      }
+      if (_coachFeedbackQueue.isEmpty) return;
+    }
+    _coachFeedbackActive = true;
+    try {
+      while (_coachFeedbackQueue.isNotEmpty &&
+          mounted &&
+          (!_ending || allowWhileEnding)) {
+        final feedback = _coachFeedbackQueue.removeFirst();
+        _updateCaption(feedback.text);
+        await _saveMarker(feedback.text);
+        await _speakCoachFeedback(
+          feedback.text,
+          mood: feedback.mood,
+          allowWhileEnding: allowWhileEnding,
+        );
+      }
+    } finally {
+      _coachFeedbackActive = false;
+    }
+  }
+
+  Future<void> _speakCoachFeedback(
+    String text, {
+    String mood = '',
+    bool allowWhileEnding = false,
+  }) async {
+    if (_ending && !allowWhileEnding) return;
+    try {
+      await _applyCoachVoiceStyle(mood);
+      await _speakCoachLine(text);
+    } catch (_) {}
+  }
+
+  Future<void> _waitForPendingFeedbackUploads() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 28));
+    while (mounted &&
+        DateTime.now().isBefore(deadline) &&
+        (_feedbackUploadInFlight || _queuedFeedbackChunk != null)) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
   }
 
   String _cleanCoachTranscript(String raw) {
@@ -1272,41 +1342,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     await box.put(sessionId, existing);
   }
 
-  Future<void> _enqueueCoachSpeech(String text, {String mood = ''}) async {
-    if (_ending) return;
-    final chunks = _splitSpeech(text);
-    if (chunks.isEmpty) return;
-    if (_coachSpeechActive) {
-      _coachSpeechQueue
-        ..clear()
-        ..add(_speechPayload(chunks.last, mood));
-      return;
-    }
-    for (final finalChunk in chunks) {
-      _coachSpeechQueue.add(_speechPayload(finalChunk, mood));
-    }
-    _coachSpeechActive = true;
-    try {
-      while (_coachSpeechQueue.isNotEmpty && !_ending) {
-        final payload = _coachSpeechQueue.removeFirst();
-        final next = _speechText(payload);
-        if (next.trim().isEmpty) continue;
-        try {
-          await _applyCoachVoiceStyle(_speechMood(payload));
-          await _speakCoachLine(next);
-        } catch (_) {}
-      }
-    } finally {
-      _coachSpeechActive = false;
-      _ttsCompletion = null;
-    }
-  }
-
   Future<void> _speakCoachLine(String text) async {
     final completer = Completer<void>();
     _ttsCompletion = completer;
     await _tts.speak(text);
-    final seconds = (text.length / 9).ceil().clamp(3, 12);
+    final seconds = (text.length / 8).ceil().clamp(4, 45);
     try {
       await completer.future.timeout(Duration(seconds: seconds));
     } catch (_) {
@@ -1315,20 +1355,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         _ttsCompletion = null;
       }
     }
-  }
-
-  String _speechPayload(String text, String mood) => '$mood\t$text';
-
-  String _speechMood(String payload) {
-    final index = payload.indexOf('\t');
-    if (index <= 0) return '';
-    return payload.substring(0, index);
-  }
-
-  String _speechText(String payload) {
-    final index = payload.indexOf('\t');
-    if (index < 0) return payload;
-    return payload.substring(index + 1);
   }
 
   Future<void> _applyCoachVoiceStyle(String mood) async {
@@ -1360,15 +1386,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         _captionHistory.removeLast();
       }
     });
-  }
-
-  List<String> _splitSpeech(String text) {
-    final clean = text
-        .replaceAll(RegExp(r'[*_`#>]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (clean.isEmpty) return const <String>[];
-    return <String>[clean];
   }
 
   Future<void> _finishFromServer([String? reason]) async {
@@ -1481,7 +1498,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     SystemSound.play(SystemSoundType.click);
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
-    _coachSpeechQueue.clear();
+    _coachFeedbackQueue.clear();
+    _allowFinalFeedbackDrain = false;
     await _tts.stop();
 
     final controller = _camera;
@@ -1510,13 +1528,14 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     _frameTimer = null;
-    _coachSpeechQueue.clear();
+    _coachFeedbackQueue.clear();
     _pendingCoachFeedback = null;
     _queuedFeedbackChunk = null;
     _chunksSent = 0;
     _chunksAnalysed = 0;
     _coachProcessing = false;
     _feedbackUploadInFlight = false;
+    _allowFinalFeedbackDrain = false;
     await _tts.stop();
     try {
       await _socket?.close();
@@ -1566,10 +1585,15 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     final user = FirebaseAuth.instance.currentUser;
     _ending = true;
+    _allowFinalFeedbackDrain = true;
     SystemSound.play(SystemSoundType.click);
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
-    await _tts.stop();
+    if (mounted) {
+      setState(() {
+        _status = 'Finishing coach feedback';
+      });
+    }
 
     final controller = _camera;
     String? tempVideoPath;
@@ -1585,6 +1609,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
     _socket?.add(jsonEncode({'type': 'stop'}));
     await _socket?.close();
+    await _waitForPendingFeedbackUploads();
+    await _drainCoachFeedbackQueue(allowWhileEnding: true);
+    await _tts.stop();
+    _allowFinalFeedbackDrain = false;
     if (user != null) {
       await PremiumService.refreshLiveEdgeBalance(uid: user.uid);
       PremiumService.premiumNotifier.forceNotify();
@@ -1630,7 +1658,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _connectWatchdog?.cancel();
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
-    _coachSpeechQueue.clear();
+    _coachFeedbackQueue.clear();
     _tts.stop();
     _socket?.close();
     _camera?.dispose();

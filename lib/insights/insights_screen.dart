@@ -496,7 +496,6 @@ class _InsightsScreenState extends State<InsightsScreen>
     final accuracyScores = _deriveAccuracyScores(speedHistory);
     final avgAccuracy = _avgAccuracyPercent(speedHistory);
     final topSpeed = _topSpeed(speedHistory);
-    final avgSpeed = _averageSpeed(speedHistory);
     final consistency = _consistencyPercent(speedHistory);
     final performanceScore = _performanceScore(
       topSpeed,
@@ -592,9 +591,9 @@ class _InsightsScreenState extends State<InsightsScreen>
                 order: 2,
                 child: _ChartTelemetryCard(
                   title: "Speed Trend",
-                  subtitle:
-                      "Session average ${avgSpeed.toStringAsFixed(1)} km/h",
+                  subtitle: "Session Peak ${topSpeed.toStringAsFixed(1)} km/h",
                   accent: const Color(0xFF22D3EE),
+                  height: 340,
                   child: speedHistory.isEmpty
                       ? const _EmptyAnalyticsState(
                           message: "No speed data yet.",
@@ -608,9 +607,10 @@ class _InsightsScreenState extends State<InsightsScreen>
                 order: 3,
                 child: _ChartTelemetryCard(
                   title: "Accuracy Trend",
-                  subtitle: "Derived from release-speed consistency",
-                  accent: const Color(0xFFFFD166),
-                  height: 260,
+                  subtitle:
+                      "Session Accuracy ${avgAccuracy.toStringAsFixed(0)}%",
+                  accent: const Color(0xFF00FFC8),
+                  height: 340,
                   child: accuracyScores.isEmpty
                       ? const _EmptyAnalyticsState(
                           message: "No accuracy data yet.",
@@ -1195,52 +1195,85 @@ class _ChartTelemetryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassCard(
-      padding: const EdgeInsets.all(16),
-      borderColor: accent.withValues(alpha: 0.35),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF081223).withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.36),
+                blurRadius: 42,
+                offset: const Offset(0, 24),
               ),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accent,
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.5),
-                      blurRadius: 12,
-                    ),
-                  ],
-                ),
+              BoxShadow(
+                color: accent.withValues(alpha: 0.08),
+                blurRadius: 34,
+                offset: const Offset(0, 14),
               ),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: GoogleFonts.poppins(
-              color: Colors.white54,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF94A3B8),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: accent.withValues(alpha: 0.28)),
+                    ),
+                    child: Text(
+                      "LIVE",
+                      style: GoogleFonts.poppins(
+                        color: accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(height: height.clamp(320, 380), child: child),
+            ],
           ),
-          const SizedBox(height: 14),
-          SizedBox(height: height, child: child),
-        ],
+        ),
       ),
     );
   }
@@ -1639,9 +1672,9 @@ class _InteractiveSpeedChartState extends State<InteractiveSpeedChart> {
 
   void _setFromLocal(Offset local, Size size) {
     if (widget.speeds.isEmpty) return;
-    final usableWidth = size.width - 40;
+    final usableWidth = size.width - 52;
     if (usableWidth <= 0) return;
-    final t = ((local.dx - 40) / usableWidth).clamp(0.0, 1.0);
+    final t = ((local.dx - 42) / usableWidth).clamp(0.0, 1.0);
     final idx = (t * (widget.speeds.length - 1)).round().clamp(
       0,
       widget.speeds.length - 1,
@@ -1673,7 +1706,7 @@ class _InteractiveSpeedChartState extends State<InteractiveSpeedChart> {
           child: TweenAnimationBuilder<double>(
             key: ValueKey(widget.speeds.join(',')),
             tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 900),
+            duration: const Duration(milliseconds: 1200),
             curve: Curves.easeOutCubic,
             builder: (context, progress, _) {
               return CustomPaint(
@@ -1715,9 +1748,9 @@ class _InteractiveAccuracyChartState extends State<InteractiveAccuracyChart> {
 
   void _setFromLocal(Offset local, Size size) {
     if (widget.accuracy.isEmpty) return;
-    final usableWidth = size.width - 40;
+    final usableWidth = size.width - 52;
     if (usableWidth <= 0) return;
-    final t = ((local.dx - 40) / usableWidth).clamp(0.0, 1.0);
+    final t = ((local.dx - 42) / usableWidth).clamp(0.0, 1.0);
     final idx = (t * (widget.accuracy.length - 1)).round().clamp(
       0,
       widget.accuracy.length - 1,
@@ -1749,7 +1782,7 @@ class _InteractiveAccuracyChartState extends State<InteractiveAccuracyChart> {
           child: TweenAnimationBuilder<double>(
             key: ValueKey(widget.accuracy.join(',')),
             tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 900),
+            duration: const Duration(milliseconds: 1200),
             curve: Curves.easeOutCubic,
             builder: (context, progress, _) {
               return CustomPaint(
@@ -1784,19 +1817,15 @@ class SpeedChartPainter extends CustomPainter {
     }
 
     path.moveTo(points.first.dx, points.first.dy);
-    for (int i = 1; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final mx = (p0.dx + p1.dx) / 2;
-      final my = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, mx, my);
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i == 0 ? points[i] : points[i - 1];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : p2;
+      final cp1 = p1 + (p2 - p0) / 6;
+      final cp2 = p2 - (p3 - p1) / 6;
+      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
     }
-    path.quadraticBezierTo(
-      points[points.length - 2].dx,
-      points[points.length - 2].dy,
-      points.last.dx,
-      points.last.dy,
-    );
     return path;
   }
 
@@ -1854,33 +1883,112 @@ class SpeedChartPainter extends CustomPainter {
     tp.paint(canvas, Offset(left + padX, top + padY));
   }
 
+  void _paintDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint, {
+    double dash = 8,
+    double gap = 7,
+  }) {
+    final distance = (end - start).distance;
+    if (distance <= 0) return;
+    final direction = (end - start) / distance;
+    var travelled = 0.0;
+    while (travelled < distance) {
+      final segmentEnd = math.min(travelled + dash, distance);
+      canvas.drawLine(
+        start + direction * travelled,
+        start + direction * segmentEnd,
+        paint,
+      );
+      travelled += dash + gap;
+    }
+  }
+
+  void _paintBestBadge({
+    required Canvas canvas,
+    required Size size,
+    required Offset anchor,
+    required String text,
+  }) {
+    final tp = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Color(0xFFFFD166),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    )..layout();
+    const padX = 10.0;
+    const padY = 6.0;
+    final w = tp.width + padX * 2;
+    final h = tp.height + padY * 2;
+    var left = anchor.dx - w / 2;
+    left = left.clamp(44.0, size.width - w - 4);
+    var top = anchor.dy - h - 18;
+    if (top < 4) top = anchor.dy + 16;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, w, h),
+      const Radius.circular(999),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = const Color(0xFF101826).withValues(alpha: 0.94)
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 1),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = const Color(0xFFFFD166).withValues(alpha: 0.38)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = const Color(0xFFFFD166).withValues(alpha: 0.18)
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 18),
+    );
+    tp.paint(canvas, Offset(left + padX, top + padY));
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (speeds.isEmpty) return;
 
     const double minSpeed = 40;
     const double maxSpeed = 160;
+    final chart = Rect.fromLTWH(42, 28, size.width - 52, size.height - 64);
 
     final axisPaint = Paint()
-      ..color = const Color(0xFF334155).withValues(alpha: 0.55)
+      ..color = Colors.white.withValues(alpha: 0.05)
       ..strokeWidth = 1;
 
     final linePaint = Paint()
-      ..strokeWidth = 3
+      ..strokeWidth = 5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..shader = const LinearGradient(
-        colors: [Color(0xFF00FF88), Color(0xFF38BDF8)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+      ).createShader(chart);
 
     final glowLinePaint = Paint()
-      ..strokeWidth = 10
+      ..strokeWidth = 18
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..color = const Color(0xFF00FF88).withValues(alpha: 0.18)
-      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+      ).createShader(chart)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 32);
 
     final fillPaint = Paint()
       ..style = PaintingStyle.fill
@@ -1888,10 +1996,10 @@ class SpeedChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          const Color(0xFF00FF88).withValues(alpha: 0.18),
-          const Color(0xFF00FF88).withValues(alpha: 0.0),
+          const Color(0xFF00FFC8).withValues(alpha: 0.20),
+          const Color(0xFF00FFC8).withValues(alpha: 0.0),
         ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      ).createShader(chart);
 
     final textPainter = TextPainter(
       textAlign: TextAlign.right,
@@ -1903,9 +2011,9 @@ class SpeedChartPainter extends CustomPainter {
         0.0,
         1.0,
       );
-      final double y = size.height - (normalized * size.height);
+      final double y = chart.bottom - (normalized * chart.height);
 
-      canvas.drawLine(Offset(40, y), Offset(size.width, y), axisPaint);
+      canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), axisPaint);
 
       textPainter.text = TextSpan(
         text: value.toString(),
@@ -1920,7 +2028,7 @@ class SpeedChartPainter extends CustomPainter {
     }
 
     final int ballsToShow = speeds.length;
-    final double usableWidth = size.width - 40;
+    final double usableWidth = chart.width;
     final double stepX = ballsToShow > 1 ? usableWidth / (ballsToShow - 1) : 0;
 
     final List<Offset> points = <Offset>[];
@@ -1931,21 +2039,26 @@ class SpeedChartPainter extends CustomPainter {
         1.0,
       );
 
-      final double x = 40 + (stepX * i);
-      final double y = size.height - (normalized * size.height);
+      final double x = ballsToShow == 1
+          ? chart.center.dx
+          : chart.left + (stepX * i);
+      final double y = chart.bottom - (normalized * chart.height);
       points.add(Offset(x, y));
 
       if (selectedIndex == null) {
         textPainter.text = TextSpan(
-          text: "Ball ${i + 1}",
+          text: "#${i + 1}",
           style: const TextStyle(
-            color: Color(0xFF94A3B8),
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
+            color: Color(0xFF64748B),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
           ),
         );
         textPainter.layout();
-        textPainter.paint(canvas, Offset(x - 15, size.height + 4));
+        textPainter.paint(
+          canvas,
+          Offset(x - (textPainter.width / 2), chart.bottom + 12),
+        );
       }
     }
 
@@ -1954,25 +2067,24 @@ class SpeedChartPainter extends CustomPainter {
     final averageSpeed = speeds.reduce((a, b) => a + b) / speeds.length;
     final avgNormalized = ((averageSpeed - minSpeed) / (maxSpeed - minSpeed))
         .clamp(0.0, 1.0);
-    final avgY = size.height - (avgNormalized * size.height);
+    final avgY = chart.bottom - (avgNormalized * chart.height);
 
     final avgPaint = Paint()
-      ..color = const Color(0xFFFFD166).withValues(alpha: 0.48)
+      ..color = Colors.white.withValues(alpha: 0.34)
       ..strokeWidth = 1.2;
-    for (double x = 40; x < size.width; x += 12) {
-      canvas.drawLine(
-        Offset(x, avgY),
-        Offset(math.min(x + 6, size.width), avgY),
-        avgPaint,
-      );
-    }
+    _paintDashedLine(
+      canvas,
+      Offset(chart.left, avgY),
+      Offset(chart.right, avgY),
+      avgPaint,
+    );
     _paintValuePill(
       canvas: canvas,
       size: size,
-      anchor: Offset(size.width - 36, avgY),
-      text: "Avg ${averageSpeed.toStringAsFixed(0)}",
-      bg: const Color(0xFF1F1402).withValues(alpha: 0.72),
-      fg: const Color(0xFFFFD166),
+      anchor: Offset(chart.right - 18, avgY),
+      text: "Avg ${averageSpeed.toStringAsFixed(1)} km/h",
+      bg: const Color(0xFF081223).withValues(alpha: 0.92),
+      fg: const Color(0xFFB6F9FF),
     );
 
     // Avoid collisions: the peak point gets a single "Top" pill instead of
@@ -1980,38 +2092,49 @@ class SpeedChartPainter extends CustomPainter {
 
     canvas.save();
     canvas.clipRect(
-      Rect.fromLTWH(0, 0, size.width * progress, size.height + 30),
+      Rect.fromLTWH(0, 0, chart.left + chart.width * progress, size.height),
     );
 
     if (points.length > 1) {
       final curvePath = _smoothCurve(points);
       final fillPath = Path.from(curvePath)
-        ..lineTo(points.last.dx, size.height)
-        ..lineTo(points.first.dx, size.height)
+        ..lineTo(points.last.dx, chart.bottom)
+        ..lineTo(points.first.dx, chart.bottom)
         ..close();
 
       canvas.drawPath(fillPath, fillPaint);
+      canvas.saveLayer(
+        chart.inflate(42),
+        Paint()..color = Colors.white.withValues(alpha: 0.25),
+      );
       canvas.drawPath(curvePath, glowLinePaint);
+      canvas.restore();
       canvas.drawPath(curvePath, linePaint);
+    } else if (points.length == 1) {
+      final p = points.first;
+      final pulse = 0.75 + (progress * 0.25);
+      canvas.drawCircle(
+        p,
+        22 * pulse,
+        Paint()
+          ..color = const Color(0xFF00FFC8).withValues(alpha: 0.20)
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 28),
+      );
     }
 
     for (int i = 0; i < points.length; i++) {
       final p = points[i];
       final isSel = selectedIndex == i;
       final glowDot = Paint()
-        ..color = const Color(0xFF38BDF8).withValues(alpha: isSel ? 0.32 : 0.20)
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 14 : 10);
-      canvas.drawCircle(p, isSel ? 12 : 10, glowDot);
+        ..color = const Color(0xFF00FFC8).withValues(alpha: isSel ? 0.38 : 0.24)
+        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 24 : 16);
+      canvas.drawCircle(p, isSel ? 17 : 12, glowDot);
       canvas.drawCircle(
         p,
-        isSel ? 6 : 5,
-        Paint()..color = const Color(0xFF38BDF8),
+        isSel ? 7 : 4,
+        Paint()..color = const Color(0xFF00E5FF),
       );
-      canvas.drawCircle(
-        p,
-        isSel ? 3 : 2.2,
-        Paint()..color = const Color(0xFF00FF88),
-      );
+      canvas.drawCircle(p, isSel ? 3.5 : 2.4, Paint()..color = Colors.white);
     }
     canvas.restore();
 
@@ -2020,8 +2143,8 @@ class SpeedChartPainter extends CustomPainter {
         selectedIndex! < points.length) {
       final p = points[selectedIndex!];
       canvas.drawLine(
-        Offset(p.dx, 0),
-        Offset(p.dx, size.height),
+        Offset(p.dx, chart.top),
+        Offset(p.dx, chart.bottom),
         Paint()
           ..color = Colors.white.withValues(alpha: 0.10)
           ..strokeWidth = 1.2,
@@ -2043,19 +2166,17 @@ class SpeedChartPainter extends CustomPainter {
         size: size,
         anchor: p + const Offset(0, -34),
         text:
-            "Ball ${selectedIndex! + 1}: ${speeds[selectedIndex!].toStringAsFixed(0)}",
+            "#${selectedIndex! + 1}: ${speeds[selectedIndex!].toStringAsFixed(1)} km/h",
         bg: const Color(0xFF0B1220).withValues(alpha: 0.90),
-        fg: const Color(0xFF38BDF8),
+        fg: const Color(0xFF00FFC8),
       );
     } else if (peakIndex >= 0 && peakIndex < points.length) {
       final p = points[peakIndex];
-      _paintValuePill(
+      _paintBestBadge(
         canvas: canvas,
         size: size,
-        anchor: p + const Offset(0, -14),
-        text: "Top ${peakSpeed.toStringAsFixed(0)}",
-        bg: const Color(0xFF1F1402).withValues(alpha: 0.86),
-        fg: const Color(0xFFFFD700),
+        anchor: p,
+        text: "🔥 Best Speed",
       );
     }
   }
@@ -2080,19 +2201,15 @@ class AccuracyChartPainter extends CustomPainter {
     }
 
     path.moveTo(points.first.dx, points.first.dy);
-    for (int i = 1; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final mx = (p0.dx + p1.dx) / 2;
-      final my = (p0.dy + p1.dy) / 2;
-      path.quadraticBezierTo(p0.dx, p0.dy, mx, my);
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i == 0 ? points[i] : points[i - 1];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : p2;
+      final cp1 = p1 + (p2 - p0) / 6;
+      final cp2 = p2 - (p3 - p1) / 6;
+      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
     }
-    path.quadraticBezierTo(
-      points[points.length - 2].dx,
-      points[points.length - 2].dy,
-      points.last.dx,
-      points.last.dy,
-    );
     return path;
   }
 
@@ -2144,33 +2261,110 @@ class AccuracyChartPainter extends CustomPainter {
     tp.paint(canvas, Offset(left + padX, top + padY));
   }
 
+  void _paintDashedLine(
+    Canvas canvas,
+    Offset start,
+    Offset end,
+    Paint paint, {
+    double dash = 8,
+    double gap = 7,
+  }) {
+    final distance = (end - start).distance;
+    if (distance <= 0) return;
+    final direction = (end - start) / distance;
+    var travelled = 0.0;
+    while (travelled < distance) {
+      final segmentEnd = math.min(travelled + dash, distance);
+      canvas.drawLine(
+        start + direction * travelled,
+        start + direction * segmentEnd,
+        paint,
+      );
+      travelled += dash + gap;
+    }
+  }
+
+  void _paintBestBadge({
+    required Canvas canvas,
+    required Size size,
+    required Offset anchor,
+    required String text,
+  }) {
+    final tp = TextPainter(
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      text: TextSpan(
+        text: text,
+        style: const TextStyle(
+          color: Color(0xFFFFD166),
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    )..layout();
+    const padX = 10.0;
+    const padY = 6.0;
+    final w = tp.width + padX * 2;
+    final h = tp.height + padY * 2;
+    var left = anchor.dx - w / 2;
+    left = left.clamp(44.0, size.width - w - 4);
+    var top = anchor.dy - h - 18;
+    if (top < 4) top = anchor.dy + 16;
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(left, top, w, h),
+      const Radius.circular(999),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = const Color(0xFF101826).withValues(alpha: 0.94),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = const Color(0xFFFFD166).withValues(alpha: 0.38)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = const Color(0xFFFFD166).withValues(alpha: 0.18)
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 18),
+    );
+    tp.paint(canvas, Offset(left + padX, top + padY));
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (accuracy.isEmpty) return;
 
     const double minVal = 0;
     const double maxVal = 100;
+    final chart = Rect.fromLTWH(42, 28, size.width - 52, size.height - 64);
 
     final axisPaint = Paint()
-      ..color = const Color(0xFF334155).withValues(alpha: 0.55)
+      ..color = Colors.white.withValues(alpha: 0.05)
       ..strokeWidth = 1;
 
     final linePaint = Paint()
-      ..strokeWidth = 3
+      ..strokeWidth = 5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..shader = const LinearGradient(
-        colors: [Color(0xFFFFD700), Color(0xFF00FF88)],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+      ).createShader(chart);
 
     final glowLinePaint = Paint()
-      ..strokeWidth = 10
+      ..strokeWidth = 18
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..color = const Color(0xFFFFD700).withValues(alpha: 0.18)
-      ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, 10);
+      ..shader = const LinearGradient(
+        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+      ).createShader(chart)
+      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 32);
 
     final fillPaint = Paint()
       ..style = PaintingStyle.fill
@@ -2178,10 +2372,10 @@ class AccuracyChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          const Color(0xFFFFD700).withValues(alpha: 0.18),
-          const Color(0xFFFFD700).withValues(alpha: 0.0),
+          const Color(0xFF00FFC8).withValues(alpha: 0.20),
+          const Color(0xFF00FFC8).withValues(alpha: 0.0),
         ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      ).createShader(chart);
 
     final textPainter = TextPainter(
       textAlign: TextAlign.right,
@@ -2190,8 +2384,8 @@ class AccuracyChartPainter extends CustomPainter {
 
     for (int value = 0; value <= 100; value += 20) {
       final normalized = ((value - minVal) / (maxVal - minVal)).clamp(0.0, 1.0);
-      final double y = size.height - (normalized * size.height);
-      canvas.drawLine(Offset(40, y), Offset(size.width, y), axisPaint);
+      final double y = chart.bottom - (normalized * chart.height);
+      canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), axisPaint);
 
       textPainter.text = TextSpan(
         text: "$value%",
@@ -2206,7 +2400,7 @@ class AccuracyChartPainter extends CustomPainter {
     }
 
     final int points = accuracy.length;
-    final double usableWidth = size.width - 40;
+    final double usableWidth = chart.width;
     final double stepX = points > 1 ? usableWidth / (points - 1) : 0;
 
     final List<Offset> pts = <Offset>[];
@@ -2216,21 +2410,24 @@ class AccuracyChartPainter extends CustomPainter {
         0.0,
         1.0,
       );
-      final double x = 40 + (stepX * i);
-      final double y = size.height - (normalized * size.height);
+      final double x = points == 1 ? chart.center.dx : chart.left + (stepX * i);
+      final double y = chart.bottom - (normalized * chart.height);
       pts.add(Offset(x, y));
 
       if (selectedIndex == null) {
         textPainter.text = TextSpan(
-          text: "Ball ${i + 1}",
+          text: "#${i + 1}",
           style: const TextStyle(
-            color: Color(0xFF94A3B8),
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
+            color: Color(0xFF64748B),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
           ),
         );
         textPainter.layout();
-        textPainter.paint(canvas, Offset(x - 15, size.height + 4));
+        textPainter.paint(
+          canvas,
+          Offset(x - (textPainter.width / 2), chart.bottom + 12),
+        );
       }
     }
 
@@ -2239,41 +2436,55 @@ class AccuracyChartPainter extends CustomPainter {
       0.0,
       1.0,
     );
-    final avgY = size.height - (avgNormalized * size.height);
+    final avgY = chart.bottom - (avgNormalized * chart.height);
     final avgPaint = Paint()
-      ..color = const Color(0xFF38BDF8).withValues(alpha: 0.46)
+      ..color = Colors.white.withValues(alpha: 0.34)
       ..strokeWidth = 1.2;
-    for (double x = 40; x < size.width; x += 12) {
-      canvas.drawLine(
-        Offset(x, avgY),
-        Offset(math.min(x + 6, size.width), avgY),
-        avgPaint,
-      );
-    }
+    _paintDashedLine(
+      canvas,
+      Offset(chart.left, avgY),
+      Offset(chart.right, avgY),
+      avgPaint,
+    );
     _paintValuePill(
       canvas: canvas,
       size: size,
-      anchor: Offset(size.width - 36, avgY),
+      anchor: Offset(chart.right - 18, avgY),
       text: "Avg ${avgAccuracy.toStringAsFixed(0)}%",
-      bg: const Color(0xFF07111F).withValues(alpha: 0.78),
-      fg: const Color(0xFF38BDF8),
+      bg: const Color(0xFF081223).withValues(alpha: 0.92),
+      fg: const Color(0xFFB6F9FF),
     );
 
     canvas.save();
     canvas.clipRect(
-      Rect.fromLTWH(0, 0, size.width * progress, size.height + 30),
+      Rect.fromLTWH(0, 0, chart.left + chart.width * progress, size.height),
     );
 
     if (pts.length > 1) {
       final curvePath = _smoothCurve(pts);
       final fillPath = Path.from(curvePath)
-        ..lineTo(pts.last.dx, size.height)
-        ..lineTo(pts.first.dx, size.height)
+        ..lineTo(pts.last.dx, chart.bottom)
+        ..lineTo(pts.first.dx, chart.bottom)
         ..close();
 
       canvas.drawPath(fillPath, fillPaint);
+      canvas.saveLayer(
+        chart.inflate(42),
+        Paint()..color = Colors.white.withValues(alpha: 0.25),
+      );
       canvas.drawPath(curvePath, glowLinePaint);
+      canvas.restore();
       canvas.drawPath(curvePath, linePaint);
+    } else if (pts.length == 1) {
+      final p = pts.first;
+      final pulse = 0.75 + (progress * 0.25);
+      canvas.drawCircle(
+        p,
+        22 * pulse,
+        Paint()
+          ..color = const Color(0xFF00FFC8).withValues(alpha: 0.20)
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 28),
+      );
     }
 
     final bestAcc = accuracy.reduce((a, b) => a > b ? a : b);
@@ -2283,19 +2494,15 @@ class AccuracyChartPainter extends CustomPainter {
       final p = pts[i];
       final isSel = selectedIndex == i;
       final glowDot = Paint()
-        ..color = const Color(0xFFFFD700).withValues(alpha: isSel ? 0.32 : 0.20)
+        ..color = const Color(0xFF00FFC8).withValues(alpha: isSel ? 0.38 : 0.24)
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 14 : 10);
-      canvas.drawCircle(p, isSel ? 12 : 10, glowDot);
+      canvas.drawCircle(p, isSel ? 17 : 12, glowDot);
       canvas.drawCircle(
         p,
-        isSel ? 6 : 5,
-        Paint()..color = const Color(0xFFFFD700),
+        isSel ? 7 : 4,
+        Paint()..color = const Color(0xFF00E5FF),
       );
-      canvas.drawCircle(
-        p,
-        isSel ? 3 : 2.2,
-        Paint()..color = const Color(0xFF00FF88),
-      );
+      canvas.drawCircle(p, isSel ? 3.5 : 2.4, Paint()..color = Colors.white);
     }
     canvas.restore();
 
@@ -2304,8 +2511,8 @@ class AccuracyChartPainter extends CustomPainter {
         selectedIndex! < pts.length) {
       final p = pts[selectedIndex!];
       canvas.drawLine(
-        Offset(p.dx, 0),
-        Offset(p.dx, size.height),
+        Offset(p.dx, chart.top),
+        Offset(p.dx, chart.bottom),
         Paint()
           ..color = Colors.white.withValues(alpha: 0.10)
           ..strokeWidth = 1.2,
@@ -2328,19 +2535,17 @@ class AccuracyChartPainter extends CustomPainter {
         size: size,
         anchor: p + const Offset(0, -34),
         text:
-            "Ball ${selectedIndex! + 1}: ${accuracy[selectedIndex!].toStringAsFixed(0)}%",
+            "#${selectedIndex! + 1}: ${accuracy[selectedIndex!].toStringAsFixed(0)}%",
         bg: const Color(0xFF0B1220).withValues(alpha: 0.90),
-        fg: const Color(0xFFFFD700),
+        fg: const Color(0xFF00FFC8),
       );
     } else if (bestIndex >= 0 && bestIndex < pts.length) {
       final p = pts[bestIndex];
-      _paintValuePill(
+      _paintBestBadge(
         canvas: canvas,
         size: size,
-        anchor: p + const Offset(0, -14),
-        text: "Best ${bestAcc.toStringAsFixed(0)}%",
-        bg: const Color(0xFF1F1402).withValues(alpha: 0.86),
-        fg: const Color(0xFFFFD700),
+        anchor: p,
+        text: "🚀 Personal Best",
       );
     }
   }
