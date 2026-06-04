@@ -770,6 +770,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   _PendingVideoChunk? _queuedFeedbackChunk;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
+  DateTime? _currentClipStartedAt;
+  bool _chunkRestartScheduled = false;
+
+  static const Duration _chunkDuration = Duration(seconds: 10);
+  static const Duration _minimumChunkDuration = Duration(seconds: 7);
 
   @override
   void initState() {
@@ -908,8 +913,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       await controller.startVideoRecording().timeout(
         const Duration(seconds: 12),
       );
+      _currentClipStartedAt = DateTime.now();
       _frameTimer = Timer.periodic(
-        const Duration(seconds: 10),
+        _chunkDuration,
         (_) => _sendVideoChunk(),
       );
 
@@ -1025,9 +1031,26 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         !controller.value.isInitialized) {
       return;
     }
+    final startedAt = _currentClipStartedAt;
+    if (startedAt != null) {
+      final age = DateTime.now().difference(startedAt);
+      if (age < _minimumChunkDuration) {
+        if (!_chunkRestartScheduled) {
+          _chunkRestartScheduled = true;
+          final wait = _minimumChunkDuration - age;
+          Future<void>.delayed(wait, () {
+            _chunkRestartScheduled = false;
+            if (!mounted || _ending || _paused) return;
+            unawaited(_sendVideoChunk());
+          });
+        }
+        return;
+      }
+    }
     if (!controller.value.isRecordingVideo) {
       try {
         await controller.startVideoRecording();
+        _currentClipStartedAt = DateTime.now();
       } catch (error) {
         debugPrint('CrickNova Edge chunk restart failed: $error');
       }
@@ -1050,7 +1073,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         'CrickNova Edge preparing 10-second video #$clipIndex: ${file.path}',
       );
       if (!_ending && !_paused && controller.value.isInitialized) {
+        await Future<void>.delayed(const Duration(milliseconds: 180));
         await controller.startVideoRecording();
+        _currentClipStartedAt = DateTime.now();
       }
       unawaited(() async {
         try {
@@ -1067,6 +1092,15 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _flushPendingCoachFeedback();
     } catch (error) {
       debugPrint('CrickNova Edge video chunk failed: $error');
+      if (!_ending && !_paused && controller.value.isInitialized) {
+        try {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+          await controller.startVideoRecording();
+          _currentClipStartedAt = DateTime.now();
+        } catch (restartError) {
+          debugPrint('CrickNova Edge recovery restart failed: $restartError');
+        }
+      }
     } finally {
       _chunkInFlight = false;
     }
@@ -1517,6 +1551,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       try {
         if (controller.value.isRecordingVideo) {
           await controller.stopVideoRecording();
+          _currentClipStartedAt = null;
         }
       } catch (_) {}
     }
@@ -1543,6 +1578,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _queuedFeedbackChunk = null;
     _chunksSent = 0;
     _chunksAnalysed = 0;
+    _currentClipStartedAt = null;
+    _chunkRestartScheduled = false;
     _coachProcessing = false;
     _feedbackUploadInFlight = false;
     _allowFinalFeedbackDrain = false;
@@ -1557,6 +1594,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       try {
         if (controller.value.isRecordingVideo) {
           await controller.stopVideoRecording();
+          _currentClipStartedAt = null;
         }
       } catch (_) {}
       try {
@@ -1583,6 +1621,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           await controller.pauseVideoRecording();
         } else {
           await controller.resumeVideoRecording();
+          _currentClipStartedAt = DateTime.now();
         }
       }
     } catch (_) {}
@@ -1611,6 +1650,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       if (_paused) {
         try {
           await controller.resumeVideoRecording();
+          _currentClipStartedAt = DateTime.now();
         } catch (_) {}
       }
       final file = await controller.stopVideoRecording();

@@ -307,8 +307,8 @@ def _role_prompt(role: str) -> str:
             "Do not use batting advice."
         )
     return (
-        "Focus on batting only. Mention stance, head position, balance, bat path, "
-        "timing, footwork, and shot selection. "
+        "Focus on batting only. Mention stance, balance, bat path, "
+        "timing, footwork, body alignment, and shot selection. "
         "Do not use bowling advice."
     )
 
@@ -425,7 +425,7 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
     spoken_name = _spoken_player_name(coach_name)
     coach_language = _normalize_live_language(language)
     role_rules = (
-        "For batting, focus on stance, balance, footwork, bat path, timing, and shot selection.\n"
+        "For batting, focus on stance, balance, footwork, bat path, timing, body alignment, and shot selection.\n"
         "For bowling, focus on run-up, body alignment, wrist position, seam presentation, release point, and follow-through."
     )
     return (
@@ -474,7 +474,10 @@ def _is_frame_too_dark(frame_bytes: bytes) -> bool:
         if frame is None:
             return True
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        return float(gray.mean()) < 18.0
+        mean_value = float(gray.mean())
+        std_value = float(gray.std())
+        bright_ratio = float(np.count_nonzero(gray > 35)) / float(gray.size)
+        return mean_value < 22.0 or std_value < 10.0 or bright_ratio < 0.03
     except Exception:
         return False
 
@@ -1673,7 +1676,7 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         if not ball_positions or len(ball_positions) < 6:
             return {
                 "status": "success",
-                "coach_feedback": "Stay balanced at setup, keep your head steady through impact, and repeat short shadow-batting with a straight bat path."
+                "coach_feedback": ""
             }
 
         swing = detect_swing_x(ball_positions)
@@ -1684,7 +1687,7 @@ You are CrickNova Coach.
 
 Give short, honest batting feedback.
 Mention one mistake and one improvement.
-Focus on batting mechanics like stance, head position, balance, bat path, timing, footwork, and shot control.
+Focus on batting mechanics like stance, balance, bat path, timing, footwork, body alignment, and shot control.
 Do not mention speed, swing, or spin.
 """
 

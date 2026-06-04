@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/premium_service.dart';
+import '../services/live_nets_purchase_service.dart';
 import '../services/pricing_location_service.dart';
 import '../services/subscription_provider.dart';
 import '../navigation/main_navigation.dart';
@@ -1051,12 +1052,16 @@ class _PremiumEntryHighlight {
 class _LiveNetsPack {
   const _LiveNetsPack({
     required this.minutes,
-    required this.price,
+    required this.priceInr,
+    required this.priceUsd,
+    required this.productId,
     required this.badge,
   });
 
   final int minutes;
-  final int price;
+  final int priceInr;
+  final double priceUsd;
+  final String productId;
   final String badge;
 }
 
@@ -1073,7 +1078,11 @@ class _LiveNetsPackCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = pack.minutes == 60 ? '1 Hour' : '${pack.minutes} Mins';
+    final title = '${pack.minutes} Min';
+    final isIndia = PricingLocationService.isIndia;
+    final price = isIndia
+        ? '₹${pack.priceInr}'
+        : '\$${pack.priceUsd.toStringAsFixed(2)}';
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1120,7 +1129,7 @@ class _LiveNetsPackCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '₹${pack.price}',
+                price,
                 style: GoogleFonts.poppins(
                   color: const Color(0xFF00E5FF),
                   fontSize: 17,
@@ -2053,12 +2062,21 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   Widget _liveNetsPayAsYouGoSection() {
-    final packs = const [
-      _LiveNetsPack(minutes: 3, price: 29, badge: 'Quick Net'),
-      _LiveNetsPack(minutes: 10, price: 89, badge: 'Match Prep'),
-      _LiveNetsPack(minutes: 30, price: 299, badge: 'Deep Work'),
-      _LiveNetsPack(minutes: 60, price: 599, badge: 'Full Hour'),
-    ];
+    final packs = LiveNetsPurchaseService.packs
+        .map(
+          (pack) => _LiveNetsPack(
+            minutes: pack.minutes,
+            priceInr: pack.amountInr,
+            priceUsd: pack.amountUsd,
+            productId: pack.productId,
+            badge: switch (pack.minutes) {
+              3 => 'Quick Net',
+              10 => 'Match Prep',
+              _ => 'Deep Work',
+            },
+          ),
+        )
+        .toList(growable: false);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 20),
@@ -2139,31 +2157,14 @@ class _PremiumScreenState extends State<PremiumScreen>
     setState(() => _startingLivePack = true);
 
     try {
-      await FirebaseFirestore.instance
-          .collection('live_nets_checkout_intents')
-          .add({
-            'uid': user.uid,
-            'minutes': pack.minutes,
-            'seconds': pack.minutes * 60,
-            'milliseconds': pack.minutes * 60 * 1000,
-            'amount_inr': pack.price,
-            'status': 'test_unlocked',
-            'test_mode': true,
-            'created_at': FieldValue.serverTimestamp(),
-            'updated_at': FieldValue.serverTimestamp(),
-          });
-
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'live_seconds_remaining': FieldValue.increment(pack.minutes * 60),
-        'live_milliseconds_remaining': FieldValue.increment(
-          pack.minutes * 60 * 1000,
-        ),
-        'last_live_pack_minutes': pack.minutes,
-        'last_live_pack_amount_inr': pack.price,
-        'last_live_pack_test_mode': true,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
+      final purchaseService = LiveNetsPurchaseService.instance;
+      await purchaseService.initialize();
+      final launched = await purchaseService.buyPack(pack.productId);
+      if (!launched) {
+        throw StateError(
+          purchaseService.lastError ?? 'Unable to start Google Play billing.',
+        );
+      }
       await PremiumService.refreshLiveEdgeBalance(uid: user.uid);
       PremiumService.premiumNotifier.forceNotify();
     } catch (error) {
@@ -2182,7 +2183,7 @@ class _PremiumScreenState extends State<PremiumScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Live Nets ${pack.minutes} min pack added. Starting Live Nets.',
+          'Live Nets ${pack.minutes} min purchase started. Starting Live Nets.',
         ),
       ),
     );
