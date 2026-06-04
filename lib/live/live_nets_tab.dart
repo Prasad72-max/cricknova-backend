@@ -735,6 +735,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Timer? _connectWatchdog;
   Timer? _socketReconnectTimer;
   bool _coachSpeechActive = false;
+  Completer<void>? _ttsCompletion;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
 
@@ -770,6 +771,24 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     } catch (_) {
       await _tts.setLanguage('en-IN');
     }
+    _tts.setCompletionHandler(() {
+      final completer = _ttsCompletion;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    _tts.setErrorHandler((_) {
+      final completer = _ttsCompletion;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
+    _tts.setCancelHandler(() {
+      final completer = _ttsCompletion;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
     unawaited(_applyPreferredVoice(_effectiveLanguage));
     await _tts.awaitSpeakCompletion(true);
     try {
@@ -858,7 +877,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(milliseconds: 1300),
+        const Duration(seconds: 3),
         (_) => _sendSnapshot(),
       );
 
@@ -1059,10 +1078,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
 
   Future<void> _enqueueCoachSpeech(String text, {String mood = ''}) async {
     if (_ending) return;
-    for (final finalChunk in _splitSpeech(text)) {
+    final chunks = _splitSpeech(text);
+    if (chunks.isEmpty) return;
+    if (_coachSpeechActive) {
+      _coachSpeechQueue
+        ..clear()
+        ..add(_speechPayload(chunks.last, mood));
+      return;
+    }
+    for (final finalChunk in chunks) {
       _coachSpeechQueue.add(_speechPayload(finalChunk, mood));
     }
-    if (_coachSpeechActive) return;
     _coachSpeechActive = true;
     try {
       while (_coachSpeechQueue.isNotEmpty && !_ending) {
@@ -1071,11 +1097,27 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         if (next.trim().isEmpty) continue;
         try {
           await _applyCoachVoiceStyle(_speechMood(payload));
-          await _tts.speak(next);
+          await _speakCoachLine(next);
         } catch (_) {}
       }
     } finally {
       _coachSpeechActive = false;
+      _ttsCompletion = null;
+    }
+  }
+
+  Future<void> _speakCoachLine(String text) async {
+    final completer = Completer<void>();
+    _ttsCompletion = completer;
+    await _tts.speak(text);
+    final seconds = (text.length / 9).ceil().clamp(3, 12);
+    try {
+      await completer.future.timeout(Duration(seconds: seconds));
+    } catch (_) {
+      final active = _ttsCompletion;
+      if (active == completer) {
+        _ttsCompletion = null;
+      }
     }
   }
 
