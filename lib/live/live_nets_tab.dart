@@ -1362,14 +1362,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     if (clean.isEmpty) return const <String>[];
-
-    final parts = clean
-        .split(RegExp(r'(?<=[\.\!\?\:;])\s+'))
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList(growable: false);
-    if (parts.isEmpty) return <String>[clean];
-    return parts;
+    return <String>[clean];
   }
 
   Future<void> _finishFromServer([String? reason]) async {

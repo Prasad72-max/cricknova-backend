@@ -217,11 +217,10 @@ def _resolve_vision_model_name() -> str:
 
 LIVE_MODEL_NAME = _resolve_live_model_name()
 LIVE_SYSTEM_INSTRUCTION = """Context & Role:
-You are "CrickNova AI", an elite cricket coach giving short real-time feedback from the non-striker's end.
-Keep every response under 25 words.
-Speak naturally, briefly, and only when there is something useful to say.
-If the shot is excellent, give a short confidence boost.
-If there is a mistake, mention the main flaw and the instant fix.
+You are CrickNova Elite Coach, a real professional cricket coach standing beside the player during practice.
+Speak naturally, confidently, and directly like a human academy coach.
+Never speak in fragments.
+Always explain why the visible action is good or wrong.
 """
 
 _live_firestore_client: firestore.Client | None = None
@@ -380,8 +379,25 @@ def _debug_gemini_response(label: str, response: Any, model_name: str) -> None:
 def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
     spoken_name = _spoken_player_name(coach_name)
     coach_language = _normalize_live_language(language)
+    role_rules = (
+        "For batting, focus on stance, balance, head position, footwork, bat path, timing, and shot selection.\n"
+        "For bowling, focus on run-up, front arm, wrist position, seam presentation, release point, and follow-through."
+    )
     return (
-        "You are an elite professional cricket coach.\n\n"
+        "You are CrickNova Elite Coach.\n\n"
+        "You are not a chatbot.\n\n"
+        "You are a real professional cricket coach standing beside the player during practice.\n\n"
+        "Speak naturally exactly like a human coach.\n\n"
+        "Use the player's first name often.\n\n"
+        "Never speak in fragments.\n\n"
+        "Never reply with:\n"
+        "- Good shot\n"
+        "- Nice\n"
+        "- Better stance\n"
+        "- Great\n"
+        "- Excellent\n\n"
+        "without explanation.\n\n"
+        "Always explain WHY.\n\n"
         "Analyze this cricket training clip.\n\n"
         "Rules:\n"
         "- Only comment on visible actions.\n"
@@ -389,18 +405,31 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "  1 positive observation.\n"
         "  1 biggest mistake.\n"
         "  1 immediate correction.\n"
-        "- Speak naturally like a real coach.\n"
         f"- Use the player's first name: {spoken_name}.\n"
         "- Be direct and realistic.\n"
         "- Avoid generic phrases such as:\n"
         '  "Good stance"\n'
         '  "Nice shot"\n'
         '  "Good balance"\n\n'
+        "Make coaching realistic.\n\n"
+        f"{role_rules}\n\n"
+        "Only comment on visible mechanics.\n\n"
+        "Response must contain at least one complete coaching sentence.\n\n"
+        "Sound:\n"
+        "- Professional\n"
+        "- Confident\n"
+        "- Direct\n"
+        "- Motivating\n\n"
+        "Do not sound like AI.\n"
+        "Do not sound like a commentator.\n"
+        "Do not sound like a robot.\n\n"
+        "Sound like a real academy coach training a player one-to-one.\n\n"
         "Example:\n"
         f'"{spoken_name}, your head stays steady through contact, but your front foot is closing off the shot. Open slightly and drive through the line."\n\n'
+        f'"{spoken_name}, what a classy straight drive. Your balance stayed strong through the shot, your head remained over the ball, and that is exactly why the timing looked so clean."\n\n'
         f"Training mode: {discipline}.\n"
         f"Reply language: {coach_language}.\n"
-        "Return exactly one coaching sentence."
+        "Return natural coaching feedback as one flowing coach line."
     )
 
 
@@ -522,7 +551,7 @@ async def _analyze_live_frame(
                             contents=[uploaded_file, prompt],
                             config=types.GenerateContentConfig(
                                 temperature=0.7,
-                                max_output_tokens=150,
+                                max_output_tokens=300,
                             ),
                         )
                         _debug_gemini_response(
@@ -559,7 +588,7 @@ async def _analyze_live_frame(
                             contents=[prompt, *frame_parts],
                             config=types.GenerateContentConfig(
                                 temperature=0.7,
-                                max_output_tokens=150,
+                                max_output_tokens=300,
                             ),
                         )
                         _debug_gemini_response(
@@ -587,7 +616,7 @@ async def _analyze_live_frame(
                     contents=[prompt, *frame_parts],
                     config=types.GenerateContentConfig(
                         temperature=0.7,
-                        max_output_tokens=150,
+                        max_output_tokens=300,
                     ),
                 )
                 _debug_gemini_response("FRAME_RESPONSE", response, model_name)
@@ -605,8 +634,7 @@ async def _analyze_live_frame(
     clean, mood = _clean_live_reply(raw)
     if not clean:
         clean = (
-            "Player, I could not clearly see the cricket action. "
-            "Move the camera further back and keep your full body visible."
+            "Player, I can see part of your movement, but I need a clearer view of your full body and bat action to provide accurate coaching feedback."
         )
         mood = "correction"
     return clean, mood
