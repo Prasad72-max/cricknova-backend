@@ -841,7 +841,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       );
       final controller = CameraController(
         selected,
-        ResolutionPreset.low,
+        ResolutionPreset.high,
         enableAudio: true,
       );
       await controller.initialize().timeout(const Duration(seconds: 12));

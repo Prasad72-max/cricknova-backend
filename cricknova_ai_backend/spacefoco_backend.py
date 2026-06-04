@@ -376,7 +376,7 @@ def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]
             ok, frame = cap.read()
             if not ok or frame is None:
                 continue
-            ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
+            ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
             if ok:
                 sampled.append(encoded.tobytes())
         cap.release()
@@ -420,7 +420,7 @@ async def _analyze_live_frame(
             "If there is a mistake, sound strict, blunt, and demanding, but never use abusive slurs. "
             "If no cricket action is visible, say only what is visible and what camera setup is needed. "
             "Give exactly one complete spoken coach sentence. "
-            "When cricket action is visible, mention one good thing, one bad thing, and one immediate fix. "
+            "Only when cricket action is visible, mention one good thing, one bad thing, and one immediate fix. "
             f"Preferred style: '{spoken_name}, you are doing X well, but Y is wrong; fix Z now.' "
             "Never reply with fragments, labels, brackets, bullets, or app/status text."
         )
@@ -500,7 +500,7 @@ async def _analyze_live_frame(
                     sampled_prompt = (
                         f"These images are sampled in order from the same 10-second cricket video for {spoken_name}. "
                         f"Reply only in {coach_language}. "
-                        "Give one complete coach sentence with one good thing, one bad thing, and one immediate fix. "
+                        "If cricket action is visible, give one complete coach sentence with one good thing, one bad thing, and one immediate fix. "
                         "If cricket action is not visible, say what is visible and the camera fix. No labels, no bullets."
                     )
                     sampled_response = _vision_gemini().models.generate_content(
@@ -552,74 +552,6 @@ async def _analyze_live_frame(
         except Exception as exc:
             print(f"❌ _analyze_live_frame FAILED: {exc}")
             return ""
-
-    raw = await asyncio.to_thread(run)
-    return _clean_live_reply(raw)
-
-
-async def _analyze_live_with_mistake_engine(
-    video_bytes: bytes,
-    *,
-    coach_name: str,
-    language: str,
-    discipline: str,
-) -> tuple[str, str]:
-    def run() -> str:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            tmp.write(video_bytes)
-            video_path = tmp.name
-        try:
-            ball_positions = track_ball_positions(video_path)
-            spoken_name = _spoken_player_name(coach_name)
-            coach_language = _normalize_live_language(language)
-            is_bowling = "bowl" in (discipline or "").lower()
-
-            if ball_positions and len(ball_positions) >= 6:
-                swing = detect_swing_x(ball_positions)
-                spin_name, spin_deg = calculate_spin_real(ball_positions)
-                movement_note = (
-                    f"Ball tracking found {len(ball_positions)} positions, swing={swing}, "
-                    f"spin={spin_name}, spin_degrees={spin_deg:.1f}."
-                )
-            else:
-                movement_note = "Ball tracking was not clear, so focus on visible body mechanics and camera setup."
-
-            if is_bowling:
-                role_rules = (
-                    "Give bowling feedback: run-up rhythm, front arm, wrist, release, line, length, and follow-through."
-                )
-            else:
-                role_rules = (
-                    "Give batting feedback: stance, head position, balance, bat path, timing, footwork, and shot control."
-                )
-
-            prompt = (
-                f"Player name: {spoken_name}. Language: {coach_language}. Mode: {discipline}. "
-                f"{movement_note} {role_rules} "
-                "Write exactly one complete coach sentence in the requested language. "
-                "Use this style: name, one good thing, one bad thing, and one immediate fix. "
-                "Do not use labels, brackets, bullets, or fragments."
-            )
-            text = generate_text(
-                system_instruction="You are CrickNova Coach giving live net feedback.",
-                user_prompt=prompt,
-                max_output_tokens=90,
-                temperature=0.45,
-            )
-            if text.strip():
-                return text
-            if is_bowling:
-                return f"{spoken_name}, your rhythm is building, but release control is not clear; repeat the run-up and finish tall."
-            return f"{spoken_name}, your setup is improving, but balance is not clear; keep your head still and finish the shot."
-        except Exception as exc:
-            print(f"❌ Mistake engine live fallback failed: {exc}")
-            spoken_name = _spoken_player_name(coach_name)
-            if "bowl" in (discipline or "").lower():
-                return f"{spoken_name}, your run-up intent is good, but release shape needs control; keep the front arm strong."
-            return f"{spoken_name}, your intent is good, but your balance needs control; keep your head still through contact."
-        finally:
-            with suppress(Exception):
-                os.remove(video_path)
 
     raw = await asyncio.to_thread(run)
     return _clean_live_reply(raw)
@@ -852,12 +784,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 language=coach_language,
                                 discipline=coach_discipline,
                                 is_video=is_video,
-                            ) if not is_video else await _analyze_live_with_mistake_engine(
-                                    bytes(frame),
-                                    coach_name=coach_name,
-                                    language=coach_language,
-                                    discipline=coach_discipline,
-                                )
+                            )
                         except Exception as exc:
                             print(f"❌ Analysis loop error: {exc}")
                             reply = ""
