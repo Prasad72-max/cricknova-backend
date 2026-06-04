@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive/hive.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_gallery_saver/image_gallery_saver.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -1035,23 +1036,73 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       debugPrint(
         'CrickNova Edge sending 8-second video #$clipIndex: ${bytes.length} bytes',
       );
-      try {
-        socket.add(bytes);
-      } catch (_) {
-        socket.add(jsonEncode({
-          'type': 'video_clip',
-          'clip_index': clipIndex,
-          'data': base64Encode(bytes),
-        }));
-      }
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
       }
+      unawaited(_uploadVideoChunkForFeedback(bytes, clipIndex));
       _flushPendingCoachFeedback();
     } catch (error) {
       debugPrint('CrickNova Edge video chunk failed: $error');
     } finally {
       _chunkInFlight = false;
+    }
+  }
+
+  Future<void> _uploadVideoChunkForFeedback(
+    List<int> bytes,
+    int clipIndex,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _ending) return;
+    try {
+      final uri = Uri.parse(
+        '${ApiConfig.baseUrl}/live-nets/analyze-chunk/${user.uid}',
+      );
+      final request = http.MultipartRequest('POST', uri)
+        ..fields['name'] = widget.coachName
+        ..fields['language'] = _effectiveLanguage
+        ..fields['discipline'] = widget.discipline
+        ..fields['clip_index'] = clipIndex.toString()
+        ..files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            bytes,
+            filename: 'edge_clip_$clipIndex.mp4',
+          ),
+        );
+      final token = await user.getIdToken();
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      final streamed = await request.send().timeout(const Duration(seconds: 25));
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint(
+          'CrickNova Edge chunk feedback failed: ${response.statusCode} ${response.body}',
+        );
+        if (mounted) {
+          setState(() => _coachProcessing = false);
+        }
+        return;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return;
+      final text = _cleanCoachTranscript(decoded['text']?.toString() ?? '');
+      final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
+      if (mounted) {
+        setState(() {
+          _chunksAnalysed = clipIndex;
+          _coachProcessing = false;
+        });
+      }
+      if (text.isNotEmpty) {
+        await _showCoachFeedback(text, mood: mood);
+      }
+    } catch (error) {
+      debugPrint('CrickNova Edge chunk upload failed: $error');
+      if (mounted) {
+        setState(() => _coachProcessing = false);
+      }
     }
   }
 

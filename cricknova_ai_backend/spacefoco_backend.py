@@ -557,6 +557,35 @@ async def _analyze_live_frame(
     return _clean_live_reply(raw)
 
 
+@app.post("/live-nets/analyze-chunk/{user_id}")
+async def analyze_live_nets_chunk(
+    user_id: str,
+    file: UploadFile = File(...),
+    name: str = Form("Player"),
+    language: str = Form("English"),
+    discipline: str = Form("Batting"),
+    clip_index: int = Form(0),
+):
+    video_bytes = await file.read()
+    print(
+        f"🎬 HTTP live chunk user={user_id} clip={clip_index} "
+        f"bytes={len(video_bytes)} lang={language} discipline={discipline}"
+    )
+    reply, mood = await _analyze_live_frame(
+        video_bytes,
+        coach_name=name,
+        language=language,
+        discipline=discipline,
+        is_video=True,
+    )
+    return {
+        "status": "success" if reply else "empty",
+        "text": reply,
+        "mood": mood,
+        "clip_index": clip_index,
+    }
+
+
 async def _get_live_balance_ms(user_id: str) -> int:
     def read() -> int:
         snap = _live_doc(user_id).get()
