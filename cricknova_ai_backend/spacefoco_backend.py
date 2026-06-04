@@ -217,6 +217,22 @@ def _resolve_vision_model_name() -> str:
     return VISION_FALLBACK_MODEL
 
 
+def _vision_model_candidates() -> list[str]:
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for model in (
+        _resolve_vision_model_name(),
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+    ):
+        if model in _VISION_MODEL_WHITELIST and model not in seen:
+            seen.add(model)
+            candidates.append(model)
+    return candidates
+
+
 LIVE_MODEL_NAME = _resolve_live_model_name()
 LIVE_SYSTEM_INSTRUCTION = """Context & Role:
 You are CrickNova Elite Coach, a real professional cricket coach standing beside the player during practice.
@@ -570,8 +586,8 @@ async def _analyze_live_frame(
 ) -> tuple[str, str]:
     def run() -> str:
         prompt = _live_edge_prompt(coach_name, language, discipline)
-        model_name = _resolve_vision_model_name()
-        print(f"VIDEO_ANALYSIS_STARTED model={model_name} is_video={is_video}")
+        model_candidates = _vision_model_candidates()
+        print(f"VIDEO_ANALYSIS_STARTED models={model_candidates} is_video={is_video}")
         try:
             client = _vision_gemini()
 
@@ -592,30 +608,40 @@ async def _analyze_live_frame(
                         _text_part_for_gemini(prompt),
                     ])
 
-                    for attempt in range(2):
-                        if attempt > 0:
-                            print("GEMINI_RETRY video")
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=video_contents,
-                            config=types.GenerateContentConfig(
-                                temperature=0.7,
-                                max_output_tokens=300,
-                            ),
-                        )
-                        _debug_gemini_response(
-                            "VIDEO_ANALYSIS_RESPONSE",
-                            response,
-                            model_name,
-                        )
-                        text = _extract_usable_gemini_text(response)
-                        if text:
-                            print(f"VIDEO_ANALYSIS_SUCCESS text={text}")
-                            return text
-                    print("GEMINI_EMPTY_RESPONSE video")
+                    for model_name in model_candidates:
+                        for attempt in range(2):
+                            if attempt > 0:
+                                print(f"GEMINI_RETRY video model={model_name}")
+                            try:
+                                response = client.models.generate_content(
+                                    model=model_name,
+                                    contents=video_contents,
+                                    config=types.GenerateContentConfig(
+                                        temperature=0.7,
+                                        max_output_tokens=300,
+                                    ),
+                                )
+                            except Exception as model_exc:
+                                if _is_gemini_quota_error(model_exc):
+                                    print(
+                                        f"GEMINI_QUOTA_EXHAUSTED video model={model_name}: "
+                                        f"{model_exc}"
+                                    )
+                                    break
+                                raise
+                            _debug_gemini_response(
+                                "VIDEO_ANALYSIS_RESPONSE",
+                                response,
+                                model_name,
+                            )
+                            text = _extract_usable_gemini_text(response)
+                            if text:
+                                print(f"VIDEO_ANALYSIS_SUCCESS model={model_name} text={text}")
+                                return text
+                        print(f"GEMINI_EMPTY_RESPONSE video model={model_name}")
                 except Exception as video_exc:
                     if _is_gemini_quota_error(video_exc):
-                        print(f"GEMINI_QUOTA_EXHAUSTED video model={model_name}: {video_exc}")
+                        print(f"GEMINI_QUOTA_EXHAUSTED video: {video_exc}")
                     print(f"❌ VIDEO_ANALYSIS_FAILED: {video_exc}")
                 finally:
                     if uploaded_file is not None:
@@ -635,26 +661,37 @@ async def _analyze_live_frame(
                         _text_part_for_gemini(prompt),
                         *frame_parts,
                     ])
-                    for attempt in range(2):
-                        if attempt > 0:
-                            print("GEMINI_RETRY frames")
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=frame_contents,
-                            config=types.GenerateContentConfig(
-                                temperature=0.7,
-                                max_output_tokens=300,
-                            ),
-                        )
-                        _debug_gemini_response(
-                            "FRAME_FALLBACK_RESPONSE",
-                            response,
-                            model_name,
-                        )
-                        text = _extract_usable_gemini_text(response)
-                        if text:
-                            print(f"FRAME_FALLBACK_SUCCESS text={text}")
-                            return text
+                    for model_name in model_candidates:
+                        for attempt in range(2):
+                            if attempt > 0:
+                                print(f"GEMINI_RETRY frames model={model_name}")
+                            try:
+                                response = client.models.generate_content(
+                                    model=model_name,
+                                    contents=frame_contents,
+                                    config=types.GenerateContentConfig(
+                                        temperature=0.7,
+                                        max_output_tokens=300,
+                                    ),
+                                )
+                            except Exception as model_exc:
+                                if _is_gemini_quota_error(model_exc):
+                                    print(
+                                        f"GEMINI_QUOTA_EXHAUSTED frames model={model_name}: "
+                                        f"{model_exc}"
+                                    )
+                                    break
+                                raise
+                            _debug_gemini_response(
+                                "FRAME_FALLBACK_RESPONSE",
+                                response,
+                                model_name,
+                            )
+                            text = _extract_usable_gemini_text(response)
+                            if text:
+                                print(f"FRAME_FALLBACK_SUCCESS model={model_name} text={text}")
+                                return text
+                        print(f"GEMINI_EMPTY_RESPONSE frames model={model_name}")
                 print("GEMINI_EMPTY_RESPONSE frame_fallback")
                 return ""
 
@@ -667,27 +704,38 @@ async def _analyze_live_frame(
                 _text_part_for_gemini(prompt),
                 *frame_parts,
             ])
-            for attempt in range(2):
-                if attempt > 0:
-                    print("GEMINI_RETRY frames")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=frame_contents,
-                    config=types.GenerateContentConfig(
-                        temperature=0.7,
-                        max_output_tokens=300,
-                    ),
-                )
-                _debug_gemini_response("FRAME_RESPONSE", response, model_name)
-                text = _extract_usable_gemini_text(response)
-                if text:
-                    print(f"FRAME_FALLBACK_SUCCESS text={text}")
-                    return text
+            for model_name in model_candidates:
+                for attempt in range(2):
+                    if attempt > 0:
+                        print(f"GEMINI_RETRY frames model={model_name}")
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=frame_contents,
+                            config=types.GenerateContentConfig(
+                                temperature=0.7,
+                                max_output_tokens=300,
+                            ),
+                        )
+                    except Exception as model_exc:
+                        if _is_gemini_quota_error(model_exc):
+                            print(
+                                f"GEMINI_QUOTA_EXHAUSTED frames model={model_name}: "
+                                f"{model_exc}"
+                            )
+                            break
+                        raise
+                    _debug_gemini_response("FRAME_RESPONSE", response, model_name)
+                    text = _extract_usable_gemini_text(response)
+                    if text:
+                        print(f"FRAME_FALLBACK_SUCCESS model={model_name} text={text}")
+                        return text
+                print(f"GEMINI_EMPTY_RESPONSE frames model={model_name}")
             print("GEMINI_EMPTY_RESPONSE frames")
             return ""
         except Exception as exc:
             if _is_gemini_quota_error(exc):
-                print(f"GEMINI_QUOTA_EXHAUSTED model={model_name}: {exc}")
+                print(f"GEMINI_QUOTA_EXHAUSTED model_candidates={model_candidates}: {exc}")
             print(f"❌ _analyze_live_frame FAILED: {exc}")
             return ""
 
