@@ -907,7 +907,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(seconds: 8),
+        const Duration(seconds: 10),
         (_) => _sendVideoChunk(),
       );
 
@@ -1046,7 +1046,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
       debugPrint(
-        'CrickNova Edge sending 8-second video #$clipIndex: ${bytes.length} bytes',
+        'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
       );
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
@@ -1109,6 +1109,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       debugPrint('CrickNova Edge uploading clip #$clipIndex for feedback');
       final streamed = await request.send().timeout(const Duration(seconds: 90));
       final response = await http.Response.fromStream(streamed);
+      debugPrint(
+        'CrickNova Edge feedback response #$clipIndex: '
+        '${response.statusCode} ${response.body}',
+      );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
           'CrickNova Edge chunk feedback failed: ${response.statusCode} ${response.body}',
@@ -1117,8 +1121,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           setState(() {
             _chunksAnalysed = clipIndex;
             _coachProcessing = false;
+            _status = 'Gemini feedback failed';
           });
-          _updateCaption('Coach upload failed ${response.statusCode}. Gemini feedback not received.');
         }
         return;
       }
@@ -1128,8 +1132,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           setState(() {
             _chunksAnalysed = clipIndex;
             _coachProcessing = false;
+            _status = 'Gemini response unreadable';
           });
-          _updateCaption('Coach response was unreadable. Gemini feedback not received.');
         }
         return;
       }
@@ -1146,7 +1150,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       } else {
         debugPrint('CrickNova Edge feedback empty for clip #$clipIndex');
         if (mounted) {
-          _updateCaption('Gemini returned empty for clip $clipIndex.');
+          setState(() {
+            _status = 'Waiting for real Gemini feedback';
+          });
         }
       }
     } catch (error) {
@@ -1155,8 +1161,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         setState(() {
           _chunksAnalysed = clipIndex;
           _coachProcessing = false;
+          _status = 'Gemini upload failed';
         });
-        _updateCaption('Coach upload error. Gemini feedback not received.');
       }
     } finally {
       _feedbackUploadInFlight = false;
@@ -1781,7 +1787,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                             : _coachProcessing
                                 ? 'Coach analysing clip $_chunksSent'
                                 : _chunksSent == 0
-                                    ? 'Live: observing first 8 seconds'
+                                    ? 'Live: observing first 10 seconds'
                                     : 'Live: clips $_chunksSent, feedback $_chunksAnalysed',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1874,7 +1880,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         Expanded(
                           child: Text(
                             _chunksSent == 0
-                                ? 'CrickNova Coach is watching your first 8 seconds...'
+                                ? 'CrickNova Coach is watching your first 10 seconds...'
                                 : 'Coach is reading your movement and preparing feedback...',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,

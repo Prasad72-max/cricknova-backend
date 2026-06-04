@@ -446,9 +446,9 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   int _tabCount() {
-    // Free without live time: Home + Insights + Coach + Premium + Profile = 5
-    // Any user with live time: Home + Insights + Coach + Edge + Profile = 5
-    // Paid without live time: Home + Insights + Coach + Profile = 4
+    // Free without live time: Home + Analytics + Coach + Premium + Profile = 5
+    // Any user with live time: Home + Analytics + Coach + Edge + Profile = 5
+    // Paid without live time: Home + Analytics + Coach + Profile = 4
     return (_showPremiumTab || _showEdgeTab) ? 5 : 4;
   }
 
@@ -476,7 +476,7 @@ class _MainNavigationState extends State<MainNavigation>
 
   String _screenNameForIndex(int index) {
     if (index == 0) return 'Home';
-    if (index == 1) return 'Insights';
+    if (index == 1) return 'Analytics';
     if (index == _coachTabIndex) return 'CrickNova Coach';
     if (_showPremiumTab && index == _premiumTabIndex) return 'Premium';
     if (_showEdgeTab && index == _edgeTabIndex) return 'CrickNova Edge';
@@ -488,7 +488,7 @@ class _MainNavigationState extends State<MainNavigation>
   Widget build(BuildContext context) {
     final navItems = <_NavTabData>[
       _NavTabData(label: 'Home', icon: Icons.home_outlined, index: 0),
-      _NavTabData(label: 'Insights', icon: Icons.insights_outlined, index: 1),
+      _NavTabData(label: 'Analytics', icon: Icons.insights_outlined, index: 1),
       _NavTabData(
         label: 'Coach',
         icon: Icons.auto_awesome_outlined,

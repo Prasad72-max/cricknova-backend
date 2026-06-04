@@ -349,6 +349,26 @@ def _extract_gemini_text(response: Any) -> str:
     return ""
 
 
+def _is_usable_gemini_reply(text: str) -> bool:
+    clean = " ".join((text or "").split()).strip()
+    if not clean:
+        return False
+    if len(clean) < 35:
+        return False
+    if len(re.findall(r"\w+", clean, flags=re.UNICODE)) < 7:
+        return False
+    return True
+
+
+def _extract_usable_gemini_text(response: Any) -> str:
+    text = _extract_gemini_text(response)
+    if _is_usable_gemini_reply(text):
+        return text
+    if text:
+        print(f"GEMINI_FRAGMENT_RESPONSE text={text}")
+    return ""
+
+
 def _debug_gemini_response(label: str, response: Any, model_name: str) -> None:
     print(f"===== {label} =====")
     print(f"MODEL: {model_name}")
@@ -390,13 +410,7 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "Speak naturally exactly like a human coach.\n\n"
         "Use the player's first name often.\n\n"
         "Never speak in fragments.\n\n"
-        "Never reply with:\n"
-        "- Good shot\n"
-        "- Nice\n"
-        "- Better stance\n"
-        "- Great\n"
-        "- Excellent\n\n"
-        "without explanation.\n\n"
+        "Never reply with short generic praise or one-word feedback without explanation.\n\n"
         "Always explain WHY.\n\n"
         "Analyze this cricket training clip.\n\n"
         "Rules:\n"
@@ -407,10 +421,7 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "  1 immediate correction.\n"
         f"- Use the player's first name: {spoken_name}.\n"
         "- Be direct and realistic.\n"
-        "- Avoid generic phrases such as:\n"
-        '  "Good stance"\n'
-        '  "Nice shot"\n'
-        '  "Good balance"\n\n'
+        "- Avoid generic coaching phrases unless you explain the visible reason.\n\n"
         "Make coaching realistic.\n\n"
         f"{role_rules}\n\n"
         "Only comment on visible mechanics.\n\n"
@@ -424,9 +435,6 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "Do not sound like a commentator.\n"
         "Do not sound like a robot.\n\n"
         "Sound like a real academy coach training a player one-to-one.\n\n"
-        "Example:\n"
-        f'"{spoken_name}, your head stays steady through contact, but your front foot is closing off the shot. Open slightly and drive through the line."\n\n'
-        f'"{spoken_name}, what a classy straight drive. Your balance stayed strong through the shot, your head remained over the ball, and that is exactly why the timing looked so clean."\n\n'
         f"Training mode: {discipline}.\n"
         f"Reply language: {coach_language}.\n"
         "Return natural coaching feedback as one flowing coach line."
@@ -505,7 +513,7 @@ def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]
             if ok:
                 sampled.append(encoded.tobytes())
         cap.release()
-        print(f"🎞️ Extracted {len(sampled)} frames from 8-second video fallback")
+        print(f"🎞️ Extracted {len(sampled)} frames from live video fallback")
         return sampled
     except Exception as exc:
         print(f"❌ Video frame fallback failed: {exc}")
@@ -559,7 +567,7 @@ async def _analyze_live_frame(
                             response,
                             model_name,
                         )
-                        text = _extract_gemini_text(response)
+                        text = _extract_usable_gemini_text(response)
                         if text:
                             print(f"VIDEO_ANALYSIS_SUCCESS text={text}")
                             return text
@@ -596,7 +604,7 @@ async def _analyze_live_frame(
                             response,
                             model_name,
                         )
-                        text = _extract_gemini_text(response)
+                        text = _extract_usable_gemini_text(response)
                         if text:
                             print(f"FRAME_FALLBACK_SUCCESS text={text}")
                             return text
@@ -620,7 +628,7 @@ async def _analyze_live_frame(
                     ),
                 )
                 _debug_gemini_response("FRAME_RESPONSE", response, model_name)
-                text = _extract_gemini_text(response)
+                text = _extract_usable_gemini_text(response)
                 if text:
                     print(f"FRAME_FALLBACK_SUCCESS text={text}")
                     return text
@@ -633,10 +641,8 @@ async def _analyze_live_frame(
     raw = await asyncio.to_thread(run)
     clean, mood = _clean_live_reply(raw)
     if not clean:
-        clean = (
-            "Player, I can see part of your movement, but I need a clearer view of your full body and bat action to provide accurate coaching feedback."
-        )
-        mood = "correction"
+        print("GEMINI_NO_USABLE_REPLY returning_empty_text")
+        return "", ""
     return clean, mood
 
 
@@ -973,7 +979,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 clip_index = int(clip_index) if clip_index is not None else None
                             except (TypeError, ValueError):
                                 clip_index = None
-                            print(f"🎬 Live 8-second video #{clip_index} received: {len(clip)} bytes")
+                            print(f"🎬 Live video #{clip_index} received: {len(clip)} bytes")
                             if clip and (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = clip
                                 latest_is_video = True
@@ -986,7 +992,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 for item in raw_frames
                                 if isinstance(item, str) and item
                             ]
-                            print(f"🎞️ Live 8-second batch received: {len(frames)} frames")
+                            print(f"🎞️ Live frame batch received: {len(frames)} frames")
                             if frames and (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frames[-5:]
                                 latest_is_video = False
