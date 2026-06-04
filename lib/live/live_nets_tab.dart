@@ -966,10 +966,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
     if (decoded['type'] == 'transcript') {
       final text = decoded['text']?.toString().trim() ?? '';
+      final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
       if (text.isNotEmpty) {
         _updateCaption(text);
         await _saveMarker(text);
-        unawaited(_enqueueCoachSpeech(text));
+        unawaited(_enqueueCoachSpeech(text, mood: mood));
       }
     }
     if (decoded['type'] == 'termination') {
@@ -1003,24 +1004,58 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     await box.put(sessionId, existing);
   }
 
-  Future<void> _enqueueCoachSpeech(String text) async {
+  Future<void> _enqueueCoachSpeech(String text, {String mood = ''}) async {
     if (_ending) return;
     for (final finalChunk in _splitSpeech(text)) {
-      _coachSpeechQueue.add(finalChunk);
+      _coachSpeechQueue.add(_speechPayload(finalChunk, mood));
     }
     if (_coachSpeechActive) return;
     _coachSpeechActive = true;
     try {
       while (_coachSpeechQueue.isNotEmpty && !_ending) {
-        final next = _coachSpeechQueue.removeFirst();
+        final payload = _coachSpeechQueue.removeFirst();
+        final next = _speechText(payload);
         if (next.trim().isEmpty) continue;
         try {
+          await _applyCoachVoiceStyle(_speechMood(payload));
           await _tts.speak(next);
         } catch (_) {}
       }
     } finally {
       _coachSpeechActive = false;
     }
+  }
+
+  String _speechPayload(String text, String mood) => '$mood\t$text';
+
+  String _speechMood(String payload) {
+    final index = payload.indexOf('\t');
+    if (index <= 0) return '';
+    return payload.substring(0, index);
+  }
+
+  String _speechText(String payload) {
+    final index = payload.indexOf('\t');
+    if (index < 0) return payload;
+    return payload.substring(index + 1);
+  }
+
+  Future<void> _applyCoachVoiceStyle(String mood) async {
+    if (mood == 'praise') {
+      await _tts.setSpeechRate(0.48);
+      await _tts.setPitch(1.02);
+      await _tts.setVolume(1.0);
+      return;
+    }
+    if (mood == 'correction') {
+      await _tts.setSpeechRate(0.56);
+      await _tts.setPitch(0.82);
+      await _tts.setVolume(1.0);
+      return;
+    }
+    await _tts.setSpeechRate(0.50);
+    await _tts.setPitch(0.95);
+    await _tts.setVolume(1.0);
   }
 
   void _updateCaption(String text) {

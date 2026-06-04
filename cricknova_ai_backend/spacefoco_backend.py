@@ -295,27 +295,105 @@ def _role_prompt(role: str) -> str:
     )
 
 
+def _spoken_player_name(coach_name: str) -> str:
+    clean = " ".join((coach_name or "").strip().split())
+    if not clean or clean.lower() == "player":
+        return "Player"
+    return clean.split(" ", 1)[0][:24]
+
+
+def _normalize_live_language(language: str) -> str:
+    value = (language or "").strip().lower()
+    if "hindi" in value:
+        return "Hindi"
+    if "marathi" in value:
+        return "Marathi"
+    return "English"
+
+
+def _fallback_coach_line(
+    coach_name: str,
+    language: str,
+    discipline: str,
+    mood: str,
+) -> str:
+    name = _spoken_player_name(coach_name)
+    is_bowling = "bowl" in (discipline or "").lower()
+    lang = _normalize_live_language(language)
+    if mood == "praise":
+        if lang == "Hindi":
+            skill = "release" if is_bowling else "balance"
+            return f"{name}, {skill} strong lag raha hai; calm reh, isi rhythm ko repeat kar."
+        if lang == "Marathi":
+            skill = "release" if is_bowling else "balance"
+            return f"{name}, {skill} strong aahe; calm raha, hach rhythm repeat kar."
+        skill = "release" if is_bowling else "balance"
+        return f"{name}, that {skill} looks strong; stay calm and repeat this rhythm."
+    if lang == "Hindi":
+        flaw = "front arm gir raha hai" if is_bowling else "head jaldi gir raha hai"
+        return f"{name}, {flaw}; control kar warna next ball bhi waste hogi."
+    if lang == "Marathi":
+        flaw = "front arm padtoy" if is_bowling else "head lavkar padtoy"
+        return f"{name}, {flaw}; control kar nahi tar next ball pan waste honar."
+    flaw = "front arm is dropping" if is_bowling else "head is falling early"
+    return f"{name}, your {flaw}; fix it now or the next ball is wasted."
+
+
+def _clean_live_reply(
+    raw_text: str,
+    *,
+    coach_name: str,
+    language: str,
+    discipline: str,
+) -> tuple[str, str]:
+    text = " ".join((raw_text or "").replace("\n", " ").split()).strip()
+    mood = "correction"
+    upper = text.upper()
+    if upper.startswith("[PRAISE]"):
+        mood = "praise"
+        text = text[8:].strip()
+    elif upper.startswith("[CORRECTION]"):
+        mood = "correction"
+        text = text[12:].strip()
+
+    weak_phrases = (
+        "good",
+        "good stance",
+        "nice",
+        "well played",
+        "keep it up",
+        "good shot",
+    )
+    weak = text.lower().strip(" .!?,") in weak_phrases or len(text.split()) < 7
+    name = _spoken_player_name(coach_name)
+    if weak:
+        return _fallback_coach_line(coach_name, language, discipline, mood), mood
+    if name != "Player" and name.lower() not in text.lower():
+        text = f"{name}, {text[0].lower()}{text[1:]}" if len(text) > 1 else f"{name}, {text}"
+    return text, mood
+
+
 async def _analyze_live_frame(
     frame_bytes: bytes,
     *,
     coach_name: str = "Player",
     language: str = "English",
     discipline: str = "Batting",
-) -> str:
+) -> tuple[str, str]:
     def run() -> str:
-        spoken_name = coach_name.strip() or "Player"
+        spoken_name = _spoken_player_name(coach_name)
+        coach_language = _normalize_live_language(language)
         prompt = (
-            f"You are 'CrickNova AI', a tough, high-energy elite cricket coach watching a live training frame for the athlete named {spoken_name}. "
-            f"Your feedback must be a complete coaching line (a full sentence of 10 to 20 words), not just single words. "
-            f"Respond ONLY in {language}. "
+            f"You are CrickNova Edge, a real elite cricket coach watching ONE live camera frame for {spoken_name}. "
+            f"Respond ONLY in {coach_language}. Use {spoken_name}'s name in every line. "
             f"{_role_prompt(discipline)} "
-            "Strict Tone Rules: "
-            "1. If the player's technique/shot is GOOD: Be extremely happy, proud, and use encouraging, energetic coaching language. "
-            "2. If the player makes a MISTAKE/BAD movement: Be extremely strict, rude, harsh, and cruel. Call out the technical flaw sharply without making excuses. "
-            "IMPORTANT: You MUST always respond, even if no cricket action is visible — describe what you see and give advice. "
-            "Format Rule: Respond with exactly ONE complete punchy coaching sentence. Do not output single words, bullet points, or lists."
+            "Judge the visible frame honestly. If the action looks good, start with [PRAISE] and sound confident, proud, and calm. "
+            "If there is a mistake, start with [CORRECTION] and sound strict, blunt, and demanding, but never use abusive slurs. "
+            "Never say generic lines like good, good stance, nice, keep it up, or well played. "
+            "Name one specific visible technical point and one instant fix. "
+            "Output exactly one complete coach sentence, 12 to 22 words, no bullets, no explanation."
         )
-        print(f"🏏 Analyzing frame for {spoken_name} | lang={language} | discipline={discipline} | model={_resolve_vision_model_name()}")
+        print(f"🏏 Analyzing frame for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
         try:
             response = _vision_gemini().models.generate_content(
                 model=_resolve_vision_model_name(),
@@ -348,7 +426,13 @@ async def _analyze_live_frame(
             print(f"❌ _analyze_live_frame FAILED: {exc}")
             return ""
 
-    return await asyncio.to_thread(run)
+    raw = await asyncio.to_thread(run)
+    return _clean_live_reply(
+        raw,
+        coach_name=coach_name,
+        language=language,
+        discipline=discipline,
+    )
 
 
 async def _get_live_balance_ms(user_id: str) -> int:
@@ -566,7 +650,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                         frame = latest_frame
                         latest_frame = None
                         try:
-                            reply = await _analyze_live_frame(
+                            reply, mood = await _analyze_live_frame(
                                 frame,
                                 coach_name=coach_name,
                                 language=coach_language,
@@ -575,12 +659,14 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                         except Exception as exc:
                             print(f"❌ Analysis loop error: {exc}")
                             reply = ""
+                            mood = "correction"
                         if reply:
-                            print(f"📢 Sending transcript: {reply}")
+                            print(f"📢 Sending transcript ({mood}): {reply}")
                             await websocket.send_json(
                                 {
                                     "type": "transcript",
                                     "text": reply,
+                                    "mood": mood,
                                 }
                             )
                             last_reply_at = time.monotonic()
