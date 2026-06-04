@@ -318,25 +318,18 @@ def _fallback_coach_line(
     mood: str,
 ) -> str:
     name = _spoken_player_name(coach_name)
-    is_bowling = "bowl" in (discipline or "").lower()
     lang = _normalize_live_language(language)
     if mood == "praise":
         if lang == "Hindi":
-            skill = "release" if is_bowling else "balance"
-            return f"{name}, {skill} strong lag raha hai; calm reh, isi rhythm ko repeat kar."
+            return f"{name}, action clear nahi dikh raha; full body frame mein lao, phir main exact feedback dunga."
         if lang == "Marathi":
-            skill = "release" if is_bowling else "balance"
-            return f"{name}, {skill} strong aahe; calm raha, hach rhythm repeat kar."
-        skill = "release" if is_bowling else "balance"
-        return f"{name}, that {skill} looks strong; stay calm and repeat this rhythm."
+            return f"{name}, action clear disat nahi; full body frame madhe aan, mag exact feedback deto."
+        return f"{name}, I cannot see a clear cricket action yet; bring your full body into frame."
     if lang == "Hindi":
-        flaw = "front arm gir raha hai" if is_bowling else "head jaldi gir raha hai"
-        return f"{name}, {flaw}; control kar warna next ball bhi waste hogi."
+        return f"{name}, cricket action frame mein nahi hai; camera net, pitch, aur body par set karo."
     if lang == "Marathi":
-        flaw = "front arm padtoy" if is_bowling else "head lavkar padtoy"
-        return f"{name}, {flaw}; control kar nahi tar next ball pan waste honar."
-    flaw = "front arm is dropping" if is_bowling else "head is falling early"
-    return f"{name}, your {flaw}; fix it now or the next ball is wasted."
+        return f"{name}, cricket action frame madhe nahi; camera net, pitch, ani body var set kar."
+    return f"{name}, cricket action is not visible; set the camera on your body before I judge technique."
 
 
 def _clean_live_reply(
@@ -387,6 +380,8 @@ async def _analyze_live_frame(
             f"You are CrickNova Edge, a real elite cricket coach watching ONE live camera frame for {spoken_name}. "
             f"Respond ONLY in {coach_language}. Use {spoken_name}'s name in every line. "
             f"{_role_prompt(discipline)} "
+            "Only coach what is actually visible in the frame. Never invent a cricket mistake. "
+            "If the frame shows a laptop, code editor, room, wall, or no player/cricket action, say the action is not visible and tell the user to set the camera. "
             "Judge the visible frame honestly. If the action looks good, start with [PRAISE] and sound confident, proud, and calm. "
             "If there is a mistake, start with [CORRECTION] and sound strict, blunt, and demanding, but never use abusive slurs. "
             "Never say generic lines like good, good stance, nice, keep it up, or well played. "

@@ -621,25 +621,58 @@ class _LiveCountdown extends StatefulWidget {
 }
 
 class _LiveCountdownState extends State<_LiveCountdown> {
+  final FlutterTts _tickTts = FlutterTts();
+  Timer? _timer;
   int _count = 3;
 
   @override
   void initState() {
     super.initState();
-    Timer.periodic(const Duration(seconds: 1), (timer) {
+    unawaited(_prepareTickSound());
+    unawaited(_playTick());
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
-      SystemSound.play(SystemSoundType.click);
       if (_count == 1) {
         timer.cancel();
-        SystemSound.play(SystemSoundType.click);
         Navigator.pop(context);
       } else {
-        setState(() => _count -= 1);
+        setState(() {
+          _count -= 1;
+        });
+        unawaited(_playTick());
       }
     });
+  }
+
+  Future<void> _prepareTickSound() async {
+    try {
+      await _tickTts.setLanguage('en-IN');
+      await _tickTts.setSpeechRate(0.70);
+      await _tickTts.setPitch(1.35);
+      await _tickTts.setVolume(1.0);
+      await _tickTts.awaitSpeakCompletion(false);
+    } catch (_) {}
+  }
+
+  Future<void> _playTick() async {
+    try {
+      await SystemSound.play(SystemSoundType.click);
+      await HapticFeedback.selectionClick();
+      await _tickTts.stop();
+      await _tickTts.speak('tick');
+    } catch (_) {
+      await SystemSound.play(SystemSoundType.click);
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    unawaited(_tickTts.stop());
+    super.dispose();
   }
 
   @override
