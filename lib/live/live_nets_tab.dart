@@ -717,7 +717,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
   final Queue<String> _coachSpeechQueue = Queue<String>();
   final List<String> _captionHistory = <String>[];
-  final List<String> _pendingFrameBatch = <String>[];
+  final List<String> _recordedChunkPaths = <String>[];
   CameraController? _camera;
   WebSocket? _socket;
   Timer? _frameTimer;
@@ -729,7 +729,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   bool _ending = false;
   bool _paused = false;
   bool _streamStarted = false;
-  bool _snapshotInFlight = false;
+  bool _chunkInFlight = false;
   int _socketReconnectAttempts = 0;
   String? _connectError;
   String _status = 'Connecting';
@@ -878,8 +878,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         const Duration(seconds: 12),
       );
       _frameTimer = Timer.periodic(
-        const Duration(seconds: 1),
-        (_) => _sendSnapshot(),
+        const Duration(seconds: 5),
+        (_) => _sendVideoChunk(),
       );
 
       if (mounted) {
@@ -892,7 +892,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _socketReconnectAttempts = 0;
       _cancelConnectWatchdog();
 
-      unawaited(_sendSnapshot());
     } catch (error) {
       _cancelConnectWatchdog();
       if (localController != null) {
@@ -984,33 +983,40 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     return 'Live session could not start: $message';
   }
 
-  Future<void> _sendSnapshot() async {
+  Future<void> _sendVideoChunk() async {
     final controller = _camera;
     final socket = _socket;
     if (controller == null ||
         socket == null ||
         _ending ||
         _paused ||
-        _snapshotInFlight ||
+        _chunkInFlight ||
         !controller.value.isInitialized) {
       return;
     }
-    _snapshotInFlight = true;
-    try {
-      final file = await controller.takePicture();
-      final bytes = await file.readAsBytes();
-      _pendingFrameBatch.add(base64Encode(bytes));
-      if (_pendingFrameBatch.length >= 5) {
-        final frames = List<String>.from(_pendingFrameBatch);
-        _pendingFrameBatch.clear();
-        debugPrint('CrickNova Edge sending 5-second batch: ${frames.length}');
-        socket.add(jsonEncode({'type': 'video_batch', 'frames': frames}));
+    if (!controller.value.isRecordingVideo) {
+      try {
+        await controller.startVideoRecording();
+      } catch (error) {
+        debugPrint('CrickNova Edge chunk restart failed: $error');
       }
-      await File(file.path).delete();
+      return;
+    }
+
+    _chunkInFlight = true;
+    try {
+      final file = await controller.stopVideoRecording();
+      final bytes = await file.readAsBytes();
+      _recordedChunkPaths.add(file.path);
+      debugPrint('CrickNova Edge sending 5-second video: ${bytes.length} bytes');
+      socket.add(jsonEncode({'type': 'video_clip', 'data': base64Encode(bytes)}));
+      if (!_ending && !_paused && controller.value.isInitialized) {
+        await controller.startVideoRecording();
+      }
     } catch (error) {
-      debugPrint('CrickNova Edge snapshot failed: $error');
+      debugPrint('CrickNova Edge video chunk failed: $error');
     } finally {
-      _snapshotInFlight = false;
+      _chunkInFlight = false;
     }
   }
 
@@ -1275,7 +1281,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           _status = 'AI live';
         });
       }
-      unawaited(_sendSnapshot());
     } catch (_) {
       _scheduleSocketReconnect();
     }
@@ -1394,6 +1399,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       }
       final file = await controller.stopVideoRecording();
       tempVideoPath = file.path;
+      _recordedChunkPaths.add(file.path);
     }
     _socket?.add(jsonEncode({'type': 'stop'}));
     await _socket?.close();
@@ -1402,8 +1408,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       PremiumService.premiumNotifier.forceNotify();
     }
 
-    if (tempVideoPath != null && _recordedPath != null) {
-      await File(tempVideoPath).copy(_recordedPath!);
+    final reviewSource = _recordedChunkPaths.isNotEmpty
+        ? _recordedChunkPaths.first
+        : tempVideoPath;
+    if (reviewSource != null && _recordedPath != null) {
+      await File(reviewSource).copy(_recordedPath!);
       await ImageGallerySaver.saveFile(
         _recordedPath!,
         name: p.basename(_recordedPath!),
