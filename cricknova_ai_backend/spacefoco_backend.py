@@ -350,6 +350,47 @@ def _extract_gemini_text(response: Any) -> str:
     return ""
 
 
+def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]:
+    path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(video_bytes)
+            path = tmp.name
+
+        cap = cv2.VideoCapture(path)
+        if not cap.isOpened():
+            print("⚠️ Could not open video clip for frame fallback")
+            return []
+
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if frame_count <= 0:
+            frame_count = max_frames
+        indexes = sorted({
+            min(frame_count - 1, max(0, round(i * (frame_count - 1) / max(1, max_frames - 1))))
+            for i in range(max_frames)
+        })
+
+        sampled: list[bytes] = []
+        for index in indexes:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, index)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
+            if ok:
+                sampled.append(encoded.tobytes())
+        cap.release()
+        print(f"🎞️ Extracted {len(sampled)} frames from 5-second video fallback")
+        return sampled
+    except Exception as exc:
+        print(f"❌ Video frame fallback failed: {exc}")
+        return []
+    finally:
+        if path:
+            with suppress(Exception):
+                os.remove(path)
+
+
 async def _analyze_live_frame(
     frame_bytes: bytes | list[bytes],
     *,
@@ -440,6 +481,33 @@ async def _analyze_live_frame(
             if alternate_text:
                 print(f"✅ Gemini alternate reply: {alternate_text}")
                 return alternate_text
+
+            if is_video and frames:
+                sampled_frames = _sample_video_frames(frames[0])
+                if sampled_frames:
+                    print("⚠️ Gemini video empty, retrying with sampled frames from same video")
+                    sampled_parts = [
+                        types.Part.from_bytes(data=frame, mime_type="image/jpeg")
+                        for frame in sampled_frames
+                    ]
+                    sampled_prompt = (
+                        f"These images are sampled in order from the same 5-second cricket video for {spoken_name}. "
+                        f"Reply only in {coach_language}. "
+                        "Give one complete coach sentence with one good thing, one bad thing, and one immediate fix. "
+                        "If cricket action is not visible, say what is visible and the camera fix. No labels, no bullets."
+                    )
+                    sampled_response = _vision_gemini().models.generate_content(
+                        model=model_name,
+                        contents=[sampled_prompt, *sampled_parts],
+                        config=types.GenerateContentConfig(
+                            temperature=0.25,
+                            max_output_tokens=96,
+                        ),
+                    )
+                    sampled_text = _extract_gemini_text(sampled_response)
+                    if sampled_text:
+                        print(f"✅ Gemini sampled-video reply: {sampled_text}")
+                        return sampled_text
 
             if not is_video and len(frames) > 1:
                 print("⚠️ Gemini batch empty, trying key frames from same 5-second batch")
