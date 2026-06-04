@@ -713,6 +713,18 @@ class LiveNetsCameraScreen extends StatefulWidget {
   State<LiveNetsCameraScreen> createState() => _LiveNetsCameraScreenState();
 }
 
+class _PendingCoachFeedback {
+  const _PendingCoachFeedback({
+    required this.text,
+    required this.mood,
+    required this.clipIndex,
+  });
+
+  final String text;
+  final String mood;
+  final int clipIndex;
+}
+
 class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
   final Queue<String> _coachSpeechQueue = Queue<String>();
@@ -737,6 +749,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Timer? _socketReconnectTimer;
   bool _coachSpeechActive = false;
   Completer<void>? _ttsCompletion;
+  int _chunksSent = 0;
+  _PendingCoachFeedback? _pendingCoachFeedback;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
 
@@ -1008,11 +1022,20 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       final file = await controller.stopVideoRecording();
       final bytes = await file.readAsBytes();
       _recordedChunkPaths.add(file.path);
-      debugPrint('CrickNova Edge sending 5-second video: ${bytes.length} bytes');
-      socket.add(jsonEncode({'type': 'video_clip', 'data': base64Encode(bytes)}));
+      _chunksSent += 1;
+      final clipIndex = _chunksSent;
+      debugPrint(
+        'CrickNova Edge sending 5-second video #$clipIndex: ${bytes.length} bytes',
+      );
+      socket.add(jsonEncode({
+        'type': 'video_clip',
+        'clip_index': clipIndex,
+        'data': base64Encode(bytes),
+      }));
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
       }
+      _flushPendingCoachFeedback();
     } catch (error) {
       debugPrint('CrickNova Edge video chunk failed: $error');
     } finally {
@@ -1039,10 +1062,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (decoded['type'] == 'transcript') {
       final text = _cleanCoachTranscript(decoded['text']?.toString() ?? '');
       final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
+      final clipIndex = (decoded['clip_index'] as num?)?.toInt();
       if (text.isNotEmpty) {
-        _updateCaption(text);
-        await _saveMarker(text);
-        unawaited(_enqueueCoachSpeech(text, mood: mood));
+        if (clipIndex != null && clipIndex >= _chunksSent) {
+          _pendingCoachFeedback = _PendingCoachFeedback(
+            text: text,
+            mood: mood,
+            clipIndex: clipIndex,
+          );
+        } else {
+          await _showCoachFeedback(text, mood: mood);
+        }
       }
     }
     if (decoded['type'] == 'termination') {
@@ -1061,6 +1091,19 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
     }
+  }
+
+  Future<void> _showCoachFeedback(String text, {String mood = ''}) async {
+    _updateCaption(text);
+    await _saveMarker(text);
+    unawaited(_enqueueCoachSpeech(text, mood: mood));
+  }
+
+  void _flushPendingCoachFeedback() {
+    final pending = _pendingCoachFeedback;
+    if (pending == null || pending.clipIndex >= _chunksSent) return;
+    _pendingCoachFeedback = null;
+    unawaited(_showCoachFeedback(pending.text, mood: pending.mood));
   }
 
   String _cleanCoachTranscript(String raw) {
@@ -1335,6 +1378,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _frameTimer?.cancel();
     _frameTimer = null;
     _coachSpeechQueue.clear();
+    _pendingCoachFeedback = null;
+    _chunksSent = 0;
     await _tts.stop();
     try {
       await _socket?.close();

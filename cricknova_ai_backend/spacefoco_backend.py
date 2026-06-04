@@ -372,6 +372,7 @@ async def _analyze_live_frame(
             "If there is a mistake, sound strict, blunt, and demanding, but never use abusive slurs. "
             "If no cricket action is visible, say only what is visible and what camera setup is needed. "
             "Give exactly one complete spoken coach sentence. "
+            "When cricket action is visible, mention one good thing, one bad thing, and one immediate fix. "
             f"Preferred style: '{spoken_name}, you are doing X well, but Y is wrong; fix Z now.' "
             "Never reply with fragments, labels, brackets, bullets, or app/status text."
         )
@@ -677,6 +678,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
 
         latest_frame: bytes | list[bytes] | None = None
         latest_is_video = False
+        latest_clip_index: int | None = None
         analysis_event = asyncio.Event()
         analysis_running = False
         last_reply_at = 0.0
@@ -685,7 +687,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
         coach_discipline = "Batting"
 
         async def _analysis_loop() -> None:
-            nonlocal latest_frame, latest_is_video, analysis_running, last_reply_at
+            nonlocal latest_frame, latest_is_video, latest_clip_index, analysis_running, last_reply_at
             analysis_running = True
             print("🚀 _analysis_loop started")
             try:
@@ -696,8 +698,10 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                     while not stop.is_set() and latest_frame is not None:
                         frame = latest_frame
                         is_video = latest_is_video
+                        clip_index = latest_clip_index
                         latest_frame = None
                         latest_is_video = False
+                        latest_clip_index = None
                         try:
                             reply, mood = await _analyze_live_frame(
                                 frame,
@@ -717,6 +721,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                     "type": "transcript",
                                     "text": reply,
                                     "mood": mood,
+                                    "clip_index": clip_index,
                                 }
                             )
                             last_reply_at = time.monotonic()
@@ -728,7 +733,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                 print("🛑 _analysis_loop ended")
 
         async def _receive_frames() -> None:
-            nonlocal latest_frame, latest_is_video, coach_name, coach_language, coach_discipline
+            nonlocal latest_frame, latest_is_video, latest_clip_index, coach_name, coach_language, coach_discipline
             print("🎥 _receive_frames started")
             try:
                 while not stop.is_set():
@@ -752,13 +757,20 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             if (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frame
                                 latest_is_video = False
+                                latest_clip_index = None
                                 analysis_event.set()
                         elif kind == "video_clip":
                             clip = base64.b64decode(payload["data"])
-                            print(f"🎬 Live 5-second video received: {len(clip)} bytes")
+                            clip_index = payload.get("clip_index")
+                            try:
+                                clip_index = int(clip_index) if clip_index is not None else None
+                            except (TypeError, ValueError):
+                                clip_index = None
+                            print(f"🎬 Live 5-second video #{clip_index} received: {len(clip)} bytes")
                             if clip and (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = clip
                                 latest_is_video = True
+                                latest_clip_index = clip_index
                                 analysis_event.set()
                         elif kind == "video_batch":
                             raw_frames = payload.get("frames") or []
@@ -771,6 +783,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             if frames and (time.monotonic() - last_reply_at) >= 0.5:
                                 latest_frame = frames[-5:]
                                 latest_is_video = False
+                                latest_clip_index = None
                                 analysis_event.set()
                         elif kind == "stop":
                             stop.set()
@@ -782,6 +795,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                         if (time.monotonic() - last_reply_at) >= 0.5:
                             latest_frame = raw
                             latest_is_video = False
+                            latest_clip_index = None
                             analysis_event.set()
             except WebSocketDisconnect:
                 stop.set()
