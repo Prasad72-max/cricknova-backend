@@ -447,107 +447,7 @@ async def _analyze_live_frame(
                 print(f"✅ Gemini reply: {text}")
                 return text
 
-            retry_prompt = (
-                f"Look at this live cricket {'video clip' if is_video else 'sequence'} and answer in {coach_language}. "
-                f"Return one complete coach sentence for {spoken_name}. "
-                "If cricket technique is visible, give cricket feedback. "
-                "Use this style: name, what is good, what is wrong, and what to fix. "
-                "If not, say what is visible. No labels, no bullets, no fragments."
-            )
-            print("⚠️ Gemini returned empty response, retrying same 8-second batch once")
-            retry = _vision_gemini().models.generate_content(
-                model=model_name,
-                contents=[retry_prompt, *media_parts],
-                config=types.GenerateContentConfig(
-                    temperature=0.2,
-                    max_output_tokens=80,
-                ),
-            )
-            retry_text = _extract_gemini_text(retry)
-            if retry_text:
-                print(f"✅ Gemini retry reply: {retry_text}")
-                return retry_text
-            print("⚠️ Gemini retry empty, trying alternate content layout")
-            alternate = _vision_gemini().models.generate_content(
-                model=model_name,
-                contents=[
-                    types.Content(
-                        role="user",
-                        parts=[
-                            types.Part.from_text(text=retry_prompt),
-                            *media_parts,
-                        ],
-                    )
-                ],
-                config=types.GenerateContentConfig(
-                    temperature=0.2,
-                    max_output_tokens=80,
-                ),
-            )
-            alternate_text = _extract_gemini_text(alternate)
-            if alternate_text:
-                print(f"✅ Gemini alternate reply: {alternate_text}")
-                return alternate_text
-
-            if is_video and frames:
-                sampled_frames = _sample_video_frames(frames[0])
-                if sampled_frames:
-                    print("⚠️ Gemini video empty, retrying with sampled frames from same video")
-                    sampled_parts = [
-                        types.Part.from_bytes(data=frame, mime_type="image/jpeg")
-                        for frame in sampled_frames
-                    ]
-                    sampled_prompt = (
-                        f"These images are sampled in order from the same 8-second cricket video for {spoken_name}. "
-                        f"Reply only in {coach_language}. "
-                        "If cricket action is visible, give one complete coach sentence with one good thing, one bad thing, and one immediate fix. "
-                        "If cricket action is not visible, say what is visible and the camera fix. No labels, no bullets."
-                    )
-                    sampled_response = _vision_gemini().models.generate_content(
-                        model=model_name,
-                        contents=[sampled_prompt, *sampled_parts],
-                        config=types.GenerateContentConfig(
-                            temperature=0.25,
-                            max_output_tokens=96,
-                        ),
-                    )
-                    sampled_text = _extract_gemini_text(sampled_response)
-                    if sampled_text:
-                        print(f"✅ Gemini sampled-video reply: {sampled_text}")
-                        return sampled_text
-
-            if not is_video and len(frames) > 1:
-                print("⚠️ Gemini batch empty, trying key frames from same 8-second batch")
-                key_frames = [
-                    ("last", frames[-1]),
-                    ("middle", frames[len(frames) // 2]),
-                    ("first", frames[0]),
-                ]
-                single_prompt = (
-                    f"Analyse this key frame from a 8-second live cricket sequence for {spoken_name}. "
-                    f"Reply only in {coach_language}. "
-                    "If cricket action is visible, give one real coach feedback line. "
-                    "Use this style: name, what is good, what is wrong, and what to fix. "
-                    "If not, describe what is visible. No labels, no bullets, no fragments."
-                )
-                for label, key_frame in key_frames:
-                    key_part = types.Part.from_bytes(
-                        data=key_frame,
-                        mime_type="image/jpeg",
-                    )
-                    key_response = _vision_gemini().models.generate_content(
-                        model=model_name,
-                        contents=[key_part, single_prompt],
-                        config=types.GenerateContentConfig(
-                            temperature=0.25,
-                            max_output_tokens=80,
-                        ),
-                    )
-                    key_text = _extract_gemini_text(key_response)
-                    if key_text:
-                        print(f"✅ Gemini key-frame reply ({label}): {key_text}")
-                        return key_text
-            print("⚠️ Gemini returned empty response after retry")
+            print("⚠️ Gemini vision returned empty on first attempt")
             return ""
         except Exception as exc:
             print(f"❌ _analyze_live_frame FAILED: {exc}")
@@ -578,6 +478,23 @@ async def analyze_live_nets_chunk(
         discipline=discipline,
         is_video=True,
     )
+    if not reply:
+        print("⚠️ Vision returned empty for live chunk, asking Gemini text coach to explain visible-analysis failure")
+        try:
+            reply = generate_text(
+                system_instruction="You are CrickNova Coach.",
+                user_prompt=(
+                    f"Player name: {name}. Language: {language}. Mode: {discipline}. "
+                    "The live video chunk reached the backend, but visual analysis returned empty. "
+                    "Write one short coach line telling the player to keep training while the camera is checked. "
+                    "Do not mention backend, Gemini, server, API, or technical words."
+                ),
+                max_output_tokens=70,
+                temperature=0.35,
+            )
+            mood = ""
+        except Exception as exc:
+            print(f"❌ Text fallback failed for live chunk: {exc}")
     return {
         "status": "success" if reply else "empty",
         "text": reply,

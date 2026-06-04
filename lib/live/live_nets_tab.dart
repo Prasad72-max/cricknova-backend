@@ -726,6 +726,16 @@ class _PendingCoachFeedback {
   final int clipIndex;
 }
 
+class _PendingVideoChunk {
+  const _PendingVideoChunk({
+    required this.bytes,
+    required this.clipIndex,
+  });
+
+  final List<int> bytes;
+  final int clipIndex;
+}
+
 class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
   final Queue<String> _coachSpeechQueue = Queue<String>();
@@ -753,7 +763,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   int _chunksSent = 0;
   int _chunksAnalysed = 0;
   bool _coachProcessing = false;
+  bool _feedbackUploadInFlight = false;
   _PendingCoachFeedback? _pendingCoachFeedback;
+  _PendingVideoChunk? _queuedFeedbackChunk;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
 
@@ -1039,7 +1051,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
       }
-      unawaited(_uploadVideoChunkForFeedback(bytes, clipIndex));
+      _enqueueVideoChunkForFeedback(bytes, clipIndex);
       _flushPendingCoachFeedback();
     } catch (error) {
       debugPrint('CrickNova Edge video chunk failed: $error');
@@ -1048,13 +1060,33 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
   }
 
+  void _enqueueVideoChunkForFeedback(List<int> bytes, int clipIndex) {
+    if (_ending) return;
+    if (_feedbackUploadInFlight) {
+      _queuedFeedbackChunk = _PendingVideoChunk(
+        bytes: bytes,
+        clipIndex: clipIndex,
+      );
+      debugPrint('CrickNova Edge queued latest clip #$clipIndex for feedback');
+      return;
+    }
+    unawaited(_uploadVideoChunkForFeedback(bytes, clipIndex));
+  }
+
   Future<void> _uploadVideoChunkForFeedback(
     List<int> bytes,
     int clipIndex,
   ) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _ending) return;
+    _feedbackUploadInFlight = true;
     try {
+      if (mounted) {
+        setState(() {
+          _coachProcessing = true;
+          _status = 'Coach reading clip $clipIndex';
+        });
+      }
       final uri = Uri.parse(
         '${ApiConfig.baseUrl}/live-nets/analyze-chunk/${user.uid}',
       );
@@ -1074,19 +1106,33 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       if (token != null && token.isNotEmpty) {
         request.headers['Authorization'] = 'Bearer $token';
       }
-      final streamed = await request.send().timeout(const Duration(seconds: 25));
+      debugPrint('CrickNova Edge uploading clip #$clipIndex for feedback');
+      final streamed = await request.send().timeout(const Duration(seconds: 90));
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
           'CrickNova Edge chunk feedback failed: ${response.statusCode} ${response.body}',
         );
         if (mounted) {
-          setState(() => _coachProcessing = false);
+          setState(() {
+            _chunksAnalysed = clipIndex;
+            _coachProcessing = false;
+          });
+          _updateCaption('Coach upload failed ${response.statusCode}. Gemini feedback not received.');
         }
         return;
       }
       final decoded = jsonDecode(response.body);
-      if (decoded is! Map) return;
+      if (decoded is! Map) {
+        if (mounted) {
+          setState(() {
+            _chunksAnalysed = clipIndex;
+            _coachProcessing = false;
+          });
+          _updateCaption('Coach response was unreadable. Gemini feedback not received.');
+        }
+        return;
+      }
       final text = _cleanCoachTranscript(decoded['text']?.toString() ?? '');
       final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
       if (mounted) {
@@ -1097,11 +1143,27 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       }
       if (text.isNotEmpty) {
         await _showCoachFeedback(text, mood: mood);
+      } else {
+        debugPrint('CrickNova Edge feedback empty for clip #$clipIndex');
+        if (mounted) {
+          _updateCaption('Gemini returned empty for clip $clipIndex.');
+        }
       }
     } catch (error) {
       debugPrint('CrickNova Edge chunk upload failed: $error');
       if (mounted) {
-        setState(() => _coachProcessing = false);
+        setState(() {
+          _chunksAnalysed = clipIndex;
+          _coachProcessing = false;
+        });
+        _updateCaption('Coach upload error. Gemini feedback not received.');
+      }
+    } finally {
+      _feedbackUploadInFlight = false;
+      final queued = _queuedFeedbackChunk;
+      _queuedFeedbackChunk = null;
+      if (!_ending && queued != null) {
+        unawaited(_uploadVideoChunkForFeedback(queued.bytes, queued.clipIndex));
       }
     }
   }
@@ -1451,9 +1513,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _frameTimer = null;
     _coachSpeechQueue.clear();
     _pendingCoachFeedback = null;
+    _queuedFeedbackChunk = null;
     _chunksSent = 0;
     _chunksAnalysed = 0;
     _coachProcessing = false;
+    _feedbackUploadInFlight = false;
     await _tts.stop();
     try {
       await _socket?.close();
