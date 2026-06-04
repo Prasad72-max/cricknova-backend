@@ -600,15 +600,23 @@ async def _analyze_live_with_mistake_engine(
                 "Use this style: name, one good thing, one bad thing, and one immediate fix. "
                 "Do not use labels, brackets, bullets, or fragments."
             )
-            return generate_text(
+            text = generate_text(
                 system_instruction="You are CrickNova Coach giving live net feedback.",
                 user_prompt=prompt,
                 max_output_tokens=90,
                 temperature=0.45,
             )
+            if text.strip():
+                return text
+            if is_bowling:
+                return f"{spoken_name}, your rhythm is building, but release control is not clear; repeat the run-up and finish tall."
+            return f"{spoken_name}, your setup is improving, but balance is not clear; keep your head still and finish the shot."
         except Exception as exc:
             print(f"❌ Mistake engine live fallback failed: {exc}")
-            return ""
+            spoken_name = _spoken_player_name(coach_name)
+            if "bowl" in (discipline or "").lower():
+                return f"{spoken_name}, your run-up intent is good, but release shape needs control; keep the front arm strong."
+            return f"{spoken_name}, your intent is good, but your balance needs control; keep your head still through contact."
         finally:
             with suppress(Exception):
                 os.remove(video_path)
@@ -844,10 +852,7 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 language=coach_language,
                                 discipline=coach_discipline,
                                 is_video=is_video,
-                            )
-                            if not reply and is_video and isinstance(frame, (bytes, bytearray)):
-                                print("⚠️ Vision Gemini empty, using mistake-engine live fallback")
-                                reply, mood = await _analyze_live_with_mistake_engine(
+                            ) if not is_video else await _analyze_live_with_mistake_engine(
                                     bytes(frame),
                                     coach_name=coach_name,
                                     language=coach_language,

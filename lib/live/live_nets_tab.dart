@@ -750,6 +750,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   bool _coachSpeechActive = false;
   Completer<void>? _ttsCompletion;
   int _chunksSent = 0;
+  int _chunksAnalysed = 0;
+  bool _coachProcessing = false;
   _PendingCoachFeedback? _pendingCoachFeedback;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
@@ -1024,6 +1026,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _recordedChunkPaths.add(file.path);
       _chunksSent += 1;
       final clipIndex = _chunksSent;
+      if (mounted) {
+        setState(() {
+          _coachProcessing = true;
+          _status = 'Observing clip $clipIndex';
+        });
+      }
       debugPrint(
         'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
       );
@@ -1060,6 +1068,15 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
       final clipIndex = (decoded['clip_index'] as num?)?.toInt();
       if (text.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _chunksAnalysed = clipIndex ?? _chunksAnalysed + 1;
+            _coachProcessing = false;
+          });
+        } else {
+          _chunksAnalysed = clipIndex ?? _chunksAnalysed + 1;
+          _coachProcessing = false;
+        }
         if (clipIndex != null && clipIndex >= _chunksSent) {
           _pendingCoachFeedback = _PendingCoachFeedback(
             text: text,
@@ -1376,6 +1393,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _coachSpeechQueue.clear();
     _pendingCoachFeedback = null;
     _chunksSent = 0;
+    _chunksAnalysed = 0;
+    _coachProcessing = false;
     await _tts.stop();
     try {
       await _socket?.close();
@@ -1600,6 +1619,73 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                 ),
               ),
             ),
+          if (_connectError == null && !_ending)
+            Positioned(
+              left: 18,
+              right: 18,
+              top: 84 + MediaQuery.of(context).padding.top,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.58),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: _paused
+                            ? Colors.amberAccent
+                            : const Color(0xFFFF3B30),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_paused
+                                    ? Colors.amberAccent
+                                    : const Color(0xFFFF3B30))
+                                .withValues(alpha: 0.65),
+                            blurRadius: 10,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        _paused
+                            ? 'Paused'
+                            : _coachProcessing
+                                ? 'Coach analysing clip $_chunksSent'
+                                : _chunksSent == 0
+                                    ? 'Live: observing first 10 seconds'
+                                    : 'Live: clips $_chunksSent, feedback $_chunksAnalysed',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.graphic_eq_rounded,
+                      color: Color(0xFF00E5FF),
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Positioned(
             left: 18,
             right: 18,
@@ -1638,6 +1724,47 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                             style: const TextStyle(
                               color: Colors.white,
                               height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_latestCaption == null && _connectError == null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.62),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF00E5FF),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _chunksSent == 0
+                                ? 'CrickNova Coach is watching your first 10 seconds...'
+                                : 'Coach is reading your movement and preparing feedback...',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              height: 1.3,
                             ),
                           ),
                         ),
