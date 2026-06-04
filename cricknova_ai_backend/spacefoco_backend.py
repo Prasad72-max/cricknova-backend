@@ -350,6 +350,102 @@ def _extract_gemini_text(response: Any) -> str:
     return ""
 
 
+def _debug_gemini_response(label: str, response: Any, model_name: str) -> None:
+    print(f"===== {label} =====")
+    print(f"MODEL: {model_name}")
+    print("GEMINI RAW RESPONSE:")
+    try:
+        print(response)
+    except Exception as exc:
+        print(f"<raw response print failed: {exc}>")
+    print("TEXT:")
+    try:
+        print(getattr(response, "text", None))
+    except Exception as exc:
+        print(f"<text read failed: {exc}>")
+    print("CANDIDATES:")
+    candidates = getattr(response, "candidates", None) or []
+    print(candidates)
+    for index, candidate in enumerate(candidates):
+        print(f"CANDIDATE[{index}]: {candidate}")
+        print(f"FINISH_REASON[{index}]: {getattr(candidate, 'finish_reason', None)}")
+        print(f"SAFETY_RATINGS[{index}]: {getattr(candidate, 'safety_ratings', None)}")
+        content = getattr(candidate, "content", None)
+        if content:
+            print(f"CONTENT[{index}]: {content}")
+            print(f"PARTS[{index}]: {getattr(content, 'parts', None)}")
+    print(f"===== END {label} =====")
+
+
+def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
+    spoken_name = _spoken_player_name(coach_name)
+    coach_language = _normalize_live_language(language)
+    return (
+        "You are an elite professional cricket coach.\n\n"
+        "Analyze this cricket training clip.\n\n"
+        "Rules:\n"
+        "- Only comment on visible actions.\n"
+        "- Mention exactly:\n"
+        "  1 positive observation.\n"
+        "  1 biggest mistake.\n"
+        "  1 immediate correction.\n"
+        "- Speak naturally like a real coach.\n"
+        f"- Use the player's first name: {spoken_name}.\n"
+        "- Be direct and realistic.\n"
+        "- Avoid generic phrases such as:\n"
+        '  "Good stance"\n'
+        '  "Nice shot"\n'
+        '  "Good balance"\n\n'
+        "Example:\n"
+        f'"{spoken_name}, your head stays steady through contact, but your front foot is closing off the shot. Open slightly and drive through the line."\n\n'
+        f"Training mode: {discipline}.\n"
+        f"Reply language: {coach_language}.\n"
+        "Return exactly one coaching sentence."
+    )
+
+
+def _file_state_name(uploaded_file: Any) -> str:
+    state = getattr(uploaded_file, "state", None)
+    if state is None:
+        return ""
+    return str(getattr(state, "name", state)).upper()
+
+
+def _upload_gemini_video_file(client: Client, video_path: str) -> Any:
+    try:
+        return client.files.upload(
+            file=video_path,
+            config=types.UploadFileConfig(mime_type="video/mp4"),
+        )
+    except Exception as first_exc:
+        print(f"⚠️ Gemini file upload with config failed, retrying plain upload: {first_exc}")
+        return client.files.upload(file=video_path)
+
+
+def _wait_for_gemini_file_active(client: Client, uploaded_file: Any) -> Any:
+    name = getattr(uploaded_file, "name", None)
+    current = uploaded_file
+    for attempt in range(60):
+        state_name = _file_state_name(current)
+        print(f"VIDEO_UPLOADED state={state_name or 'UNKNOWN'} attempt={attempt}")
+        if state_name in ("ACTIVE", "FILE_STATE_ACTIVE", ""):
+            return current
+        if state_name in ("FAILED", "FILE_STATE_FAILED"):
+            raise RuntimeError(f"Gemini uploaded file failed processing: {current}")
+        time.sleep(1)
+        if name:
+            current = client.files.get(name=name)
+    raise TimeoutError("Gemini uploaded video did not become ACTIVE in time")
+
+
+def _delete_gemini_file(client: Client, uploaded_file: Any) -> None:
+    name = getattr(uploaded_file, "name", None)
+    if not name:
+        return
+    with suppress(Exception):
+        client.files.delete(name=name)
+
+
 def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]:
     path = None
     try:
@@ -400,61 +496,120 @@ async def _analyze_live_frame(
     is_video: bool = False,
 ) -> tuple[str, str]:
     def run() -> str:
-        spoken_name = _spoken_player_name(coach_name)
-        coach_language = _normalize_live_language(language)
-        original_frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
-        frames = original_frames
-        if is_video and original_frames:
-            sampled = _sample_video_frames(original_frames[0], max_frames=6)
-            if sampled:
-                frames = sampled
-                is_video = False
-                print("🎯 Using sampled frames from 8-second video for Gemini analysis")
-        media_label = "8-second video clip" if is_video else f"{len(frames)} frames from the last 8 seconds"
-        prompt = (
-            f"Analyse this {media_label} of live cricket training for {spoken_name}. "
-            f"Respond ONLY in {coach_language}. Use {spoken_name}'s name naturally when useful. "
-            f"{_role_prompt(discipline)} "
-            "Only talk about what you can actually see in the video. Do not invent a mistake or praise. "
-            "Judge the visible movement honestly. If the action looks good, sound confident, proud, and calm. "
-            "If there is a mistake, sound strict, blunt, and demanding, but never use abusive slurs. "
-            "If no cricket action is visible, say only what is visible and what camera setup is needed. "
-            "Give exactly one complete spoken coach sentence. "
-            "Only when cricket action is visible, mention one good thing, one bad thing, and one immediate fix. "
-            f"Preferred style: '{spoken_name}, you are doing X well, but Y is wrong; fix Z now.' "
-            "Never reply with fragments, labels, brackets, bullets, or app/status text."
-        )
-        print(f"🏏 Analyzing {media_label} for {spoken_name} | lang={coach_language} | discipline={discipline} | model={_resolve_vision_model_name()}")
+        prompt = _live_edge_prompt(coach_name, language, discipline)
+        model_name = _resolve_vision_model_name()
+        print(f"VIDEO_ANALYSIS_STARTED model={model_name} is_video={is_video}")
         try:
-            model_name = _resolve_vision_model_name()
-            media_parts = [
-                types.Part.from_bytes(
-                    data=frame,
-                    mime_type="video/mp4" if is_video else "image/jpeg",
-                )
+            client = _vision_gemini()
+
+            if is_video and isinstance(frame_bytes, (bytes, bytearray)):
+                video_path = None
+                uploaded_file = None
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                        tmp.write(bytes(frame_bytes))
+                        video_path = tmp.name
+                    print(f"VIDEO_RECEIVED bytes={len(frame_bytes)} path={video_path}")
+                    uploaded_file = _upload_gemini_video_file(client, video_path)
+                    print(f"VIDEO_UPLOADED file={uploaded_file}")
+                    uploaded_file = _wait_for_gemini_file_active(client, uploaded_file)
+
+                    for attempt in range(2):
+                        if attempt > 0:
+                            print("GEMINI_RETRY video")
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=[uploaded_file, prompt],
+                            config=types.GenerateContentConfig(
+                                temperature=0.7,
+                                max_output_tokens=150,
+                            ),
+                        )
+                        _debug_gemini_response(
+                            "VIDEO_ANALYSIS_RESPONSE",
+                            response,
+                            model_name,
+                        )
+                        text = _extract_gemini_text(response)
+                        if text:
+                            print(f"VIDEO_ANALYSIS_SUCCESS text={text}")
+                            return text
+                    print("GEMINI_EMPTY_RESPONSE video")
+                except Exception as video_exc:
+                    print(f"❌ VIDEO_ANALYSIS_FAILED: {video_exc}")
+                finally:
+                    if uploaded_file is not None:
+                        _delete_gemini_file(client, uploaded_file)
+                    if video_path:
+                        with suppress(Exception):
+                            os.remove(video_path)
+
+                print("FRAME_FALLBACK_STARTED")
+                frames = _sample_video_frames(bytes(frame_bytes), max_frames=8)
+                if frames:
+                    frame_parts = [
+                        types.Part.from_bytes(data=frame, mime_type="image/jpeg")
+                        for frame in frames
+                    ]
+                    for attempt in range(2):
+                        if attempt > 0:
+                            print("GEMINI_RETRY frames")
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=[prompt, *frame_parts],
+                            config=types.GenerateContentConfig(
+                                temperature=0.7,
+                                max_output_tokens=150,
+                            ),
+                        )
+                        _debug_gemini_response(
+                            "FRAME_FALLBACK_RESPONSE",
+                            response,
+                            model_name,
+                        )
+                        text = _extract_gemini_text(response)
+                        if text:
+                            print(f"FRAME_FALLBACK_SUCCESS text={text}")
+                            return text
+                print("GEMINI_EMPTY_RESPONSE frame_fallback")
+                return ""
+
+            frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
+            frame_parts = [
+                types.Part.from_bytes(data=frame, mime_type="image/jpeg")
                 for frame in frames
             ]
-            response = _vision_gemini().models.generate_content(
-                model=model_name,
-                contents=[prompt, *media_parts],
-                config=types.GenerateContentConfig(
-                    temperature=0.35,
-                    max_output_tokens=96,
-                ),
-            )
-            text = _extract_gemini_text(response)
-            if text:
-                print(f"✅ Gemini reply: {text}")
-                return text
-
-            print("⚠️ Gemini vision returned empty on first attempt")
+            for attempt in range(2):
+                if attempt > 0:
+                    print("GEMINI_RETRY frames")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[prompt, *frame_parts],
+                    config=types.GenerateContentConfig(
+                        temperature=0.7,
+                        max_output_tokens=150,
+                    ),
+                )
+                _debug_gemini_response("FRAME_RESPONSE", response, model_name)
+                text = _extract_gemini_text(response)
+                if text:
+                    print(f"FRAME_FALLBACK_SUCCESS text={text}")
+                    return text
+            print("GEMINI_EMPTY_RESPONSE frames")
             return ""
         except Exception as exc:
             print(f"❌ _analyze_live_frame FAILED: {exc}")
             return ""
 
     raw = await asyncio.to_thread(run)
-    return _clean_live_reply(raw)
+    clean, mood = _clean_live_reply(raw)
+    if not clean:
+        clean = (
+            "Player, I could not clearly see the cricket action. "
+            "Move the camera further back and keep your full body visible."
+        )
+        mood = "correction"
+    return clean, mood
 
 
 @app.post("/live-nets/analyze-chunk/{user_id}")
