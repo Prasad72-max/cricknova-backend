@@ -21,6 +21,14 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 app = FastAPI(title="CrickNova AI Backend")
 
+STRICT_POLICY_NOTICE = (
+    "🚨 Strict Policy Notice:\n"
+    "Our CrickNova AI models are highly advanced and optimized strictly for cricket analysis. "
+    "If non-cricketing videos, black screens, or unrelated content are intentionally uploaded, "
+    "your session will be instantly terminated with NO REFUND, and repeated attempts may lead "
+    "to a permanent account ban. Play fair, train hard!"
+)
+
 @app.get("/__alive")
 def alive():
     return {
@@ -371,6 +379,11 @@ def _is_usable_gemini_reply(text: str) -> bool:
     clean = " ".join((text or "").split()).strip()
     if not clean:
         return False
+    if clean.upper().replace(" ", "_") in {
+        "NO_CRICKET_ACTION",
+        "STRICT_POLICY_VIOLATION",
+    }:
+        return False
     if len(clean) < 12:
         return False
     if len(re.findall(r"\w+", clean, flags=re.UNICODE)) < 3:
@@ -382,6 +395,11 @@ def _is_usable_gemini_reply(text: str) -> bool:
 
 def _extract_usable_gemini_text(response: Any) -> str:
     text = _extract_gemini_text(response)
+    if text.strip().upper().replace(" ", "_") in {
+        "NO_CRICKET_ACTION",
+        "STRICT_POLICY_VIOLATION",
+    }:
+        return "STRICT_POLICY_VIOLATION"
     if _is_usable_gemini_reply(text):
         return text
     if text:
@@ -392,6 +410,32 @@ def _extract_usable_gemini_text(response: Any) -> str:
 def _is_gemini_quota_error(exc: Exception) -> bool:
     text = str(exc)
     return "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower()
+
+
+def _flag_policy_violation(user_id: str, reason: str, clip_index: int | None = None) -> None:
+    print(
+        f"STRICT_POLICY_VIOLATION user={user_id} clip={clip_index} reason={reason}"
+    )
+    try:
+        user_ref = _live_db().collection("users").document(user_id)
+        user_ref.collection("policy_flags").add(
+            {
+                "type": "non_cricket_edge_upload",
+                "reason": reason,
+                "clip_index": clip_index,
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "source": "cricknova_edge",
+            }
+        )
+        user_ref.set(
+            {
+                "last_policy_flag": "non_cricket_edge_upload",
+                "last_policy_flag_at": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+    except Exception as exc:
+        print(f"STRICT_POLICY_FLAG_FAILED user={user_id}: {exc}")
 
 
 def _debug_gemini_response(label: str, response: Any, model_name: str) -> None:
@@ -439,6 +483,10 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "Always explain WHY.\n\n"
         "Do not make the response revolve around one repeated body part.\n\n"
         "Analyze this cricket training clip.\n\n"
+        "Critical cricket-only policy check:\n"
+        "- If the media does not clearly show active cricket batting, bowling, or wicketkeeping action, return exactly STRICT_POLICY_VIOLATION and nothing else.\n"
+        "- Return STRICT_POLICY_VIOLATION for pets, casual walking, generic objects, blank or black screens, unrelated sports, computer/app screens, or uncertain media.\n"
+        "- If active cricket action is visible, continue with coaching.\n\n"
         "Rules:\n"
         "- Only comment on visible actions.\n"
         "- Mention exactly:\n"
@@ -624,7 +672,7 @@ async def _analyze_live_frame(
                 try:
                     if not _video_has_visible_action(bytes(frame_bytes)):
                         print("VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
-                        return ""
+                        return "STRICT_POLICY_VIOLATION"
                     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                         tmp.write(bytes(frame_bytes))
                         video_path = tmp.name
@@ -773,6 +821,8 @@ async def _analyze_live_frame(
             return ""
 
     raw = await asyncio.to_thread(run)
+    if raw == "STRICT_POLICY_VIOLATION":
+        return "", "policy_violation"
     clean, mood = _clean_live_reply(raw)
     if not clean:
         print("GEMINI_NO_USABLE_REPLY returning_empty_text")
@@ -810,6 +860,16 @@ async def analyze_live_nets_chunk(
             discipline=discipline,
             is_video=True,
         )
+        if mood == "policy_violation":
+            _flag_policy_violation(user_id, "non_cricket_or_blank_edge_clip", clip_index)
+            return {
+                "status": "policy_violation",
+                "text": STRICT_POLICY_NOTICE,
+                "mood": mood,
+                "refund_minutes": False,
+                "terminate_session": True,
+                "clip_index": clip_index,
+            }
         return {
             "status": "success" if reply else "empty",
             "text": reply,
@@ -1072,6 +1132,22 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                                 }
                             )
                             last_reply_at = time.monotonic()
+                        elif mood == "policy_violation":
+                            _flag_policy_violation(
+                                user_id,
+                                "non_cricket_or_blank_edge_socket",
+                                clip_index,
+                            )
+                            await websocket.send_json(
+                                {
+                                    "type": "policy_violation",
+                                    "text": STRICT_POLICY_NOTICE,
+                                    "refund_minutes": False,
+                                    "clip_index": clip_index,
+                                }
+                            )
+                            stop.set()
+                            return
                         if latest_frame is None:
                             break
                         await asyncio.sleep(0.5)

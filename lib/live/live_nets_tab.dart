@@ -21,6 +21,10 @@ import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
 import 'review_player_screen.dart';
 
+const String strictCricketOnlyPolicyNotice =
+    '🚨 Strict Policy Notice:\n'
+    'Our CrickNova AI models are highly advanced and optimized strictly for cricket analysis. If non-cricketing videos, black screens, or unrelated content are intentionally uploaded, your session will be instantly terminated with NO REFUND, and repeated attempts may lead to a permanent account ban. Play fair, train hard!';
+
 class LiveNetsAccessCard extends StatelessWidget {
   const LiveNetsAccessCard({super.key});
 
@@ -169,6 +173,8 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
       builder: (_) => const _MoneyCareSheet(),
     );
     if (start != true || !mounted) return;
+    final acceptedPolicy = await _showStrictPolicyNotice();
+    if (acceptedPolicy != true || !mounted) return;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -184,6 +190,54 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
           discipline: _selectedDiscipline,
         ),
       ),
+    );
+  }
+
+  Future<bool?> _showStrictPolicyNotice() {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF07111F),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(
+              color: const Color(0xFFFF3B30).withValues(alpha: 0.55),
+            ),
+          ),
+          title: const Text(
+            'Strict Cricket-Only Policy',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: const Text(
+            strictCricketOnlyPolicyNotice,
+            style: TextStyle(
+              color: Colors.white70,
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.verified_user_rounded),
+              label: const Text('I Understand'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF3B30),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -753,6 +807,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   final FlutterTts _tts = FlutterTts();
   final Queue<_PendingCoachFeedback> _coachFeedbackQueue =
       Queue<_PendingCoachFeedback>();
+  final Queue<_PendingVideoChunk> _feedbackUploadQueue =
+      Queue<_PendingVideoChunk>();
   final List<String> _captionHistory = <String>[];
   final List<String> _recordedChunkPaths = <String>[];
   CameraController? _camera;
@@ -780,7 +836,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   bool _coachProcessing = false;
   bool _feedbackUploadInFlight = false;
   _PendingCoachFeedback? _pendingCoachFeedback;
-  _PendingVideoChunk? _queuedFeedbackChunk;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
   DateTime? _currentClipStartedAt;
@@ -877,7 +932,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       final controller = CameraController(
         selected,
         ResolutionPreset.medium,
-        enableAudio: true,
+        enableAudio: false,
       );
       await controller.initialize().timeout(const Duration(seconds: 12));
       if (_ending || !mounted) {
@@ -1144,11 +1199,13 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   void _enqueueVideoChunkForFeedback(List<int> bytes, int clipIndex) {
     if (_ending) return;
     if (_feedbackUploadInFlight) {
-      _queuedFeedbackChunk = _PendingVideoChunk(
-        bytes: bytes,
-        clipIndex: clipIndex,
+      _feedbackUploadQueue.add(
+        _PendingVideoChunk(
+          bytes: bytes,
+          clipIndex: clipIndex,
+        ),
       );
-      debugPrint('CrickNova Edge queued latest clip #$clipIndex for feedback');
+      debugPrint('CrickNova Edge queued clip #$clipIndex for feedback');
       return;
     }
     unawaited(_uploadVideoChunkForFeedback(bytes, clipIndex));
@@ -1218,6 +1275,21 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         }
         return;
       }
+      if (decoded['status']?.toString() == 'no_cricket') {
+        if (mounted) {
+          setState(() {
+            _chunksAnalysed = clipIndex;
+            _coachProcessing = false;
+            _status =
+                'No cricket action detected. Point the camera at batting or bowling practice.';
+          });
+        }
+        return;
+      }
+      if (decoded['status']?.toString() == 'policy_violation') {
+        await _handleStrictPolicyViolation();
+        return;
+      }
       final text = _cleanCoachTranscript(decoded['text']?.toString() ?? '');
       final mood = decoded['mood']?.toString().trim().toLowerCase() ?? '';
       if (mounted) {
@@ -1247,8 +1319,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       }
     } finally {
       _feedbackUploadInFlight = false;
-      final queued = _queuedFeedbackChunk;
-      _queuedFeedbackChunk = null;
+      final queued = _feedbackUploadQueue.isEmpty
+          ? null
+          : _feedbackUploadQueue.removeFirst();
       if (queued != null && (!_ending || _allowFinalFeedbackDrain)) {
         unawaited(_uploadVideoChunkForFeedback(queued.bytes, queued.clipIndex));
       }
@@ -1300,6 +1373,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         }
       }
     }
+    if (decoded['type'] == 'policy_violation') {
+      await _handleStrictPolicyViolation();
+      return;
+    }
     if (decoded['type'] == 'termination') {
       await _finishFromServer(decoded['reason']?.toString());
     }
@@ -1333,6 +1410,55 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       ),
     );
     unawaited(_drainCoachFeedbackQueue());
+  }
+
+  Future<void> _handleStrictPolicyViolation() async {
+    if (!mounted) return;
+    _coachFeedbackQueue.clear();
+    _feedbackUploadQueue.clear();
+    setState(() {
+      _coachProcessing = false;
+      _status = 'Strict policy violation';
+      _latestCaption = strictCricketOnlyPolicyNotice;
+    });
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF07111F),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: const Color(0xFFFF3B30).withValues(alpha: 0.55),
+          ),
+        ),
+        title: const Text(
+          'Strict Policy Notice',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        content: const Text(
+          strictCricketOnlyPolicyNotice,
+          style: TextStyle(
+            color: Colors.white70,
+            height: 1.35,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF3B30),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Understood'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) {
+      await _goBack();
+    }
   }
 
   void _flushPendingCoachFeedback() {
@@ -1390,7 +1516,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     final deadline = DateTime.now().add(const Duration(seconds: 28));
     while (mounted &&
         DateTime.now().isBefore(deadline) &&
-        (_feedbackUploadInFlight || _queuedFeedbackChunk != null)) {
+        (_feedbackUploadInFlight || _feedbackUploadQueue.isNotEmpty)) {
       await Future<void>.delayed(const Duration(milliseconds: 250));
     }
   }
@@ -1575,11 +1701,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     _ending = true;
     SystemSound.play(SystemSoundType.click);
-    
-    // Pop the camera screen immediately so the transition is instant for the user
-    Navigator.of(context).maybePop();
 
-    // Perform cleanup asynchronously in the background so it doesn't block the UI thread
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
     unawaited(_cleanupForRetry());
   }
 
@@ -1589,8 +1714,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _frameTimer?.cancel();
     _frameTimer = null;
     _coachFeedbackQueue.clear();
+    _feedbackUploadQueue.clear();
     _pendingCoachFeedback = null;
-    _queuedFeedbackChunk = null;
     _chunksSent = 0;
     _chunksAnalysed = 0;
     _currentClipStartedAt = null;
@@ -1730,6 +1855,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     _coachFeedbackQueue.clear();
+    _feedbackUploadQueue.clear();
     unawaited(_tts.stop());
     
     final socket = _socket;
