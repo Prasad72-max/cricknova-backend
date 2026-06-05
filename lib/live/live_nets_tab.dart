@@ -190,14 +190,22 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0E1A),
-        foregroundColor: Colors.white,
-        title: const Text('CrickNova Edge'),
+    return Theme(
+      data: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0A0E1A),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF0A0E1A),
+          foregroundColor: Colors.white,
+        ),
       ),
-      body: user == null
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0E1A),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF0A0E1A),
+          foregroundColor: Colors.white,
+          title: const Text('CrickNova Edge'),
+        ),
+        body: user == null
           ? const Center(
               child: Text(
                 'Sign in to use Live Nets.',
@@ -330,6 +338,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                 );
               },
             ),
+      ),
     );
   }
 }
@@ -544,9 +553,11 @@ class _CoachControlsRow extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                   selectedColor: const Color(0xFF00E5FF),
-                  backgroundColor: Colors.white.withValues(alpha: 0.05),
+                  backgroundColor: const Color(0xFF1E293B),
                   side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.10),
+                    color: language == value
+                        ? const Color(0xFF00E5FF)
+                        : Colors.white.withValues(alpha: 0.15),
                   ),
                 ),
               )
@@ -566,9 +577,11 @@ class _CoachControlsRow extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                   selectedColor: const Color(0xFF00E5FF),
-                  backgroundColor: Colors.white.withValues(alpha: 0.05),
+                  backgroundColor: const Color(0xFF1E293B),
                   side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.10),
+                    color: discipline == value
+                        ? const Color(0xFF00E5FF)
+                        : Colors.white.withValues(alpha: 0.15),
                   ),
                 ),
               )
@@ -855,6 +868,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       final cameras = await availableCameras().timeout(
         const Duration(seconds: 10),
       );
+      if (_ending || !mounted) return;
+
       final selected = cameras.firstWhere(
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
@@ -865,6 +880,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         enableAudio: true,
       );
       await controller.initialize().timeout(const Duration(seconds: 12));
+      if (_ending || !mounted) {
+        unawaited(controller.dispose());
+        return;
+      }
       localController = controller;
       _camera = controller;
       if (mounted) {
@@ -890,6 +909,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       final socket = await WebSocket.connect(
         _liveUri(user.uid).toString(),
       ).timeout(const Duration(seconds: 15));
+      if (_ending || !mounted) {
+        unawaited(socket.close());
+        unawaited(localController.dispose());
+        _camera = null;
+        return;
+      }
       socket.listen(
         _handleSocketMessage,
         onDone: _handleSocketClosed,
@@ -913,6 +938,16 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       await controller.startVideoRecording().timeout(
         const Duration(seconds: 12),
       );
+      if (_ending || !mounted) {
+        try {
+          await controller.stopVideoRecording();
+        } catch (_) {}
+        unawaited(socket.close());
+        unawaited(controller.dispose());
+        _camera = null;
+        _socket = null;
+        return;
+      }
       _currentClipStartedAt = DateTime.now();
       _frameTimer = Timer.periodic(
         _chunkDuration,
@@ -1540,32 +1575,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     _ending = true;
     SystemSound.play(SystemSoundType.click);
-    _socketReconnectTimer?.cancel();
-    _frameTimer?.cancel();
-    _coachFeedbackQueue.clear();
-    _allowFinalFeedbackDrain = false;
-    await _tts.stop();
-
-    final controller = _camera;
-    if (controller != null) {
-      try {
-        if (controller.value.isRecordingVideo) {
-          await controller.stopVideoRecording();
-          _currentClipStartedAt = null;
-        }
-      } catch (_) {}
-    }
-
-    try {
-      _socket?.add(jsonEncode({'type': 'stop'}));
-      await _socket?.close();
-    } catch (_) {}
-
-    if (mounted) {
-      await _cleanupForRetry();
-    }
-    if (!mounted) return;
+    
+    // Pop the camera screen immediately so the transition is instant for the user
     Navigator.of(context).maybePop();
+
+    // Perform cleanup asynchronously in the background so it doesn't block the UI thread
+    unawaited(_cleanupForRetry());
   }
 
   Future<void> _cleanupForRetry() async {
@@ -1583,11 +1598,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _coachProcessing = false;
     _feedbackUploadInFlight = false;
     _allowFinalFeedbackDrain = false;
-    await _tts.stop();
-    try {
-      await _socket?.close();
-    } catch (_) {}
+    
+    unawaited(_tts.stop());
+    
+    final socket = _socket;
     _socket = null;
+    if (socket != null) {
+      try {
+        await socket.close();
+      } catch (_) {}
+    }
+    
     final controller = _camera;
     _camera = null;
     if (controller != null) {
@@ -1705,13 +1726,30 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
 
   @override
   void dispose() {
-    _connectWatchdog?.cancel();
+    _cancelConnectWatchdog();
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     _coachFeedbackQueue.clear();
-    _tts.stop();
-    _socket?.close();
-    _camera?.dispose();
+    unawaited(_tts.stop());
+    
+    final socket = _socket;
+    _socket = null;
+    if (socket != null) {
+      unawaited(socket.close());
+    }
+    
+    final controller = _camera;
+    _camera = null;
+    if (controller != null) {
+      if (controller.value.isRecordingVideo) {
+        controller
+            .stopVideoRecording()
+            .then((_) => controller.dispose())
+            .catchError((_) => controller.dispose());
+      } else {
+        controller.dispose();
+      }
+    }
     super.dispose();
   }
 
