@@ -590,6 +590,15 @@ Do not give rating/score.
 
       if (response.statusCode == 200) {
         final data = jsonDecode(body);
+        if (data is Map &&
+            data["status"]?.toString().toLowerCase() == "non_cricket") {
+          setState(() {
+            diffResult =
+                data["message"]?.toString() ??
+                "This does not look like a cricket training clip. Please upload clear cricket practice videos for accurate CrickNova analysis.";
+          });
+          return;
+        }
 
         setState(() {
           diffResult = _formatCompareReply(
@@ -871,7 +880,9 @@ Do not give rating/score.
       backgroundColor: const Color(0xFF0B0E11),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0B0E11),
-        title: Text(_isBowlingMode ? 'Bowling Analyse' : 'Cricknova Analyse Yourself'),
+        title: Text(
+          _isBowlingMode ? 'Bowling Analyse' : 'Cricknova Analyse Yourself',
+        ),
         foregroundColor: Colors.white,
       ),
       body: Stack(

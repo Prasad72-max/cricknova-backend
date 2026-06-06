@@ -41,6 +41,12 @@ EDGE_POLICY_BAN_NOTICE = (
     "All CrickNova AI and paid features are disabled until the lock expires."
 )
 
+UPLOAD_NON_CRICKET_NOTICE = (
+    "This does not look like a cricket training clip. "
+    "Please upload a clear batting, bowling, fielding, wicketkeeping, "
+    "or cricket practice video for accurate CrickNova analysis."
+)
+
 @app.get("/__alive")
 def alive():
     return {
@@ -760,6 +766,31 @@ def _classify_active_cricket_action(frames: list[bytes]) -> str:
                 continue
             print(f"CRICKET_ACTION_CLASSIFIER_FAILED model={model_name}: {exc}")
     return "unknown"
+
+
+def _classify_uploaded_cricket_video(video_path: str) -> str:
+    try:
+        with open(video_path, "rb") as video_file:
+            video_bytes = video_file.read()
+        if not _video_has_visible_action(video_bytes):
+            print("UPLOAD_VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
+            return "violation"
+        frames = _sample_video_frames(video_bytes, max_frames=6)
+        label = _classify_active_cricket_action(frames)
+        print(f"UPLOAD_CRICKET_ACTION_CLASSIFIER label={label}")
+        return label
+    except Exception as exc:
+        print(f"UPLOAD_CRICKET_ACTION_CLASSIFIER_FAILED: {exc}")
+        return "unknown"
+
+
+def _non_cricket_upload_response(source: str) -> dict[str, Any]:
+    return {
+        "status": "non_cricket",
+        "reason": "NO_CRICKET_ACTION",
+        "message": UPLOAD_NON_CRICKET_NOTICE,
+        "source": source,
+    }
 
 
 def _file_state_name(uploaded_file: Any) -> str:
@@ -1846,6 +1877,10 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
+        action_label = _classify_uploaded_cricket_video(video_path)
+        if action_label == "violation":
+            return _non_cricket_upload_response("training_analyze")
+
         ball_positions = track_ball_positions(video_path)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -1991,17 +2026,22 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     if banned is not None:
         raise HTTPException(status_code=403, detail=banned["text"])
 
-    from subscriptions_store import get_subscription, increment_mistake
-    sub = get_subscription(user_id)
-    try:
-        increment_mistake(user_id)
-    except Exception as e:
-        print("⚠️ Mistake usage bypassed for active subscriber:", e)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
 
     try:
+        action_label = _classify_uploaded_cricket_video(video_path)
+        if action_label == "violation":
+            return _non_cricket_upload_response("coach_analyze")
+
+        from subscriptions_store import get_subscription, increment_mistake
+        sub = get_subscription(user_id)
+        try:
+            increment_mistake(user_id)
+        except Exception as e:
+            print("⚠️ Mistake usage bypassed for active subscriber:", e)
+
         ball_positions = track_ball_positions(video_path)
 
         if not ball_positions or len(ball_positions) < 6:
@@ -2197,13 +2237,6 @@ async def ai_coach_diff(
     if banned is not None:
         raise HTTPException(status_code=403, detail=banned["text"])
 
-    from subscriptions_store import get_subscription, increment_compare
-    sub = get_subscription(user_id)
-    try:
-        increment_compare(user_id)
-    except Exception as e:
-        print("⚠️ Compare usage bypassed for active subscriber:", e)
-
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tmp.write(file.file.read())
@@ -2242,6 +2275,18 @@ async def ai_coach_diff(
         )
 
     try:
+        left_label = _classify_uploaded_cricket_video(left_path)
+        right_label = _classify_uploaded_cricket_video(right_path)
+        if left_label == "violation" or right_label == "violation":
+            return _non_cricket_upload_response("coach_diff")
+
+        from subscriptions_store import get_subscription, increment_compare
+        sub = get_subscription(user_id)
+        try:
+            increment_compare(user_id)
+        except Exception as e:
+            print("⚠️ Compare usage bypassed for active subscriber:", e)
+
         try:
             left_positions = track_ball_positions(left_path) or []
         except Exception:

@@ -7693,6 +7693,13 @@ class _UploadScreenState extends State<UploadScreen>
 
       if (response.statusCode != 200) throw Exception("UPLOAD_FAILED");
 
+      final decoded = jsonDecode(respStr);
+      if (decoded is Map &&
+          decoded["status"]?.toString().toLowerCase() == "non_cricket") {
+        await _handleNonCricketUploadWarning(decoded["message"]?.toString());
+        return false;
+      }
+
       await _incrementTotalVideos();
       unawaited(
         AppAnalytics.log(
@@ -7701,7 +7708,6 @@ class _UploadScreenState extends State<UploadScreen>
         ),
       );
 
-      final decoded = jsonDecode(respStr);
       final analysis = decoded["analysis"] ?? decoded;
 
       // 🔥 Cache for identical future uploads
@@ -7752,6 +7758,42 @@ class _UploadScreenState extends State<UploadScreen>
       }
       return false;
     }
+  }
+
+  Future<void> _handleNonCricketUploadWarning(String? message) async {
+    final text = (message == null || message.trim().isEmpty)
+        ? "This does not look like a cricket training clip. Please upload a clear batting, bowling, fielding, wicketkeeping, or cricket practice video for accurate CrickNova analysis."
+        : message.trim();
+    if (!mounted) return;
+    setState(() {
+      analysisLoading = false;
+      uploading = false;
+      showTrajectory = false;
+      showDRS = false;
+      drsResult = null;
+      _analysisStatusText = "Upload a cricket training clip";
+      _stopAnalysisExperience();
+    });
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF07111F),
+        title: const Text(
+          "Cricket video needed",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        content: Text(
+          text,
+          style: const TextStyle(color: Colors.white70, height: 1.35),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Upload cricket clip"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<File> _copyVideoToAnalysisStorage(File source) async {
