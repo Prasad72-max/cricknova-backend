@@ -26,8 +26,6 @@ class AICoachScreen extends StatefulWidget {
 }
 
 class _AICoachScreenState extends State<AICoachScreen> {
-  // Let users ask fuller questions; backend still keeps replies concise.
-  static const int _maxChars = 120;
   bool _redirectedToPremium = false;
 
   late Uri uri;
@@ -256,17 +254,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   Future<void> sendMessage() async {
     final raw = controller.text;
-    if (raw.characters.length > _maxChars) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Message too long. Limit is 120 characters."),
-          ),
-        );
-      }
-      return;
-    }
-
     String userMessage = raw.trim();
     if (userMessage.isEmpty) return;
 
@@ -646,7 +633,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
                           ),
                           onTap: () async {
                             await provider.openChat(session.id);
-                            if (mounted) Navigator.pop(context);
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
                           },
                         );
                       },
@@ -948,25 +936,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
                           ),
                           IconButton(
                             icon: const Icon(Icons.send, color: Colors.white),
-                            onPressed: (_charCount > _maxChars)
-                                ? null
-                                : (locked ? unlock : sendMessage),
+                            onPressed: locked ? unlock : sendMessage,
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          "${_charCount.toString()}/$_maxChars",
-                          style: TextStyle(
-                            color: _charCount > _maxChars
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFF22C55E),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
                       ),
                     ],
                   ),

@@ -24,6 +24,10 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Fire immediately on app icon tap so Render can wake while splash/onboarding
+  // routing is still preparing.
+  unawaited(BackendWarmupService.instance.wake(force: true));
+
   final startupFuture = _initializeStartup();
 
   runApp(MyApp(startupFuture: startupFuture));
@@ -33,19 +37,27 @@ Future<void> main() async {
 }
 
 Future<void> _initializeStartup() async {
-  if (Firebase.apps.isEmpty) {
-    if (kIsWeb) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } else {
-      await Firebase.initializeApp();
+  try {
+    if (Firebase.apps.isEmpty) {
+      if (kIsWeb) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } else {
+        await Firebase.initializeApp();
+      }
     }
+  } catch (error) {
+    // macOS development builds may not include a Firebase plist. Keep the
+    // local app usable instead of blocking forever on the splash screen.
+    debugPrint('Firebase startup unavailable: $error');
   }
 
-  FirebaseMessaging.onBackgroundMessage(
-    crickNovaFirebaseMessagingBackgroundHandler,
-  );
+  if (Firebase.apps.isNotEmpty) {
+    FirebaseMessaging.onBackgroundMessage(
+      crickNovaFirebaseMessagingBackgroundHandler,
+    );
+  }
 
   // Keep Hive ready before any screen tries to open chat/session boxes.
   await Hive.initFlutter();
@@ -73,8 +85,10 @@ Future<void> _warmStartup() async {
     await CrickNovaMarketingNotificationService.instance.initialize();
   } catch (_) {}
 
-  // Start background analysis checker
-  BackgroundAnalysisService.instance.start();
+  if (Firebase.apps.isNotEmpty) {
+    // Start background analysis checker only when its Firebase dependency is ready.
+    BackgroundAnalysisService.instance.start();
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -130,30 +144,34 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       PricingLocationService.bootstrap(timeout: const Duration(seconds: 5)),
     );
 
-    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
-      if (user == null) {
-        debugPrint("⚠️ AUTH: transient null ignored");
-        return;
-      }
-
-      debugPrint("🔐 AUTH: stable user uid=${user.uid}");
-      try {
-        unawaited(AppAnalytics.ensureUserTrackingDefaults());
-        if (!PremiumService.isLoaded) {
-          await PremiumService.restoreOnLaunch();
-        } else {
-          unawaited(PremiumService.refresh());
+    if (Firebase.apps.isNotEmpty) {
+      _authSub = FirebaseAuth.instance.authStateChanges().listen((user) async {
+        if (user == null) {
+          debugPrint("⚠️ AUTH: transient null ignored");
+          return;
         }
-        unawaited(
-          PlayBillingService.instance.syncEntitlementToPremiumService(),
-        );
-      } catch (e) {
-        debugPrint("❌ Premium refresh failed: $e");
-      }
-    });
+
+        debugPrint("🔐 AUTH: stable user uid=${user.uid}");
+        try {
+          unawaited(AppAnalytics.ensureUserTrackingDefaults());
+          if (!PremiumService.isLoaded) {
+            await PremiumService.restoreOnLaunch();
+          } else {
+            unawaited(PremiumService.refresh());
+          }
+          unawaited(
+            PlayBillingService.instance.syncEntitlementToPremiumService(),
+          );
+        } catch (e) {
+          debugPrint("❌ Premium refresh failed: $e");
+        }
+      });
+    }
 
     await Future<void>.delayed(const Duration(milliseconds: 600));
-    unawaited(PlayBillingService.instance.initialize());
+    if (Firebase.apps.isNotEmpty) {
+      unawaited(PlayBillingService.instance.initialize());
+    }
     unawaited(_initAppLinks());
   }
 

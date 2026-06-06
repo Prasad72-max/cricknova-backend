@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
@@ -38,8 +39,8 @@ class _SplashNavigationTarget {
 
 class _SplashScreenState extends State<SplashScreen> {
   static const String _onboardingSeenKey = 'cricknova_onboarding_seen_once';
-  static const Duration _startupTimeout = Duration(seconds: 8);
-  static const Duration _remoteCheckTimeout = Duration(seconds: 5);
+  static const Duration _startupTimeout = Duration(milliseconds: 1400);
+  static const Duration _remoteCheckTimeout = Duration(milliseconds: 900);
   bool _fadeOut = false;
   bool _networkDialogOpen = false;
 
@@ -59,7 +60,7 @@ class _SplashScreenState extends State<SplashScreen> {
     _startTaglineTyping();
     _navigationTargetFuture = _prepareNavigationTarget();
     // Keep the final brand splash polished without repeating the player logo.
-    _advanceTimer = Timer(const Duration(milliseconds: 1100), _advance);
+    _advanceTimer = Timer(const Duration(milliseconds: 650), _advance);
   }
 
   @override
@@ -93,9 +94,9 @@ class _SplashScreenState extends State<SplashScreen> {
   void _startTaglineTyping() {
     _typingTimer?.cancel();
     int i = 0;
-    _typingTimer = Timer(const Duration(milliseconds: 450), () {
+    _typingTimer = Timer(const Duration(milliseconds: 180), () {
       if (!mounted) return;
-      _typingTimer = Timer.periodic(const Duration(milliseconds: 25), (t) {
+      _typingTimer = Timer.periodic(const Duration(milliseconds: 12), (t) {
         if (!mounted) {
           t.cancel();
           return;
@@ -165,6 +166,10 @@ class _SplashScreenState extends State<SplashScreen> {
       return const _SplashNavigationTarget.online(
         LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
       );
+    }
+
+    if (Platform.isMacOS && Firebase.apps.isEmpty) {
+      return _localNavigationTarget();
     }
 
     // Desktop DNS/network permissions can be delayed independently of the
@@ -242,25 +247,40 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<_SplashNavigationTarget> _fallbackNavigationTarget() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      return await _localNavigationTarget();
+    } catch (error) {
+      debugPrint('Splash local fallback failed: $error');
+    }
+
+    return const _SplashNavigationTarget.online(
+      LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+    );
+  }
+
+  Future<_SplashNavigationTarget> _localNavigationTarget() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (Platform.isMacOS && Firebase.apps.isEmpty) {
+      return const _SplashNavigationTarget.online(
+        MainNavigation(userName: 'Player'),
+      );
+    }
+
+    if (Firebase.apps.isNotEmpty) {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         return _SplashNavigationTarget.online(
           MainNavigation(userName: user.displayName ?? 'Player'),
         );
       }
-
-      final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
-      if (!onboardingSeen) {
-        await prefs.setBool(_onboardingSeenKey, true);
-        return const _SplashNavigationTarget.online(
-          CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
-        );
-      }
-    } catch (error) {
-      debugPrint('Splash local fallback failed: $error');
     }
 
+    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
+    if (!onboardingSeen) {
+      await prefs.setBool(_onboardingSeenKey, true);
+      return const _SplashNavigationTarget.online(
+        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
+      );
+    }
     return const _SplashNavigationTarget.online(
       LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
     );
@@ -286,7 +306,7 @@ class _SplashScreenState extends State<SplashScreen> {
     try {
       final result = await InternetAddress.lookup(
         'example.com',
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(milliseconds: 700));
       return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
     } catch (_) {
       return false;

@@ -7,7 +7,6 @@ import 'package:camera/camera.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
@@ -19,11 +18,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
+import 'edge_saved_reviews_screen.dart';
 import 'review_player_screen.dart';
 
+const String edgeStartPolicyNotice =
+    'CRICKET CONTENT ONLY.\n\n'
+    'Do not start CrickNova Edge for black screens, unrelated videos, apps, or non-cricket activity.\n\n'
+    'Non-cricket content will terminate the session immediately. Used time will not be refunded. Repeated violations will lock every AI and paid feature for 27 days.';
+
 const String strictCricketOnlyPolicyNotice =
-    '🚨 Strict Policy Notice:\n'
-    'Our CrickNova AI models are highly advanced and optimized strictly for cricket analysis. If non-cricketing videos, black screens, or unrelated content are intentionally uploaded, your session will be instantly terminated with NO REFUND, and repeated attempts may lead to a permanent account ban. Play fair, train hard!';
+    'NON-CRICKET CONTENT DETECTED.\n\n'
+    'This session has been terminated immediately. No feedback will be generated, used time will not be refunded, and this violation has been recorded against your account.\n\n'
+    'Repeated violations will lock all CrickNova AI and paid features for 27 days.';
 
 class LiveNetsAccessCard extends StatelessWidget {
   const LiveNetsAccessCard({super.key});
@@ -208,11 +214,11 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
             ),
           ),
           title: const Text(
-            'Strict Cricket-Only Policy',
+            'Cricket-Only Access Warning',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
           ),
           content: const Text(
-            strictCricketOnlyPolicyNotice,
+            edgeStartPolicyNotice,
             style: TextStyle(
               color: Colors.white70,
               height: 1.35,
@@ -227,7 +233,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
             ElevatedButton.icon(
               onPressed: () => Navigator.pop(dialogContext, true),
               icon: const Icon(Icons.verified_user_rounded),
-              label: const Text('I Understand'),
+              label: const Text('Accept & Start'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF3B30),
                 foregroundColor: Colors.white,
@@ -256,6 +262,20 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
           backgroundColor: const Color(0xFF0A0E1A),
           foregroundColor: Colors.white,
           title: const Text('CrickNova Edge'),
+          actions: [
+            if (user != null)
+              IconButton(
+                tooltip: 'Saved Reviews',
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => EdgeSavedReviewsScreen(uid: user.uid),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.bookmark_rounded),
+              ),
+          ],
         ),
         body: user == null
             ? const Center(
@@ -680,15 +700,12 @@ class _LiveCountdown extends StatefulWidget {
 }
 
 class _LiveCountdownState extends State<_LiveCountdown> {
-  final FlutterTts _tickTts = FlutterTts();
   Timer? _timer;
   int _count = 3;
 
   @override
   void initState() {
     super.initState();
-    unawaited(_prepareTickSound());
-    unawaited(_playTick());
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -701,36 +718,13 @@ class _LiveCountdownState extends State<_LiveCountdown> {
         setState(() {
           _count -= 1;
         });
-        unawaited(_playTick());
       }
     });
-  }
-
-  Future<void> _prepareTickSound() async {
-    try {
-      await _tickTts.setLanguage('en-IN');
-      await _tickTts.setSpeechRate(0.70);
-      await _tickTts.setPitch(1.35);
-      await _tickTts.setVolume(1.0);
-      await _tickTts.awaitSpeakCompletion(false);
-    } catch (_) {}
-  }
-
-  Future<void> _playTick() async {
-    try {
-      await SystemSound.play(SystemSoundType.click);
-      await HapticFeedback.selectionClick();
-      await _tickTts.stop();
-      await _tickTts.speak('tick');
-    } catch (_) {
-      await SystemSound.play(SystemSoundType.click);
-    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    unawaited(_tickTts.stop());
     super.dispose();
   }
 
@@ -823,6 +817,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   int _chunksAnalysed = 0;
   bool _coachProcessing = false;
   bool _feedbackUploadInFlight = false;
+  bool _controlActionInFlight = false;
   _PendingCoachFeedback? _pendingCoachFeedback;
   String? _latestCaption;
   String _effectiveLanguage = 'English';
@@ -1134,19 +1129,18 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _recordedChunkPaths.add(file.path);
       _chunksSent += 1;
       final clipIndex = _chunksSent;
+      debugPrint(
+        'CrickNova Edge preparing 10-second video #$clipIndex: ${file.path}',
+      );
+      if (!_ending && !_paused && controller.value.isInitialized) {
+        await controller.startVideoRecording();
+        _currentClipStartedAt = DateTime.now();
+      }
       if (mounted) {
         setState(() {
           _coachProcessing = true;
           _status = 'Observing clip $clipIndex';
         });
-      }
-      debugPrint(
-        'CrickNova Edge preparing 10-second video #$clipIndex: ${file.path}',
-      );
-      if (!_ending && !_paused && controller.value.isInitialized) {
-        await Future<void>.delayed(const Duration(milliseconds: 180));
-        await controller.startVideoRecording();
-        _currentClipStartedAt = DateTime.now();
       }
       unawaited(() async {
         try {
@@ -1165,7 +1159,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       debugPrint('CrickNova Edge video chunk failed: $error');
       if (!_ending && !_paused && controller.value.isInitialized) {
         try {
-          await Future<void>.delayed(const Duration(milliseconds: 250));
           await controller.startVideoRecording();
           _currentClipStartedAt = DateTime.now();
         } catch (restartError) {
@@ -1408,7 +1401,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _feedbackUploadQueue.clear();
     setState(() {
       _coachProcessing = false;
-      _status = isBan ? 'CrickNova Edge blocked' : 'Strict policy violation';
+      _status = isBan ? 'CrickNova account locked' : 'Session terminated';
       _latestCaption = message;
     });
     await showDialog<void>(
@@ -1423,7 +1416,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           ),
         ),
         title: Text(
-          isBan ? 'CrickNova Edge Blocked' : 'Strict Policy Notice',
+          isBan ? 'CrickNova Account Locked' : 'Non-Cricket Content Detected',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w900,
@@ -1696,7 +1689,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Future<void> _goBack() async {
     if (_ending) return;
     _ending = true;
-    SystemSound.play(SystemSoundType.click);
 
     if (mounted) {
       Navigator.of(context).pop();
@@ -1748,36 +1740,54 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   Future<void> _togglePause() async {
     final controller = _camera;
     final socket = _socket;
-    if (_connecting || _ending || controller == null) return;
-
+    if (_connecting ||
+        _ending ||
+        _controlActionInFlight ||
+        controller == null) {
+      return;
+    }
+    _controlActionInFlight = true;
     final nextPaused = !_paused;
-    setState(() {
-      _paused = nextPaused;
-      _status = nextPaused ? 'Paused' : 'Live';
-    });
-
     try {
-      socket?.add(jsonEncode({'type': nextPaused ? 'pause' : 'resume'}));
-      if (controller.value.isRecordingVideo) {
-        if (nextPaused) {
-          await controller.pauseVideoRecording();
-        } else {
-          await controller.resumeVideoRecording();
-          _currentClipStartedAt = DateTime.now();
+      if (nextPaused) {
+        if (controller.value.isRecordingVideo) {
+          final file = await controller.stopVideoRecording();
+          _recordedChunkPaths.add(file.path);
+          _currentClipStartedAt = null;
         }
+      } else if (controller.value.isInitialized &&
+          !controller.value.isRecordingVideo) {
+        await controller.startVideoRecording();
+        _currentClipStartedAt = DateTime.now();
       }
-    } catch (_) {}
+      socket?.add(jsonEncode({'type': nextPaused ? 'pause' : 'resume'}));
+      if (mounted) {
+        setState(() {
+          _paused = nextPaused;
+          _status = nextPaused ? 'Paused' : 'AI live';
+        });
+      }
+    } catch (error) {
+      debugPrint('CrickNova Edge pause/resume failed: $error');
+      if (mounted) {
+        setState(() {
+          _status = nextPaused ? 'Could not pause' : 'Could not resume';
+        });
+      }
+    } finally {
+      _controlActionInFlight = false;
+    }
   }
 
   Future<void> _endSession({
     bool navigateToReview = true,
     String? serverReason,
   }) async {
-    if (_ending) return;
+    if (_ending || _controlActionInFlight) return;
     final user = FirebaseAuth.instance.currentUser;
+    _controlActionInFlight = true;
     _ending = true;
     _allowFinalFeedbackDrain = true;
-    SystemSound.play(SystemSoundType.click);
     _socketReconnectTimer?.cancel();
     _frameTimer?.cancel();
     if (mounted) {
@@ -1788,22 +1798,27 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
 
     final controller = _camera;
     String? tempVideoPath;
-    if (controller != null && controller.value.isRecordingVideo) {
-      if (_paused) {
-        try {
-          await controller.resumeVideoRecording();
-          _currentClipStartedAt = DateTime.now();
-        } catch (_) {}
+    if (controller != null) {
+      try {
+        if (controller.value.isRecordingVideo) {
+          final file = await controller.stopVideoRecording();
+          tempVideoPath = file.path;
+          _recordedChunkPaths.add(file.path);
+        }
+      } catch (error) {
+        debugPrint('CrickNova Edge final recording stop failed: $error');
       }
-      final file = await controller.stopVideoRecording();
-      tempVideoPath = file.path;
-      _recordedChunkPaths.add(file.path);
     }
-    _socket?.add(jsonEncode({'type': 'stop'}));
-    await _socket?.close();
-    await _waitForPendingFeedbackUploads();
-    await _drainCoachFeedbackQueue(allowWhileEnding: true);
+    try {
+      _socket?.add(jsonEncode({'type': 'stop'}));
+      await _socket?.close().timeout(const Duration(seconds: 2));
+    } catch (_) {}
+    await _waitForPendingFeedbackUploads().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {},
+    );
     await _tts.stop();
+    _coachFeedbackQueue.clear();
     _allowFinalFeedbackDrain = false;
     if (user != null) {
       await PremiumService.refreshLiveEdgeBalance(uid: user.uid);
@@ -1814,11 +1829,15 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         ? _recordedChunkPaths.first
         : tempVideoPath;
     if (reviewSource != null && _recordedPath != null) {
-      await File(reviewSource).copy(_recordedPath!);
-      await ImageGallerySaver.saveFile(
-        _recordedPath!,
-        name: p.basename(_recordedPath!),
-      );
+      try {
+        await File(reviewSource).copy(_recordedPath!);
+        await ImageGallerySaver.saveFile(
+          _recordedPath!,
+          name: p.basename(_recordedPath!),
+        );
+      } catch (error) {
+        debugPrint('CrickNova Edge automatic save failed: $error');
+      }
     }
 
     if (!mounted) return;
@@ -1828,6 +1847,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           builder: (_) => ReviewPlayerScreen(
             videoPath: _recordedPath ?? '',
             sessionId: _sessionId ?? '',
+            sourceLanguage: _effectiveLanguage,
           ),
         ),
       );
@@ -1838,6 +1858,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (!mounted) return;
     setState(() {
       _ending = false;
+      _controlActionInFlight = false;
       _connectError = serverReason?.isNotEmpty == true
           ? serverReason
           : 'Live session stopped before it could fully start.';
@@ -2182,7 +2203,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: _connecting ? null : _togglePause,
+                    onPressed: _connecting || _controlActionInFlight
+                        ? null
+                        : _togglePause,
                     icon: Icon(
                       _paused
                           ? Icons.play_circle_outline_rounded
@@ -2199,7 +2222,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _connecting ? null : _endSession,
+                    onPressed: _connecting || _controlActionInFlight
+                        ? null
+                        : _endSession,
                     icon: const Icon(Icons.stop_circle_outlined),
                     label: const Text('End & Save'),
                     style: ElevatedButton.styleFrom(

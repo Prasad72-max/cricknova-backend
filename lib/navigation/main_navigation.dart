@@ -619,23 +619,30 @@ class _MainNavigationState extends State<MainNavigation>
               else
                 Icon(item.icon, color: color, size: isActive ? 22 : 20),
 
-              const SizedBox(height: 3),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    item.label,
-                    maxLines: 1,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 11,
-                      fontWeight: item.isPremium || item.isEdge
-                          ? FontWeight.w800
-                          : isActive
-                          ? FontWeight.w700
-                          : FontWeight.w500,
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                height: isActive ? 16 : 0,
+                margin: EdgeInsets.only(top: isActive ? 3 : 0),
+                child: ClipRect(
+                  child: Align(
+                    heightFactor: isActive ? 1 : 0,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          item.label,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: item.isPremium || item.isEdge
+                                ? FontWeight.w800
+                                : FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

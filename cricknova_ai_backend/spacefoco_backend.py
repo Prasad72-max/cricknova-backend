@@ -22,24 +22,23 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 app = FastAPI(title="CrickNova AI Backend")
 
 STRICT_POLICY_NOTICE = (
-    "🚨 Strict Policy Notice:\n"
-    "Our CrickNova AI models are highly advanced and optimized strictly for cricket analysis. "
-    "If non-cricketing videos, black screens, or unrelated content are intentionally uploaded, "
-    "your session will be instantly terminated with NO REFUND, and repeated attempts may lead "
-    "to a permanent account ban. Play fair, train hard!"
+    "NON-CRICKET CONTENT DETECTED.\n\n"
+    "This session has been terminated immediately. No feedback will be generated, "
+    "used time will not be refunded, and this violation has been recorded against your account.\n\n"
+    "Repeated violations will lock all CrickNova AI and paid features for 27 days."
 )
 
 FINAL_POLICY_WARNING_NOTICE = (
-    "🚨 Final Policy Warning:\n"
-    "This is not a cricket-related clip. CrickNova Edge is only for cricket analysis. "
-    "You now have only 3 final chances. If non-cricket videos continue until 10 violations, "
-    "your account will be blocked for 27 days."
+    "FINAL WARNING: NON-CRICKET CONTENT DETECTED.\n\n"
+    "This session has been terminated with no refund and another violation has been recorded. "
+    "Continue uploading non-cricket content and every CrickNova AI and paid feature "
+    "will be locked for 27 days."
 )
 
 EDGE_POLICY_BAN_NOTICE = (
-    "🚫 Account Temporarily Blocked:\n"
-    "Too many non-cricket videos were uploaded to CrickNova Edge. "
-    "Your CrickNova Edge access is blocked for 27 days."
+    "ACCOUNT LOCKED FOR 27 DAYS.\n\n"
+    "Repeated non-cricket uploads triggered an account restriction. "
+    "All CrickNova AI and paid features are disabled until the lock expires."
 )
 
 @app.get("/__alive")

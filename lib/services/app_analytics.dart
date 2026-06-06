@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 
 class AppAnalytics {
@@ -20,7 +21,9 @@ class AppAnalytics {
     } catch (error) {
       debugPrint('Analytics event failed: $name -> $error');
     }
-    unawaited(_writeActivityEvent(name, parameters: parameters));
+    if (Firebase.apps.isNotEmpty) {
+      unawaited(_writeActivityEvent(name, parameters: parameters));
+    }
   }
 
   static Future<void> logScreenOpen(
