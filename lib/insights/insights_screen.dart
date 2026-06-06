@@ -305,22 +305,6 @@ class _InsightsScreenState extends State<InsightsScreen>
         .clamp(0, 100);
   }
 
-  int _longestConsistencyStreak() {
-    var best = 0;
-    var current = 0;
-    for (final session in sessions) {
-      for (final score in _deriveAccuracyScores(session)) {
-        if (score >= 85) {
-          current++;
-          best = math.max(best, current);
-        } else {
-          current = 0;
-        }
-      }
-    }
-    return best;
-  }
-
   List<String> _buildInsightLines(List<double> speeds, double accuracy) {
     if (speeds.isEmpty) {
       return const [
@@ -344,15 +328,6 @@ class _InsightsScreenState extends State<InsightsScreen>
         ? "Accuracy remained stable throughout the session."
         : "Accuracy has room to tighten as pace increases.";
     return [recoveryText, finishText, accuracyText];
-  }
-
-  String _sessionDurationLabel() {
-    if (speedHistory.isEmpty) return "--";
-    final seconds = math.max(45, speedHistory.length * 28);
-    final minutes = seconds ~/ 60;
-    final remaining = seconds % 60;
-    if (minutes == 0) return "${remaining}s";
-    return "${minutes}m ${remaining}s";
   }
 
   Future<void> _showDeleteOptions() async {
@@ -504,11 +479,6 @@ class _InsightsScreenState extends State<InsightsScreen>
     );
     final allSpeeds = _allSpeeds;
     final fastestEver = _topSpeed(allSpeeds);
-    final bestAccuracyEver = sessions.isEmpty
-        ? 0.0
-        : sessions
-              .map(_avgAccuracyPercent)
-              .fold<double>(0, (best, value) => math.max(best, value));
     final hasPersonalBest =
         speedHistory.isNotEmpty && fastestEver > 0 && topSpeed >= fastestEver;
     final canGenerateCertificate =
@@ -622,27 +592,6 @@ class _InsightsScreenState extends State<InsightsScreen>
               _Entrance(
                 controller: _entranceController,
                 order: 4,
-                child: _SessionDetailsCard(
-                  date: DateTime.now(),
-                  duration: _sessionDurationLabel(),
-                  ballsTracked: speedHistory.length,
-                  trainingType: "Bowling Analytics",
-                ),
-              ),
-              const SizedBox(height: 16),
-              _Entrance(
-                controller: _entranceController,
-                order: 5,
-                child: _PersonalRecordsCard(
-                  fastestBall: fastestEver,
-                  bestAccuracy: bestAccuracyEver,
-                  longestStreak: _longestConsistencyStreak(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              _Entrance(
-                controller: _entranceController,
-                order: 6,
                 child: _GoalTrackerCard(
                   speed: topSpeed,
                   target: 140,
@@ -652,7 +601,7 @@ class _InsightsScreenState extends State<InsightsScreen>
               const SizedBox(height: 16),
               _Entrance(
                 controller: _entranceController,
-                order: 7,
+                order: 5,
                 child: _AchievementsCard(
                   topSpeed: topSpeed,
                   accuracy: avgAccuracy,
@@ -1290,146 +1239,6 @@ class _EmptyAnalyticsState extends StatelessWidget {
       child: Text(
         message,
         style: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
-      ),
-    );
-  }
-}
-
-class _SessionDetailsCard extends StatelessWidget {
-  const _SessionDetailsCard({
-    required this.date,
-    required this.duration,
-    required this.ballsTracked,
-    required this.trainingType,
-  });
-
-  final DateTime date;
-  final String duration;
-  final int ballsTracked;
-  final String trainingType;
-
-  @override
-  Widget build(BuildContext context) {
-    final dateLabel =
-        "${date.day.toString().padLeft(2, '0')}/"
-        "${date.month.toString().padLeft(2, '0')}/${date.year}";
-    return _InfoGridCard(
-      title: "Session Details",
-      items: [
-        ("Session Date", dateLabel),
-        ("Duration", duration),
-        ("Balls Tracked", ballsTracked == 0 ? "--" : "$ballsTracked"),
-        ("Training Type", trainingType),
-      ],
-    );
-  }
-}
-
-class _PersonalRecordsCard extends StatelessWidget {
-  const _PersonalRecordsCard({
-    required this.fastestBall,
-    required this.bestAccuracy,
-    required this.longestStreak,
-  });
-
-  final double fastestBall;
-  final double bestAccuracy;
-  final int longestStreak;
-
-  @override
-  Widget build(BuildContext context) {
-    return _InfoGridCard(
-      title: "Personal Records",
-      gold: true,
-      items: [
-        (
-          "Fastest Ball Ever",
-          fastestBall == 0 ? "--" : "${fastestBall.toStringAsFixed(1)} km/h",
-        ),
-        (
-          "Best Accuracy Ever",
-          bestAccuracy == 0 ? "--" : "${bestAccuracy.toStringAsFixed(0)}%",
-        ),
-        (
-          "Longest Consistency Streak",
-          longestStreak == 0 ? "--" : "$longestStreak balls",
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoGridCard extends StatelessWidget {
-  const _InfoGridCard({
-    required this.title,
-    required this.items,
-    this.gold = false,
-  });
-
-  final String title;
-  final List<(String, String)> items;
-  final bool gold;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = gold ? const Color(0xFFFFD166) : const Color(0xFF22D3EE);
-    return _GlassCard(
-      borderColor: accent.withValues(alpha: 0.35),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            runSpacing: 12,
-            spacing: 12,
-            children: [
-              for (final item in items)
-                SizedBox(
-                  width: MediaQuery.sizeOf(context).width > 420
-                      ? (MediaQuery.sizeOf(context).width - 76) / 2
-                      : double.infinity,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.$1,
-                          style: GoogleFonts.poppins(
-                            color: Colors.white54,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          item.$2,
-                          style: GoogleFonts.poppins(
-                            color: accent,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
       ),
     );
   }

@@ -1,7 +1,8 @@
-platform :osx, '10.15'
+platform :osx, '11.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+require 'fileutils'
 
 project 'Runner', {
   'Debug' => :debug,
@@ -32,6 +33,27 @@ target 'Runner' do
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
     inherit! :search_paths
+  end
+end
+
+pre_install do |_installer|
+  grpc_privacy_manifest = File.join(
+    File.dirname(File.realpath(__FILE__)),
+    'Pods',
+    'gRPC-C++',
+    'src',
+    'objective-c',
+    'PrivacyInfo.xcprivacy'
+  )
+  unless File.exist?(grpc_privacy_manifest)
+    FileUtils.mkdir_p(File.dirname(grpc_privacy_manifest))
+    File.write(grpc_privacy_manifest, <<~PLIST)
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict/>
+      </plist>
+    PLIST
   end
 end
 

@@ -38,6 +38,8 @@ class _SplashNavigationTarget {
 
 class _SplashScreenState extends State<SplashScreen> {
   static const String _onboardingSeenKey = 'cricknova_onboarding_seen_once';
+  static const Duration _startupTimeout = Duration(seconds: 8);
+  static const Duration _remoteCheckTimeout = Duration(seconds: 5);
   bool _fadeOut = false;
   bool _networkDialogOpen = false;
 
@@ -114,8 +116,13 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     if (_fadeOut) return;
 
-    final target = await (_navigationTargetFuture ??=
-        _prepareNavigationTarget());
+    late final _SplashNavigationTarget target;
+    try {
+      target = await (_navigationTargetFuture ??= _prepareNavigationTarget());
+    } catch (error, stackTrace) {
+      debugPrint('Splash navigation fallback: $error\n$stackTrace');
+      target = await _fallbackNavigationTarget();
+    }
     if (!mounted) return;
     if (!target.hasInternet || target.destination == null) {
       await _showNetworkErrorDialog();
@@ -137,7 +144,12 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<_SplashNavigationTarget> _prepareNavigationTarget() async {
-    await widget.startupFuture;
+    try {
+      await widget.startupFuture.timeout(_startupTimeout);
+    } catch (error) {
+      // Startup services must never leave the visible splash blocked forever.
+      debugPrint('Splash startup continued after error/timeout: $error');
+    }
 
     if (kIsWeb) {
       final user = FirebaseAuth.instance.currentUser;
@@ -155,9 +167,13 @@ class _SplashScreenState extends State<SplashScreen> {
       );
     }
 
-    final hasInternet = await _hasInternetConnection();
-    if (!hasInternet) {
-      return const _SplashNavigationTarget.offline();
+    // Desktop DNS/network permissions can be delayed independently of the
+    // actual Firebase connection, so do not gate macOS startup on a DNS probe.
+    if (!Platform.isMacOS) {
+      final hasInternet = await _hasInternetConnection();
+      if (!hasInternet) {
+        return const _SplashNavigationTarget.offline();
+      }
     }
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
@@ -183,12 +199,12 @@ class _SplashScreenState extends State<SplashScreen> {
       if (firestoreExists) {
         // Case 1 — returning user
         try {
-          await PremiumService.ensureFreshState();
+          await PremiumService.ensureFreshState().timeout(_remoteCheckTimeout);
         } catch (_) {}
         try {
           await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(
             user.uid,
-          );
+          ).timeout(_remoteCheckTimeout);
         } catch (_) {}
         return _SplashNavigationTarget.online(
           MainNavigation(userName: userName),
@@ -224,12 +240,39 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 
+  Future<_SplashNavigationTarget> _fallbackNavigationTarget() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        return _SplashNavigationTarget.online(
+          MainNavigation(userName: user.displayName ?? 'Player'),
+        );
+      }
+
+      final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
+      if (!onboardingSeen) {
+        await prefs.setBool(_onboardingSeenKey, true);
+        return const _SplashNavigationTarget.online(
+          CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
+        );
+      }
+    } catch (error) {
+      debugPrint('Splash local fallback failed: $error');
+    }
+
+    return const _SplashNavigationTarget.online(
+      LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+    );
+  }
+
   Future<bool> _firestoreUserExists(String uid) async {
     try {
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .get(const GetOptions(source: Source.serverAndCache));
+          .get(const GetOptions(source: Source.serverAndCache))
+          .timeout(_remoteCheckTimeout);
       return snap.exists;
     } catch (_) {
       return false;

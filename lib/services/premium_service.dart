@@ -48,11 +48,14 @@ class PremiumService {
   static DateTime? trialRevokeAt;
   static SubscriptionAccessState accessState = SubscriptionAccessState.unknown;
   static String billingState = "UNKNOWN";
+  static bool isAccountBanned = false;
+  static DateTime? bannedUntil;
+  static String? banReason;
 
   /// 🔐 Premium validity = premium flag only
   /// Limits are enforced strictly by backend
   static bool get isPremiumActive {
-    return isPremium && !isAccountOnHold;
+    return isPremium && !isAccountOnHold && !isAccountBanned;
   }
 
   static bool get isInGracePeriod =>
@@ -89,6 +92,7 @@ class PremiumService {
   static int liveMillisecondsRemaining = 0;
 
   static bool get hasCrickNovaEdgeAccess => liveMillisecondsRemaining > 0;
+  static bool get hasAnyPaidOrAiAccess => !isAccountBanned && !isAccountOnHold;
 
   // Init guard
   static bool isLoaded = false;
@@ -123,6 +127,9 @@ class PremiumService {
     DateTime? graceUntil,
     DateTime? holdUntil,
     DateTime? trialRevokeAt,
+    bool isAccountBanned,
+    DateTime? bannedUntil,
+    String? banReason,
     bool justExpired,
     SubscriptionAccessState accessState,
     String billingState,
@@ -143,6 +150,9 @@ class PremiumService {
       graceUntil: graceUntil,
       holdUntil: holdUntil,
       trialRevokeAt: trialRevokeAt,
+      isAccountBanned: isAccountBanned,
+      bannedUntil: bannedUntil,
+      banReason: banReason,
       justExpired: justExpired,
       accessState: accessState,
       billingState: billingState,
@@ -165,6 +175,23 @@ class PremiumService {
     compareUsed = 0;
     _usageDirty = false;
     _lastLocalUsageUpdate = null;
+  }
+
+  static void _applyBanState({
+    required bool banned,
+    DateTime? until,
+    String? reason,
+  }) {
+    isAccountBanned = banned;
+    bannedUntil = until;
+    banReason = reason;
+    if (banned) {
+      isPremium = false;
+      accessState = SubscriptionAccessState.accountHold;
+      billingState = "BANNED";
+      liveMillisecondsRemaining = 0;
+      _resetUsageState();
+    }
   }
 
   static int _intField(Map<String, dynamic> data, List<String> keys) {
@@ -196,11 +223,43 @@ class PremiumService {
         "live_seconds_remaining",
         "liveSecondsRemaining",
       ]);
-      liveMillisecondsRemaining = milliseconds > 0
-          ? milliseconds
-          : seconds * 1000;
+      if (isAccountBanned) {
+        liveMillisecondsRemaining = 0;
+        return;
+      }
+      liveMillisecondsRemaining = milliseconds > 0 ? milliseconds : seconds * 1000;
     } catch (_) {
       // Keep the last known value; this only drives navigation/display.
+    }
+  }
+
+  static Future<void> _refreshBanState(String uid) async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(uid)
+          .get(const GetOptions(source: Source.server));
+      final data = doc.data() ?? const <String, dynamic>{};
+      final bool banned = data["edge_policy_banned"] == true ||
+          data["is_banned"] == true ||
+          data["account_banned"] == true;
+      final DateTime? until = _dateField(data, const [
+        "edge_policy_banned_until",
+        "banned_until",
+        "account_banned_until",
+      ]);
+      final String reason = _stringField(data, const [
+        "edge_policy_ban_reason",
+        "ban_reason",
+        "account_ban_reason",
+      ]);
+      _applyBanState(
+        banned: banned && (until == null || until.isAfter(DateTime.now())),
+        until: until,
+        reason: reason.isEmpty ? null : reason,
+      );
+    } catch (_) {
+      // Keep last known ban state if the user doc is temporarily unavailable.
     }
   }
 
@@ -480,7 +539,33 @@ class PremiumService {
     final completer = Completer<void>();
     _loadInFlight = completer.future;
     try {
+      await _refreshBanState(uid);
       await refreshLiveEdgeBalance(uid: uid);
+
+      if (isAccountBanned) {
+        final bannedData = {
+          "edge_policy_banned": true,
+          "edge_policy_banned_until": bannedUntil?.toIso8601String(),
+          "edge_policy_ban_reason": banReason ?? "policy_violation",
+        };
+        _setAccessState(SubscriptionAccessState.accountHold);
+        await _setCachedState(
+          premium: false,
+          planId: "BANNED",
+          chat: 0,
+          mistake: 0,
+          compare: 0,
+          state: accessState,
+          billing: "BANNED",
+          resetUsage: true,
+        );
+        debugPrint("🚫 Account banned; premium/AI access locked: $bannedData");
+        isLoaded = true;
+        _lastLoadedUid = uid;
+        _notifyPremium(force: before != _snapshot());
+        completer.complete();
+        return;
+      }
 
       final doc = await FirebaseFirestore.instance
           .collection("subscriptions")
@@ -1068,18 +1153,19 @@ class PremiumService {
 
   static bool canChat() {
     if (!isLoaded) return true;
+    if (isAccountBanned) return false;
     return isPremium && chatUsed < chatLimit;
   }
 
   static bool canMistake() {
     if (!isLoaded) return false;
-    if (!isPremium) return false;
+    if (isAccountBanned || !isPremium) return false;
     return mistakeUsed < mistakeLimit;
   }
 
   static bool canCompare() {
     if (!isLoaded) return false;
-    if (!isPremium) return false;
+    if (isAccountBanned || !isPremium) return false;
     return compareLimit > 0 && compareUsed < compareLimit;
   }
 

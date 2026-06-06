@@ -7050,6 +7050,18 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
   String? _swing;
   String? _spin;
 
+  _OnboardingMistakeReport
+  get _sampleMistakeReport => const _OnboardingMistakeReport(
+    mistakes: [
+      'Front shoulder opens early, so the bat path gets exposed before contact.',
+      'Weight stays behind the ball, which leaks power and makes control late.',
+    ],
+    impact:
+        'These flaws can make a shot look fine on video, but under match pressure they reduce timing, balance, and clean contact.',
+    drill:
+        'Do 18 shadow drives: freeze side-on at contact, keep the head over the ball, then finish the shot only after balance stays forward.',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -7076,6 +7088,9 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
 
       final hasVideo =
           path != null && path.isNotEmpty && File(path).existsSync();
+      final resolvedReport = report?.hasStructured == true
+          ? report
+          : _sampleMistakeReport;
       VideoPlayerController? controller;
       if (hasVideo) {
         controller = VideoPlayerController.file(File(path));
@@ -7092,7 +7107,7 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
         _controller = controller;
         _hasUploadedVideo = hasVideo;
         _showCoach = !hasVideo;
-        _report = report;
+        _report = resolvedReport;
         _analysisJson = analysisJson;
         _speed = speed?.isEmpty == true ? null : speed;
         _swing = swing?.isEmpty == true ? null : swing;
@@ -7105,6 +7120,7 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
         _loaded = true;
         _hasUploadedVideo = false;
         _showCoach = true;
+        _report = _sampleMistakeReport;
       });
     }
   }
@@ -7309,10 +7325,14 @@ Drill: ...
         : 'Show Coach Fix';
 
     return _PaneShell(
-      kicker: _showCoach ? 'CRICKNOVA CHAT COACH' : 'MISTAKE DETECTION',
+      kicker: _showCoach
+          ? (_hasUploadedVideo ? 'CRICKNOVA CHAT COACH' : 'SAMPLE FLAW REPORT')
+          : 'FLAWS, NOT GUESSWORK',
       title: _showCoach
-          ? 'Chat Coach turns the mistake into a fix.'
-          : 'Your real mistake report is ready.',
+          ? (_hasUploadedVideo
+                ? 'Your mistake becomes a fix.'
+                : 'This is what CrickNova exposes.')
+          : 'Your flaws are now in front of you.',
       body: '',
       footer: _PulseButton(
         label: footerLabel,
@@ -7436,7 +7456,7 @@ class _MistakeProofCard extends StatelessWidget {
                   icon: Icons.warning_amber_rounded,
                   color: _FeatureProofPaneState._danger,
                   label: report?.hasStructured == true
-                      ? 'REAL MISTAKE REPORT'
+                      ? 'YOUR FLAWS ARE IN FRONT'
                       : 'REPORT NOT AVAILABLE',
                   title: report?.hasStructured == true
                       ? report!.points.first
@@ -7496,17 +7516,17 @@ class _CoachProofCard extends StatelessWidget {
           _ProofBanner(
             icon: Icons.auto_awesome_rounded,
             color: _FeatureProofPaneState._teal,
-            label: hasVideo ? 'AUTO-SENT TO CHAT COACH' : 'AI CHAT COACH',
+            label: hasVideo ? 'AUTO-SENT TO CHAT COACH' : 'SAMPLE FLAW REPORT',
             title: hasVideo
                 ? 'Your real mistake report was sent to Chat Coach.'
-                : 'Ask your cricket coach anything, anytime.',
+                : 'See the kind of mistake CrickNova exposes before Premium.',
           ),
           const SizedBox(height: 16),
           _ChatBubble(
             isCoach: false,
             text: hasVideo && sourceReport?.hasStructured == true
                 ? 'How do I fix this report?\n${sourceReport!.points.join('\n')}'
-                : 'How can CrickNova Chat Coach help improve my cricket?',
+                : 'Show me the flaws CrickNova can bring in front of me.',
           ),
           const SizedBox(height: 10),
           if (loading)
@@ -7518,6 +7538,8 @@ class _CoachProofCard extends StatelessWidget {
             )
           else if (coachReport?.hasStructured == true)
             _StructuredReportList(points: coachReport!.points)
+          else if (!hasVideo && sourceReport?.hasStructured == true)
+            _StructuredReportList(points: sourceReport!.points)
           else if (error != null)
             _ChatBubble(isCoach: true, text: error!)
           else

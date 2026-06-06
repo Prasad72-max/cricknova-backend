@@ -8,7 +8,7 @@ import re
 import time
 import tempfile
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 print("💤😡💀")
 # Ensure the repo root (the directory containing this file) is on sys.path.
@@ -29,6 +29,19 @@ STRICT_POLICY_NOTICE = (
     "to a permanent account ban. Play fair, train hard!"
 )
 
+FINAL_POLICY_WARNING_NOTICE = (
+    "🚨 Final Policy Warning:\n"
+    "This is not a cricket-related clip. CrickNova Edge is only for cricket analysis. "
+    "You now have only 3 final chances. If non-cricket videos continue until 10 violations, "
+    "your account will be blocked for 27 days."
+)
+
+EDGE_POLICY_BAN_NOTICE = (
+    "🚫 Account Temporarily Blocked:\n"
+    "Too many non-cricket videos were uploaded to CrickNova Edge. "
+    "Your CrickNova Edge access is blocked for 27 days."
+)
+
 @app.get("/__alive")
 def alive():
     return {
@@ -42,7 +55,7 @@ def alive():
 @app.get("/__test_gemini")
 async def test_gemini():
     try:
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        api_key = _current_gemini_api_key()
         if not api_key:
             return {"success": False, "error": "No API key configured in environment variables (GOOGLE_API_KEY and GEMINI_API_KEY are empty)"}
         
@@ -252,6 +265,7 @@ Always explain why the visible action is good or wrong.
 _live_firestore_client: firestore.Client | None = None
 _live_gemini_client: Client | None = None
 _live_vision_client: Client | None = None
+_vision_key_index = 0
 
 
 def _live_db() -> firestore.Client:
@@ -286,24 +300,97 @@ def _legacy_seconds(milliseconds: int) -> int:
 def _live_gemini() -> Client:
     global _live_gemini_client
     if _live_gemini_client is None:
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
         _live_gemini_client = Client(
-            api_key=api_key,
+            api_key=_current_gemini_api_key(),
             http_options={"api_version": "v1alpha"},
         )
     return _live_gemini_client
 
 
+def _gemini_api_keys() -> list[str]:
+    keys: list[str] = []
+    for env_name in ("GEMINI_API_KEYS", "GOOGLE_API_KEYS"):
+        raw = os.getenv(env_name, "")
+        for item in re.split(r"[,\s]+", raw):
+            clean = item.strip()
+            if clean and clean not in keys:
+                keys.append(clean)
+    for index in range(1, 11):
+        for env_name in (
+            f"GEMINI_API_KEY_{index}",
+            f"GOOGLE_API_KEY_{index}",
+            f"GEMINI_KEY_{index}",
+            f"GOOGLE_KEY_{index}",
+        ):
+            clean = (os.getenv(env_name) or "").strip()
+            if clean and clean not in keys:
+                keys.append(clean)
+    for env_name in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
+        clean = (os.getenv(env_name) or "").strip()
+        if clean and clean not in keys:
+            keys.append(clean)
+    return keys
+
+
+def _current_gemini_api_key() -> str:
+    keys = _gemini_api_keys()
+    if not keys:
+        raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
+    return keys[_vision_key_index % len(keys)]
+
+
 def _vision_gemini() -> Client:
     global _live_vision_client
     if _live_vision_client is None:
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
-        _live_vision_client = Client(api_key=api_key)
+        _live_vision_client = Client(api_key=_current_gemini_api_key())
     return _live_vision_client
+
+
+def _rotate_vision_key() -> None:
+    global _vision_key_index, _live_vision_client
+    keys = _gemini_api_keys()
+    if not keys:
+        return
+    _vision_key_index = (_vision_key_index + 1) % len(keys)
+    _live_vision_client = Client(api_key=keys[_vision_key_index])
+    print(f"GEMINI_KEY_ROTATED active_index={_vision_key_index + 1}/{len(keys)}")
+
+
+def _generate_vision_content_with_key_rotation(
+    *,
+    model: str,
+    contents: Any,
+    config: Any,
+) -> Any:
+    keys = _gemini_api_keys()
+    if not keys:
+        raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
+    global _vision_key_index, _live_vision_client
+    last_quota_error: Exception | None = None
+    for offset in range(len(keys)):
+        key_index = (_vision_key_index + offset) % len(keys)
+        client = Client(api_key=keys[key_index])
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=config,
+            )
+            _vision_key_index = key_index
+            _live_vision_client = client
+            if offset > 0:
+                print(f"GEMINI_KEY_RECOVERED active_index={key_index + 1}/{len(keys)}")
+            return response
+        except Exception as exc:
+            if _is_gemini_quota_error(exc):
+                last_quota_error = exc
+                print(
+                    f"GEMINI_KEY_QUOTA_EXHAUSTED index={key_index + 1}/{len(keys)} "
+                    f"model={model}: {exc}"
+                )
+                continue
+            raise
+    raise RuntimeError(f"GEMINI_ALL_KEYS_QUOTA_EXHAUSTED: {last_quota_error}")
 
 
 def _role_prompt(role: str) -> str:
@@ -412,30 +499,116 @@ def _is_gemini_quota_error(exc: Exception) -> bool:
     return "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower()
 
 
-def _flag_policy_violation(user_id: str, reason: str, clip_index: int | None = None) -> None:
+def _edge_policy_ban_status(user_id: str) -> dict[str, Any] | None:
+    try:
+        snapshot = _live_db().collection("users").document(user_id).get()
+        data = snapshot.to_dict() or {}
+        banned_until = data.get("edge_policy_banned_until")
+        if isinstance(banned_until, datetime):
+            now = datetime.now(timezone.utc)
+            if banned_until.tzinfo is None:
+                banned_until = banned_until.replace(tzinfo=timezone.utc)
+            if banned_until > now:
+                return {
+                    "status": "policy_banned",
+                    "text": EDGE_POLICY_BAN_NOTICE,
+                    "banned_until": banned_until.isoformat(),
+                }
+    except Exception as exc:
+        print(f"EDGE_POLICY_BAN_CHECK_FAILED user={user_id}: {exc}")
+    return None
+
+
+def _reject_if_edge_banned(user_id: str) -> dict[str, Any] | None:
+    ban_status = _edge_policy_ban_status(user_id)
+    if ban_status is None:
+        return None
+    return {
+        "status": "policy_banned",
+        "text": ban_status["text"],
+        "mood": "policy_violation",
+        "refund_minutes": False,
+        "terminate_session": True,
+        "banned_until": ban_status.get("banned_until"),
+    }
+
+
+def _reject_if_any_ai_banned(user_id: str) -> dict[str, Any] | None:
+    try:
+        snapshot = _live_db().collection("users").document(user_id).get()
+        data = snapshot.to_dict() or {}
+        banned = (
+            data.get("edge_policy_banned") == True
+            or data.get("is_banned") == True
+            or data.get("account_banned") == True
+        )
+        ban_until_keys = [
+            "edge_policy_banned_until",
+            "banned_until",
+            "account_banned_until",
+        ]
+        until = _date_field(data, ban_until_keys)
+        if banned and (until is None or until > datetime.now(timezone.utc)):
+            return {
+                "status": "policy_banned",
+                "text": EDGE_POLICY_BAN_NOTICE,
+                "banned_until": until.isoformat() if until else None,
+            }
+    except Exception as exc:
+        print(f"AI_BAN_CHECK_FAILED user={user_id}: {exc}")
+    return None
+
+
+def _flag_policy_violation(
+    user_id: str,
+    reason: str,
+    clip_index: int | None = None,
+) -> dict[str, Any]:
     print(
         f"STRICT_POLICY_VIOLATION user={user_id} clip={clip_index} reason={reason}"
     )
+    result: dict[str, Any] = {
+        "count": 1,
+        "text": STRICT_POLICY_NOTICE,
+        "banned": False,
+        "banned_until": None,
+    }
     try:
         user_ref = _live_db().collection("users").document(user_id)
+        snapshot = user_ref.get()
+        data = snapshot.to_dict() or {}
+        current_count = int(data.get("edge_policy_violation_count") or 0)
+        next_count = current_count + 1
+        update_data: dict[str, Any] = {
+            "last_policy_flag": "non_cricket_edge_upload",
+            "last_policy_flag_at": firestore.SERVER_TIMESTAMP,
+            "edge_policy_violation_count": next_count,
+        }
+        if 7 <= next_count < 10:
+            update_data["edge_policy_final_warning_count"] = next_count - 6
+            result["text"] = FINAL_POLICY_WARNING_NOTICE
+        elif next_count >= 10:
+            banned_until = datetime.now(timezone.utc) + timedelta(days=27)
+            update_data["edge_policy_banned_until"] = banned_until
+            update_data["edge_policy_ban_reason"] = "repeated_non_cricket_edge_uploads"
+            result["text"] = EDGE_POLICY_BAN_NOTICE
+            result["banned"] = True
+            result["banned_until"] = banned_until.isoformat()
+        result["count"] = next_count
         user_ref.collection("policy_flags").add(
             {
                 "type": "non_cricket_edge_upload",
                 "reason": reason,
                 "clip_index": clip_index,
+                "violation_count": next_count,
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "source": "cricknova_edge",
             }
         )
-        user_ref.set(
-            {
-                "last_policy_flag": "non_cricket_edge_upload",
-                "last_policy_flag_at": firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
+        user_ref.set(update_data, merge=True)
     except Exception as exc:
         print(f"STRICT_POLICY_FLAG_FAILED user={user_id}: {exc}")
+    return result
 
 
 def _debug_gemini_response(label: str, response: Any, model_name: str) -> None:
@@ -484,9 +657,9 @@ def _live_edge_prompt(coach_name: str, language: str, discipline: str) -> str:
         "Do not make the response revolve around one repeated body part.\n\n"
         "Analyze this cricket training clip.\n\n"
         "Critical cricket-only policy check:\n"
-        "- If the media does not clearly show active cricket batting, bowling, or wicketkeeping action, return exactly STRICT_POLICY_VIOLATION and nothing else.\n"
-        "- Return STRICT_POLICY_VIOLATION for pets, casual walking, generic objects, blank or black screens, unrelated sports, computer/app screens, or uncertain media.\n"
-        "- If active cricket action is visible, continue with coaching.\n\n"
+        "- First check whether this is a cricket-related video.\n"
+        "- If it is not cricket-related, return exactly STRICT_POLICY_VIOLATION and nothing else.\n"
+        "- If it is cricket-related, continue with coaching.\n\n"
         "Rules:\n"
         "- Only comment on visible actions.\n"
         "- Mention exactly:\n"
@@ -539,6 +712,55 @@ def _video_has_visible_action(video_bytes: bytes) -> bool:
         if not _is_frame_too_dark(frame):
             visible += 1
     return visible >= 2
+
+
+def _classify_active_cricket_action(frames: list[bytes]) -> str:
+    usable_frames = [
+        frame for frame in frames
+        if isinstance(frame, (bytes, bytearray)) and not _is_frame_too_dark(frame)
+    ][:6]
+    if len(usable_frames) < 2:
+        return "unknown"
+
+    classifier_prompt = (
+        "You are a visual pre-check for CrickNova Edge.\n"
+        "Look only at the provided frames.\n"
+        "Return exactly one label:\n"
+        "ACTIVE_CRICKET_ACTION - if this looks cricket-related.\n"
+        "STRICT_POLICY_VIOLATION - if this is clearly not cricket-related.\n"
+        "If unsure, return ACTIVE_CRICKET_ACTION."
+    )
+    frame_parts = [
+        types.Part.from_bytes(data=frame, mime_type="image/jpeg")
+        for frame in usable_frames
+    ]
+    contents = _content_from_parts([
+        _text_part_for_gemini(classifier_prompt),
+        *frame_parts,
+    ])
+
+    for model_name in _vision_model_candidates()[:2]:
+        try:
+            response = _generate_vision_content_with_key_rotation(
+                model=model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    max_output_tokens=12,
+                ),
+            )
+            label = " ".join(_extract_gemini_text(response).upper().split())
+            print(f"CRICKET_ACTION_CLASSIFIER model={model_name} label={label}")
+            if label == "STRICT_POLICY_VIOLATION":
+                return "violation"
+            if label == "ACTIVE_CRICKET_ACTION":
+                return "active"
+        except Exception as exc:
+            if _is_gemini_quota_error(exc):
+                print(f"GEMINI_QUOTA_EXHAUSTED classifier model={model_name}: {exc}")
+                continue
+            print(f"CRICKET_ACTION_CLASSIFIER_FAILED model={model_name}: {exc}")
+    return "unknown"
 
 
 def _file_state_name(uploaded_file: Any) -> str:
@@ -673,6 +895,11 @@ async def _analyze_live_frame(
                     if not _video_has_visible_action(bytes(frame_bytes)):
                         print("VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
                         return "STRICT_POLICY_VIOLATION"
+                    action_frames = _sample_video_frames(bytes(frame_bytes), max_frames=6)
+                    action_label = _classify_active_cricket_action(action_frames)
+                    if action_label == "violation":
+                        print("VIDEO_SKIPPED_NON_CRICKET_ACTION")
+                        return "STRICT_POLICY_VIOLATION"
                     with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                         tmp.write(bytes(frame_bytes))
                         video_path = tmp.name
@@ -691,7 +918,7 @@ async def _analyze_live_frame(
                             if attempt > 0:
                                 print(f"GEMINI_RETRY video model={model_name}")
                             try:
-                                response = client.models.generate_content(
+                                response = _generate_vision_content_with_key_rotation(
                                     model=model_name,
                                     contents=video_contents,
                                     config=types.GenerateContentConfig(
@@ -744,7 +971,7 @@ async def _analyze_live_frame(
                             if attempt > 0:
                                 print(f"GEMINI_RETRY frames model={model_name}")
                             try:
-                                response = client.models.generate_content(
+                                response = _generate_vision_content_with_key_rotation(
                                     model=model_name,
                                     contents=frame_contents,
                                     config=types.GenerateContentConfig(
@@ -790,7 +1017,7 @@ async def _analyze_live_frame(
                     if attempt > 0:
                         print(f"GEMINI_RETRY frames model={model_name}")
                     try:
-                        response = client.models.generate_content(
+                        response = _generate_vision_content_with_key_rotation(
                             model=model_name,
                             contents=frame_contents,
                             config=types.GenerateContentConfig(
@@ -840,6 +1067,10 @@ async def analyze_live_nets_chunk(
     clip_index: int = Form(0),
 ):
     try:
+        banned_payload = _reject_if_edge_banned(user_id)
+        if banned_payload is not None:
+            banned_payload["clip_index"] = clip_index
+            return banned_payload
         video_bytes = await file.read()
         print(
             f"🎬 HTTP live chunk user={user_id} clip={clip_index} "
@@ -861,14 +1092,20 @@ async def analyze_live_nets_chunk(
             is_video=True,
         )
         if mood == "policy_violation":
-            _flag_policy_violation(user_id, "non_cricket_or_blank_edge_clip", clip_index)
+            policy = _flag_policy_violation(
+                user_id,
+                "non_cricket_or_blank_edge_clip",
+                clip_index,
+            )
             return {
-                "status": "policy_violation",
-                "text": STRICT_POLICY_NOTICE,
+                "status": "policy_banned" if policy["banned"] else "policy_violation",
+                "text": policy["text"],
                 "mood": mood,
                 "refund_minutes": False,
                 "terminate_session": True,
                 "clip_index": clip_index,
+                "policy_violation_count": policy["count"],
+                "banned_until": policy.get("banned_until"),
             }
         return {
             "status": "success" if reply else "empty",
@@ -1042,6 +1279,19 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
 
     try:
         await websocket.accept()
+        ban_status = _edge_policy_ban_status(user_id)
+        if ban_status is not None:
+            await websocket.send_json(
+                {
+                    "type": "policy_banned",
+                    "text": ban_status["text"],
+                    "refund_minutes": False,
+                    "terminate_session": True,
+                    "banned_until": ban_status.get("banned_until"),
+                }
+            )
+            await websocket.close(code=4003)
+            return
         
         if SKIP_BILLING:
             starting_balance_ms = DEV_BALANCE_MS
@@ -1133,17 +1383,21 @@ async def live_nets_socket(websocket: WebSocket, user_id: str) -> None:
                             )
                             last_reply_at = time.monotonic()
                         elif mood == "policy_violation":
-                            _flag_policy_violation(
+                            policy = _flag_policy_violation(
                                 user_id,
                                 "non_cricket_or_blank_edge_socket",
                                 clip_index,
                             )
                             await websocket.send_json(
                                 {
-                                    "type": "policy_violation",
-                                    "text": STRICT_POLICY_NOTICE,
+                                    "type": "policy_banned"
+                                    if policy["banned"]
+                                    else "policy_violation",
+                                    "text": policy["text"],
                                     "refund_minutes": False,
                                     "clip_index": clip_index,
+                                    "policy_violation_count": policy["count"],
+                                    "banned_until": policy.get("banned_until"),
                                 }
                             )
                             stop.set()
@@ -1725,8 +1979,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
 # -----------------------------
 @app.post("/coach/analyze")
 async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    if not _gemini_api_keys():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     # ---- Subscription/Mistake Limit Check ----
@@ -1735,6 +1988,9 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
     ))
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    banned = _reject_if_any_ai_banned(user_id)
+    if banned is not None:
+        raise HTTPException(status_code=403, detail=banned["text"])
 
     from subscriptions_store import get_subscription, increment_mistake
     sub = get_subscription(user_id)
@@ -1799,8 +2055,7 @@ class CoachChatRequest(BaseModel):
 
 @app.post("/coach/chat")
 async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    if not _gemini_api_keys():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     message = (req.message or "").strip()
@@ -1817,6 +2072,9 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
     ))
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    banned = _reject_if_any_ai_banned(user_id)
+    if banned is not None:
+        raise HTTPException(status_code=403, detail=banned["text"])
 
     from subscriptions_store import get_subscription, increment_chat
     sub = get_subscription(user_id)
@@ -1927,8 +2185,7 @@ async def ai_coach_diff(
     right: UploadFile = File(...),
     prompt: str | None = Form(None),
 ):
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    if not _gemini_api_keys():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     # ---- Subscription/Compare Limit Check ----
@@ -1937,6 +2194,9 @@ async def ai_coach_diff(
     ))
     if not user_id:
         raise HTTPException(status_code=401, detail="USER_NOT_AUTHENTICATED")
+    banned = _reject_if_any_ai_banned(user_id)
+    if banned is not None:
+        raise HTTPException(status_code=403, detail=banned["text"])
 
     from subscriptions_store import get_subscription, increment_compare
     sub = get_subscription(user_id)

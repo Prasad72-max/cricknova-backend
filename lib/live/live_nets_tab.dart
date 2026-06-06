@@ -125,17 +125,18 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
     final uid = user?.uid ?? 'guest';
     final savedLanguage = prefs.getString(_languagePrefsKey)?.trim();
     final savedDiscipline = prefs.getString(_disciplinePrefsKey)?.trim();
-    final savedName = [
-      prefs.getString('profileName_$uid')?.trim(),
-      prefs.getString('userName_$uid')?.trim(),
-      prefs.getString('profileName')?.trim(),
-      prefs.getString('userName')?.trim(),
-      MainNavigation.userNameNotifier.value.trim(),
-      user?.displayName?.trim(),
-    ].whereType<String>().firstWhere(
-      (value) => value.isNotEmpty && value.toLowerCase() != 'player',
-      orElse: () => 'Player',
-    );
+    final savedName =
+        [
+          prefs.getString('profileName_$uid')?.trim(),
+          prefs.getString('userName_$uid')?.trim(),
+          prefs.getString('profileName')?.trim(),
+          prefs.getString('userName')?.trim(),
+          MainNavigation.userNameNotifier.value.trim(),
+          user?.displayName?.trim(),
+        ].whereType<String>().firstWhere(
+          (value) => value.isNotEmpty && value.toLowerCase() != 'player',
+          orElse: () => 'Player',
+        );
 
     if (!mounted) return;
     setState(() {
@@ -208,10 +209,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
           ),
           title: const Text(
             'Strict Cricket-Only Policy',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
-            ),
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
           ),
           content: const Text(
             strictCricketOnlyPolicyNotice,
@@ -260,138 +258,138 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
           title: const Text('CrickNova Edge'),
         ),
         body: user == null
-          ? const Center(
-              child: Text(
-                'Sign in to use Live Nets.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            )
-          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(user.uid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                final balanceMs = LiveNetsAccessCard.balanceMsFrom(
-                  snapshot.data?.data() ?? {},
-                );
-                return Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _CoachControlsRow(
-                        language: _selectedLanguage,
-                        discipline: _selectedDiscipline,
-                        onLanguageChanged: (value) {
-                          setState(() => _selectedLanguage = value);
-                          unawaited(_saveEdgePrefs());
-                        },
-                        onDisciplineChanged: (value) {
-                          setState(() => _selectedDiscipline = value);
-                          unawaited(_saveEdgePrefs());
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(18),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF07111F),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: const Color(
-                              0xFF00E5FF,
-                            ).withValues(alpha: 0.6),
-                          ),
+            ? const Center(
+                child: Text(
+                  'Sign in to use Live Nets.',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              )
+            : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  final balanceMs = LiveNetsAccessCard.balanceMsFrom(
+                    snapshot.data?.data() ?? {},
+                  );
+                  return Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _CoachControlsRow(
+                          language: _selectedLanguage,
+                          discipline: _selectedDiscipline,
+                          onLanguageChanged: (value) {
+                            setState(() => _selectedLanguage = value);
+                            unawaited(_saveEdgePrefs());
+                          },
+                          onDisciplineChanged: (value) {
+                            setState(() => _selectedDiscipline = value);
+                            unawaited(_saveEdgePrefs());
+                          },
                         ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF07111F),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(
+                                0xFF00E5FF,
+                              ).withValues(alpha: 0.6),
+                            ),
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Row(
-                              children: [
-                                Icon(
-                                  Icons.bolt_rounded,
-                                  color: Color(0xFF00E5FF),
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'CrickNova Edge Balance',
-                                  style: TextStyle(color: Colors.white60),
-                                ),
-                              ],
-                            ),
+                                children: [
+                                  Icon(
+                                    Icons.bolt_rounded,
+                                    color: Color(0xFF00E5FF),
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'CrickNova Edge Balance',
+                                    style: TextStyle(color: Colors.white60),
+                                  ),
+                                ],
+                              ),
                               const SizedBox(height: 8),
                               Text(
                                 LiveNetsAccessCard.formatBalance(balanceMs),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 38,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            children: const [
-                              _EdgeInstructionCard(
-                                icon: Icons.savings_outlined,
-                                title: 'Your Money Matters',
-                                body:
-                                    'We respect every minute you purchase. Your training time and money are valuable, and CrickNova is designed to protect both.',
-                              ),
-                              _EdgeInstructionCard(
-                                icon: Icons.play_circle_outline_rounded,
-                                title:
-                                    'Minutes Start Only When You Press Start',
-                                body:
-                                    'Live Analysis never begins automatically. Your session starts only when you choose to begin.',
-                              ),
-                              _EdgeInstructionCard(
-                                icon: Icons.pause_circle_outline_rounded,
-                                title: 'Pause Or Stop Anytime',
-                                body:
-                                    'Need a break? Adjusting your setup? Taking a rest between drills? Pause or stop your session whenever you want.',
-                              ),
-                              _EdgeInstructionCard(
-                                icon: Icons.tune_rounded,
-                                title: "You're Always In Control",
-                                body:
-                                    'No hidden timers. No wasted minutes. No unexpected usage. Every minute remains under your control.',
-                              ),
-                              _EdgeInstructionCard(
-                                icon: Icons.sports_cricket_rounded,
-                                title: 'Train With Confidence',
-                                body:
-                                    'Focus on your cricket while CrickNova Coach focuses on the analysis.',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 38,
+                                  fontWeight: FontWeight.w900,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      ElevatedButton.icon(
-                        onPressed: balanceMs > 0 ? _openCareSheet : null,
-                        icon: const Icon(Icons.videocam_rounded),
-                        label: const Text('Start CrickNova Edge'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00E5FF),
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                        const SizedBox(height: 18),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: Column(
+                              children: const [
+                                _EdgeInstructionCard(
+                                  icon: Icons.savings_outlined,
+                                  title: 'Your Money Matters',
+                                  body:
+                                      'We respect every minute you purchase. Your training time and money are valuable, and CrickNova is designed to protect both.',
+                                ),
+                                _EdgeInstructionCard(
+                                  icon: Icons.play_circle_outline_rounded,
+                                  title:
+                                      'Minutes Start Only When You Press Start',
+                                  body:
+                                      'Live Analysis never begins automatically. Your session starts only when you choose to begin.',
+                                ),
+                                _EdgeInstructionCard(
+                                  icon: Icons.pause_circle_outline_rounded,
+                                  title: 'Pause Or Stop Anytime',
+                                  body:
+                                      'Need a break? Adjusting your setup? Taking a rest between drills? Pause or stop your session whenever you want.',
+                                ),
+                                _EdgeInstructionCard(
+                                  icon: Icons.tune_rounded,
+                                  title: "You're Always In Control",
+                                  body:
+                                      'No hidden timers. No wasted minutes. No unexpected usage. Every minute remains under your control.',
+                                ),
+                                _EdgeInstructionCard(
+                                  icon: Icons.sports_cricket_rounded,
+                                  title: 'Train With Confidence',
+                                  body:
+                                      'Focus on your cricket while CrickNova Coach focuses on the analysis.',
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                        const SizedBox(height: 14),
+                        ElevatedButton.icon(
+                          onPressed: balanceMs > 0 ? _openCareSheet : null,
+                          icon: const Icon(Icons.videocam_rounded),
+                          label: const Text('Start CrickNova Edge'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF00E5FF),
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
@@ -647,10 +645,7 @@ class _CoachControlsRow extends StatelessWidget {
 }
 
 class _ChoiceSection extends StatelessWidget {
-  const _ChoiceSection({
-    required this.title,
-    required this.children,
-  });
+  const _ChoiceSection({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
@@ -671,11 +666,7 @@ class _ChoiceSection extends StatelessWidget {
             ),
           ),
         ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: children,
-        ),
+        Wrap(spacing: 8, runSpacing: 8, children: children),
       ],
     );
   }
@@ -794,10 +785,7 @@ class _PendingCoachFeedback {
 }
 
 class _PendingVideoChunk {
-  const _PendingVideoChunk({
-    required this.bytes,
-    required this.clipIndex,
-  });
+  const _PendingVideoChunk({required this.bytes, required this.clipIndex});
 
   final List<int> bytes;
   final int clipIndex;
@@ -1004,10 +992,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         return;
       }
       _currentClipStartedAt = DateTime.now();
-      _frameTimer = Timer.periodic(
-        _chunkDuration,
-        (_) => _sendVideoChunk(),
-      );
+      _frameTimer = Timer.periodic(_chunkDuration, (_) => _sendVideoChunk());
 
       if (mounted) {
         setState(() {
@@ -1018,7 +1003,6 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _streamStarted = true;
       _socketReconnectAttempts = 0;
       _cancelConnectWatchdog();
-
     } catch (error) {
       _cancelConnectWatchdog();
       if (localController != null) {
@@ -1059,14 +1043,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     try {
       final voices = await _tts.getVoices;
       if (voices is List) {
-        final voice = voices.cast<dynamic>().firstWhere(
-          (item) {
-            if (item is! Map) return false;
-            final localeValue = (item['locale'] ?? '').toString().toLowerCase();
-            return localeValue.startsWith(locale.split('-').first.toLowerCase());
-          },
-          orElse: () => null,
-        );
+        final voice = voices.cast<dynamic>().firstWhere((item) {
+          if (item is! Map) return false;
+          final localeValue = (item['locale'] ?? '').toString().toLowerCase();
+          return localeValue.startsWith(locale.split('-').first.toLowerCase());
+        }, orElse: () => null);
         if (voice is Map) {
           await _tts.setVoice({
             'name': (voice['name'] ?? '').toString(),
@@ -1200,10 +1181,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     if (_feedbackUploadInFlight) {
       _feedbackUploadQueue.add(
-        _PendingVideoChunk(
-          bytes: bytes,
-          clipIndex: clipIndex,
-        ),
+        _PendingVideoChunk(bytes: bytes, clipIndex: clipIndex),
       );
       debugPrint('CrickNova Edge queued clip #$clipIndex for feedback');
       return;
@@ -1245,7 +1223,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         request.headers['Authorization'] = 'Bearer $token';
       }
       debugPrint('CrickNova Edge uploading clip #$clipIndex for feedback');
-      final streamed = await request.send().timeout(const Duration(seconds: 90));
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 90),
+      );
       final response = await http.Response.fromStream(streamed);
       debugPrint(
         'CrickNova Edge feedback response #$clipIndex: '
@@ -1286,8 +1266,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         }
         return;
       }
-      if (decoded['status']?.toString() == 'policy_violation') {
-        await _handleStrictPolicyViolation();
+      final status = decoded['status']?.toString();
+      if (status == 'policy_violation' || status == 'policy_banned') {
+        await _handleStrictPolicyViolation(
+          decoded['text']?.toString(),
+          isBan: status == 'policy_banned',
+        );
         return;
       }
       final text = _cleanCoachTranscript(decoded['text']?.toString() ?? '');
@@ -1365,16 +1349,16 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
             clipIndex: clipIndex,
           );
         } else {
-          await _showCoachFeedback(
-            text,
-            mood: mood,
-            clipIndex: clipIndex,
-          );
+          await _showCoachFeedback(text, mood: mood, clipIndex: clipIndex);
         }
       }
     }
-    if (decoded['type'] == 'policy_violation') {
-      await _handleStrictPolicyViolation();
+    if (decoded['type'] == 'policy_violation' ||
+        decoded['type'] == 'policy_banned') {
+      await _handleStrictPolicyViolation(
+        decoded['text']?.toString(),
+        isBan: decoded['type'] == 'policy_banned',
+      );
       return;
     }
     if (decoded['type'] == 'termination') {
@@ -1412,14 +1396,20 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     unawaited(_drainCoachFeedbackQueue());
   }
 
-  Future<void> _handleStrictPolicyViolation() async {
+  Future<void> _handleStrictPolicyViolation(
+    String? serverMessage, {
+    bool isBan = false,
+  }) async {
     if (!mounted) return;
+    final message = (serverMessage ?? '').trim().isNotEmpty
+        ? serverMessage!.trim()
+        : strictCricketOnlyPolicyNotice;
     _coachFeedbackQueue.clear();
     _feedbackUploadQueue.clear();
     setState(() {
       _coachProcessing = false;
-      _status = 'Strict policy violation';
-      _latestCaption = strictCricketOnlyPolicyNotice;
+      _status = isBan ? 'CrickNova Edge blocked' : 'Strict policy violation';
+      _latestCaption = message;
     });
     await showDialog<void>(
       context: context,
@@ -1432,13 +1422,16 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
             color: const Color(0xFFFF3B30).withValues(alpha: 0.55),
           ),
         ),
-        title: const Text(
-          'Strict Policy Notice',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        title: Text(
+          isBan ? 'CrickNova Edge Blocked' : 'Strict Policy Notice',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+          ),
         ),
-        content: const Text(
-          strictCricketOnlyPolicyNotice,
-          style: TextStyle(
+        content: Text(
+          message,
+          style: const TextStyle(
             color: Colors.white70,
             height: 1.35,
             fontWeight: FontWeight.w700,
@@ -1609,7 +1602,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     }
 
     await _endSession(
-      navigateToReview: _streamStarted &&
+      navigateToReview:
+          _streamStarted &&
           (_startedAt == null ||
               DateTime.now().difference(_startedAt!).inSeconds >= 5),
       serverReason: reason,
@@ -1636,8 +1630,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (_ending) return;
     _socketReconnectTimer?.cancel();
     _socketReconnectAttempts += 1;
-    final delayMs = (1000 * (1 << (_socketReconnectAttempts - 1)))
-        .clamp(1000, 5000);
+    final delayMs = (1000 * (1 << (_socketReconnectAttempts - 1))).clamp(
+      1000,
+      5000,
+    );
     if (mounted) {
       setState(() {
         _status = 'AI live';
@@ -1723,9 +1719,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _coachProcessing = false;
     _feedbackUploadInFlight = false;
     _allowFinalFeedbackDrain = false;
-    
+
     unawaited(_tts.stop());
-    
+
     final socket = _socket;
     _socket = null;
     if (socket != null) {
@@ -1733,7 +1729,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         await socket.close();
       } catch (_) {}
     }
-    
+
     final controller = _camera;
     _camera = null;
     if (controller != null) {
@@ -1857,13 +1853,13 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _coachFeedbackQueue.clear();
     _feedbackUploadQueue.clear();
     unawaited(_tts.stop());
-    
+
     final socket = _socket;
     _socket = null;
     if (socket != null) {
       unawaited(socket.close());
     }
-    
+
     final controller = _camera;
     _camera = null;
     if (controller != null) {
@@ -1913,7 +1909,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: const Color(0xFF00E5FF).withValues(alpha: 0.55),
+                          color: const Color(
+                            0xFF00E5FF,
+                          ).withValues(alpha: 0.55),
                         ),
                       ),
                       child: const Icon(
@@ -1951,7 +1949,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                   ),
                 ),
               ],
-              ),
+            ),
           ),
           if (_connectError != null)
             Positioned(
@@ -2012,10 +2010,11 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (_paused
-                                    ? Colors.amberAccent
-                                    : const Color(0xFFFF3B30))
-                                .withValues(alpha: 0.65),
+                            color:
+                                (_paused
+                                        ? Colors.amberAccent
+                                        : const Color(0xFFFF3B30))
+                                    .withValues(alpha: 0.65),
                             blurRadius: 10,
                           ),
                         ],
@@ -2027,10 +2026,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         _paused
                             ? 'Paused'
                             : _coachProcessing
-                                ? 'Coach analysing clip $_chunksSent'
-                                : _chunksSent == 0
-                                    ? 'Live: observing first 10 seconds'
-                                    : 'Live: clips $_chunksSent, feedback $_chunksAnalysed',
+                            ? 'Coach analysing clip $_chunksSent'
+                            : _chunksSent == 0
+                            ? 'Live: observing first 10 seconds'
+                            : 'Live: clips $_chunksSent, feedback $_chunksAnalysed',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(

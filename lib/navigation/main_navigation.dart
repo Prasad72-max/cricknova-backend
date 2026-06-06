@@ -490,7 +490,7 @@ class _MainNavigationState extends State<MainNavigation>
       _NavTabData(label: 'Home', icon: Icons.home_outlined, index: 0),
       _NavTabData(label: 'Analytics', icon: Icons.insights_outlined, index: 1),
       _NavTabData(
-        label: 'Coach',
+        label: 'CrickNova Coach',
         icon: Icons.auto_awesome_outlined,
         index: _coachTabIndex,
       ),
@@ -503,7 +503,7 @@ class _MainNavigationState extends State<MainNavigation>
         ),
       if (_showEdgeTab)
         _NavTabData(
-          label: 'Edge',
+          label: 'CrickNova Edge',
           icon: Icons.bolt_rounded,
           index: _edgeTabIndex,
           isEdge: true,
