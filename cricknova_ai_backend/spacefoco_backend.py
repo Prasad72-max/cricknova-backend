@@ -785,18 +785,64 @@ def _classify_uploaded_cricket_video(video_path: str) -> str:
         if not _video_has_visible_action(video_bytes):
             print("UPLOAD_VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
             return "violation"
-        frames = _sample_video_frames(
-            video_bytes,
-            max_frames=3,
-            max_width=384,
-            jpeg_quality=62,
-        )
-        label = _classify_active_cricket_action(frames)
-        print(f"UPLOAD_CRICKET_ACTION_CLASSIFIER label={label}")
-        return label
     except Exception as exc:
-        print(f"UPLOAD_CRICKET_ACTION_CLASSIFIER_FAILED: {exc}")
+        print(f"UPLOAD_VIDEO_LOCAL_VISIBILITY_CHECK_FAILED: {exc}")
         return "unknown"
+
+    def request_video_label() -> str:
+        client = _vision_gemini()
+        uploaded_file = None
+        try:
+            uploaded_file = _upload_gemini_video_file(client, video_path)
+            uploaded_file = _wait_for_gemini_file_active(
+                client,
+                uploaded_file,
+                max_attempts=8,
+            )
+            classifier_prompt = (
+                "Check this uploaded video only.\n"
+                "Return exactly one label:\n"
+                "ACTIVE_CRICKET_ACTION - if this is a cricket-related video.\n"
+                "STRICT_POLICY_VIOLATION - if this is clearly not cricket-related.\n"
+                "If unsure, return ACTIVE_CRICKET_ACTION."
+            )
+            contents = _content_from_parts([
+                _file_part_for_gemini(uploaded_file),
+                _text_part_for_gemini(classifier_prompt),
+            ])
+            response = _generate_vision_content_with_key_rotation(
+                model=_vision_model_candidates()[0],
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    max_output_tokens=12,
+                ),
+            )
+            return " ".join(_extract_gemini_text(response).upper().split())
+        finally:
+            if uploaded_file is not None:
+                _delete_gemini_file(client, uploaded_file)
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        label = executor.submit(request_video_label).result(timeout=10)
+        print(f"UPLOAD_CRICKET_VIDEO_CLASSIFIER label={label}")
+        if label == "STRICT_POLICY_VIOLATION":
+            return "violation"
+        if label == "ACTIVE_CRICKET_ACTION":
+            return "active"
+        return "unknown"
+    except FutureTimeoutError:
+        print("UPLOAD_CRICKET_VIDEO_CLASSIFIER_TIMEOUT")
+        return "unknown"
+    except Exception as exc:
+        if _is_gemini_quota_error(exc):
+            print(f"GEMINI_QUOTA_EXHAUSTED upload_video_classifier: {exc}")
+        else:
+            print(f"UPLOAD_CRICKET_VIDEO_CLASSIFIER_FAILED: {exc}")
+        return "unknown"
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _non_cricket_upload_response(source: str) -> dict[str, Any]:
@@ -826,10 +872,15 @@ def _upload_gemini_video_file(client: Client, video_path: str) -> Any:
         return client.files.upload(file=video_path)
 
 
-def _wait_for_gemini_file_active(client: Client, uploaded_file: Any) -> Any:
+def _wait_for_gemini_file_active(
+    client: Client,
+    uploaded_file: Any,
+    *,
+    max_attempts: int = 60,
+) -> Any:
     name = getattr(uploaded_file, "name", None)
     current = uploaded_file
-    for attempt in range(60):
+    for attempt in range(max_attempts):
         state_name = _file_state_name(current)
         uri = getattr(current, "uri", None)
         print(
