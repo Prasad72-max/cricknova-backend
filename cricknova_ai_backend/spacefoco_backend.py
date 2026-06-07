@@ -7,6 +7,7 @@ import math
 import re
 import time
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -723,7 +724,7 @@ def _classify_active_cricket_action(frames: list[bytes]) -> str:
     usable_frames = [
         frame for frame in frames
         if isinstance(frame, (bytes, bytearray)) and not _is_frame_too_dark(frame)
-    ][:6]
+    ][:3]
     if len(usable_frames) < 2:
         return "unknown"
 
@@ -744,27 +745,36 @@ def _classify_active_cricket_action(frames: list[bytes]) -> str:
         *frame_parts,
     ])
 
-    for model_name in _vision_model_candidates()[:2]:
+    def request_label(model_name: str) -> str:
+        response = _generate_vision_content_with_key_rotation(
+            model=model_name,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=12,
+            ),
+        )
+        return " ".join(_extract_gemini_text(response).upper().split())
+
+    for model_name in _vision_model_candidates()[:1]:
+        executor = ThreadPoolExecutor(max_workers=1)
         try:
-            response = _generate_vision_content_with_key_rotation(
-                model=model_name,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    max_output_tokens=12,
-                ),
-            )
-            label = " ".join(_extract_gemini_text(response).upper().split())
+            label = executor.submit(request_label, model_name).result(timeout=8)
             print(f"CRICKET_ACTION_CLASSIFIER model={model_name} label={label}")
             if label == "STRICT_POLICY_VIOLATION":
                 return "violation"
             if label == "ACTIVE_CRICKET_ACTION":
                 return "active"
+        except FutureTimeoutError:
+            print(f"CRICKET_ACTION_CLASSIFIER_TIMEOUT model={model_name}")
+            return "unknown"
         except Exception as exc:
             if _is_gemini_quota_error(exc):
                 print(f"GEMINI_QUOTA_EXHAUSTED classifier model={model_name}: {exc}")
                 continue
             print(f"CRICKET_ACTION_CLASSIFIER_FAILED model={model_name}: {exc}")
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
     return "unknown"
 
 
@@ -775,7 +785,12 @@ def _classify_uploaded_cricket_video(video_path: str) -> str:
         if not _video_has_visible_action(video_bytes):
             print("UPLOAD_VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
             return "violation"
-        frames = _sample_video_frames(video_bytes, max_frames=6)
+        frames = _sample_video_frames(
+            video_bytes,
+            max_frames=3,
+            max_width=384,
+            jpeg_quality=62,
+        )
         label = _classify_active_cricket_action(frames)
         print(f"UPLOAD_CRICKET_ACTION_CLASSIFIER label={label}")
         return label
@@ -862,7 +877,13 @@ def _delete_gemini_file(client: Client, uploaded_file: Any) -> None:
         client.files.delete(name=name)
 
 
-def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]:
+def _sample_video_frames(
+    video_bytes: bytes,
+    max_frames: int = 6,
+    *,
+    max_width: int | None = None,
+    jpeg_quality: int = 88,
+) -> list[bytes]:
     path = None
     try:
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
@@ -888,7 +909,18 @@ def _sample_video_frames(video_bytes: bytes, max_frames: int = 6) -> list[bytes]
             ok, frame = cap.read()
             if not ok or frame is None:
                 continue
-            ok, encoded = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+            if max_width and frame.shape[1] > max_width:
+                scale = max_width / float(frame.shape[1])
+                frame = cv2.resize(
+                    frame,
+                    (max_width, max(1, int(frame.shape[0] * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, encoded = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), int(jpeg_quality)],
+            )
             if ok:
                 sampled.append(encoded.tobytes())
         cap.release()
@@ -2275,8 +2307,11 @@ async def ai_coach_diff(
         )
 
     try:
-        left_label = _classify_uploaded_cricket_video(left_path)
-        right_label = _classify_uploaded_cricket_video(right_path)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            left_future = executor.submit(_classify_uploaded_cricket_video, left_path)
+            right_future = executor.submit(_classify_uploaded_cricket_video, right_path)
+            left_label = left_future.result()
+            right_label = right_future.result()
         if left_label == "violation" or right_label == "violation":
             return _non_cricket_upload_response("coach_diff")
 
