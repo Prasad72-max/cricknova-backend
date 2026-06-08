@@ -11,6 +11,7 @@ import '../config/api_config.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import '../services/weekly_stats_service.dart';
+import '../services/xp_service.dart';
 import 'chat_sessions_provider.dart';
 import '../widgets/premium_blur_lock.dart';
 import '../navigation/main_navigation.dart';
@@ -165,11 +166,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final box = await Hive.openBox("local_stats_${user.uid}");
-    final int currentXp = box.get('xp', defaultValue: 0);
-    final int newXp = currentXp + 10;
-    await box.put('xp', newXp);
-    debugPrint("XP UPDATED (AI COACH) => +10 | TOTAL => $newXp");
+    await XpService.award(uid: user.uid, amount: 10, source: 'AI COACH');
   }
 
   Future<void> _loadResolvedUserName() async {

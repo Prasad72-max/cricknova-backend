@@ -275,7 +275,7 @@ class PlayBillingService with WidgetsBindingObserver {
           break;
         case PurchaseStatus.error:
           purchasePendingNotifier.value = false;
-          _lastError = purchase.error?.message ?? "Purchase failed.";
+          _lastError = _friendlyPurchaseError(purchase.error?.message);
           break;
         case PurchaseStatus.canceled:
           purchasePendingNotifier.value = false;
@@ -295,6 +295,17 @@ class PlayBillingService with WidgetsBindingObserver {
         await _safeCompletePurchase(purchase);
       }
     }
+  }
+
+  String _friendlyPurchaseError(String? rawMessage) {
+    final String message = (rawMessage ?? '').toLowerCase();
+    if (message.contains('already owned') ||
+        message.contains('already own') ||
+        message.contains('item already owned') ||
+        message.contains('owned by another user')) {
+      return 'This plan is already active on your Google account. Restore purchases if the app does not reflect it yet.';
+    }
+    return rawMessage ?? 'Purchase failed.';
   }
 
   Future<bool> _verifyAndUnlock(PurchaseDetails purchase) async {

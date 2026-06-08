@@ -121,21 +121,6 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
 
   int get _fullDaysWasted => (_technicalDebtHours / 24).round();
 
-  static const Set<String> _requiredQuestionIds = <String>{
-    'q2', // Do you know why you fail?
-    'q6', // Do you track performance data?
-    'q7', // Scout evaluation
-    'q10', // Confidence question
-    'q18', // Ready to improve?
-  };
-
-  List<_QuestionNode> get _questionNodes {
-    final bank = _questionBankFor(_roleValue);
-    return bank
-        .where((n) => _requiredQuestionIds.contains(n.id))
-        .toList(growable: false);
-  }
-
   List<_FlowStep> get _steps {
     final steps = <_FlowStep>[
       _FlowStep.trialUpload(
@@ -179,57 +164,18 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         storageKey: 'net_hours',
         options: _abcd('< 5 hrs', '5-12 hrs', '12-25 hrs', '25+ hrs'),
       ),
-      _FlowStep.shock(
-        id: 'practice_waste',
-        kicker: 'TIME-WASTAGE REALITY',
-        title: '$_firstName, your practice needs feedback.',
-        body:
-            'Without objective feedback, many players repeat the same mistakes for months.',
-        footnote: 'This is why your first AI analysis matters.',
-        ctaLabel: 'Turn Practice Into Progress',
-      ),
     ];
-
-    for (final node in _questionNodes) {
-      steps.add(
-        _FlowStep.choice(
-          id: node.id,
-          kicker: node.blockLabel,
-          category: node.blockLabel,
-          question: node.question,
-          body: node.helper,
-          storageKey: node.id,
-          options: node.options,
-        ),
-      );
-    }
-
-    steps.addAll(<_FlowStep>[
-      _FlowStep.analysis(
-        id: 'ugly_truth_loading',
-        kicker: 'Building Your Reveal',
-        title: 'Reading your cricket profile...',
-      ),
-      _FlowStep.finalCta(
-        id: 'ugly_truth_final',
-        kicker: 'The Ugly Truth',
-        title: 'The Ugly Truth',
-        body: '',
-        ctaLabel: 'Show Me My Game',
-      ),
-      _FlowStep.featureProof(
-        id: 'feature_proof',
-        kicker: 'Your First AI Proof',
-        title: 'CrickNova found the next fix.',
-        body: '',
-        ctaLabel: 'Continue',
-      ),
-    ]);
 
     return steps;
   }
 
-  _FlowStep get _currentStep => _steps[_stepIndex];
+  _FlowStep get _currentStep {
+    final safeIndex = _stepIndex.clamp(0, _steps.length - 1);
+    if (safeIndex != _stepIndex) {
+      _stepIndex = safeIndex;
+    }
+    return _steps[safeIndex];
+  }
 
   @override
   void initState() {
@@ -237,6 +183,9 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     WidgetsBinding.instance.addObserver(this);
     _stepIndex = widget.skipGetStarted ? 1 : 0;
     _restoreInputValueForCurrentStep();
+    unawaited(
+      CricknovaOnboardingStore.savePendingProgress(_answers, completed: false),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       FocusManager.instance.primaryFocus?.unfocus();
@@ -329,6 +278,9 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     setState(() {
       _selectedOption = value;
     });
+    unawaited(
+      CricknovaOnboardingStore.savePendingProgress(_answers, completed: false),
+    );
   }
 
   Future<void> _rateCricknovaAndContinue() async {
@@ -374,6 +326,12 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         if (step.storageKey == 'display_name') {
           await _saveProfileName(name);
         }
+        unawaited(
+          CricknovaOnboardingStore.savePendingProgress(
+            _answers,
+            completed: false,
+          ),
+        );
         _goNext();
         return;
       case _FlowStepKind.analysis:
@@ -389,7 +347,18 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         _goNext();
         return;
       case _FlowStepKind.featureProof:
-        await _completeOnboarding();
+        if (FirebaseAuth.instance.currentUser == null) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const LoginScreen(
+                postLoginTarget: LoginPostLoginTarget.paywall,
+                skipOnboardingGetStarted: true,
+              ),
+            ),
+          );
+          return;
+        }
+        _goNext();
         return;
       case _FlowStepKind.choice:
         final step = _currentStep;
@@ -401,7 +370,24 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
           }
           _answers[step.storageKey!] = selected;
         });
-        if (_stepIndex >= _steps.length - 1) {
+        unawaited(
+          CricknovaOnboardingStore.savePendingProgress(
+            _answers,
+            completed: false,
+          ),
+        );
+        if (step.id == 'net_hours') {
+          if (FirebaseAuth.instance.currentUser == null) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const LoginScreen(
+                  postLoginTarget: LoginPostLoginTarget.paywall,
+                  skipOnboardingGetStarted: true,
+                ),
+              ),
+            );
+            return;
+          }
           await _completeOnboarding();
           return;
         }
@@ -452,7 +438,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     }
 
     if (!mounted) return;
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await Future<void>.delayed(const Duration(milliseconds: 250));
 
     final user = FirebaseAuth.instance.currentUser;
     final enteredName = _answers['display_name']?.trim();
@@ -471,8 +457,10 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     if (FirebaseAuth.instance.currentUser == null) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) =>
-              const LoginScreen(postLoginTarget: LoginPostLoginTarget.paywall),
+          builder: (_) => LoginScreen(
+            postLoginTarget: LoginPostLoginTarget.paywall,
+            skipOnboardingGetStarted: true,
+          ),
         ),
       );
       return;
@@ -527,6 +515,11 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
 
     final progress = ((_stepIndex + 1) / _steps.length).clamp(0.0, 1.0);
     final displayedProgress = _stepIndex == 0 ? 0.03 : progress;
+    final showProgressLabel = _currentStep.id != 'final_unlock' &&
+        _currentStep.id != 'feature_proof';
+    final progressLabel = showProgressLabel
+        ? '${_stepIndex + 1} / ${_steps.length}'
+        : '';
 
     return PopScope(
       canPop: _canPopSystem(),
@@ -545,7 +538,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
                   RepaintBoundary(
                     child: _CinematicTopBar(
                       title: 'CrickNova AI',
-                      progressLabel: '${_stepIndex + 1} / ${_steps.length}',
+                      progressLabel: progressLabel,
                       progress: displayedProgress,
                       onBack: _stepIndex == 0 ? null : _goBack,
                     ),
@@ -7034,33 +7027,12 @@ class _OnboardingMistakeReport {
 
 class _FeatureProofPaneState extends State<_FeatureProofPane> {
   static const Color _gold = Color(0xFFD4AF37);
-  static const Color _danger = Color(0xFFFF5A5F);
   static const Color _teal = Color(0xFF10B981);
-
-  VideoPlayerController? _controller;
   bool _loaded = false;
-  bool _hasUploadedVideo = false;
-  bool _showCoach = false;
-  bool _coachLoading = false;
-  _OnboardingMistakeReport? _report;
-  _OnboardingMistakeReport? _coachReport;
-  String? _coachError;
-  String? _analysisJson;
+  bool _showFixStep = false;
   String? _speed;
   String? _swing;
   String? _spin;
-
-  _OnboardingMistakeReport
-  get _sampleMistakeReport => const _OnboardingMistakeReport(
-    mistakes: [
-      'Front shoulder opens early, so the bat path gets exposed before contact.',
-      'Weight stays behind the ball, which leaks power and makes control late.',
-    ],
-    impact:
-        'These flaws can make a shot look fine on video, but under match pressure they reduce timing, balance, and clean contact.',
-    drill:
-        'Do 18 shadow drives: freeze side-on at contact, keep the head over the ball, then finish the shot only after balance stays forward.',
-  );
 
   @override
   void initState() {
@@ -7070,45 +7042,20 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
 
   @override
   void dispose() {
-    _controller?.dispose();
     super.dispose();
   }
 
   Future<void> _loadTrialProof() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final path = prefs.getString('trial_video_path');
-      final report = _OnboardingMistakeReport.fromJsonString(
-        prefs.getString('trial_real_mistake_report'),
-      );
-      final analysisJson = prefs.getString('trial_real_analysis_json');
+      final hasUploadedVideo = (prefs.getString('trial_video_path') ?? '')
+          .trim()
+          .isNotEmpty;
       final speed = prefs.getString('trial_real_speed')?.trim();
       final swing = prefs.getString('trial_real_swing')?.trim();
       final spin = prefs.getString('trial_real_spin')?.trim();
-
-      final hasVideo =
-          path != null && path.isNotEmpty && File(path).existsSync();
-      final resolvedReport = report?.hasStructured == true
-          ? report
-          : _sampleMistakeReport;
-      VideoPlayerController? controller;
-      if (hasVideo) {
-        controller = VideoPlayerController.file(File(path));
-        await controller.initialize();
-        await controller.setLooping(true);
-        await controller.play();
-      }
-
-      if (!mounted) {
-        await controller?.dispose();
-        return;
-      }
       setState(() {
-        _controller = controller;
-        _hasUploadedVideo = hasVideo;
-        _showCoach = !hasVideo;
-        _report = resolvedReport;
-        _analysisJson = analysisJson;
+        _showFixStep = !hasUploadedVideo;
         _speed = speed?.isEmpty == true ? null : speed;
         _swing = swing?.isEmpty == true ? null : swing;
         _spin = spin?.isEmpty == true ? null : spin;
@@ -7118,200 +7065,7 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
       if (!mounted) return;
       setState(() {
         _loaded = true;
-        _hasUploadedVideo = false;
-        _showCoach = true;
-        _report = _sampleMistakeReport;
-      });
-    }
-  }
-
-  Future<void> _populateCoachChat(_OnboardingMistakeReport report) async {
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'guest';
-      final box = await Hive.openBox("chat_sessions_$uid");
-      final raw = (box.get("sessions") as List?)?.cast<Map>() ?? const <Map>[];
-      final sessions = raw
-          .map((entry) => Map<String, dynamic>.from(entry))
-          .toList(growable: true);
-      const title = 'CrickNova Mistake Fix';
-      if (sessions.any((session) => session['title'] == title)) return;
-
-      final chatId =
-          'onboarding_mistake_fix_${DateTime.now().millisecondsSinceEpoch}';
-      sessions.insert(0, {
-        'chat_id': chatId,
-        'user_id': uid,
-        'title': title,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-        'messages': [
-          {'role': 'user', 'content': _mistakePrompt(report)},
-          {'role': 'coach', 'content': report.points.join('\n')},
-        ],
-      });
-      await box.put('sessions', sessions);
-    } catch (_) {}
-  }
-
-  String _mistakePrompt(_OnboardingMistakeReport report) {
-    return '''
-CrickNova detected this real mistake report from my uploaded cricket video:
-${report.toPromptJson()}
-
-Return exactly this format using the same real mistakes:
-Mistake 1: ...
-Mistake 2: ...
-Impact: ...
-Drill: ...
-''';
-  }
-
-  Map<String, dynamic>? _jsonFromText(String raw) {
-    var text = raw.trim();
-    if (text.startsWith('```')) {
-      text = text.replaceAll('```json', '').replaceAll('```', '').trim();
-    }
-    final start = text.indexOf('{');
-    final end = text.lastIndexOf('}');
-    if (start == -1 || end == -1 || end <= start) return null;
-    try {
-      final decoded = jsonDecode(text.substring(start, end + 1));
-      return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  _OnboardingMistakeReport _reportFromCoachText(String raw) {
-    final parsedJson = _jsonFromText(raw);
-    if (parsedJson != null) {
-      final parsed = _OnboardingMistakeReport.fromMap(parsedJson);
-      if (parsed.hasStructured) return parsed;
-    }
-
-    final lines = raw
-        .split(RegExp(r'\n+'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList(growable: false);
-    final mistakes = <String>[];
-    String? impact;
-    String? drill;
-    for (final line in lines) {
-      final lower = line.toLowerCase();
-      final value = line.replaceFirst(RegExp(r'^[\-•\d\.\s]*'), '');
-      if (lower.startsWith('mistake') && mistakes.length < 2) {
-        mistakes.add(
-          value
-              .replaceFirst(
-                RegExp(r'^mistake\s*\d*\s*[:\-]\s*', caseSensitive: false),
-                '',
-              )
-              .trim(),
-        );
-      } else if (lower.startsWith('impact')) {
-        impact = value
-            .replaceFirst(
-              RegExp(r'^impact\s*[:\-]\s*', caseSensitive: false),
-              '',
-            )
-            .trim();
-      } else if (lower.startsWith('drill')) {
-        drill = value
-            .replaceFirst(
-              RegExp(r'^drill\s*[:\-]\s*', caseSensitive: false),
-              '',
-            )
-            .trim();
-      }
-    }
-    return _OnboardingMistakeReport(
-      mistakes: mistakes.take(2).toList(growable: false),
-      impact: impact,
-      drill: drill,
-    );
-  }
-
-  Future<void> _showCoachFix() async {
-    final report = _report;
-    if (report == null || !report.hasStructured) {
-      setState(() {
-        _showCoach = true;
-        _coachError =
-            'CrickNova did not receive a structured mistake report for this uploaded clip.';
-      });
-      return;
-    }
-
-    setState(() {
-      _showCoach = true;
-      _coachLoading = true;
-      _coachError = null;
-    });
-
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      final token = await user?.getIdToken(true);
-      final response = await http
-          .post(
-            Uri.parse('${ApiConfig.baseUrl}/coach/chat'),
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-              if (token != null && token.isNotEmpty)
-                'Authorization': 'Bearer $token',
-              if (user != null) 'X-USER-ID': user.uid,
-            },
-            body: jsonEncode({
-              'user_id': user?.uid ?? 'guest',
-              'message':
-                  '${_mistakePrompt(report)}\nRaw video analysis JSON, if useful:\n${_analysisJson ?? '{}'}',
-            }),
-          )
-          .timeout(const Duration(seconds: 45));
-
-      if (response.statusCode != 200) {
-        throw Exception('Coach returned ${response.statusCode}');
-      }
-      final decoded = jsonDecode(response.body);
-      String rawReply = '';
-      if (decoded is String) {
-        rawReply = decoded;
-      } else if (decoded is Map) {
-        if (decoded['mistakes'] != null ||
-            decoded['impact'] != null ||
-            decoded['drill'] != null) {
-          rawReply = jsonEncode(decoded);
-        } else {
-          for (final key in const [
-            'reply',
-            'coach_feedback',
-            'difference',
-            'message',
-          ]) {
-            final value = decoded[key]?.toString().trim();
-            if (value != null && value.isNotEmpty) {
-              rawReply = value;
-              break;
-            }
-          }
-        }
-      }
-      final coachReport = _reportFromCoachText(rawReply);
-      if (!coachReport.hasStructured) {
-        throw Exception('Coach response was not structured.');
-      }
-      if (!mounted) return;
-      setState(() {
-        _coachReport = coachReport;
-        _coachLoading = false;
-      });
-      unawaited(_populateCoachChat(coachReport));
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _coachLoading = false;
-        _coachError =
-            'Coach fix is not available right now. The real mistake report is still shown above.';
+        _showFixStep = true;
       });
     }
   }
@@ -7320,27 +7074,36 @@ Drill: ...
   Widget build(BuildContext context) {
     final footerLabel = !_loaded
         ? 'Loading'
-        : _showCoach
-        ? 'Continue to Premium'
-        : 'Show Coach Fix';
+        : _showFixStep
+        ? 'Continue to Login'
+        : 'Show How to Fix';
 
     return _PaneShell(
-      kicker: _showCoach
-          ? (_hasUploadedVideo ? 'CRICKNOVA CHAT COACH' : 'SAMPLE FLAW REPORT')
-          : 'FLAWS, NOT GUESSWORK',
-      title: _showCoach
-          ? (_hasUploadedVideo
-                ? 'Your mistake becomes a fix.'
-                : 'This is what CrickNova exposes.')
-          : 'Your flaws are now in front of you.',
+      kicker: _showFixStep
+          ? 'HOW TO FIX'
+          : 'UPLOADED CLIP DETECTION',
+      title: _showFixStep
+          ? 'Now see how CrickNova fixes the clip.'
+          : 'Your uploaded clip is being read by CrickNova.',
       body: '',
       footer: _PulseButton(
         label: footerLabel,
         onPressed: !_loaded
             ? null
-            : _showCoach
-            ? widget.onContinue
-            : _showCoachFix,
+            : () {
+                if (!_showFixStep) {
+                  setState(() => _showFixStep = true);
+                  return;
+                }
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const LoginScreen(
+                      postLoginTarget: LoginPostLoginTarget.paywall,
+                      skipOnboardingGetStarted: true,
+                    ),
+                  ),
+                );
+              },
         color: _gold,
         textColor: Colors.black,
       ),
@@ -7348,19 +7111,15 @@ Drill: ...
         duration: const Duration(milliseconds: 320),
         child: !_loaded
             ? const _FeatureProofLoading(key: ValueKey('loading'))
-            : _showCoach
-            ? _CoachProofCard(
-                key: const ValueKey('coach'),
-                sourceReport: _report,
-                coachReport: _coachReport,
-                loading: _coachLoading,
-                error: _coachError,
-                hasVideo: _hasUploadedVideo,
+            : _showFixStep
+            ? _FixFlowCard(
+                key: const ValueKey('fix_flow'),
+                speed: _speed,
+                swing: _swing,
+                spin: _spin,
               )
-            : _MistakeProofCard(
-                key: const ValueKey('mistake'),
-                controller: _controller,
-                report: _report,
+            : _UploadedClipDetectionCard(
+                key: const ValueKey('uploaded_clip'),
                 speed: _speed,
                 swing: _swing,
                 spin: _spin,
@@ -7388,17 +7147,13 @@ class _FeatureProofLoading extends StatelessWidget {
   }
 }
 
-class _MistakeProofCard extends StatelessWidget {
-  final VideoPlayerController? controller;
-  final _OnboardingMistakeReport? report;
+class _UploadedClipDetectionCard extends StatelessWidget {
   final String? speed;
   final String? swing;
   final String? spin;
 
-  const _MistakeProofCard({
+  const _UploadedClipDetectionCard({
     super.key,
-    required this.controller,
-    required this.report,
     required this.speed,
     required this.swing,
     required this.spin,
@@ -7406,170 +7161,222 @@ class _MistakeProofCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final initialized = controller?.value.isInitialized == true;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          height: 270,
-          decoration: BoxDecoration(
-            color: const Color(0xFF111111),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0x33FF5A5F)),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ProofBanner(
+            icon: Icons.video_camera_back_rounded,
+            color: _FeatureProofPaneState._gold,
+            label: 'UPLOADED CLIP DETECTION',
+            title: 'CrickNova reads the clip and spots what is happening.',
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (initialized)
-                Center(
-                  child: AspectRatio(
-                    aspectRatio: controller!.value.aspectRatio,
-                    child: VideoPlayer(controller!),
-                  ),
-                )
-              else
-                const Center(
-                  child: Icon(
-                    Icons.video_camera_back_rounded,
-                    color: Color(0x44FFFFFF),
-                    size: 54,
-                  ),
-                ),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.08),
-                      Colors.black.withValues(alpha: 0.86),
-                    ],
-                  ),
-                ),
+          const SizedBox(height: 12),
+          _FeatureGroup(
+            title: 'Analysis',
+            items: const [
+              _FeatureLine(
+                title: 'Batting Mistake Detection',
+                text: 'Upload a batting clip and see batting mistakes.',
               ),
-              Positioned(
-                left: 16,
-                right: 16,
-                bottom: 16,
-                child: _ProofBanner(
-                  icon: Icons.warning_amber_rounded,
-                  color: _FeatureProofPaneState._danger,
-                  label: report?.hasStructured == true
-                      ? 'YOUR FLAWS ARE IN FRONT'
-                      : 'REPORT NOT AVAILABLE',
-                  title: report?.hasStructured == true
-                      ? report!.points.first
-                      : 'The uploaded clip did not return structured mistake data.',
-                ),
+              SizedBox(height: 8),
+              _FeatureLine(
+                title: 'Bowling Mistake Detection',
+                text: 'Upload a bowling clip and see bowling mistakes.',
+              ),
+              SizedBox(height: 8),
+              _FeatureLine(
+                title: 'Speed, Swing, Spin',
+                text: 'See speed, swing, and spin after each clip.',
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 14),
-        if (report?.hasStructured == true) ...[
-          _StructuredReportList(points: report!.points),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
+          _FeatureGroup(
+            title: 'Live Preview',
+            items: const [
+              _FeatureLine(
+                title: 'CrickNova Edge',
+                text:
+                    'Live mistake detection with fast premium coaching feedback.',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (speed != null) _MetricPill(label: 'Speed', value: speed!),
+              if (swing != null) _MetricPill(label: 'Swing', value: swing!),
+              if (spin != null) _MetricPill(label: 'Spin', value: spin!),
+            ],
+          ),
         ],
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            if (speed != null) _MetricPill(label: 'Speed', value: speed!),
-            if (swing != null) _MetricPill(label: 'Swing', value: swing!),
-            if (spin != null) _MetricPill(label: 'Spin', value: spin!),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _CoachProofCard extends StatelessWidget {
-  final _OnboardingMistakeReport? sourceReport;
-  final _OnboardingMistakeReport? coachReport;
-  final bool loading;
-  final String? error;
-  final bool hasVideo;
+class _FixFlowCard extends StatelessWidget {
+  final String? speed;
+  final String? swing;
+  final String? spin;
 
-  const _CoachProofCard({
+  const _FixFlowCard({
     super.key,
-    required this.sourceReport,
-    required this.coachReport,
-    required this.loading,
-    required this.error,
-    required this.hasVideo,
+    required this.speed,
+    required this.swing,
+    required this.spin,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.055),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0x3310B981)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _ProofBanner(
-            icon: Icons.auto_awesome_rounded,
+            icon: Icons.auto_fix_high_rounded,
             color: _FeatureProofPaneState._teal,
-            label: hasVideo ? 'AUTO-SENT TO CHAT COACH' : 'SAMPLE FLAW REPORT',
-            title: hasVideo
-                ? 'Your real mistake report was sent to Chat Coach.'
-                : 'See the kind of mistake CrickNova exposes before Premium.',
+            label: 'HOW TO FIX',
+            title: 'CrickNova shows the correction path in the next step.',
           ),
-          const SizedBox(height: 16),
-          _ChatBubble(
-            isCoach: false,
-            text: hasVideo && sourceReport?.hasStructured == true
-                ? 'How do I fix this report?\n${sourceReport!.points.join('\n')}'
-                : 'Show me the flaws CrickNova can bring in front of me.',
+          const SizedBox(height: 12),
+          const _FeatureLine(
+            title: 'Batting Analyze Yourself',
+            text: 'Review batting clips with a coach-style breakdown.',
+          ),
+          const SizedBox(height: 8),
+          const _FeatureLine(
+            title: 'Bowling Analyze Yourself',
+            text: 'Review bowling clips with a coach-style breakdown.',
+          ),
+          const SizedBox(height: 8),
+          const _FeatureLine(
+            title: 'DRS',
+            text: 'See the DRS review flow inside the app.',
           ),
           const SizedBox(height: 10),
-          if (loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 18),
-              child: Center(
-                child: CircularProgressIndicator(color: Color(0xFFD4AF37)),
-              ),
-            )
-          else if (coachReport?.hasStructured == true)
-            _StructuredReportList(points: coachReport!.points)
-          else if (!hasVideo && sourceReport?.hasStructured == true)
-            _StructuredReportList(points: sourceReport!.points)
-          else if (error != null)
-            _ChatBubble(isCoach: true, text: error!)
-          else
-            const _ChatBubble(
-              isCoach: true,
-              text:
-                  'Chat Coach converts your analysis into clear mistakes, impact, and one drill to repeat.',
-            ),
+          const _FeatureLine(
+            title: 'CrickNova Chat Coach',
+            text: 'Get a clear chat-based explanation of what to try next.',
+          ),
+          const SizedBox(height: 8),
+          const _FeatureLine(
+            title: 'CrickNova Edge',
+            text: 'Live mistake detection for fast premium coaching feedback.',
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (speed != null) _MetricPill(label: 'Speed', value: speed!),
+              if (swing != null) _MetricPill(label: 'Swing', value: swing!),
+              if (spin != null) _MetricPill(label: 'Spin', value: spin!),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _StructuredReportList extends StatelessWidget {
-  final List<String> points;
+class _FeatureGroup extends StatelessWidget {
+  final String title;
+  final List<Widget> items;
 
-  const _StructuredReportList({required this.points});
+  const _FeatureGroup({required this.title, required this.items});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: points
-          .map(
-            (point) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _ChatBubble(isCoach: true, text: point),
+      return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: _LuxuryTypography.label(
+              color: const Color(0xFFD4AF37),
+              fontSize: 9.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.4,
             ),
-          )
-          .toList(growable: false),
+          ),
+          const SizedBox(height: 8),
+          ...items,
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureLine extends StatelessWidget {
+  final String title;
+  final String text;
+
+  const _FeatureLine({required this.title, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(top: 6),
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(
+            color: const Color(0xFFD4AF37),
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: GoogleFonts.inter(
+                color: Colors.white70,
+                fontSize: 12.3,
+                height: 1.28,
+              ),
+              children: [
+                TextSpan(
+                  text: '$title: ',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                  ),
+                ),
+                TextSpan(text: text),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

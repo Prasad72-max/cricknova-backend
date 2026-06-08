@@ -42,6 +42,8 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
   bool _saving = false;
   bool _savingCcVoice = false;
   String _languageSearch = '';
+  String? _generatingLanguage;
+  final Map<String, List<_Marker>> _generatedCaptions = {};
 
   static const Map<String, TranslateLanguage> _translationLanguages = {
     'English': TranslateLanguage.english,
@@ -153,6 +155,7 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
     if (language == 'Original') {
       setState(() {
         _targetLanguage = language;
+        _generatingLanguage = null;
         _displayMarkers = List<_Marker>.from(_markers);
         _activeMarker = null;
       });
@@ -160,8 +163,20 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
     }
     final target = _translationLanguages[language];
     if (target == null || _translating) return;
+
+    final cached = _generatedCaptions[language];
+    if (cached != null) {
+      setState(() {
+        _targetLanguage = language;
+        _generatingLanguage = null;
+        _displayMarkers = List<_Marker>.from(cached);
+        _activeMarker = null;
+      });
+      return;
+    }
+
     setState(() {
-      _targetLanguage = language;
+      _generatingLanguage = language;
       _translating = true;
     });
 
@@ -181,6 +196,9 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
       }
       if (mounted) {
         setState(() {
+          _generatedCaptions[language] = List<_Marker>.from(translated);
+          _targetLanguage = language;
+          _generatingLanguage = null;
           _displayMarkers = translated;
           _activeMarker = null;
         });
@@ -188,16 +206,21 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Translation model is downloading. Try this language again shortly.',
+              '$language CC is still preparing. Try again in a moment.',
             ),
           ),
         );
       }
     } finally {
       await translator.close();
-      if (mounted) setState(() => _translating = false);
+      if (mounted) {
+        setState(() {
+          _translating = false;
+          _generatingLanguage = null;
+        });
+      }
     }
   }
 
@@ -221,6 +244,10 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
   }
 
   String get _captionHeading {
+    final generating = _generatingLanguage;
+    if (_translating && generating != null) {
+      return 'Generating $generating CC...';
+    }
     if (_targetLanguage == 'Original') {
       return 'Original AI Captions';
     }
@@ -725,7 +752,11 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _targetLanguage,
+                                _translating && _generatingLanguage != null
+                                    ? 'Generating ${_generatingLanguage!}...'
+                                    : _targetLanguage == 'Original'
+                                    ? 'Choose a language'
+                                    : 'Generated $_targetLanguage',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 15,
@@ -735,10 +766,19 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                             ],
                           ),
                         ),
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white,
-                        ),
+                        _translating
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Colors.white,
+                              ),
                       ],
                     ),
                   ),

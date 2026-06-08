@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 
@@ -13,8 +13,8 @@ import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_screen.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
-import '../onboarding/cricknova_paywall_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
+import '../services/backend_warmup_service.dart';
 import '../services/premium_service.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -39,8 +39,8 @@ class _SplashNavigationTarget {
 
 class _SplashScreenState extends State<SplashScreen> {
   static const String _onboardingSeenKey = 'cricknova_onboarding_seen_once';
-  static const Duration _startupTimeout = Duration(milliseconds: 1400);
-  static const Duration _remoteCheckTimeout = Duration(milliseconds: 900);
+  static const Duration _startupTimeout = Duration(seconds: 3);
+  static const Duration _authRestoreTimeout = Duration(milliseconds: 500);
   bool _fadeOut = false;
   bool _networkDialogOpen = false;
 
@@ -56,11 +56,12 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    unawaited(BackendWarmupService.instance.wake(force: true));
     _startCursorBlinking();
     _startTaglineTyping();
     _navigationTargetFuture = _prepareNavigationTarget();
     // Keep the final brand splash polished without repeating the player logo.
-    _advanceTimer = Timer(const Duration(milliseconds: 650), _advance);
+    _advanceTimer = Timer(const Duration(seconds: 3), _advance);
   }
 
   @override
@@ -132,7 +133,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     setState(() => _fadeOut = true);
 
-    await Future<void>.delayed(const Duration(milliseconds: 160));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -153,7 +154,7 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     if (kIsWeb) {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = await _restoredFirebaseUser();
       final userName = user?.displayName ?? 'Player';
       if (user != null) {
         try {
@@ -172,6 +173,33 @@ class _SplashScreenState extends State<SplashScreen> {
       return _localNavigationTarget();
     }
 
+    final prefs = await SharedPreferences.getInstance();
+    final user = await _restoredFirebaseUser();
+    final userName = await _resolvedCachedUserName(prefs, user);
+    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
+    final pendingAnswers = await CricknovaOnboardingStore.loadPendingAnswers();
+    final pendingCompleted = await CricknovaOnboardingStore.isPendingCompleted();
+
+    if (user != null) {
+      // Signed-in users must not be sent back to Google login on every app
+      // launch. Let Firebase's persisted native session win before any network
+      // checks, because DNS/Firestore can be slow while auth is already valid.
+      unawaited(_refreshReturningUserInBackground(user));
+      return _SplashNavigationTarget.online(MainNavigation(userName: userName));
+    }
+
+    if (_hadSavedLogin(prefs)) {
+      final cachedName =
+          prefs.getString('userName') ??
+          prefs.getString('user_name') ??
+          prefs.getString('displayName') ??
+          'Player';
+      unawaited(_restoreGoogleSessionSilently());
+      return _SplashNavigationTarget.online(
+        MainNavigation(userName: cachedName),
+      );
+    }
+
     // Desktop DNS/network permissions can be delayed independently of the
     // actual Firebase connection, so do not gate macOS startup on a DNS probe.
     if (!Platform.isMacOS) {
@@ -180,57 +208,10 @@ class _SplashScreenState extends State<SplashScreen> {
         return const _SplashNavigationTarget.offline();
       }
     }
-    final prefs = await SharedPreferences.getInstance();
-    final user = FirebaseAuth.instance.currentUser;
-    final userName = user?.displayName ?? 'Player';
-    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
 
-    if (user != null) {
-      // ── 3-way check for signed-in users ──────────────────────────────────
-      //
-      // Case 1: Firestore users doc EXISTS → fully registered returning user.
-      //         Load fresh premium and go to app.
-      //
-      // Case 2: No Firestore doc BUT local onboarding is COMPLETED.
-      //         This happens after account-deletion + re-onboarding + re-login:
-      //         the backend hasn't recreated the users doc yet, but the user
-      //         already went through onboarding.  Send to pre-paywall.
-      //
-      // Case 3: No Firestore doc AND onboarding NOT done → truly new account.
-      //         Show onboarding from the welcome step.
-      // ─────────────────────────────────────────────────────────────────────
-      final bool firestoreExists = await _firestoreUserExists(user.uid);
-
-      if (firestoreExists) {
-        // Case 1 — returning user
-        try {
-          await PremiumService.ensureFreshState().timeout(_remoteCheckTimeout);
-        } catch (_) {}
-        try {
-          await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(
-            user.uid,
-          ).timeout(_remoteCheckTimeout);
-        } catch (_) {}
-        return _SplashNavigationTarget.online(
-          MainNavigation(userName: userName),
-        );
-      }
-
-      final bool localOnboardingDone =
-          await CricknovaOnboardingStore.isCompleted(user.uid);
-
-      if (localOnboardingDone) {
-        // Case 2 — onboarding done locally but no Firestore doc yet
-        //           (e.g., after account-deletion → re-onboarding → re-login)
-        return _SplashNavigationTarget.online(
-          CricknovaPaywallScreen(userName: userName),
-        );
-      }
-
-      // Case 3 — truly brand-new sign-in, show onboarding
-      await prefs.setBool(_onboardingSeenKey, true);
-      return _SplashNavigationTarget.online(
-        CricknovaOnboardingScreen(userName: userName, skipGetStarted: false),
+    if (pendingAnswers.isNotEmpty && !pendingCompleted) {
+      return const _SplashNavigationTarget.online(
+        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
       );
     }
 
@@ -266,7 +247,7 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     if (Firebase.apps.isNotEmpty) {
-      final user = FirebaseAuth.instance.currentUser;
+      final user = await _restoredFirebaseUser();
       if (user != null) {
         return _SplashNavigationTarget.online(
           MainNavigation(userName: user.displayName ?? 'Player'),
@@ -275,6 +256,13 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
+    final pendingAnswers = await CricknovaOnboardingStore.loadPendingAnswers();
+    final pendingCompleted = await CricknovaOnboardingStore.isPendingCompleted();
+    if (pendingAnswers.isNotEmpty && !pendingCompleted) {
+      return const _SplashNavigationTarget.online(
+        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
+      );
+    }
     if (!onboardingSeen) {
       await prefs.setBool(_onboardingSeenKey, true);
       return const _SplashNavigationTarget.online(
@@ -286,17 +274,80 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 
-  Future<bool> _firestoreUserExists(String uid) async {
+  Future<User?> _restoredFirebaseUser() async {
+    if (Firebase.apps.isEmpty) return null;
+    final current = FirebaseAuth.instance.currentUser;
+    if (current != null) return current;
+    final prefs = await SharedPreferences.getInstance();
+    final hadSavedLogin = _hadSavedLogin(prefs);
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get(const GetOptions(source: Source.serverAndCache))
-          .timeout(_remoteCheckTimeout);
-      return snap.exists;
+      return await FirebaseAuth.instance
+          .authStateChanges()
+          .firstWhere((user) => user != null)
+          .timeout(_authRestoreTimeout);
     } catch (_) {
-      return false;
+      final restored = FirebaseAuth.instance.currentUser;
+      if (restored != null || !hadSavedLogin) return restored;
+      return _restoreGoogleSessionSilently();
     }
+  }
+
+  bool _hadSavedLogin(SharedPreferences prefs) {
+    return prefs.getBool('is_logged_in') == true ||
+        prefs.getBool('isLoggedIn') == true ||
+        (prefs.getString('user_id')?.isNotEmpty ?? false) ||
+        (prefs.getString('uid')?.isNotEmpty ?? false);
+  }
+
+  Future<User?> _restoreGoogleSessionSilently() async {
+    try {
+      final googleUser = await GoogleSignIn().signInSilently();
+      if (googleUser == null) return FirebaseAuth.instance.currentUser;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
+      return userCredential.user ?? FirebaseAuth.instance.currentUser;
+    } catch (error) {
+      debugPrint('Silent auth restore failed: $error');
+      return FirebaseAuth.instance.currentUser;
+    }
+  }
+
+  Future<void> _refreshReturningUserInBackground(User user) async {
+    try {
+      await PremiumService.ensureFreshState();
+    } catch (_) {}
+    try {
+      await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
+    } catch (_) {}
+  }
+
+  Future<String> _resolvedCachedUserName(
+    SharedPreferences prefs,
+    User? user,
+  ) async {
+    final uid = user?.uid;
+    final candidates = <String?>[
+      if (uid != null) prefs.getString('profileName_$uid'),
+      if (uid != null) prefs.getString('userName_$uid'),
+      prefs.getString('profileName'),
+      prefs.getString('userName'),
+      prefs.getString('user_name'),
+      prefs.getString('displayName'),
+      user?.displayName,
+    ];
+    for (final candidate in candidates) {
+      final name = candidate?.trim();
+      if (name != null && name.isNotEmpty && name.toLowerCase() != 'player') {
+        return name;
+      }
+    }
+    return 'Player';
   }
 
   Future<bool> _hasInternetConnection() async {
@@ -401,7 +452,7 @@ class _SplashScreenState extends State<SplashScreen> {
     return AnimatedOpacity(
       key: const ValueKey('splash'),
       opacity: _fadeOut ? 0 : 1,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 180),
       curve: OnboardingUiTokens.motionEaseIn,
       child: Center(
         child: Padding(
@@ -420,7 +471,7 @@ class _SplashScreenState extends State<SplashScreen> {
       children: [
         TweenAnimationBuilder<double>(
           tween: Tween<double>(begin: 0, end: 1),
-          duration: const Duration(milliseconds: 1400),
+          duration: const Duration(milliseconds: 500),
           curve: Curves.easeOutCubic,
           builder: (context, t, _) {
             final scale = 0.92 + (t * 0.08);

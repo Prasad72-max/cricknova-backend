@@ -10,9 +10,9 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
-import 'package:hive/hive.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/weekly_stats_service.dart';
+import '../services/xp_service.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   final bool bowlingMode;
@@ -25,6 +25,8 @@ class AnalyseYourselfScreen extends StatefulWidget {
 
 class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     with TickerProviderStateMixin {
+  static bool _hasShownUploadGuidanceThisSession = false;
+
   bool get _isBowlingMode => widget.bowlingMode;
   String get _analysisDiscipline => _isBowlingMode ? "bowling" : "batting";
   String get _disciplineGuard => _isBowlingMode
@@ -143,9 +145,15 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
   }
 
   Future<void> _pickCompareVideo({required bool isLeft}) async {
+    if (_hasShownUploadGuidanceThisSession) {
+      await pickVideo(isLeft: isLeft);
+      return;
+    }
+    _hasShownUploadGuidanceThisSession = true;
+
     final title = isLeft ? "Select Video 1" : "Select Video 2";
     final subtitle =
-        "Pick two different clips so CrickNova Coach can compare technique honestly.";
+        "Choose two clear clips of your own cricket action. Similar camera angles and matching batting or bowling actions will give you a more useful comparison.";
 
     final shouldContinue = await showDialog<bool>(
       context: context,
@@ -191,7 +199,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
                     ),
                   ),
                   child: const Text(
-                    "CRICKNOVA COACH",
+                    "BETTER COMPARISON GUIDE",
                     style: TextStyle(
                       color: Color(0xFFBAE6FD),
                       fontSize: 11,
@@ -217,6 +225,27 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
                     color: Colors.white70,
                     fontSize: 14,
                     height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF3B30).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFFFF3B30).withOpacity(0.35),
+                    ),
+                  ),
+                  child: const Text(
+                    "For the clearest result, use genuine cricket practice clips where your full action is visible. Avoid dark, shaky, cropped, or unrelated videos.",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -608,16 +637,7 @@ Do not give rating/score.
         try {
           await WeeklyStatsService.recordAnalyseAi(user.uid);
         } catch (_) {}
-        // 🎯 XP update → Always stored locally in Hive
-        final uid = user.uid;
-        final box = await Hive.openBox("local_stats_$uid");
-
-        int currentXp = box.get('xp', defaultValue: 0);
-        int newXp = currentXp + 40; // Compare XP reward
-
-        await box.put('xp', newXp);
-
-        debugPrint("🔥 HIVE XP UPDATED (COMPARE) → $newXp");
+        await XpService.award(uid: user.uid, amount: 40, source: 'COMPARE');
 
         await PremiumService.consumeCompare();
         try {

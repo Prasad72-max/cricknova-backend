@@ -104,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _greeting = GreetingController.build(widget.userName);
+    _primeInitialHomeFromOpenCaches();
     WidgetsBinding.instance.addObserver(_lifeCycleObserver);
     _eliteHeaderController = AnimationController(
       vsync: this,
@@ -144,6 +145,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       'pending_videos',
     ).watch().listen((_) => unawaited(_syncAnalysisTwoMinuteReminders()));
     _scheduleGreetingRefresh();
+  }
+
+  void _primeInitialHomeFromOpenCaches() {
+    final uid = _currentUid();
+    if (Hive.isBoxOpen('quick_stats_cache')) {
+      final box = Hive.box('quick_stats_cache');
+      totalUploadedSessions =
+          (box.get(_cacheSessionsKey(uid), defaultValue: 0) as num).toInt();
+      _cachedTopSpeed =
+          (box.get(_cacheTopSpeedKey(uid), defaultValue: 0.0) as num)
+              .toDouble();
+    }
+    if (Hive.isBoxOpen('speedBox')) {
+      final stored = Hive.box('speedBox').get('allSpeeds_$uid');
+      if (stored is List) {
+        final speeds = stored.whereType<num>().map((value) {
+          return value.toDouble();
+        }).toList();
+        speedHistory = speeds.length > 6
+            ? speeds.sublist(speeds.length - 6)
+            : speeds;
+      }
+    }
   }
 
   bool get _isHomeTabVisible => MainNavigation.activeTabNotifier.value == 0;
@@ -1486,6 +1510,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: CustomPaint(
                     painter: _EliteStadiumBackdropPainter(
                       opacity: 0.42 * progress,
+                      slot: greetingTheme.slot,
                     ),
                   ),
                 ),
@@ -2133,44 +2158,57 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
 class _EliteStadiumBackdropPainter extends CustomPainter {
   final double opacity;
+  final GreetingTimeSlot slot;
 
-  _EliteStadiumBackdropPainter({required this.opacity});
+  _EliteStadiumBackdropPainter({required this.opacity, required this.slot});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (opacity <= 0) return;
-
-    final floodPaint = Paint()
-      ..shader =
-          const RadialGradient(
-            colors: [Color(0x44A8CFFF), Color(0x00000000)],
-          ).createShader(
-            Rect.fromCircle(
-              center: Offset(size.width * 0.22, size.height * 0.06),
-              radius: size.width * 0.35,
-            ),
-          )
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26);
-    canvas.drawCircle(
-      Offset(size.width * 0.22, size.height * 0.06),
-      size.width * 0.22,
-      floodPaint..color = const Color(0x66A8CFFF).withValues(alpha: opacity),
+    final now = DateTime.now();
+    final isNight = slot == GreetingTimeSlot.midnight;
+    final sunProgress = _sunProgress(now);
+    final sunCenter = Offset(
+      size.width * sunProgress,
+      size.height * (isNight ? 0.62 : 0.18),
     );
-    canvas.drawCircle(
-      Offset(size.width * 0.82, size.height * 0.09),
-      size.width * 0.18,
-      Paint()
+    final moonVisible = isNight && _moonIllumination(now) > 0.14;
+    final moonCenter = Offset(size.width * 0.72, size.height * 0.17);
+
+    final skyOrb = Paint()
+      ..shader =
+          RadialGradient(
+            colors: isNight
+                ? [
+                    const Color(0xFFBFD8FF).withValues(alpha: 0.20 * opacity),
+                    Colors.transparent,
+                  ]
+                : [
+                    const Color(0xFFFFF0B0).withValues(alpha: 0.22 * opacity),
+                    Colors.transparent,
+                  ],
+          ).createShader(
+            Rect.fromCircle(center: sunCenter, radius: size.width * 0.28),
+          )
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
+    canvas.drawCircle(sunCenter, size.width * 0.10, skyOrb);
+
+    if (moonVisible) {
+      final moonGlow = Paint()
         ..shader =
             const RadialGradient(
-              colors: [Color(0x3399C7FF), Color(0x00000000)],
+              colors: [Color(0xAAFFFFFF), Color(0x00FFFFFF)],
             ).createShader(
-              Rect.fromCircle(
-                center: Offset(size.width * 0.82, size.height * 0.09),
-                radius: size.width * 0.28,
-              ),
+              Rect.fromCircle(center: moonCenter, radius: size.width * 0.16),
             )
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24),
-    );
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+      canvas.drawCircle(moonCenter, size.width * 0.05, moonGlow);
+
+      final moon = Paint()
+        ..color = Colors.white.withValues(alpha: 0.82 * opacity)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+      canvas.drawCircle(moonCenter, size.width * 0.035, moon);
+    }
 
     final fieldArc = Paint()
       ..style = PaintingStyle.stroke
@@ -2194,11 +2232,68 @@ class _EliteStadiumBackdropPainter extends CustomPainter {
       Offset(size.width * 0.92, size.height * 0.38),
       railPaint,
     );
+
+    if (!isNight) {
+      final cloudPaint = Paint()
+        ..color = Colors.white.withValues(alpha: opacity * 0.07)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+      _drawCloud(
+        canvas,
+        Offset(size.width * 0.20, size.height * 0.14),
+        1.0,
+        cloudPaint,
+      );
+      _drawCloud(
+        canvas,
+        Offset(size.width * 0.64, size.height * 0.10),
+        0.82,
+        cloudPaint,
+      );
+    } else if (moonVisible) {
+      final mistPaint = Paint()
+        ..color = const Color(0xFF9DB4D6).withValues(alpha: opacity * 0.04)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+      _drawCloud(
+        canvas,
+        Offset(size.width * 0.26, size.height * 0.12),
+        0.78,
+        mistPaint,
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _EliteStadiumBackdropPainter oldDelegate) {
-    return oldDelegate.opacity != opacity;
+    return oldDelegate.opacity != opacity || oldDelegate.slot != slot;
+  }
+
+  double _sunProgress(DateTime now) {
+    final minutes = (now.hour * 60) + now.minute + (now.second / 60.0);
+    final clamped = minutes.clamp(300.0, 1260.0);
+    return (clamped - 300.0) / (1260.0 - 300.0);
+  }
+
+  double _moonIllumination(DateTime now) {
+    final epochDays =
+        now.toUtc().millisecondsSinceEpoch / Duration.millisecondsPerDay;
+    final synodicMonth = 29.53058867;
+    final phase = (epochDays / synodicMonth) % 1.0;
+    final illuminated = (1 - (math.cos(phase * math.pi * 2) * -1));
+    return (illuminated / 2).clamp(0.0, 1.0);
+  }
+
+  void _drawCloud(Canvas canvas, Offset origin, double scale, Paint paint) {
+    final r = 18.0 * scale;
+    canvas.drawCircle(origin + Offset(-r * 0.7, 0), r * 0.72, paint);
+    canvas.drawCircle(origin + Offset(0, -r * 0.26), r, paint);
+    canvas.drawCircle(origin + Offset(r * 0.72, 0), r * 0.78, paint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: origin, width: r * 3.0, height: r * 1.45),
+        Radius.circular(r),
+      ),
+      paint,
+    );
   }
 }
 

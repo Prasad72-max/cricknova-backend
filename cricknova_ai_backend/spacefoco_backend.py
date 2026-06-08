@@ -1960,10 +1960,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        action_label = _classify_uploaded_cricket_video(video_path)
-        if action_label == "violation":
-            return _non_cricket_upload_response("training_analyze")
-
         ball_positions = track_ball_positions(video_path)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -2114,10 +2110,6 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        action_label = _classify_uploaded_cricket_video(video_path)
-        if action_label == "violation":
-            return _non_cricket_upload_response("coach_analyze")
-
         from subscriptions_store import get_subscription, increment_mistake
         sub = get_subscription(user_id)
         try:
@@ -2358,14 +2350,6 @@ async def ai_coach_diff(
         )
 
     try:
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            left_future = executor.submit(_classify_uploaded_cricket_video, left_path)
-            right_future = executor.submit(_classify_uploaded_cricket_video, right_path)
-            left_label = left_future.result()
-            right_label = right_future.result()
-        if left_label == "violation" or right_label == "violation":
-            return _non_cricket_upload_response("coach_diff")
-
         from subscriptions_store import get_subscription, increment_compare
         sub = get_subscription(user_id)
         try:

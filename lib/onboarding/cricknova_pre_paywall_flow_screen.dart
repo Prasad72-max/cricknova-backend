@@ -35,7 +35,16 @@ class CricknovaPrePaywallFlowScreen extends StatefulWidget {
       _CricknovaPrePaywallFlowScreenState();
 }
 
-enum _PrePaywallStep { login, reel, comparison, snapshot, hook, trust, mistakeAnalysis, trial }
+enum _PrePaywallStep {
+  login,
+  reel,
+  comparison,
+  snapshot,
+  hook,
+  trust,
+  mistakeAnalysis,
+  trial,
+}
 
 enum _PlanChoice { yearly, monthly }
 
@@ -1454,7 +1463,7 @@ class _LockedTrialCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'This device has already used the free trial. Choose a direct plan instead.',
+            'Choose a direct plan to continue.',
             style: OnboardingTextStyles.uiSans(
               color: Colors.white.withValues(alpha: 0.78),
               fontSize: 13.5,

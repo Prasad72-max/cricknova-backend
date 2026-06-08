@@ -252,13 +252,14 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         }
 
         for (final offerDetails in offerDetailsList) {
-          final bool hasFreeTrial = offerDetails.pricingPhases.any(
-            (phase) => phase.priceAmountMicros == 0,
-          ) ||
-          (offerDetails.offerId ?? '').toLowerCase().contains('trial') ||
-          offerDetails.offerTags.any(
-            (tag) => tag.toLowerCase().contains('trial'),
-          );
+          final bool hasFreeTrial =
+              offerDetails.pricingPhases.any(
+                (phase) => phase.priceAmountMicros == 0,
+              ) ||
+              (offerDetails.offerId ?? '').toLowerCase().contains('trial') ||
+              offerDetails.offerTags.any(
+                (tag) => tag.toLowerCase().contains('trial'),
+              );
           debugPrint(
             'Google Play offer: '
             'basePlanId=${offerDetails.basePlanId}, '
@@ -487,10 +488,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         case PurchaseStatus.error:
           _isPurchasePending = false;
           _pendingSelectedBasePlanId = null;
-          _setError(
-            purchaseDetails.error?.message ??
-                'The Google Play purchase failed.',
-          );
+          _setError(_friendlyPurchaseError(purchaseDetails.error?.message));
           break;
         case PurchaseStatus.canceled:
           _isPurchasePending = false;
@@ -507,6 +505,17 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
         await _completePurchaseSafely(purchaseDetails);
       }
     }
+  }
+
+  String _friendlyPurchaseError(String? rawMessage) {
+    final String message = (rawMessage ?? '').toLowerCase();
+    if (message.contains('already owned') ||
+        message.contains('already own') ||
+        message.contains('item already owned') ||
+        message.contains('owned by another user')) {
+      return 'This plan is already active on your Google account. Restore purchases if the app does not reflect it yet.';
+    }
+    return rawMessage ?? 'The Google Play purchase failed.';
   }
 
   Future<void> _processPurchasedState(PurchaseDetails purchaseDetails) async {
@@ -526,7 +535,7 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
       final bool isIntroTrial =
           verification.hasFreeTrial && verification.basePlanId == oneYearPlanId;
       final DateTime expiryDate = isIntroTrial
-          ? DateTime.now().add(const Duration(days: 3))
+          ? DateTime.now().add(const Duration(days: 18))
           : verification.expiryDate ??
                 _fallbackExpiryForPlan(verification.basePlanId!);
       final String subscriptionState = isIntroTrial ? 'TRIAL_ACTIVE' : 'ACTIVE';

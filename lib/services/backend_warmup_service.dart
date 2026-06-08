@@ -10,7 +10,9 @@ class BackendWarmupService {
 
   static final BackendWarmupService instance = BackendWarmupService._();
 
-  static final Uri _warmupUri = Uri.parse(ApiConfig.baseUrl);
+  static final Uri _warmupUri = Uri.parse(
+    '${ApiConfig.baseUrl.replaceFirst(RegExp(r'/$'), '')}/__alive',
+  );
   static const List<Duration> _retryDelays = <Duration>[
     Duration(seconds: 8),
     Duration(seconds: 20),
@@ -56,10 +58,12 @@ class BackendWarmupService {
           )
           .timeout(const Duration(seconds: 6));
 
-      final ok = response.statusCode >= 200 && response.statusCode < 500;
+      final ok = response.statusCode >= 200 && response.statusCode < 400;
       if (ok) {
         _lastSuccessAt = DateTime.now();
         debugPrint('Backend warmup sent: ${response.statusCode}');
+      } else {
+        debugPrint('Backend warmup rejected: ${response.statusCode}');
       }
       return ok;
     } catch (e) {

@@ -22,7 +22,10 @@ List<Map<String, double>> _sanitizeTraj(dynamic raw) {
     final x = e['x'];
     final y = e['y'];
     if (x is! num || y is! num) continue;
-    pts.add({'x': x.toDouble().clamp(0.0, 1.0), 'y': y.toDouble().clamp(0.0, 1.0)});
+    pts.add({
+      'x': x.toDouble().clamp(0.0, 1.0),
+      'y': y.toDouble().clamp(0.0, 1.0),
+    });
   }
   return pts;
 }
@@ -35,18 +38,26 @@ List<Map<String, double>> _unmirrorX(List<Map<String, double>> pts) {
     if (x < minX) minX = x;
     if (x > maxX) maxX = x;
   }
-  return pts.map((p) => {
-    'x': (maxX - ((p['x'] ?? 0.5) - minX)).clamp(0.0, 1.0),
-    'y': (p['y'] ?? 0.5).clamp(0.0, 1.0),
-  }).toList();
+  return pts
+      .map(
+        (p) => {
+          'x': (maxX - ((p['x'] ?? 0.5) - minX)).clamp(0.0, 1.0),
+          'y': (p['y'] ?? 0.5).clamp(0.0, 1.0),
+        },
+      )
+      .toList();
 }
 
 int _bounceIdx(List<Map<String, double>> pts) {
   if (pts.length < 5) return -1;
-  int best = -1; double bestY = -1;
+  int best = -1;
+  double bestY = -1;
   for (int i = 2; i < pts.length - 2; i++) {
     final y = pts[i]['y'] ?? 0.0;
-    if (y > bestY) { bestY = y; best = i; }
+    if (y > bestY) {
+      bestY = y;
+      best = i;
+    }
   }
   return best;
 }
@@ -58,7 +69,10 @@ double _slopeX(List<Map<String, double>> pts, int start, int end) {
   for (int i = 0; i < n; i++) {
     final t = i.toDouble();
     final x = pts[start + i]['x'] ?? 0.5;
-    st += t; sx += x; stt += t * t; stx += t * x;
+    st += t;
+    sx += x;
+    stt += t * t;
+    stx += t * x;
   }
   final d = (n * stt) - (st * st);
   if (d.abs() < 1e-9) return 0.0;
@@ -67,8 +81,15 @@ double _slopeX(List<Map<String, double>> pts, int start, int end) {
 
 bool _badToken(String s) {
   final t = s.trim().toLowerCase();
-  return t.isEmpty || t == 'none' || t == 'unknown' || t == 'unavailable' ||
-      t == 'na' || t == 'n/a' || t == 'null' || t == 'straight' || t == 'no spin';
+  return t.isEmpty ||
+      t == 'none' ||
+      t == 'unknown' ||
+      t == 'unavailable' ||
+      t == 'na' ||
+      t == 'n/a' ||
+      t == 'null' ||
+      t == 'straight' ||
+      t == 'no spin';
 }
 
 String _resolveSwing(Map<String, dynamic>? data) {
@@ -81,7 +102,9 @@ String _resolveSwing(Map<String, dynamic>? data) {
   final pts = _unmirrorX(_sanitizeTraj(data?['trajectory']));
   if (pts.length < 2) return 'INSWING';
   final bounce = _bounceIdx(pts);
-  final pivot = bounce <= 0 ? (pts.length ~/ 2) : bounce.clamp(1, pts.length - 2);
+  final pivot = bounce <= 0
+      ? (pts.length ~/ 2)
+      : bounce.clamp(1, pts.length - 2);
   final preSlope = _slopeX(pts, 0, pivot);
   final dx = (pts.last['x'] ?? 0.5) - (pts.first['x'] ?? 0.5);
   const eps = 0.0008;
@@ -99,7 +122,9 @@ String _resolveSpin(Map<String, dynamic>? data) {
   final pts = _unmirrorX(_sanitizeTraj(data?['trajectory']));
   if (pts.length < 3) return 'OFF SPIN';
   final bounce = _bounceIdx(pts);
-  final pivot = bounce <= 0 ? (pts.length ~/ 2) : bounce.clamp(1, pts.length - 2);
+  final pivot = bounce <= 0
+      ? (pts.length ~/ 2)
+      : bounce.clamp(1, pts.length - 2);
   final pre = _slopeX(pts, 0, pivot);
   final post = _slopeX(pts, pivot, pts.length - 1);
   final curve = post - pre;
@@ -238,9 +263,7 @@ Map<String, dynamic>? _structuredMistakeReport(Map<String, dynamic>? data) {
     }
   }
 
-  final mistakes = <String>[
-    ..._usefulTextList(source['mistakes'], limit: 2),
-  ];
+  final mistakes = <String>[..._usefulTextList(source['mistakes'], limit: 2)];
   if (mistakes.isEmpty) {
     mistakes.addAll(
       _usefulTextList(
@@ -342,7 +365,8 @@ Map<String, dynamic> _fallbackMistakeReportFromAnalysis(
     drill =
         'Bowl 5 sets of 6 balls from a short run-up, marking only balls that hit the same target channel.';
   } else {
-    mistake1 = 'Contact control is not staying stable through the hitting zone.';
+    mistake1 =
+        'Contact control is not staying stable through the hitting zone.';
     mistake2 = 'The finish is not matching the intended shot direction.';
     impact =
         'Power leaks because the swing does not stay connected through contact. Current clip pace context: $speedLabel.';
@@ -360,10 +384,10 @@ Map<String, dynamic> _fallbackMistakeReportFromAnalysis(
 // ── State enum ────────────────────────────────────────────────────────────────
 
 enum _PanePhase {
-  question,       // initial choice
-  uploading,      // option A: file picked, sending to API
-  results,        // option A: real results shown
-  demo,           // option B: sample card
+  question, // initial choice
+  uploading, // option A: file picked, sending to API
+  results, // option A: real results shown
+  demo, // option B: sample card
 }
 
 // ── Widget ────────────────────────────────────────────────────────────────────
@@ -387,7 +411,8 @@ class CricknovaTrialUploadPane extends StatefulWidget {
   });
 
   @override
-  State<CricknovaTrialUploadPane> createState() => _CricknovaTrialUploadPaneState();
+  State<CricknovaTrialUploadPane> createState() =>
+      _CricknovaTrialUploadPaneState();
 }
 
 class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
@@ -403,6 +428,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
   File? _videoFile;
   VideoPlayerController? _videoCtrl;
   bool _videoReady = false;
+  bool _resultPreviewPlayed = false;
   double _progress = 0.0;
   String _statusMsg = 'Uploading to CrickNova AI…';
   String? _apiError;
@@ -454,16 +480,20 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
     // init video player for background preview
     final ctrl = VideoPlayerController.file(file);
     await ctrl.initialize();
-    ctrl.setLooping(true);
+    await ctrl.setLooping(false);
     ctrl.play();
 
-    if (!mounted) { ctrl.dispose(); return; }
+    if (!mounted) {
+      ctrl.dispose();
+      return;
+    }
 
     _videoCtrl?.dispose();
     setState(() {
       _videoFile = file;
       _videoCtrl = ctrl;
       _videoReady = true;
+      _resultPreviewPlayed = false;
       _phase = _PanePhase.uploading;
       _progress = 0.0;
       _statusMsg = 'Warming up CrickNova AI…';
@@ -480,7 +510,10 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
     try {
       // Fake progress ticks while waiting for API
       ticker = Timer.periodic(const Duration(milliseconds: 220), (t) {
-        if (!mounted || _phase != _PanePhase.uploading) { t.cancel(); return; }
+        if (!mounted || _phase != _PanePhase.uploading) {
+          t.cancel();
+          return;
+        }
         setState(() {
           _progress = (_progress + 0.012).clamp(0.0, 0.92);
           if (_progress < 0.3) {
@@ -499,7 +532,9 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
         token = await user?.getIdToken(true);
       } catch (_) {}
 
-      final uri = Uri.parse('https://cricknova-backend.onrender.com/training/analyze');
+      final uri = Uri.parse(
+        'https://cricknova-backend.onrender.com/training/analyze',
+      );
       final request = http.MultipartRequest('POST', uri)
         ..headers['Accept'] = 'application/json';
       if (token != null && token.isNotEmpty) {
@@ -507,7 +542,9 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
       }
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
 
-      final response = await request.send().timeout(const Duration(seconds: 90));
+      final response = await request.send().timeout(
+        const Duration(seconds: 90),
+      );
       final body = await response.stream.bytesToString();
       ticker.cancel();
 
@@ -515,7 +552,8 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(body);
-        final analysis = (decoded['analysis'] ?? decoded) as Map<String, dynamic>?;
+        final analysis =
+            (decoded['analysis'] ?? decoded) as Map<String, dynamic>?;
 
         final rawSpeed = _extractSpeedFromAnalysis(analysis);
         final displaySpeed = rawSpeed ?? _demoSpeedEstimate(analysis, file);
@@ -549,13 +587,19 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('trial_video_path', file.path);
           if (analysis != null) {
-            await prefs.setString('trial_real_analysis_json', jsonEncode(analysis));
+            await prefs.setString(
+              'trial_real_analysis_json',
+              jsonEncode(analysis),
+            );
           }
           await prefs.setString(
             'trial_real_mistake_report',
             jsonEncode(mistakeReport),
           );
-          await prefs.setString('trial_real_speed', '${displaySpeed.toStringAsFixed(1)} KMPH');
+          await prefs.setString(
+            'trial_real_speed',
+            '${displaySpeed.toStringAsFixed(1)} KMPH',
+          );
           if (mistake != null) {
             await prefs.setString('trial_real_mistake', mistake);
           }
@@ -573,6 +617,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
           _drs = 'AVAILABLE';
           _progress = 1.0;
           _phase = _PanePhase.results;
+          _resultPreviewPlayed = false;
         });
       } else {
         throw Exception('API returned ${response.statusCode}');
@@ -581,7 +626,8 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
       ticker?.cancel();
       if (!mounted) return;
       setState(() {
-        _apiError = 'Could not reach CrickNova AI. Check your connection and try again.';
+        _apiError =
+            'Could not reach CrickNova AI. Check your connection and try again.';
         _phase = _PanePhase.question;
         _progress = 0.0;
         _videoCtrl?.dispose();
@@ -605,22 +651,13 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
   Future<void> _runRealDrsFromOnboarding() async {
     final file = _videoFile;
     if (file == null || !file.existsSync()) {
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: _card,
-          title: const Text('Upload a video first', style: TextStyle(color: Colors.white)),
-          content: const Text(
-            'DRS runs on your uploaded cricket clip, the same way it works inside the app.',
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
-        ),
+      setState(() => _drs = 'NOT OUT');
+      await _showDrsReviewDialog(
+        decision: 'NOT OUT',
+        confidence: '92%',
+        subtitle:
+            'Sample slow-motion review. In the full app this runs on your uploaded cricket video.',
+        isDemo: true,
       );
       return;
     }
@@ -643,14 +680,18 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
         request.headers['Authorization'] = 'Bearer $token';
       }
       request.files.add(await http.MultipartFile.fromPath('file', file.path));
-      final response = await request.send().timeout(const Duration(seconds: 90));
+      final response = await request.send().timeout(
+        const Duration(seconds: 90),
+      );
       final body = await response.stream.bytesToString();
       if (!mounted) return;
       if (response.statusCode != 200) {
         throw Exception('DRS API returned ${response.statusCode}');
       }
       final decoded = jsonDecode(body);
-      final map = decoded is Map ? Map<String, dynamic>.from(decoded) : <String, dynamic>{};
+      final map = decoded is Map
+          ? Map<String, dynamic>.from(decoded)
+          : <String, dynamic>{};
       final drs = map['drs'] is Map
           ? Map<String, dynamic>.from(map['drs'])
           : map;
@@ -666,26 +707,13 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
       setState(() {
         _drs = label;
       });
-      await showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: _card,
-          title: const Text('DRS Review', style: TextStyle(color: Colors.white)),
-          content: Text(
-            label,
-            style: const TextStyle(
-              color: _gold,
-              fontWeight: FontWeight.w900,
-              fontSize: 22,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
+      await _showDrsReviewDialog(
+        decision: decision,
+        confidence: confidence == null
+            ? null
+            : '${(confidence <= 1 ? confidence * 100 : confidence).clamp(0, 100).toStringAsFixed(0)}%',
+        subtitle: 'Slow-motion replay complete. Make your call.',
+        isDemo: false,
       );
     } catch (_) {
       if (!mounted) return;
@@ -693,11 +721,218 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
         _drs = 'DRS FAILED';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DRS could not run. Try another cricket clip.')),
+        const SnackBar(
+          content: Text('DRS could not run. Try another cricket clip.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _drsLoading = false);
     }
+  }
+
+  Future<void> _showDrsReviewDialog({
+    required String decision,
+    required String subtitle,
+    String? confidence,
+    required bool isDemo,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.84),
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF090D13),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: _gold.withValues(alpha: 0.34)),
+            boxShadow: [
+              BoxShadow(
+                color: _gold.withValues(alpha: 0.12),
+                blurRadius: 34,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _gold.withValues(alpha: 0.12),
+                      border: Border.all(color: _gold.withValues(alpha: 0.45)),
+                    ),
+                    child: const Icon(
+                      Icons.slow_motion_video_rounded,
+                      color: _gold,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'DRS Review',
+                          style: OnboardingTextStyles.uiSans(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          isDemo
+                              ? 'Sample replay mode'
+                              : 'Uploaded video replay',
+                          style: OnboardingTextStyles.uiSans(
+                            color: Colors.white54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(18),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(0xFF111827), Color(0xFF05070A)],
+                          ),
+                        ),
+                      ),
+                      CustomPaint(
+                        painter: _DrsReplayPainter(
+                          decision: decision,
+                          color: decision.contains('OUT')
+                              ? const Color(0xFF10B981)
+                              : _gold,
+                        ),
+                      ),
+                      Positioned(
+                        left: 12,
+                        top: 10,
+                        child: _ReplayChip('SLOW-MO 0.35x'),
+                      ),
+                      Positioned(
+                        right: 12,
+                        top: 10,
+                        child: _ReplayChip('BALL TRACKING'),
+                      ),
+                      Positioned(
+                        left: 12,
+                        right: 12,
+                        bottom: 12,
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.drag_indicator_rounded,
+                              color: Colors.white38,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(999),
+                                child: LinearProgressIndicator(
+                                  value: 0.72,
+                                  minHeight: 5,
+                                  backgroundColor: Colors.white12,
+                                  color: _gold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'CALL',
+                              style: OnboardingTextStyles.uiMono(
+                                color: _gold,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                decision,
+                textAlign: TextAlign.center,
+                style: OnboardingTextStyles.uiSans(
+                  color: decision.contains('OUT')
+                      ? const Color(0xFF10B981)
+                      : _gold,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (confidence != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Confidence $confidence',
+                  textAlign: TextAlign.center,
+                  style: OnboardingTextStyles.uiMono(
+                    color: Colors.white54,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 10),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: OnboardingTextStyles.uiSans(
+                  color: Colors.white60,
+                  fontSize: 13,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _gold,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Done',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -741,7 +976,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
             'SEE CRICKNOVA IN ACTION',
             style: OnboardingTextStyles.uiMono(
               color: _gold,
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w800,
               letterSpacing: 2.2,
             ),
@@ -752,16 +987,16 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
             'Upload a cricket video.\nGet instant insights.',
             style: OnboardingTextStyles.serif(
               color: OnboardingColors.textPrimary,
-              fontSize: 34,
+              fontSize: 42,
               fontWeight: FontWeight.w500,
-              height: 1.12,
+              height: 1.05,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
 
           // Question card
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               color: _card,
               borderRadius: BorderRadius.circular(20),
@@ -774,12 +1009,12 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                   'Do you have a cricket video ready?',
                   style: OnboardingTextStyles.uiSans(
                     color: OnboardingColors.textPrimary,
-                    fontSize: 16,
+                    fontSize: 20,
                     fontWeight: FontWeight.w700,
                     height: 1.35,
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
 
                 // Option A
                 _OptionButton(
@@ -810,11 +1045,17 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
               decoration: BoxDecoration(
                 color: const Color(0xFF2A0E0E),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: const Color(0xFFFF4D4D).withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: const Color(0xFFFF4D4D).withValues(alpha: 0.35),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: Color(0xFFFF4D4D), size: 20),
+                  const Icon(
+                    Icons.error_outline,
+                    color: Color(0xFFFF4D4D),
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -831,18 +1072,17 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
             ),
           ],
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 26),
 
           // Feature badges row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: const [
               _Badge('⚡ Speed'),
-              const SizedBox(width: 8),
               _Badge('🌪 Swing'),
-              const SizedBox(width: 8),
               _Badge('🌀 Spin'),
-              const SizedBox(width: 8),
               _Badge('🎯 DRS'),
             ],
           ),
@@ -922,7 +1162,11 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                     Container(
                       color: Colors.black,
                       child: const Center(
-                        child: Icon(Icons.sports_cricket, size: 64, color: Colors.white12),
+                        child: Icon(
+                          Icons.sports_cricket,
+                          size: 64,
+                          color: Colors.white12,
+                        ),
                       ),
                     ),
 
@@ -943,13 +1187,21 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                               height: 72,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: _gold.withValues(alpha: 0.10 + 0.06 * _pulse.value),
+                                color: _gold.withValues(
+                                  alpha: 0.10 + 0.06 * _pulse.value,
+                                ),
                                 border: Border.all(
-                                  color: _gold.withValues(alpha: 0.5 + 0.3 * _pulse.value),
+                                  color: _gold.withValues(
+                                    alpha: 0.5 + 0.3 * _pulse.value,
+                                  ),
                                   width: 1.5,
                                 ),
                               ),
-                              child: const Icon(Icons.bolt, color: _gold, size: 34),
+                              child: const Icon(
+                                Icons.bolt,
+                                color: _gold,
+                                size: 34,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 22),
@@ -1011,7 +1263,9 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
             }),
             style: OutlinedButton.styleFrom(
               side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               foregroundColor: Colors.white60,
             ),
             child: const Text('Cancel'),
@@ -1024,6 +1278,16 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
   // ── Screen 3/4: Results or Demo ───────────────────────────────────────────
   Widget _buildResults({required bool isDemo}) {
     final key = isDemo ? const ValueKey('demo') : const ValueKey('results');
+    if (!isDemo && _videoReady && _videoCtrl != null && !_resultPreviewPlayed) {
+      _resultPreviewPlayed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final ctrl = _videoCtrl;
+        if (!mounted || ctrl == null) return;
+        await ctrl.setLooping(false);
+        await ctrl.seekTo(Duration.zero);
+        await ctrl.play();
+      });
+    }
     return SingleChildScrollView(
       key: key,
       physics: const ClampingScrollPhysics(),
@@ -1054,67 +1318,84 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
 
           // Video thumbnail (only for real upload)
           if (!isDemo && _videoReady && _videoCtrl != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: SizedBox(
-                height: 180,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: _videoCtrl!.value.size.width,
-                        height: _videoCtrl!.value.size.height,
-                        child: VideoPlayer(_videoCtrl!),
-                      ),
-                    ),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.75),
-                          ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final videoHeight = (constraints.maxWidth * 0.68).clamp(
+                  248.0,
+                  320.0,
+                );
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: SizedBox(
+                    height: videoHeight,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _videoCtrl!.value.size.width,
+                            height: _videoCtrl!.value.size.height,
+                            child: VideoPlayer(_videoCtrl!),
+                          ),
                         ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 12,
-                      left: 14,
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: _teal.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: _teal.withValues(alpha: 0.5)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.check_circle_rounded, color: _teal, size: 13),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Analysis complete',
-                                  style: OnboardingTextStyles.uiSans(
-                                    color: _teal,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withValues(alpha: 0.75),
                               ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        Positioned(
+                          bottom: 12,
+                          left: 14,
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _teal.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: _teal.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: _teal,
+                                      size: 13,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Analysis complete',
+                                      style: OnboardingTextStyles.uiSans(
+                                        color: _teal,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 18),
           ],
@@ -1152,7 +1433,9 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _gold.withValues(alpha: 0.12),
-                          border: Border.all(color: _gold.withValues(alpha: 0.4)),
+                          border: Border.all(
+                            color: _gold.withValues(alpha: 0.4),
+                          ),
                         ),
                         child: const Icon(Icons.bolt, color: _gold, size: 20),
                       ),
@@ -1161,7 +1444,9 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isDemo ? 'CrickNova AI Sample' : 'CrickNova AI Result',
+                            isDemo
+                                ? 'CrickNova AI Sample'
+                                : 'CrickNova AI Result',
                             style: OnboardingTextStyles.uiSans(
                               color: Colors.white,
                               fontSize: 14,
@@ -1169,7 +1454,9 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                             ),
                           ),
                           Text(
-                            isDemo ? 'Example detection' : 'From your uploaded video',
+                            isDemo
+                                ? 'Example detection'
+                                : 'From your uploaded video',
                             style: OnboardingTextStyles.uiSans(
                               color: Colors.white54,
                               fontSize: 11,
@@ -1190,21 +1477,42 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                     children: [
                       Row(
                         children: [
-                          Expanded(child: _MetricTile(emoji: '⚡', label: 'Speed', value: _speed ?? 'N/A', highlight: !isDemo)),
+                          Expanded(
+                            child: _MetricTile(
+                              emoji: '⚡',
+                              label: 'Speed',
+                              value: _speed ?? 'N/A',
+                              highlight: !isDemo,
+                            ),
+                          ),
                           const SizedBox(width: 10),
-                          Expanded(child: _MetricTile(emoji: '🌪️', label: 'Swing', value: _swing ?? 'N/A')),
+                          Expanded(
+                            child: _MetricTile(
+                              emoji: '🌪️',
+                              label: 'Swing',
+                              value: _swing ?? 'N/A',
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(child: _MetricTile(emoji: '🌀', label: 'Spin', value: _spin ?? 'N/A')),
+                          Expanded(
+                            child: _MetricTile(
+                              emoji: '🌀',
+                              label: 'Spin',
+                              value: _spin ?? 'N/A',
+                            ),
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: _MetricTile(
                               emoji: '🎯',
                               label: 'DRS',
-                              value: _drsLoading ? 'CHECKING...' : (_drs ?? 'N/A'),
+                              value: _drsLoading
+                                  ? 'CHECKING...'
+                                  : (_drs ?? 'N/A'),
                               isGreen: true,
                               onTap: _runRealDrsFromOnboarding,
                             ),
@@ -1291,19 +1599,23 @@ class _OptionButton extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: gold ? _gold.withValues(alpha: 0.07) : Colors.white.withValues(alpha: 0.03),
+            color: gold
+                ? _gold.withValues(alpha: 0.07)
+                : Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: gold ? _gold.withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.10),
+              color: gold
+                  ? _gold.withValues(alpha: 0.45)
+                  : Colors.white.withValues(alpha: 0.10),
               width: gold ? 1.5 : 1.0,
             ),
           ),
           child: Row(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(width: 14),
+              Text(emoji, style: const TextStyle(fontSize: 28)),
+              const SizedBox(width: 15),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1312,16 +1624,16 @@ class _OptionButton extends StatelessWidget {
                       label,
                       style: OnboardingTextStyles.uiSans(
                         color: gold ? _gold : Colors.white,
-                        fontSize: 14,
+                        fontSize: 17,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 5),
                     Text(
                       sub,
                       style: OnboardingTextStyles.uiSans(
                         color: Colors.white54,
-                        fontSize: 12,
+                        fontSize: 14,
                         height: 1.4,
                       ),
                     ),
@@ -1331,7 +1643,7 @@ class _OptionButton extends StatelessWidget {
               Icon(
                 Icons.arrow_forward_ios_rounded,
                 color: gold ? _gold.withValues(alpha: 0.7) : Colors.white24,
-                size: 14,
+                size: 16,
               ),
             ],
           ),
@@ -1366,8 +1678,8 @@ class _MetricTile extends StatelessWidget {
     final valueColor = highlight
         ? _gold
         : isGreen
-            ? _teal
-            : Colors.white;
+        ? _teal
+        : Colors.white;
 
     return Material(
       color: Colors.transparent,
@@ -1432,6 +1744,125 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
+class _ReplayChip extends StatelessWidget {
+  final String text;
+  const _ReplayChip(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Text(
+        text,
+        style: OnboardingTextStyles.uiMono(
+          color: Colors.white70,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.8,
+        ),
+      ),
+    );
+  }
+}
+
+class _DrsReplayPainter extends CustomPainter {
+  const _DrsReplayPainter({required this.decision, required this.color});
+
+  final String decision;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final pitchPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFF0F172A).withValues(alpha: 0.22),
+          const Color(0xFF1F2937).withValues(alpha: 0.55),
+        ],
+      ).createShader(Offset.zero & size);
+    final pitch = RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * 0.30, 0, size.width * 0.40, size.height),
+      const Radius.circular(18),
+    );
+    canvas.drawRRect(pitch, pitchPaint);
+
+    final creasePaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.22)
+      ..strokeWidth = 1.2;
+    canvas.drawLine(
+      Offset(size.width * 0.24, size.height * 0.70),
+      Offset(size.width * 0.76, size.height * 0.70),
+      creasePaint,
+    );
+
+    final stumpPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.74)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    for (final dx in [-0.035, 0.0, 0.035]) {
+      canvas.drawLine(
+        Offset(size.width * (0.50 + dx), size.height * 0.33),
+        Offset(size.width * (0.50 + dx), size.height * 0.58),
+        stumpPaint,
+      );
+    }
+
+    final pathPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..shader = LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: 0.08),
+          color.withValues(alpha: 0.92),
+        ],
+      ).createShader(Offset.zero & size);
+    final path = Path()
+      ..moveTo(size.width * 0.16, size.height * 0.78)
+      ..quadraticBezierTo(
+        size.width * 0.42,
+        size.height * 0.50,
+        size.width * 0.50,
+        size.height * 0.44,
+      );
+    canvas.drawPath(path, pathPaint);
+
+    final ballCenter = Offset(size.width * 0.50, size.height * 0.44);
+    canvas.drawCircle(ballCenter, 6, Paint()..color = color);
+    canvas.drawCircle(
+      ballCenter,
+      13,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..color = color.withValues(alpha: 0.45),
+    );
+
+    canvas.drawCircle(
+      Offset(size.width * 0.50, size.height * 0.46),
+      42,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = color.withValues(
+          alpha: decision.contains('OUT') ? 0.72 : 0.40,
+        ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _DrsReplayPainter oldDelegate) {
+    return oldDelegate.decision != decision || oldDelegate.color != color;
+  }
+}
+
 class _Badge extends StatelessWidget {
   final String text;
   const _Badge(this.text);
@@ -1439,7 +1870,7 @@ class _Badge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(999),
@@ -1449,8 +1880,8 @@ class _Badge extends StatelessWidget {
         text,
         style: OnboardingTextStyles.uiSans(
           color: Colors.white60,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

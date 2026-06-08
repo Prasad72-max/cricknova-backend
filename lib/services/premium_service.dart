@@ -107,6 +107,7 @@ class PremiumService {
   static const String _trialRevokeAtKey = "premium_trial_revoke_at";
   static const String _graceUntilKey = "premium_grace_until";
   static const String _holdUntilKey = "premium_hold_until";
+  static bool _cacheRestored = false;
 
   static const String _chatLimitKey = "chat_limit";
   static const String _mistakeLimitKey = "mistake_limit";
@@ -227,7 +228,9 @@ class PremiumService {
         liveMillisecondsRemaining = 0;
         return;
       }
-      liveMillisecondsRemaining = milliseconds > 0 ? milliseconds : seconds * 1000;
+      liveMillisecondsRemaining = milliseconds > 0
+          ? milliseconds
+          : seconds * 1000;
     } catch (_) {
       // Keep the last known value; this only drives navigation/display.
     }
@@ -240,7 +243,8 @@ class PremiumService {
           .doc(uid)
           .get(const GetOptions(source: Source.server));
       final data = doc.data() ?? const <String, dynamic>{};
-      final bool banned = data["edge_policy_banned"] == true ||
+      final bool banned =
+          data["edge_policy_banned"] == true ||
           data["is_banned"] == true ||
           data["account_banned"] == true;
       final DateTime? until = _dateField(data, const [
@@ -819,6 +823,41 @@ class PremiumService {
     }
     _initialized = true;
     // 🔥 STEP 1: Restore from local cache FIRST (no Firestore read)
+    await restoreCachedState();
+
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      debugPrint("⏳ Auth not ready, premium restore deferred");
+      _initialized = false;
+      return;
+    }
+
+    try {
+      // Force fresh token to avoid cached auth state
+      final String? idToken = await user.getIdToken(true);
+      if (idToken == null || idToken.isEmpty) {
+        debugPrint("❌ No valid token during premium restore");
+        _initialized = false;
+        return;
+      }
+
+      await _runSingleLoad(user.uid);
+
+      // Mark loaded and notify UI immediately
+      isLoaded = true;
+      _notifyPremium(force: true);
+
+      debugPrint("✅ Premium restored on launch: $isPremium ($plan)");
+    } catch (e) {
+      debugPrint("❌ restoreOnLaunch failed: $e");
+    }
+    _initialized = false;
+  }
+
+  static Future<void> restoreCachedState() async {
+    if (_cacheRestored) return;
+    _cacheRestored = true;
     final prefs = await SharedPreferences.getInstance();
 
     final cachedPremium = prefs.getBool(_premiumKey);
@@ -868,35 +907,6 @@ class PremiumService {
     if (isLoaded) {
       _notifyPremium(force: true);
     }
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      debugPrint("⏳ Auth not ready, premium restore deferred");
-      _initialized = false;
-      return;
-    }
-
-    try {
-      // Force fresh token to avoid cached auth state
-      final String? idToken = await user.getIdToken(true);
-      if (idToken == null || idToken.isEmpty) {
-        debugPrint("❌ No valid token during premium restore");
-        _initialized = false;
-        return;
-      }
-
-      await _runSingleLoad(user.uid);
-
-      // Mark loaded and notify UI immediately
-      isLoaded = true;
-      _notifyPremium(force: true);
-
-      debugPrint("✅ Premium restored on launch: $isPremium ($plan)");
-    } catch (e) {
-      debugPrint("❌ restoreOnLaunch failed: $e");
-    }
-    _initialized = false;
   }
 
   static Future<void> ensureFreshState() async {

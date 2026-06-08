@@ -96,7 +96,11 @@ class LegalDocument {
           body:
               "Born from a passion for the streets of India, CrickNova brings professional DRS-style technology to every gully, club, and stadium. Our mission is to make elite coaching affordable and accessible to every dreamer with a bat or a ball.",
         ),
-        DocSection(heading: "3.2 Founder", body: "Founder: Prasad & Team."),
+        DocSection(
+          heading: "3.2 Built Independently",
+          body:
+              "CrickNova AI is built independently with a solo creator mindset: focused, lean, and obsessed with making cricket analysis feel elite for every player.",
+        ),
       ],
     );
   }
@@ -412,16 +416,16 @@ class _GoldBackButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             color: const Color(0xFF1A1A1A),
-            border: Border.all(color: const Color(0xFFFFD86B), width: 1),
+            border: Border.all(color: Colors.white, width: 1),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFFFD86B).withValues(alpha: 0.4),
+                color: Colors.white.withValues(alpha: 0.22),
                 blurRadius: 12,
                 spreadRadius: 1,
               ),
             ],
           ),
-          child: const Icon(Icons.arrow_back, color: Color(0xFFFFD86B)),
+          child: const Icon(Icons.arrow_back, color: Colors.white),
         ),
       ),
     );

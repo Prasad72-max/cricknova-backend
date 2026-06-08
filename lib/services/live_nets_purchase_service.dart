@@ -23,8 +23,7 @@ class LiveNetsPackConfig {
 class LiveNetsPurchaseService {
   LiveNetsPurchaseService._();
 
-  static final LiveNetsPurchaseService instance =
-      LiveNetsPurchaseService._();
+  static final LiveNetsPurchaseService instance = LiveNetsPurchaseService._();
 
   static const List<LiveNetsPackConfig> packs = <LiveNetsPackConfig>[
     LiveNetsPackConfig(
@@ -55,8 +54,9 @@ class LiveNetsPurchaseService {
 
   final InAppPurchase _iap = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
-  final Map<String, ProductDetails> _productsById =
-      <String, ProductDetails>{};
+  final Map<String, ProductDetails> _productsById = <String, ProductDetails>{};
+  final StreamController<LiveNetsPackConfig> _purchaseSuccessController =
+      StreamController<LiveNetsPackConfig>.broadcast();
   bool _initialized = false;
   bool _available = false;
   bool _purchaseInFlight = false;
@@ -65,6 +65,8 @@ class LiveNetsPurchaseService {
   bool get isAvailable => _available;
   bool get isPurchaseInFlight => _purchaseInFlight;
   String? get lastError => _lastError;
+  Stream<LiveNetsPackConfig> get purchaseSuccessStream =>
+      _purchaseSuccessController.stream;
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -74,11 +76,22 @@ class LiveNetsPurchaseService {
         debugPrint('LiveNets purchaseStream error: $error');
         debugPrintStack(stackTrace: stackTrace);
         _purchaseInFlight = false;
-        _lastError = error.toString();
+        _lastError = _friendlyPurchaseError(error.toString());
       },
     );
     await refreshCatalog();
     _initialized = true;
+  }
+
+  String _friendlyPurchaseError(String rawMessage) {
+    final message = rawMessage.toLowerCase();
+    if (message.contains('already owned') ||
+        message.contains('already own') ||
+        message.contains('item already owned') ||
+        message.contains('owned by another user')) {
+      return 'This Edge pack is already active. If the balance is not updated yet, tap refresh and try again.';
+    }
+    return rawMessage;
   }
 
   Future<void> dispose() async {
@@ -119,7 +132,8 @@ class LiveNetsPurchaseService {
     _lastError = null;
 
     final purchaseParam = _purchaseParamFor(product);
-    final launched = await _iap.buyNonConsumable(purchaseParam: purchaseParam);
+    // Use buyConsumable so users can purchase Edge minutes multiple times.
+    final launched = await _iap.buyConsumable(purchaseParam: purchaseParam);
     if (!launched) {
       _purchaseInFlight = false;
       _lastError = 'Google Play could not open the purchase sheet.';
@@ -161,7 +175,11 @@ class LiveNetsPurchaseService {
           ),
         );
         if (pack.productId.isEmpty) continue;
-        await _grantLiveMinutes(pack);
+        final granted = await _grantLiveMinutes(pack);
+        if (granted) {
+          await _consumeIfAndroid(purchaseDetails);
+          _purchaseSuccessController.add(pack);
+        }
       }
 
       if (purchaseDetails.pendingCompletePurchase) {
@@ -171,34 +189,58 @@ class LiveNetsPurchaseService {
     }
   }
 
-  Future<void> _grantLiveMinutes(LiveNetsPackConfig pack) async {
+  Future<void> _consumeIfAndroid(PurchaseDetails purchaseDetails) async {
+    if (purchaseDetails is! GooglePlayPurchaseDetails) return;
+    try {
+      final addition = _iap
+          .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+      await addition.consumePurchase(purchaseDetails);
+    } catch (error) {
+      debugPrint('LiveNets consume skipped: $error');
+    }
+  }
+
+  Future<bool> _grantLiveMinutes(LiveNetsPackConfig pack) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       _lastError = 'Sign in required to unlock Edge minutes.';
-      return;
+      return false;
     }
 
     final now = FieldValue.serverTimestamp();
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'live_seconds_remaining': FieldValue.increment(pack.minutes * 60),
-      'live_milliseconds_remaining': FieldValue.increment(
-        pack.minutes * 60 * 1000,
-      ),
-      'last_live_pack_minutes': pack.minutes,
-      'last_live_pack_amount_inr': pack.amountInr,
-      'last_live_pack_amount_usd': pack.amountUsd,
-      'last_live_pack_product_id': pack.productId,
-      'updatedAt': now,
-    }, SetOptions(merge: true));
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'live_seconds_remaining': FieldValue.increment(pack.minutes * 60),
+        'live_milliseconds_remaining': FieldValue.increment(
+          pack.minutes * 60 * 1000,
+        ),
+        'last_live_pack_minutes': pack.minutes,
+        'last_live_pack_amount_inr': pack.amountInr,
+        'last_live_pack_amount_usd': pack.amountUsd,
+        'last_live_pack_product_id': pack.productId,
+        'updatedAt': now,
+      }, SetOptions(merge: true));
+    } catch (error, stackTrace) {
+      _lastError = error.toString();
+      debugPrint('LiveNets minutes grant failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      return false;
+    }
 
-    await FirebaseFirestore.instance.collection('live_nets_orders').add({
-      'uid': user.uid,
-      'product_id': pack.productId,
-      'minutes': pack.minutes,
-      'amount_inr': pack.amountInr,
-      'amount_usd': pack.amountUsd,
-      'purchase_state': 'purchased',
-      'createdAt': now,
-    });
+    try {
+      await FirebaseFirestore.instance.collection('live_nets_orders').add({
+        'uid': user.uid,
+        'product_id': pack.productId,
+        'minutes': pack.minutes,
+        'amount_inr': pack.amountInr,
+        'amount_usd': pack.amountUsd,
+        'purchase_state': 'purchased',
+        'createdAt': now,
+      });
+    } catch (error) {
+      debugPrint('LiveNets order log skipped: $error');
+    }
+
+    return true;
   }
 }

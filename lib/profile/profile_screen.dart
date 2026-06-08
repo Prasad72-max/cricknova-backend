@@ -749,8 +749,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     loadProfileData();
   }
 
-  bool get _isProfileTabVisible =>
-      MainNavigation.activeTabNotifier.value == 3;
+  bool get _isProfileTabVisible => MainNavigation.activeTabNotifier.value == 3;
 
   void _handleTabVisibilityChange() {
     if (_isProfileTabVisible) {
@@ -989,6 +988,15 @@ class _ProfileScreenState extends State<ProfileScreen>
   void logoutUser() async {
     try {
       await _resetOnboardingForNextLogin();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove("is_logged_in");
+      await prefs.remove("isLoggedIn");
+      await prefs.remove("firebase_id_token");
+      await prefs.remove("user_id");
+      await prefs.remove("uid");
+      await prefs.remove("login_type");
+      await prefs.remove("userName");
+      await prefs.remove("user_name");
       await FirebaseAuth.instance.signOut();
       await _googleSignIn.signOut();
       await _googleSignIn.disconnect();
@@ -2111,12 +2119,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         color: Color(0xFF3B82F6),
                       ),
                       onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalInfoScreen(
-                              document: LegalDocument.privacy(),
-                            ),
-                          ),
+                        _openDarkProfilePage(
+                          context,
+                          LegalInfoScreen(document: LegalDocument.privacy()),
                         );
                       },
                     ),
@@ -2138,12 +2143,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         color: Color(0xFF3B82F6),
                       ),
                       onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalInfoScreen(
-                              document: LegalDocument.terms(),
-                            ),
-                          ),
+                        _openDarkProfilePage(
+                          context,
+                          LegalInfoScreen(document: LegalDocument.terms()),
                         );
                       },
                     ),
@@ -2165,9 +2167,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         color: Color(0xFF3B82F6),
                       ),
                       onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const FaqScreen()),
-                        );
+                        _openDarkProfilePage(context, const FaqScreen());
                       },
                     ),
                     const Divider(color: Colors.white12),
@@ -2188,12 +2188,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                         color: Color(0xFF3B82F6),
                       ),
                       onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => LegalInfoScreen(
-                              document: LegalDocument.about(),
-                            ),
-                          ),
+                        _openDarkProfilePage(
+                          context,
+                          LegalInfoScreen(document: LegalDocument.about()),
                         );
                       },
                     ),
@@ -2337,6 +2334,28 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   // 📌 Helper Widgets
+  void _openDarkProfilePage(BuildContext context, Widget page) {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: true,
+        barrierColor: const Color(0xFF050505),
+        transitionDuration: const Duration(milliseconds: 120),
+        reverseTransitionDuration: const Duration(milliseconds: 90),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            ColoredBox(color: const Color(0xFF050505), child: page),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            ),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
   Widget cardContainer({required String title, required Widget child}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),

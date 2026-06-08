@@ -134,10 +134,7 @@ class LoginScreen extends StatelessWidget {
       } catch (_) {}
 
       try {
-        await PremiumService.clearPremium();
-      } catch (_) {}
-
-      try {
+        await PremiumService.restoreCachedState();
         await PremiumService.ensureFreshState();
       } catch (_) {}
 

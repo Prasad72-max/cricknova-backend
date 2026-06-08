@@ -21,24 +21,29 @@ class DefaultFirebaseOptions {
   // ⚠️ TEMP PLACEHOLDER VALUES
   // These MUST be replaced by running: flutterfire configure
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'TEMP',
-    appId: 'TEMP',
-    messagingSenderId: 'TEMP',
-    projectId: 'TEMP',
+    apiKey: 'AIzaSyAdZGHmz9cXjJ4hSQT0Pz1YMHusELtwAOc',
+    appId: '1:974755575850:android:79ad7eda415c43a8492b53',
+    messagingSenderId: '974755575850',
+    projectId: 'cricknova-5f94f',
+    storageBucket: 'cricknova-5f94f.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'TEMP',
-    appId: 'TEMP',
-    messagingSenderId: 'TEMP',
-    projectId: 'TEMP',
+    apiKey: 'AIzaSyAdZGHmz9cXjJ4hSQT0Pz1YMHusELtwAOc',
+    appId: '1:974755575850:ios:79ad7eda415c43a8492b53',
+    messagingSenderId: '974755575850',
+    projectId: 'cricknova-5f94f',
+    storageBucket: 'cricknova-5f94f.firebasestorage.app',
+    iosBundleId: 'com.cricknova.ai',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'TEMP',
-    appId: 'TEMP',
-    messagingSenderId: 'TEMP',
-    projectId: 'TEMP',
+    apiKey: 'AIzaSyAdZGHmz9cXjJ4hSQT0Pz1YMHusELtwAOc',
+    appId: '1:974755575850:ios:79ad7eda415c43a8492b53',
+    messagingSenderId: '974755575850',
+    projectId: 'cricknova-5f94f',
+    storageBucket: 'cricknova-5f94f.firebasestorage.app',
+    iosBundleId: 'com.cricknova.ai',
   );
 
   static const FirebaseOptions web = FirebaseOptions(

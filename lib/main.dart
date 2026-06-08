@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:CrickNova_Ai/splash/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
 import 'package:CrickNova_Ai/services/play_billing_service.dart';
 import 'package:CrickNova_Ai/services/cricknova_marketing_notification_service.dart';
 import 'package:CrickNova_Ai/services/cricknova_notification_service.dart';
@@ -24,9 +23,27 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize Firebase using currentPlatform options so that all services
+  // (like FirebaseAuth in _initializeCriticalStorage) can safely run immediately.
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+  } catch (error) {
+    // macOS development builds may not include a Firebase plist. Keep the
+    // local app usable instead of blocking forever on the splash screen.
+    debugPrint('Firebase startup unavailable: $error');
+  }
+
   // Fire immediately on app icon tap so Render can wake while splash/onboarding
   // routing is still preparing.
   unawaited(BackendWarmupService.instance.wake(force: true));
+
+  // Hive is required by several first-frame screens. Finish its lightweight
+  // initialization before runApp so no widget can access a box too early.
+  await _initializeCriticalStorage();
 
   final startupFuture = _initializeStartup();
 
@@ -39,13 +56,9 @@ Future<void> main() async {
 Future<void> _initializeStartup() async {
   try {
     if (Firebase.apps.isEmpty) {
-      if (kIsWeb) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      } else {
-        await Firebase.initializeApp();
-      }
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
     }
   } catch (error) {
     // macOS development builds may not include a Firebase plist. Keep the
@@ -59,20 +72,39 @@ Future<void> _initializeStartup() async {
     );
   }
 
-  // Keep Hive ready before any screen tries to open chat/session boxes.
-  await Hive.initFlutter();
-
-  // Register manual background queue adapter
-  Hive.registerAdapter(PendingVideoAdapter());
-  try {
-    await Hive.openBox<PendingVideo>('pending_videos');
-    await Hive.openBox('analysis_cache');
-    debugPrint("HIVE BOXES INITIALIZED (pending_videos, analysis_cache)");
-  } catch (e) {
-    debugPrint("HIVE INIT ERROR: $e");
-  }
-
   await PricingLocationService.primeFromCache();
+}
+
+Future<void> _initializeCriticalStorage() async {
+  try {
+    await Hive.initFlutter();
+    if (!Hive.isAdapterRegistered(42)) {
+      Hive.registerAdapter(PendingVideoAdapter());
+    }
+    if (!Hive.isBoxOpen('pending_videos')) {
+      await Hive.openBox<PendingVideo>('pending_videos');
+    }
+    if (!Hive.isBoxOpen('analysis_cache')) {
+      await Hive.openBox('analysis_cache');
+    }
+    if (!Hive.isBoxOpen('quick_stats_cache')) {
+      await Hive.openBox('quick_stats_cache');
+    }
+    if (!Hive.isBoxOpen('speedBox')) {
+      await Hive.openBox('speedBox');
+    }
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null && !Hive.isBoxOpen('local_stats_$uid')) {
+      await Hive.openBox('local_stats_$uid');
+    }
+    await PremiumService.restoreCachedState();
+    debugPrint("HIVE BOXES INITIALIZED (pending_videos, analysis_cache)");
+  } catch (error, stackTrace) {
+    // Keep startup alive if an optional cached box is damaged. Screens can
+    // still recreate/open their user-specific boxes after launch.
+    debugPrint("HIVE CRITICAL INIT ERROR: $error");
+    debugPrintStack(stackTrace: stackTrace);
+  }
 }
 
 Future<void> _warmStartup() async {
@@ -168,7 +200,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       });
     }
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
     if (Firebase.apps.isNotEmpty) {
       unawaited(PlayBillingService.instance.initialize());
     }
@@ -225,7 +256,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
           appBarTheme: const AppBarTheme(
             backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            iconTheme: IconThemeData(color: Colors.white),
+            actionsIconTheme: IconThemeData(color: Colors.white),
           ),
         ),
 
@@ -243,6 +276,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           appBarTheme: const AppBarTheme(
             backgroundColor: Color(0xFF050505),
             foregroundColor: Colors.white,
+            iconTheme: IconThemeData(color: Colors.white),
+            actionsIconTheme: IconThemeData(color: Colors.white),
           ),
         ),
         home: SplashScreen(startupFuture: widget.startupFuture),

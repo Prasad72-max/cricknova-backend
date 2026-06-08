@@ -508,6 +508,11 @@ def root():
     }
 
 
+@app.get("/__alive")
+def alive():
+    return {"alive": True, "service": "cricknova-backend"}
+
+
 
 # -----------------------------
 # CORS

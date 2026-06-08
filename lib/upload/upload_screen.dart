@@ -31,6 +31,7 @@ import '../services/premium_service.dart';
 import '../services/improvement_plan_service.dart';
 import '../services/weekly_stats_service.dart';
 import '../services/cricknova_notification_service.dart';
+import '../services/xp_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
@@ -4068,16 +4069,18 @@ class _UploadScreenState extends State<UploadScreen>
   Timer? _analysisMicrocopyTimer;
   Timer? _analysisLongWaitTimer;
   Timer? _analysisUploadSuccessTimer;
+  Timer? _backPressResetTimer;
   int _analysisCopyIndex = 0;
   bool _showUploadSuccessState = false;
   bool _showLongWaitHandoff = false;
   String? _analysisJobId;
   String? _analysisJobStartedAt;
   bool _analysisQueued = false;
+  bool _backPressArmed = false;
   static const Duration _cachedAnalysisResultDelay = Duration(seconds: 4);
   // If result doesn't arrive fast, hand off to background + queue.
   static const Duration _analysisHandoffDelay = Duration(seconds: 15);
-  static const int _freeDailyVideoUploadLimit = 7;
+  static const int _freeDailyVideoUploadLimit = 18;
 
   String spinStrength = "NONE";
   double spinTurnDeg = 0.0;
@@ -4441,7 +4444,7 @@ class _UploadScreenState extends State<UploadScreen>
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: Text(
-            "Free users get 7 video uploads every 24 hours.\n\nGo Elite for unlimited video uploads.\n\nResets in ${_formatFreeUploadResetDuration(resetIn)}.",
+            "Free users get 18 video uploads every 24 hours.\n\nGo Elite for unlimited video uploads.\n\nResets in ${_formatFreeUploadResetDuration(resetIn)}.",
             style: const TextStyle(color: Colors.white70, height: 1.4),
           ),
           actions: [
@@ -4479,6 +4482,7 @@ class _UploadScreenState extends State<UploadScreen>
       0,
       _freeDailyVideoUploadLimit,
     );
+    if (remaining > 4) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -4486,7 +4490,7 @@ class _UploadScreenState extends State<UploadScreen>
           content: Text(
             remaining == 0
                 ? "Free uploads finished. Go Elite for unlimited videos. Resets in ${_formatFreeUploadResetDuration(resetIn)}."
-                : "$remaining of 7 free video uploads left. Go Elite for unlimited uploads.",
+                : "$remaining of 18 free video uploads left. Go Elite for unlimited uploads.",
           ),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(milliseconds: 1700),
@@ -4748,14 +4752,7 @@ class _UploadScreenState extends State<UploadScreen>
 
   Future<void> _addXP(int amount) async {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? "guest";
-    final box = await Hive.openBox("local_stats_$uid");
-
-    int currentXp = box.get('xp', defaultValue: 0);
-    int updatedXp = currentXp + amount;
-
-    await box.put('xp', updatedXp);
-
-    debugPrint("XP UPDATED (HIVE) => +$amount | TOTAL => $updatedXp");
+    await XpService.award(uid: uid, amount: amount, source: 'UPLOAD');
   }
 
   void _applyEliteHeaders(http.MultipartRequest request) {
@@ -4992,6 +4989,9 @@ class _UploadScreenState extends State<UploadScreen>
       if (mounted) setState(() {});
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isBowlingMode) {
+        unawaited(_startUploadRespectingVideoTerms());
+      }
       unawaited(
         Future<void>.delayed(const Duration(milliseconds: 450), () async {
           await PlayBillingService.instance.initialize();
@@ -6985,26 +6985,20 @@ class _UploadScreenState extends State<UploadScreen>
     _hasAcceptedVideoTermsCache = await _hasAcceptedVideoTerms();
   }
 
+  Future<void> _startUploadRespectingVideoTerms() async {
+    final accepted = await _hasAcceptedVideoTerms();
+    if (!mounted) return;
+    if (accepted) {
+      await pickAndUpload();
+      return;
+    }
+    await _showVideoRulesThenPick();
+  }
+
   Future<void> _showVideoRulesThenPick() async {
     final parentContext = context;
     final canUpload = await _ensureFreeDailyVideoUploadAvailable();
     if (!canUpload || !parentContext.mounted) return;
-
-    if (_hasAcceptedVideoTermsCache == true) {
-      debugPrint("UPLOAD_SCREEN → video terms already accepted");
-      pickAndUpload();
-      return;
-    }
-
-    if (_hasAcceptedVideoTermsCache == null) {
-      await _primeVideoTermsAcceptance();
-      if (!parentContext.mounted) return;
-      if (_hasAcceptedVideoTermsCache == true) {
-        debugPrint("UPLOAD_SCREEN → video terms already accepted");
-        pickAndUpload();
-        return;
-      }
-    }
 
     showModalBottomSheet(
       context: parentContext,
@@ -7104,7 +7098,7 @@ class _UploadScreenState extends State<UploadScreen>
                                             SizedBox(width: 10),
                                             Expanded(
                                               child: Text(
-                                                "These results are calculated based on cricket pitch physics. If the video is not a cricket clip, the data shown (Speed/Swing/Spin) will be inaccurate. Speed is estimated from the ball path after pitching toward the batsman and may vary from real speed.",
+                                                "CrickNova Edge rules apply here too: upload only real cricket clips. These results are calculated based on cricket pitch physics. If the video is not a cricket clip, the data shown (Speed/Swing/Spin) will be inaccurate. Speed is estimated from the ball path after pitching toward the batsman and may vary from real speed.",
                                                 style: TextStyle(
                                                   color: Color(0xFFFFF7D6),
                                                   fontSize: 13,
@@ -7511,7 +7505,7 @@ class _UploadScreenState extends State<UploadScreen>
               backgroundColor: const Color(0xFF8B5CF6),
             ),
           );
-          _showVideoRulesThenPick();
+          _startUploadRespectingVideoTerms();
         }
       },
       child: Container(
@@ -8019,7 +8013,7 @@ class _UploadScreenState extends State<UploadScreen>
           analysisLoading = false;
           uploading = false;
           showTrajectory = true;
-          showDRS = true;
+          showDRS = !_isBowlingMode;
           drsResult = analysis["drs"];
           trajectory = analysis["trajectory"] is List
               ? List<dynamic>.from(analysis["trajectory"])
@@ -8709,6 +8703,7 @@ Do not add intro or conclusion.
     _analysisMicrocopyTimer?.cancel();
     _analysisLongWaitTimer?.cancel();
     _analysisUploadSuccessTimer?.cancel();
+    _backPressResetTimer?.cancel();
     _analysisPulseController.dispose();
     _analysisGlowController.dispose();
     _drsRunId++;
@@ -8792,16 +8787,18 @@ Do not add intro or conclusion.
           ),
           actions: [
             if (controller != null) ...[
-              _buildAppBarTab(
-                icon: _selectedSessionType == "Sidearm"
-                    ? Icons.bolt
-                    : _selectedSessionType == "Match"
-                    ? Icons.stadium
-                    : Icons.sports_cricket,
-                label: _sessionTypeLabel(_selectedSessionType),
-                onTap: () => _showSessionTypeSelector(fromResults: true),
-              ),
-              const SizedBox(width: 8),
+              if (!_isBowlingMode) ...[
+                _buildAppBarTab(
+                  icon: _selectedSessionType == "Sidearm"
+                      ? Icons.bolt
+                      : _selectedSessionType == "Match"
+                      ? Icons.stadium
+                      : Icons.sports_cricket,
+                  label: _sessionTypeLabel(_selectedSessionType),
+                  onTap: () => _showSessionTypeSelector(fromResults: true),
+                ),
+                const SizedBox(width: 8),
+              ],
               AnimatedBuilder(
                 animation: _exitAttentionController,
                 builder: (context, child) {
@@ -8830,7 +8827,7 @@ Do not add intro or conclusion.
                   label: "New",
                   onTap: () async {
                     controller?.pause();
-                    await pickAndUpload();
+                    await _startUploadRespectingVideoTerms();
                   },
                 ),
               ),
@@ -8890,59 +8887,60 @@ Do not add intro or conclusion.
                     children: [
                       const SizedBox(height: 18),
 
-                      // 🎯 Session Category Selector
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
+                      if (!_isBowlingMode) ...[
+                        // 🎯 Session Category Selector
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.1),
+                            ),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedSessionType,
+                              dropdownColor: const Color(0xFF1E293B),
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                color: Colors.white70,
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: "Solo / Nets Practice",
+                                  child: Text("Solo/Net Practice"),
+                                ),
+                                DropdownMenuItem(
+                                  value: "Sidearm",
+                                  child: Text("Sidearm Throwdowns"),
+                                ),
+                                DropdownMenuItem(
+                                  value: "Bowling Machine",
+                                  child: Text("Bowling Machine"),
+                                ),
+                                DropdownMenuItem(
+                                  value: "Match",
+                                  child: Text("Match Video"),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _selectedSessionType = val;
+                                  });
+                                }
+                              },
+                            ),
                           ),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedSessionType,
-                            dropdownColor: const Color(0xFF1E293B),
-                            icon: const Icon(
-                              Icons.arrow_drop_down,
-                              color: Colors.white70,
-                            ),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: "Solo / Nets Practice",
-                                child: Text("Solo/Net Practice"),
-                              ),
-                              DropdownMenuItem(
-                                value: "Sidearm",
-                                child: Text("Sidearm Throwdowns"),
-                              ),
-                              DropdownMenuItem(
-                                value: "Bowling Machine",
-                                child: Text("Bowling Machine"),
-                              ),
-                              DropdownMenuItem(
-                                value: "Match",
-                                child: Text("Match Video"),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedSessionType = val;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 18),
+                        const SizedBox(height: 18),
+                      ],
 
                       // 💡 Instruction Tip Box
                       Container(
@@ -8983,9 +8981,7 @@ Do not add intro or conclusion.
                           (v) => _uploadScale = v,
                           (r) => _uploadRotation = r,
                         ),
-                        onTap: () async {
-                          await _showSessionTypeSelector();
-                        },
+                        onTap: _startUploadRespectingVideoTerms,
                         child: AnimatedRotation(
                           turns: _uploadRotation,
                           duration: const Duration(milliseconds: 120),
@@ -9150,6 +9146,53 @@ Do not add intro or conclusion.
                     ),
                   ),
 
+                  if (!PremiumService.isPremiumActive &&
+                      !analysisLoading &&
+                      controller != null &&
+                      !showCoach)
+                    Positioned(
+                      left: 16,
+                      right: 16,
+                      bottom: 176,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: Container(
+                            constraints: const BoxConstraints(maxWidth: 560),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0B1220).withOpacity(0.74),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.10),
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.25),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              _isBowlingMode
+                                  ? "CrickNova noticed a few bowling mistakes in this clip. Tap Coach to fix them."
+                                  : "CrickNova noticed a few batting mistakes in this clip. Tap Coach to fix them.",
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                color: Colors.white.withOpacity(0.86),
+                                fontSize: 12.5,
+                                height: 1.35,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
                   // LEFT SIDEBAR (Result Panel) - always visible, dimmed while loading
                   if (!drsLoading)
                     Positioned(
@@ -9248,81 +9291,86 @@ Do not add intro or conclusion.
                                         : (spin.isNotEmpty ? spin : "----"),
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-                                GestureDetector(
-                                  onTapDown: (_) => _pressDown(
-                                    (v) => _drsScale = v,
-                                    (r) => _drsRotation = r,
-                                  ),
-                                  onTapUp: (_) => _pressUp(
-                                    (v) => _drsScale = v,
-                                    (r) => _drsRotation = r,
-                                  ),
-                                  onTapCancel: () => _pressUp(
-                                    (v) => _drsScale = v,
-                                    (r) => _drsRotation = r,
-                                  ),
-                                  onTap: drsLoading ? null : runDRS,
-                                  child: AnimatedRotation(
-                                    turns: _drsRotation,
-                                    duration: const Duration(milliseconds: 120),
-                                    child: AnimatedScale(
-                                      scale: _drsScale,
+                                if (!_isBowlingMode) ...[
+                                  const SizedBox(height: 10),
+                                  GestureDetector(
+                                    onTapDown: (_) => _pressDown(
+                                      (v) => _drsScale = v,
+                                      (r) => _drsRotation = r,
+                                    ),
+                                    onTapUp: (_) => _pressUp(
+                                      (v) => _drsScale = v,
+                                      (r) => _drsRotation = r,
+                                    ),
+                                    onTapCancel: () => _pressUp(
+                                      (v) => _drsScale = v,
+                                      (r) => _drsRotation = r,
+                                    ),
+                                    onTap: drsLoading ? null : runDRS,
+                                    child: AnimatedRotation(
+                                      turns: _drsRotation,
                                       duration: const Duration(
                                         milliseconds: 120,
                                       ),
-                                      curve: Curves.easeOutBack,
-                                      child: AnimatedContainer(
+                                      child: AnimatedScale(
+                                        scale: _drsScale,
                                         duration: const Duration(
-                                          milliseconds: 200,
+                                          milliseconds: 120,
                                         ),
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          gradient: const LinearGradient(
-                                            colors: [
-                                              Colors.redAccent,
-                                              Colors.deepOrange,
+                                        curve: Curves.easeOutBack,
+                                        child: AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 200,
+                                          ),
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                Colors.redAccent,
+                                                Colors.deepOrange,
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              14,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.redAccent
+                                                    .withOpacity(0.6),
+                                                blurRadius: 18,
+                                                spreadRadius: 1,
+                                              ),
                                             ],
                                           ),
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.redAccent
-                                                  .withOpacity(0.6),
-                                              blurRadius: 18,
-                                              spreadRadius: 1,
-                                            ),
-                                          ],
-                                        ),
-                                        child: Center(
-                                          child: drsLoading
-                                              ? const SizedBox(
-                                                  height: 18,
-                                                  width: 18,
-                                                  child:
-                                                      CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white,
-                                                      ),
-                                                )
-                                              : const Text(
-                                                  "DRS",
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 16,
+                                          child: Center(
+                                            child: drsLoading
+                                                ? const SizedBox(
+                                                    height: 18,
+                                                    width: 18,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                          color: Colors.white,
+                                                        ),
+                                                  )
+                                                : const Text(
+                                                    "DRS",
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 16,
+                                                    ),
                                                   ),
-                                                ),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
+                                ],
                                 const SizedBox(height: 10),
                                 GestureDetector(
                                   onTapDown: (_) => _pressDown(
@@ -9405,13 +9453,27 @@ Do not add intro or conclusion.
                                           ],
                                         ),
                                         child: const Center(
-                                          child: Text(
-                                            "COACH",
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 16,
-                                            ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                "COACH ANALYSIS",
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              SizedBox(height: 2),
+                                              Text(
+                                                "Click here to get analysis",
+                                                style: TextStyle(
+                                                  color: Colors.white70,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 10.5,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
@@ -10204,29 +10266,50 @@ Do not add intro or conclusion.
   Future<void> _handleBackToGallery() async {
     if (!mounted) return;
     if (controller != null) {
-      HapticFeedback.vibrate();
-      _exitAttentionController.forward(from: 0.0);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.redAccent.withOpacity(0.9),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          content: const Row(
-            children: [
-              Icon(Icons.touch_app, color: Colors.white),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  "Use the 'Exit' or 'New' buttons at the top to leave this analysis.",
-                  style: TextStyle(fontWeight: FontWeight.bold),
+      if (!_backPressArmed) {
+        _backPressArmed = true;
+        HapticFeedback.mediumImpact();
+        _backPressResetTimer?.cancel();
+        _backPressResetTimer = Timer(const Duration(seconds: 2), () {
+          _backPressArmed = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.black.withOpacity(0.92),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            content: const Row(
+              children: [
+                Icon(Icons.arrow_back, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "Tap back once more to go to Home.",
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            duration: const Duration(seconds: 2),
           ),
-          duration: const Duration(milliseconds: 1700),
+        );
+        return;
+      }
+      _backPressArmed = false;
+      _backPressResetTimer?.cancel();
+      HapticFeedback.selectionClick();
+      Navigator.of(context).pushAndRemoveUntil(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => MainNavigation(
+            userName: _wakeOverlayUserName(),
+            initialIndex: 0,
+          ),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
         ),
+        (route) => false,
       );
       return;
     }

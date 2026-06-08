@@ -96,7 +96,8 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       final bool wantsYearly = _lockedPlan == _PlanChoice.yearly;
       // Yearly always gets free trial offer; monthly is always direct payment
       final bool allowTrial = wantsYearly && _isTrialAvailable;
-      final bool requireTrial = false; // never hard-require – fall back gracefully
+      final bool requireTrial =
+          false; // never hard-require – fall back gracefully
       final String basePlanId = wantsYearly
           ? SubscriptionProvider.oneYearPlanId
           : SubscriptionProvider.monthlyPlanId;
@@ -157,14 +158,20 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (!doc.exists) {
-          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-            'name': widget.userName,
-            'source': 'google_auth',
-          }, SetOptions(merge: true));
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .set({
+                'createdAt': FieldValue.serverTimestamp(),
+                'updatedAt': FieldValue.serverTimestamp(),
+                'name': widget.userName,
+                'source': 'google_auth',
+              }, SetOptions(merge: true));
         }
       } catch (_) {}
     }
@@ -309,7 +316,7 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
       children: <Widget>[
         const SizedBox(height: 18),
         Text(
-          'We’ll send you\na reminder before your\nfree trial ends.',
+          'We’ll send you\na reminder before your\nplan renews.',
           style: GoogleFonts.cormorantGaramond(
             color: Colors.white,
             fontSize: 46,
@@ -345,23 +352,33 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     final String actionLabel = isYearlyTrial
         ? 'Start My 3-Day Free Trial'
         : selectedYearly
-            ? 'Subscribe – ₹499/year'
-            : 'Unlock Monthly Access';
+        ? 'Subscribe – ₹499/year'
+        : 'Unlock Monthly Access';
 
     final String footerLabel = isYearlyTrial
         ? (isIndia
-            ? '3 days free, then ₹499/year (₹41/mo)'
-            : '3 days free, then \$59.99/year (\$5.00/mo)')
+              ? '3 days free, then ₹499/year (₹41/mo)'
+              : '3 days free, then \$59.99/year (\$5.00/mo)')
         : selectedYearly
-            ? (isIndia
-                ? 'Billed today at ₹499/year (₹41/mo)'
-                : 'Billed today at \$59.99/year (\$5.00/mo)')
-            : (isIndia ? 'Billed today at ₹99/month' : 'Billed today at \$8.99/mo');
+        ? (isIndia
+              ? 'Billed today at ₹499/year (₹41/mo)'
+              : 'Billed today at \$59.99/year (\$5.00/mo)')
+        : (isIndia ? 'Billed today at ₹99/month' : 'Billed today at \$8.99/mo');
 
     final DateTime bd = DateTime.now().add(const Duration(days: 3));
     const List<String> months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final String billingDate = '${months[bd.month - 1]} ${bd.day}, ${bd.year}';
     final String billingLabel =
@@ -389,141 +406,144 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     final double bottomGap = 36 * scale;
 
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          // Big header (made smaller and responsive)
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        // Big header (made smaller and responsive)
+        Text(
+          headerTitle,
+          style: GoogleFonts.cormorantGaramond(
+            color: Colors.white,
+            fontSize: headerFontSize,
+            fontWeight: FontWeight.w700,
+            height: 1.1,
+          ),
+        ),
+        SizedBox(height: gapHeaderToTimeline),
+        // Timeline (only show for yearly plan with trial)
+        if (selectedYearly && _isTrialAvailable)
+          _DarkTimeline(
+            billingLabel: billingLabel,
+            isYearly: selectedYearly,
+            priceLabel: priceLabel,
+          ),
+        if (selectedYearly && _isTrialAvailable)
+          SizedBox(height: gapAfterTimeline)
+        else
+          SizedBox(height: 16 * scale),
+        // Monthly card
+        _PaywallPlanCard(
+          title: 'Monthly',
+          price: isIndia ? '₹99/month' : '\$8.99/mo',
+          selected: _lockedPlan == _PlanChoice.monthly,
+          showTrial: false,
+          onTap: () => setState(() => _lockedPlan = _PlanChoice.monthly),
+        ),
+        SizedBox(height: gapAfterCard1),
+        // Yearly card
+        _PaywallPlanCard(
+          title: 'Yearly',
+          price: isIndia ? '₹499/year' : '\$59.99/year',
+          selected: _lockedPlan == _PlanChoice.yearly,
+          showTrial: _isTrialAvailable,
+          onTap: () => setState(() => _lockedPlan = _PlanChoice.yearly),
+        ),
+        // Extra spacing for yearly plan to make screen bigger
+        SizedBox(height: gapAfterCard2),
+        // No Payment Due Now
+        if (isYearlyTrial) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(
+                Icons.check_circle_rounded,
+                color: const Color(0xFFFFD700),
+                size: 20 * scale,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'No Payment Due Now',
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 17 * scale,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: gapAfterNoPayment),
+        ] else
+          const SizedBox(height: 4),
+        // CTA Button
+        SizedBox(
+          width: double.infinity,
+          height: ctaHeight,
+          child: ElevatedButton(
+            onPressed: _purchasePending ? null : _startLockedPurchase,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFD700),
+              foregroundColor: Colors.black,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              textStyle: GoogleFonts.inter(
+                fontSize: ctaFontSize,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            child: _purchasePending
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: Colors.black,
+                    ),
+                  )
+                : Text(actionLabel),
+          ),
+        ),
+        // Extra spacing after button for yearly plan
+        SizedBox(height: gapAfterCta),
+        if (_billingError != null) ...[
           Text(
-            headerTitle,
-            style: GoogleFonts.cormorantGaramond(
-              color: Colors.white,
-              fontSize: headerFontSize,
-              fontWeight: FontWeight.w700,
-              height: 1.1,
+            _billingError!,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: const Color(0xFFD32F2F),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          SizedBox(height: gapHeaderToTimeline),
-          // Timeline (only show for yearly plan with trial)
-          if (selectedYearly && _isTrialAvailable)
-            _DarkTimeline(
-              billingLabel: billingLabel,
-              isYearly: selectedYearly,
-              priceLabel: priceLabel,
-            ),
-          if (selectedYearly && _isTrialAvailable)
-            SizedBox(height: gapAfterTimeline)
-          else
-            SizedBox(height: 16 * scale),
-          // Monthly card
-          _PaywallPlanCard(
-            title: 'Monthly',
-            price: isIndia ? '₹99/month' : '\$8.99/mo',
-            selected: _lockedPlan == _PlanChoice.monthly,
-            showTrial: false,
-            onTap: () => setState(() => _lockedPlan = _PlanChoice.monthly),
-          ),
-          SizedBox(height: gapAfterCard1),
-          // Yearly card
-          _PaywallPlanCard(
-            title: 'Yearly',
-            price: isIndia ? '₹499/year' : '\$59.99/year',
-            selected: _lockedPlan == _PlanChoice.yearly,
-            showTrial: _isTrialAvailable,
-            onTap: () => setState(() => _lockedPlan = _PlanChoice.yearly),
-          ),
-          // Extra spacing for yearly plan to make screen bigger
-          SizedBox(height: gapAfterCard2),
-          // No Payment Due Now
-          if (isYearlyTrial) ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Icons.check_circle_rounded,
-                    color: const Color(0xFFFFD700), size: 20 * scale),
-                const SizedBox(width: 8),
-                Text(
-                  'No Payment Due Now',
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 17 * scale,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: gapAfterNoPayment),
-          ] else
-            const SizedBox(height: 4),
-          // CTA Button
-          SizedBox(
-            width: double.infinity,
-            height: ctaHeight,
-            child: ElevatedButton(
-              onPressed: _purchasePending ? null : _startLockedPurchase,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD700),
-                foregroundColor: Colors.black,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                textStyle: GoogleFonts.inter(
-                  fontSize: ctaFontSize,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              child: _purchasePending
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: Colors.black,
-                      ),
-                    )
-                  : Text(actionLabel),
-            ),
-          ),
-          // Extra spacing after button for yearly plan
-          SizedBox(height: gapAfterCta),
-          if (_billingError != null) ...[
-            Text(
-              _billingError!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                color: const Color(0xFFD32F2F),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 6),
-          ],
-          Center(
-            child: Text(
-              footerLabel,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                color: const Color(0xFFAAAAAA),
-                fontSize: footerFontSize,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          SizedBox(height: gapFooterToProtection),
-          Center(
-            child: Text(
-              'Device-based trial protection is active.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                color: const Color(0xFF777777),
-                fontSize: protectionFontSize,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          // Extra bottom spacing for yearly plan
-          SizedBox(height: bottomGap),
+          const SizedBox(height: 6),
         ],
-      );
+        Center(
+          child: Text(
+            footerLabel,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: const Color(0xFFAAAAAA),
+              fontSize: footerFontSize,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        SizedBox(height: gapFooterToProtection),
+        Center(
+          child: Text(
+            'Device-based trial protection is active.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              color: const Color(0xFF777777),
+              fontSize: protectionFontSize,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        // Extra bottom spacing for yearly plan
+        SizedBox(height: bottomGap),
+      ],
+    );
   }
 
   @override
@@ -1138,7 +1158,8 @@ class _DarkTimeline extends StatelessWidget {
               iconBg: const Color(0xFFFFD700),
               iconColor: Colors.white,
               title: 'Today',
-              subtitle: 'Unlock all premium features like AI batting analysis, bowling coach, and more.',
+              subtitle:
+                  'Unlock all premium features like AI batting analysis, bowling coach, and more.',
             ),
             SizedBox(height: itemSpacing),
             _DarkTimelineItem(
@@ -1146,7 +1167,8 @@ class _DarkTimeline extends StatelessWidget {
               iconBg: const Color(0xFFFFD700),
               iconColor: Colors.white,
               title: 'In 2 Days – Reminder',
-              subtitle: 'We\'ll send you a reminder that your trial is ending soon.',
+              subtitle:
+                  'We\'ll send you a reminder that your trial is ending soon.',
             ),
             SizedBox(height: itemSpacing),
             _DarkTimelineItem(
@@ -2174,7 +2196,10 @@ class _PaywallPlanCard extends StatelessWidget {
             curve: Curves.easeOut,
             width: double.infinity,
             height: cardHeight,
-            padding: EdgeInsets.symmetric(horizontal: paddingHorizontal, vertical: paddingVertical),
+            padding: EdgeInsets.symmetric(
+              horizontal: paddingHorizontal,
+              vertical: paddingVertical,
+            ),
             decoration: BoxDecoration(
               color: selected
                   ? const Color(0xFF1A1500)
@@ -2242,7 +2267,11 @@ class _PaywallPlanCard extends StatelessWidget {
                     ),
                   ),
                   child: selected
-                      ? Icon(Icons.check, size: checkIconSize, color: Colors.black)
+                      ? Icon(
+                          Icons.check,
+                          size: checkIconSize,
+                          color: Colors.black,
+                        )
                       : null,
                 ),
               ],
@@ -2254,13 +2283,17 @@ class _PaywallPlanCard extends StatelessWidget {
               top: badgeTop,
               right: 14,
               child: Container(
-                padding:
-                    EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 5 * scale),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 12 * scale,
+                  vertical: 5 * scale,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(999),
-                  border:
-                      Border.all(color: const Color(0xFFFFD700), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFFFFD700),
+                    width: 1.5,
+                  ),
                 ),
                 child: Text(
                   '3 DAYS FREE',
@@ -2401,11 +2434,17 @@ class _BigPlanCard extends StatelessWidget {
               top: -12,
               right: 14,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFFFD700), width: 1.5),
+                  border: Border.all(
+                    color: const Color(0xFFFFD700),
+                    width: 1.5,
+                  ),
                 ),
                 child: Text(
                   '3 DAYS FREE',

@@ -668,14 +668,23 @@ class _AnalyticsHeader extends StatelessWidget {
           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white),
           onSelected: onMenuSelected,
           itemBuilder: (context) => const [
-            PopupMenuItem(value: "share", child: Text("Share Session")),
-            PopupMenuItem(value: "export", child: Text("Export Data")),
+            PopupMenuItem(
+              value: "share",
+              child: Text(
+                "Share Session",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            PopupMenuItem(
+              value: "export",
+              child: Text("Export Data", style: TextStyle(color: Colors.white)),
+            ),
             PopupMenuDivider(),
             PopupMenuItem(
               value: "delete",
               child: Text(
                 "Delete Session",
-                style: TextStyle(color: Colors.redAccent),
+                style: TextStyle(color: Colors.white),
               ),
             ),
           ],

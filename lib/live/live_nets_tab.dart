@@ -80,7 +80,10 @@ class LiveNetsAccessCard extends StatelessWidget {
             ],
           ),
           child: ListTile(
-            leading: const Icon(Icons.bolt_rounded, color: Color(0xFF00E5FF)),
+            leading: const Icon(
+              Icons.sports_cricket_rounded,
+              color: Color(0xFF00E5FF),
+            ),
             title: const Text(
               'CrickNova Edge',
               style: TextStyle(color: Colors.white),
@@ -328,7 +331,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                               const Row(
                                 children: [
                                   Icon(
-                                    Icons.bolt_rounded,
+                                    Icons.sports_cricket_rounded,
                                     color: Color(0xFF00E5FF),
                                     size: 20,
                                   ),

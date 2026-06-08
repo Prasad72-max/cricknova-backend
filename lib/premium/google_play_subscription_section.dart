@@ -165,11 +165,7 @@ class _PlanCard extends StatelessWidget {
                         requireFreeTrial: isYearlyTrialCapable,
                       ),
                 child: Text(
-                  isActive
-                      ? 'Subscribed'
-                      : isYearlyTrialCapable
-                      ? 'Start 3-day free trial'
-                      : 'Subscribe with Google Play',
+                  isActive ? 'Subscribed' : 'Subscribe with Google Play',
                 ),
               ),
             ),

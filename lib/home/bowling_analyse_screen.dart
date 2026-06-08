@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../compare/analyse_yourself_screen.dart';
 import '../premium/premium_screen.dart';
@@ -7,14 +8,6 @@ import '../upload/upload_screen.dart';
 
 class BowlingAnalyseScreen extends StatelessWidget {
   const BowlingAnalyseScreen({super.key});
-
-  bool _hasMistakeAccess() {
-    return PremiumService.isLoaded && PremiumService.isPremiumActive;
-  }
-
-  bool _hasCompareAccess() {
-    return PremiumService.hasCompareAccess;
-  }
 
   void _goPremium(BuildContext context, String entrySource) {
     Navigator.of(context).push(
@@ -26,78 +19,134 @@ class BowlingAnalyseScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool mistakeUnlocked = _hasMistakeAccess();
-    final bool compareUnlocked = _hasCompareAccess();
+    final mistakeUnlocked =
+        PremiumService.isLoaded && PremiumService.isPremiumActive;
+    final compareUnlocked = PremiumService.hasCompareAccess;
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFF0B0E11),
+        backgroundColor: const Color(0xFF02040B),
         appBar: AppBar(
-          backgroundColor: const Color(0xFF0B0E11),
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
-          title: const Text("Bowling Analysis"),
-          bottom: const TabBar(
-            indicatorColor: Color(0xFF38BDF8),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white70,
-            tabs: [
-              Tab(text: "Cricknova Mistake Detection"),
-              Tab(text: "Compare Vid"),
-            ],
-          ),
-        ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF0B0E11), Color(0xFF060A12)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+          elevation: 0,
+          title: Text(
+            'Bowling Analysis',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          child: TabBarView(
-            children: [
-              _BowlingActionCard(
-                icon: Icons.sports_baseball_rounded,
-                title: "Cricknova Mistake Detection",
-                subtitle:
-                    "Upload your bowling clip and get bowling-specific mistakes with fix drills.",
-                buttonText: "Start Cricknova Mistake Detection",
-                locked: !mistakeUnlocked,
-                lockCaption: "Unlock elite bowling AI with Pro or Ultra.",
-                onTap: () {
-                  if (!mistakeUnlocked) {
-                    _goPremium(context, "bowling_analysis");
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const UploadScreen(bowlingMode: true),
+        ),
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF02040B), Color(0xFF040A18), Color(0xFF010204)],
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    height: 52,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111827).withValues(alpha: 0.78),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white12),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x22000000),
+                          blurRadius: 18,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
-              _BowlingActionCard(
-                icon: Icons.compare_arrows_rounded,
-                title: "Bowling Compare",
-                subtitle:
-                    "Compare two bowling videos and get bowling difference feedback.",
-                buttonText: "Start Compare",
-                locked: !compareUnlocked,
-                lockCaption: "Unlock elite video comparison with Pro or Ultra.",
-                onTap: () {
-                  if (!compareUnlocked) {
-                    _goPremium(context, "bowling_compare");
-                    return;
-                  }
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const AnalyseYourselfScreen(bowlingMode: true),
+                    child: TabBar(
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white54,
+                      labelStyle: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      indicator: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFF7CF0D5).withValues(alpha: 0.5),
+                        ),
+                      ),
+                      tabs: const [
+                        Tab(text: 'Detect'),
+                        Tab(text: 'Compare'),
+                      ],
                     ),
-                  );
-                },
-              ),
-            ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _MinimalBowlingAction(
+                        icon: Icons.track_changes_rounded,
+                        title: 'Detect Bowling',
+                        subtitle:
+                            'Upload a bowling clip to check speed, swing, spin and get coach analysis.',
+                        buttonText: 'Upload Video',
+                        locked: !mistakeUnlocked,
+                        onTap: () {
+                          if (!mistakeUnlocked) {
+                            _goPremium(context, 'bowling_analysis');
+                            return;
+                          }
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const UploadScreen(bowlingMode: true),
+                            ),
+                          );
+                        },
+                      ),
+                      _MinimalBowlingAction(
+                        icon: Icons.compare_arrows_rounded,
+                        title: 'Compare Bowling',
+                        subtitle:
+                            'Choose two bowling clips and review the technique difference.',
+                        buttonText: 'Choose Videos',
+                        locked: !compareUnlocked,
+                        onTap: () {
+                          if (!compareUnlocked) {
+                            _goPremium(context, 'bowling_compare');
+                            return;
+                          }
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AnalyseYourselfScreen(
+                                bowlingMode: true,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -105,123 +154,120 @@ class BowlingAnalyseScreen extends StatelessWidget {
   }
 }
 
-class _BowlingActionCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String buttonText;
-  final VoidCallback onTap;
-  final bool locked;
-  final String? lockCaption;
-
-  const _BowlingActionCard({
+class _MinimalBowlingAction extends StatelessWidget {
+  const _MinimalBowlingAction({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.buttonText,
+    required this.locked,
     required this.onTap,
-    this.locked = false,
-    this.lockCaption,
   });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String buttonText;
+  final bool locked;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: const Color(0xFF38BDF8).withOpacity(0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xFF38BDF8).withOpacity(0.45),
-            ),
-          ),
-          child: Icon(icon, color: const Color(0xFF7DD3FC), size: 30),
-        ),
-        const SizedBox(height: 14),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white70,
-            fontSize: 14,
-            height: 1.4,
-          ),
-        ),
-        const SizedBox(height: 18),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              backgroundColor: const Color(0xFF38BDF8),
-              foregroundColor: Colors.black,
-              elevation: locked ? 8 : 2,
-              shadowColor: const Color(0xFF38BDF8).withOpacity(0.35),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            onPressed: onTap,
-            child: Text(
-              locked ? "Go Elite" : buttonText,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-        ),
-        if (locked && lockCaption != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            lockCaption!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white60, fontSize: 12.5),
-          ),
-        ],
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(18),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight - 36),
-            child: Center(
-              child: Container(
-                width: double.infinity,
-                constraints: const BoxConstraints(maxWidth: 560),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A).withOpacity(0.72),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Colors.white.withOpacity(0.12)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.28),
-                      blurRadius: 22,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827).withValues(alpha: 0.76),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white12),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 24,
+                  offset: Offset(0, 12),
                 ),
-                child: content,
-              ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 62,
+                  height: 62,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7CF0D5), Color(0xFF1AAE8B)],
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF7CF0D5).withValues(alpha: 0.2),
+                        blurRadius: 18,
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: const Color(0xFF03110E), size: 28),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white60,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: onTap,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFF7CF0D5),
+                      foregroundColor: const Color(0xFF03110E),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      textStyle: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    child: Text(locked ? 'View Plans' : buttonText),
+                  ),
+                ),
+                if (locked) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Available with an active plan',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white38,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

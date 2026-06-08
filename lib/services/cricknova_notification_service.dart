@@ -13,6 +13,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../analysis/analyzing_videos_screen.dart';
 import '../app_router.dart';
+import '../firebase_options.dart';
 import 'cricknova_marketing_notification_service.dart';
 
 class CrickNovaNotificationService {
@@ -549,6 +550,8 @@ Future<void> crickNovaFirebaseMessagingBackgroundHandler(
 ) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   }
 }

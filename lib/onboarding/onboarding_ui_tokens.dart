@@ -20,7 +20,7 @@ class OnboardingColors {
   static const Color bgElevated = Color(0xFF161619);
 
   // Single accent color for premium glow/highlights.
-  static const Color accent = Color(0xFF5EF2C7);
+  static const Color accent = Color(0xFF48D9AE);
 
   static const Color textPrimary = Color(0xFFEFEFED);
   static const Color textOption = Color(0xFFEFEFED);
