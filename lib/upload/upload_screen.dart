@@ -3804,9 +3804,8 @@ class _UploadScreenState extends State<UploadScreen>
     with TickerProviderStateMixin {
   bool get _isBowlingMode => widget.bowlingMode;
   String get _analysisDiscipline => _isBowlingMode ? "bowling" : "batting";
-  String get _disciplineGuard => _isBowlingMode
-      ? "Bowling-only: identify bowling mistakes using run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. Never give batting mistakes, bat path, shot, stance, or batting footwork advice."
-      : "Batting-only: identify batting mistakes using stance, head position, balance, bat path, timing, shot control, and batting footwork. Never give bowling mistakes, run-up, release point, seam/wrist, line/length, or bowling advice.";
+  String get _disciplineGuard =>
+      "Cricket-only: answer any question related to cricket and this clip. If the evidence shows batting, give batting coaching. If it shows bowling, give bowling coaching. If both are relevant, cover both. Never answer non-cricket questions.";
   String get _analysisTitle =>
       _isBowlingMode ? "Upload Bowling Video" : "Analyze My Cricket Video";
 
