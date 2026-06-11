@@ -386,7 +386,8 @@ class _EdgeIntroBackdropPainter extends CustomPainter {
     ];
     for (int i = 0; i < stars.length; i++) {
       final s = stars[i];
-      final twinkle = 0.22 + 0.12 * (math.sin(progress * 0.8 + i * 0.5) * 0.5 + 0.5);
+      final twinkle =
+          0.22 + 0.12 * (math.sin(progress * 0.8 + i * 0.5) * 0.5 + 0.5);
       starPaint.color = Colors.white.withValues(alpha: twinkle);
       canvas.drawCircle(
         Offset(size.width * s.dx, size.height * s.dy) + pointerShift,
@@ -394,7 +395,6 @@ class _EdgeIntroBackdropPainter extends CustomPainter {
         starPaint,
       );
     }
-
   }
 
   @override

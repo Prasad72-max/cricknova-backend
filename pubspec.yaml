@@ -2,7 +2,7 @@ name: CrickNova_Ai
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.0+25
+version: 1.0.0+26
 
 environment:
   sdk: ^3.10.1
@@ -88,4 +88,3 @@ flutter:
     - assets/videos/
     - assets/lottie/cricket_intro.json
     - assets/audio/
-    

@@ -3820,7 +3820,6 @@ class _UploadScreenState extends State<UploadScreen>
   // 🔥 Cost Optimization: Batch Firestore writes
   int _pendingXp = 0;
   int _pendingVideoCount = 0;
-  bool? _hasAcceptedVideoTermsCache;
   double _drsAiVal = 0.0;
   late final AnimationController _exitAttentionController;
 
@@ -5003,11 +5002,6 @@ class _UploadScreenState extends State<UploadScreen>
             onPaymentError: _handleRazorpayError,
             onExternalWallet: _handleRazorpayWallet,
           );
-        }),
-      );
-      unawaited(
-        Future<void>.delayed(const Duration(milliseconds: 250), () async {
-          await _primeVideoTermsAcceptance();
         }),
       );
     });
@@ -6941,21 +6935,6 @@ class _UploadScreenState extends State<UploadScreen>
     );
   }
 
-  String _videoConsentPrefsKey() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    return 'upload_video_terms_accepted_${uid ?? "guest"}';
-  }
-
-  Future<bool> _hasAcceptedVideoTerms() async {
-    if (_hasAcceptedVideoTermsCache != null) {
-      return _hasAcceptedVideoTermsCache!;
-    }
-    final prefs = await SharedPreferences.getInstance();
-    final accepted = prefs.getBool(_videoConsentPrefsKey()) ?? false;
-    _hasAcceptedVideoTermsCache = accepted;
-    return accepted;
-  }
-
   String _currentFact = CricketFacts.facts[0];
   Timer? _factTimer;
 
@@ -6974,354 +6953,314 @@ class _UploadScreenState extends State<UploadScreen>
     });
   }
 
-  Future<void> _setAcceptedVideoTerms() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_videoConsentPrefsKey(), true);
-    _hasAcceptedVideoTermsCache = true;
-  }
-
-  Future<void> _primeVideoTermsAcceptance() async {
-    _hasAcceptedVideoTermsCache = await _hasAcceptedVideoTerms();
-  }
-
   Future<void> _startUploadRespectingVideoTerms() async {
-    final accepted = await _hasAcceptedVideoTerms();
-    if (!mounted) return;
-    if (accepted) {
-      await pickAndUpload();
-      return;
+    if (await _shouldShowUploadConsent()) {
+      final accepted = await _showUploadConsentSheet();
+      if (!accepted || !mounted) return;
+      await _markUploadConsentSeen();
     }
-    await _showVideoRulesThenPick();
+    await _showSessionTypeSelector();
   }
 
-  Future<void> _showVideoRulesThenPick() async {
+  String _uploadConsentPrefsKey() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return 'upload_video_terms_seen_${uid ?? "guest"}';
+  }
+
+  Future<bool> _shouldShowUploadConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return !(prefs.getBool(_uploadConsentPrefsKey()) ?? false);
+  }
+
+  Future<void> _markUploadConsentSeen() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_uploadConsentPrefsKey(), true);
+  }
+
+  Future<bool> _showUploadConsentSheet() async {
     final parentContext = context;
     final canUpload = await _ensureFreeDailyVideoUploadAvailable();
-    if (!canUpload || !parentContext.mounted) return;
+    if (!canUpload || !parentContext.mounted) return false;
 
-    showModalBottomSheet(
-      context: parentContext,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) {
-        final checklist = <String, bool>{
-          "I understand non-cricket clips can make Speed, Swing, and Spin inaccurate.":
-              false,
-          "I understand app speed can vary from real speed.": false,
-          "I will upload a clear cricket bowling clip with the ball visible.":
-              false,
-          "I understand camera stability and pitch view affect result quality.":
-              false,
-          "I agree to choose a video from my gallery for analysis.": false,
-        };
-        return StatefulBuilder(
-          builder: (sheetContext, setSheetState) {
-            final hasCheckedAll = checklist.values.every((value) => value);
-            final mediaQuery = MediaQuery.of(sheetContext);
-            final bottomPadding =
-                mediaQuery.viewInsets.bottom + mediaQuery.padding.bottom;
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: bottomPadding),
-                child: FractionallySizedBox(
-                  heightFactor: 0.9,
-                  alignment: Alignment.bottomCenter,
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(22),
-                    ),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withOpacity(0.70),
-                          border: Border.all(color: Colors.white12),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(22),
-                          ),
+    final accepted =
+        await showModalBottomSheet<bool>(
+          context: parentContext,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) {
+            final checklist = <String, bool>{
+              "I understand non-cricket clips can make Speed, Swing, and Spin inaccurate.":
+                  false,
+              "I understand app speed can vary from real speed.": false,
+              "I will upload a clear cricket clip with the action visible.":
+                  false,
+              "I understand camera stability affects result quality.": false,
+              "I agree to choose a video from my gallery for analysis.": false,
+            };
+            return StatefulBuilder(
+              builder: (sheetContext, setSheetState) {
+                final hasCheckedAll = checklist.values.every((value) => value);
+                final mediaQuery = MediaQuery.of(sheetContext);
+                final bottomPadding =
+                    mediaQuery.viewInsets.bottom + mediaQuery.padding.bottom;
+                return SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomPadding),
+                    child: FractionallySizedBox(
+                      heightFactor: 0.9,
+                      alignment: Alignment.bottomCenter,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(22),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  physics: const BouncingScrollPhysics(),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        "🎥 Video Recording Guidelines",
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 14),
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 14,
-                                          vertical: 12,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFFF59E0B,
-                                          ).withOpacity(0.14),
-                                          borderRadius: BorderRadius.circular(
-                                            14,
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A).withOpacity(0.70),
+                              border: Border.all(color: Colors.white12),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(22),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                24,
+                                20,
+                                20,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            "Before you upload",
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w900,
+                                            ),
                                           ),
-                                          border: Border.all(
-                                            color: const Color(
-                                              0xFFFBBF24,
-                                            ).withOpacity(0.45),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: const [
-                                            Padding(
-                                              padding: EdgeInsets.only(top: 1),
-                                              child: Icon(
-                                                Icons.info_outline,
-                                                size: 18,
-                                                color: Color(0xFFFDE68A),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "CrickNova works best when the clip clearly shows one cricket action and the ball is visible.",
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(
+                                                0.82,
                                               ),
+                                              fontSize: 13,
+                                              height: 1.45,
                                             ),
-                                            SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                "CrickNova Edge rules apply here too: upload only real cricket clips. These results are calculated based on cricket pitch physics. If the video is not a cricket clip, the data shown (Speed/Swing/Spin) will be inaccurate. Speed is estimated from the ball path after pitching toward the batsman and may vary from real speed.",
-                                                style: TextStyle(
-                                                  color: Color(0xFFFFF7D6),
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w600,
-                                                  height: 1.45,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      const Text(
-                                        "Please confirm each point below before continuing:",
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 14,
-                                          height: 1.5,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      ...checklist.entries.map((entry) {
-                                        final checked = entry.value;
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 10,
                                           ),
-                                          child: InkWell(
-                                            borderRadius: BorderRadius.circular(
-                                              14,
-                                            ),
-                                            onTap: () {
-                                              setSheetState(() {
-                                                checklist[entry.key] = !checked;
-                                              });
-                                            },
-                                            child: Container(
-                                              width: double.infinity,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 10,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white.withOpacity(
-                                                  0.05,
-                                                ),
+                                          const SizedBox(height: 20),
+                                          ...checklist.entries.map((entry) {
+                                            final checked = entry.value;
+                                            return Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 12,
+                                              ),
+                                              child: InkWell(
                                                 borderRadius:
-                                                    BorderRadius.circular(14),
-                                                border: Border.all(
-                                                  color: checked
-                                                      ? const Color(0xFF8B5CF6)
-                                                      : Colors.white12,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Checkbox(
-                                                    value: checked,
-                                                    activeColor: const Color(
-                                                      0xFF8B5CF6,
-                                                    ),
-                                                    checkColor: Colors.white,
-                                                    side: const BorderSide(
-                                                      color: Colors.white38,
-                                                    ),
-                                                    onChanged: (value) {
-                                                      setSheetState(() {
-                                                        checklist[entry.key] =
-                                                            value ?? false;
-                                                      });
-                                                    },
+                                                    BorderRadius.circular(16),
+                                                onTap: () {
+                                                  setSheetState(() {
+                                                    checklist[entry.key] =
+                                                        !checked;
+                                                  });
+                                                },
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 180,
                                                   ),
-                                                  const SizedBox(width: 6),
-                                                  Expanded(
-                                                    child: Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                            top: 11,
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 14,
+                                                        vertical: 14,
+                                                      ),
+                                                  decoration: BoxDecoration(
+                                                    color: checked
+                                                        ? const Color(
+                                                            0xFF7C3AED,
+                                                          ).withOpacity(0.18)
+                                                        : Colors.white
+                                                              .withOpacity(
+                                                                0.04,
+                                                              ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          16,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: checked
+                                                          ? const Color(
+                                                              0xFF8B5CF6,
+                                                            ).withOpacity(0.75)
+                                                          : Colors.white12,
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Container(
+                                                        width: 22,
+                                                        height: 22,
+                                                        margin:
+                                                            const EdgeInsets.only(
+                                                              top: 1,
+                                                            ),
+                                                        decoration: BoxDecoration(
+                                                          shape:
+                                                              BoxShape.circle,
+                                                          color: checked
+                                                              ? const Color(
+                                                                  0xFF8B5CF6,
+                                                                )
+                                                              : Colors
+                                                                    .transparent,
+                                                          border: Border.all(
+                                                            color: checked
+                                                                ? const Color(
+                                                                    0xFF8B5CF6,
+                                                                  )
+                                                                : Colors
+                                                                      .white24,
+                                                            width: 1.4,
                                                           ),
-                                                      child: Text(
-                                                        entry.key,
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontSize: 13.5,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          height: 1.35,
+                                                        ),
+                                                        child: checked
+                                                            ? const Icon(
+                                                                Icons.check,
+                                                                size: 14,
+                                                                color: Colors
+                                                                    .white,
+                                                              )
+                                                            : null,
+                                                      ),
+                                                      const SizedBox(width: 12),
+                                                      Expanded(
+                                                        child: Text(
+                                                          entry.key,
+                                                          style: TextStyle(
+                                                            color: checked
+                                                                ? Colors.white
+                                                                : Colors
+                                                                      .white70,
+                                                            fontSize: 14,
+                                                            height: 1.35,
+                                                            fontWeight: checked
+                                                                ? FontWeight
+                                                                      .w700
+                                                                : FontWeight
+                                                                      .w500,
+                                                          ),
                                                         ),
                                                       ),
-                                                    ),
+                                                    ],
                                                   ),
-                                                ],
+                                                ),
+                                              ),
+                                            );
+                                          }),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            side: BorderSide(
+                                              color: Colors.white.withOpacity(
+                                                0.18,
                                               ),
                                             ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 14,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
                                           ),
-                                        );
-                                      }),
-                                      const Padding(
-                                        padding: EdgeInsets.only(
-                                          top: 2,
-                                          bottom: 12,
+                                          onPressed: () {
+                                            Navigator.pop(sheetContext, false);
+                                          },
+                                          child: const Text(
+                                            "Go Back",
+                                            style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         ),
-                                        child: Text(
-                                          "New users need to accept this once. After that, CrickNova AI will take you straight to gallery for future uploads on this account.",
-                                          style: TextStyle(
-                                            color: Colors.white54,
-                                            fontSize: 12.5,
-                                            height: 1.45,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(
+                                              0xFF8B5CF6,
+                                            ),
+                                            disabledBackgroundColor:
+                                                const Color(
+                                                  0xFF8B5CF6,
+                                                ).withOpacity(0.35),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 14,
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                            elevation: 0,
+                                            shadowColor: Colors.transparent,
+                                          ),
+                                          onPressed: hasCheckedAll
+                                              ? () => Navigator.pop(
+                                                  sheetContext,
+                                                  true,
+                                                )
+                                              : null,
+                                          child: const Text(
+                                            "Continue",
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 18),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton(
-                                      style: OutlinedButton.styleFrom(
-                                        side: BorderSide(
-                                          color: Colors.white.withOpacity(0.18),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                        ),
-                                      ),
-                                      onPressed: () {
-                                        Navigator.pop(sheetContext);
-                                        MainNavigation.of(
-                                          parentContext,
-                                        )?.goHome();
-                                      },
-                                      child: const Text(
-                                        "No, Go Home",
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF8B5CF6,
-                                        ),
-                                        disabledBackgroundColor: const Color(
-                                          0xFF8B5CF6,
-                                        ).withOpacity(0.35),
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                        ),
-                                        elevation: 0,
-                                        shadowColor: Colors.transparent,
-                                      ),
-                                      onPressed: hasCheckedAll
-                                          ? () async {
-                                              await _setAcceptedVideoTerms();
-                                              if (!mounted) return;
-                                              Navigator.pop(sheetContext);
-                                              ScaffoldMessenger.of(
-                                                  parentContext,
-                                                )
-                                                ..hideCurrentSnackBar()
-                                                ..showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      "All set! CrickNova AI will now use these permissions only to analyze your cricket videos and calculate speed. Your privacy is our priority.",
-                                                    ),
-                                                    behavior: SnackBarBehavior
-                                                        .floating,
-                                                    duration: Duration(
-                                                      milliseconds: 1700,
-                                                    ),
-                                                  ),
-                                                );
-                                              debugPrint(
-                                                "UPLOAD_SCREEN → pickAndUpload triggered",
-                                              );
-                                              pickAndUpload();
-                                            }
-                                          : null,
-                                      child: const Text(
-                                        "I Agree to All",
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
                                 ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
-        );
-      },
-    );
+        ) ??
+        false;
+
+    return accepted;
   }
 
   Future<void> _showSessionTypeSelector({bool fromResults = false}) async {
@@ -7504,7 +7443,7 @@ class _UploadScreenState extends State<UploadScreen>
               backgroundColor: const Color(0xFF8B5CF6),
             ),
           );
-          _startUploadRespectingVideoTerms();
+          await pickAndUpload();
         }
       },
       child: Container(
@@ -10301,10 +10240,8 @@ Do not add intro or conclusion.
       HapticFeedback.selectionClick();
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => MainNavigation(
-            userName: _wakeOverlayUserName(),
-            initialIndex: 0,
-          ),
+          pageBuilder: (_, __, ___) =>
+              MainNavigation(userName: _wakeOverlayUserName(), initialIndex: 0),
           transitionDuration: Duration.zero,
           reverseTransitionDuration: Duration.zero,
         ),
