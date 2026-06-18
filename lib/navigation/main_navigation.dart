@@ -717,6 +717,9 @@ class _MainNavigationState extends State<MainNavigation>
     if (name == null || name.isEmpty) {
       name = user?.displayName?.trim();
     }
+    if (name == null || name.isEmpty) {
+      name = _nameFromEmail(user?.email);
+    }
     if (uid == "guest" && (name == null || name.isEmpty)) {
       final prefs = await SharedPreferences.getInstance();
       name = prefs.getString("profileName")?.trim();
@@ -726,6 +729,13 @@ class _MainNavigationState extends State<MainNavigation>
         ? name
         : widget.userName;
     MainNavigation.userNameNotifier.value = nextUserName;
+  }
+
+  String? _nameFromEmail(String? email) {
+    final raw = email?.trim();
+    if (raw == null || raw.isEmpty || !raw.contains('@')) return null;
+    final local = raw.split('@').first.trim();
+    return local.isEmpty ? null : local;
   }
 
   Future<void> _evaluatePremiumAlerts() async {
@@ -954,7 +964,7 @@ class _MainNavigationState extends State<MainNavigation>
       if (_showPremiumTab)
         _NavTabData(
           label: 'Premium',
-          icon: Icons.workspace_premium_rounded,
+          icon: Icons.workspace_premium_outlined,
           index: _premiumTabIndex,
           isPremium: true,
         ),
@@ -1053,8 +1063,10 @@ class _MainNavigationState extends State<MainNavigation>
                 ),
               ),
 
-              // Icon — paid feature tabs get a compact glowing badge treatment
-              if ((item.isPremium || item.isEdge) && !isActive)
+              // Icon
+              if (item.isPremium)
+                _premiumNavIcon(color: color, isActive: isActive)
+              else if (item.isEdge && !isActive)
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -1105,6 +1117,34 @@ class _MainNavigationState extends State<MainNavigation>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _premiumNavIcon({required Color color, required bool isActive}) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (isActive)
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.28),
+                  blurRadius: 14,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        Icon(
+          Icons.workspace_premium_outlined,
+          color: color,
+          size: isActive ? 24 : 22,
+        ),
+      ],
     );
   }
 }

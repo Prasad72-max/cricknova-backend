@@ -850,6 +850,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     final uidProfileName = prefs.getString("profileName_$uid")?.trim();
     final uidUserName = prefs.getString("userName_$uid")?.trim();
     final authName = user?.displayName?.trim();
+    final emailName = _nameFromEmail(user?.email);
     final onboardingProfileName = prefs.getString("profileName")?.trim();
     final onboardingUserName = prefs.getString("userName")?.trim();
     final resolvedName =
@@ -858,6 +859,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           uidProfileName,
           uidUserName,
           authName,
+          emailName,
           if (uid == 'guest') onboardingProfileName,
           if (uid == 'guest') onboardingUserName,
         ].whereType<String>().firstWhere(
@@ -886,6 +888,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     _profileDataLoaded = true;
     if (!mounted) return;
     setState(() {});
+  }
+
+  String? _nameFromEmail(String? email) {
+    final raw = email?.trim();
+    if (raw == null || raw.isEmpty || !raw.contains('@')) return null;
+    final local = raw.split('@').first.trim();
+    return local.isEmpty ? null : local;
   }
 
   Future<void> saveName() async {

@@ -91,8 +91,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     if (_isHomeTabVisible) {
       final bool membershipDisplayChanged = _quickStats.any(
         (_QuickStatData stat) =>
-            stat.metric == "Membership" &&
-            stat.value != (PremiumService.isPremiumActive ? "Elite" : "Free"),
+            stat.metric == "Membership" && stat.value != _currentPlanStatValue,
       );
       if (membershipDisplayChanged) {
         setState(() {});
@@ -724,12 +723,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       _QuickStatData(
         title: "Quick Stats",
-        value: PremiumService.isPremiumActive ? "Elite" : "Free",
+        value: _currentPlanStatValue,
         metric: "Membership",
         accent: const [Color(0xFFFFE295), Color(0xFFF2B439)],
       ),
     ];
   }
+
+  String get _currentPlanStatValue =>
+      "Current Plan: ${PremiumService.isPremiumActive ? "Elite" : "Free"}";
 
   @override
   Widget build(BuildContext context) {
@@ -1068,78 +1070,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Remaining Features",
-                        style: GoogleFonts.poppins(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(
-                            0xFF111827,
-                          ).withValues(alpha: 0.74),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  "Premium",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                Text(
-                                  PremiumService.isPremium ? "Premium" : "Free",
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: PremiumService.isPremium
-                                        ? Colors.green
-                                        : Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            _usageRow(
-                              label: "CrickNova Coach Chats",
-                              used: PremiumService.chatUsed,
-                              total: PremiumService.chatLimit,
-                            ),
-                            const SizedBox(height: 10),
-                            _usageRow(
-                              label: "Cricknova Mistake Detection",
-                              used: PremiumService.mistakeUsed,
-                              total: PremiumService.mistakeLimit,
-                            ),
-                            const SizedBox(height: 10),
-                            _usageRow(
-                              label: "Cricknova Analyse Yourself",
-                              used: PremiumService.compareUsed,
-                              total: PremiumService.compareLimit,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: _remainingFeaturesSection(),
                 ),
 
                 const SizedBox(height: 40),
@@ -1210,26 +1141,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 const SizedBox(height: 6),
-                RichText(
-                  text: TextSpan(
-                    children: [
-                      TextSpan(
-                        text: stat.value,
-                        style: GoogleFonts.poppins(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: stat.value,
+                          style: GoogleFonts.poppins(
+                            fontSize: stat.metric == "Membership" ? 21 : 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
                         ),
-                      ),
-                      TextSpan(
-                        text: stat.suffix,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.72),
+                        TextSpan(
+                          text: stat.suffix,
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.72),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 Text(
@@ -1377,6 +1312,248 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _remainingFeaturesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Remaining Features",
+          style: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _remainingFeaturesCard(),
+      ],
+    );
+  }
+
+  Widget _remainingFeaturesCard() {
+    final content = Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827).withValues(alpha: 0.74),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.14),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Premium",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                PremiumService.isPremium ? "Premium" : "Free",
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: PremiumService.isPremium ? Colors.green : Colors.grey,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _usageRow(
+            label: "CrickNova Coach Chats",
+            used: PremiumService.chatUsed,
+            total: PremiumService.chatLimit,
+          ),
+          const SizedBox(height: 10),
+          _usageRow(
+            label: "Cricknova Mistake Detection",
+            used: PremiumService.mistakeUsed,
+            total: PremiumService.mistakeLimit,
+          ),
+          const SizedBox(height: 10),
+          _usageRow(
+            label: "Cricknova Analyse Yourself",
+            used: PremiumService.compareUsed,
+            total: PremiumService.compareLimit,
+          ),
+        ],
+      ),
+    );
+
+    if (PremiumService.isPremium) {
+      return content;
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: _openPremiumFromRemainingFeatures,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+                child: _lockedRemainingFeaturesPreview(),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF050A14).withValues(alpha: 0.54),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: const Color(0xFF111827).withValues(alpha: 0.88),
+                  border: Border.all(
+                    color: const Color(0xFFFFD15C).withValues(alpha: 0.55),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.28),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                    BoxShadow(
+                      color: const Color(0xFFFFD15C).withValues(alpha: 0.10),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.lock_open_rounded,
+                      color: Color(0xFFFFD15C),
+                      size: 19,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Access All Features",
+                      style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lockedRemainingFeaturesPreview() {
+    Widget softLine(double widthFactor, {double height = 14}) {
+      return FractionallySizedBox(
+        widthFactor: widthFactor,
+        alignment: Alignment.centerLeft,
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withValues(alpha: 0.26),
+                Colors.white.withValues(alpha: 0.09),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget hiddenRow(double widthFactor, Color accent) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.34),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.18),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: softLine(widthFactor)),
+            const SizedBox(width: 18),
+            SizedBox(width: 48, child: softLine(1, height: 12)),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827).withValues(alpha: 0.74),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.14),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: softLine(0.34, height: 16)),
+              SizedBox(width: 68, child: softLine(1, height: 16)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          hiddenRow(0.72, const Color(0xFF8DE0FF)),
+          const SizedBox(height: 10),
+          hiddenRow(0.86, const Color(0xFF67F7C0)),
+          const SizedBox(height: 10),
+          hiddenRow(0.78, const Color(0xFFFFE295)),
+        ],
+      ),
+    );
+  }
+
+  void _openPremiumFromRemainingFeatures() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const PremiumScreen(entrySource: "remaining_features"),
       ),
     );
   }

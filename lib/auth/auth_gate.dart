@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
 import '../navigation/main_navigation.dart';
-import '../onboarding/cricknova_onboarding_screen.dart';
+import 'login_screen.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -82,9 +82,6 @@ class _AuthGateState extends State<AuthGate> {
       return MainNavigation(userName: userId);
     }
 
-    return const CricknovaOnboardingScreen(
-      userName: 'Player',
-      skipGetStarted: false,
-    );
+    return const LoginScreen(postLoginTarget: LoginPostLoginTarget.app);
   }
 }

@@ -11,8 +11,6 @@ import 'package:flutter/foundation.dart';
 
 import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
-import '../onboarding/cricknova_onboarding_screen.dart';
-import '../onboarding/cricknova_onboarding_store.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/backend_warmup_service.dart';
 import '../services/premium_service.dart';
@@ -38,7 +36,6 @@ class _SplashNavigationTarget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  static const String _onboardingSeenKey = 'cricknova_onboarding_seen_once';
   static const Duration _startupTimeout = Duration(seconds: 3);
   static const Duration _authRestoreTimeout = Duration(milliseconds: 500);
   bool _fadeOut = false;
@@ -165,7 +162,7 @@ class _SplashScreenState extends State<SplashScreen> {
         );
       }
       return const _SplashNavigationTarget.online(
-        LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+        LoginScreen(postLoginTarget: LoginPostLoginTarget.app),
       );
     }
 
@@ -176,9 +173,6 @@ class _SplashScreenState extends State<SplashScreen> {
     final prefs = await SharedPreferences.getInstance();
     final user = await _restoredFirebaseUser();
     final userName = await _resolvedCachedUserName(prefs, user);
-    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
-    final pendingAnswers = await CricknovaOnboardingStore.loadPendingAnswers();
-    final pendingCompleted = await CricknovaOnboardingStore.isPendingCompleted();
 
     if (user != null) {
       // Signed-in users must not be sent back to Google login on every app
@@ -209,20 +203,8 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     }
 
-    if (pendingAnswers.isNotEmpty && !pendingCompleted) {
-      return const _SplashNavigationTarget.online(
-        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
-      );
-    }
-
-    if (!onboardingSeen) {
-      await prefs.setBool(_onboardingSeenKey, true);
-      return const _SplashNavigationTarget.online(
-        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
-      );
-    }
     return const _SplashNavigationTarget.online(
-      LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+      LoginScreen(postLoginTarget: LoginPostLoginTarget.app),
     );
   }
 
@@ -234,12 +216,11 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     return const _SplashNavigationTarget.online(
-      LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+      LoginScreen(postLoginTarget: LoginPostLoginTarget.app),
     );
   }
 
   Future<_SplashNavigationTarget> _localNavigationTarget() async {
-    final prefs = await SharedPreferences.getInstance();
     if (Platform.isMacOS && Firebase.apps.isEmpty) {
       return const _SplashNavigationTarget.online(
         MainNavigation(userName: 'Player'),
@@ -255,22 +236,8 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     }
 
-    final onboardingSeen = prefs.getBool(_onboardingSeenKey) ?? false;
-    final pendingAnswers = await CricknovaOnboardingStore.loadPendingAnswers();
-    final pendingCompleted = await CricknovaOnboardingStore.isPendingCompleted();
-    if (pendingAnswers.isNotEmpty && !pendingCompleted) {
-      return const _SplashNavigationTarget.online(
-        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
-      );
-    }
-    if (!onboardingSeen) {
-      await prefs.setBool(_onboardingSeenKey, true);
-      return const _SplashNavigationTarget.online(
-        CricknovaOnboardingScreen(userName: 'Player', skipGetStarted: false),
-      );
-    }
     return const _SplashNavigationTarget.online(
-      LoginScreen(postLoginTarget: LoginPostLoginTarget.getStarted),
+      LoginScreen(postLoginTarget: LoginPostLoginTarget.app),
     );
   }
 
@@ -322,9 +289,6 @@ class _SplashScreenState extends State<SplashScreen> {
     try {
       await PremiumService.ensureFreshState();
     } catch (_) {}
-    try {
-      await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
-    } catch (_) {}
   }
 
   Future<String> _resolvedCachedUserName(
@@ -340,6 +304,7 @@ class _SplashScreenState extends State<SplashScreen> {
       prefs.getString('user_name'),
       prefs.getString('displayName'),
       user?.displayName,
+      _nameFromEmail(user?.email),
     ];
     for (final candidate in candidates) {
       final name = candidate?.trim();
@@ -348,6 +313,13 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     }
     return 'Player';
+  }
+
+  String? _nameFromEmail(String? email) {
+    final raw = email?.trim();
+    if (raw == null || raw.isEmpty || !raw.contains('@')) return null;
+    final local = raw.split('@').first.trim();
+    return local.isEmpty ? null : local;
   }
 
   Future<bool> _hasInternetConnection() async {
