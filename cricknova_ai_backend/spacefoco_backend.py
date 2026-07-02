@@ -1974,7 +1974,10 @@ def calculate_spin_real(ball_positions):
 # TRAINING VIDEO API
 # -----------------------------
 @app.post("/training/analyze")
-async def analyze_training_video(file: UploadFile = File(...)):
+async def analyze_training_video(
+    file: UploadFile = File(...),
+    calibration_points: str | None = Form(None),
+):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
@@ -1982,29 +1985,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
     try:
         ball_observations = track_ball_observations(video_path)
         ball_positions = [(float(item["x"]), float(item["y"])) for item in ball_observations]
-
-        if len(ball_observations) < 5:
-            return {
-                "status": "failed",
-                "reason": "Ball not detected clearly",
-                "speed_kmph": None,
-                "speed_confidence": 0.0,
-                "swing": "unknown",
-                "spin": "unknown",
-                "trajectory": [],
-                "model": "best-2.pt",
-                "ball_point_count": len(ball_observations),
-                "ball_points": [
-                    {
-                        "frame": int(item.get("frame", index)),
-                        "x": round(float(item.get("x", 0.0)), 2),
-                        "y": round(float(item.get("y", 0.0)), 2),
-                        "confidence": float(item.get("confidence", 0.0)),
-                        "interpolated": bool(item.get("interpolated", False)),
-                    }
-                    for index, item in enumerate(ball_observations)
-                ],
-            }
 
         cap = cv2.VideoCapture(video_path)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -2028,14 +2008,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
             return [v for v in clean if abs(v - median) <= (3.5 * 1.4826 * mad)]
 
         def calculate_speed_kmph(observations, fps):
-            if len(observations) < 5 or fps <= 1:
+            if len(observations) < 2 or fps <= 1:
                 return None
 
             ys = [float(p["y"]) for p in observations]
             pitch_idx = int(np.argmax(ys))
             usable = observations[: max(2, pitch_idx + 1)]
 
-            if len(usable) < 3:
+            if len(usable) < 2:
                 return None
 
             px_per_frame = []
@@ -2063,6 +2043,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
             pitch_span_px = float(np.percentile(ys, 95) - np.percentile(ys, 5))
             if pitch_span_px <= 1:
+                xs = [float(p["x"]) for p in observations]
+                pitch_span_px = float(
+                    math.hypot(
+                        np.percentile(xs, 95) - np.percentile(xs, 5),
+                        np.percentile(ys, 95) - np.percentile(ys, 5),
+                    )
+                )
+            if pitch_span_px <= 1:
                 return None
 
             meters_per_pixel = 20.12 / pitch_span_px
@@ -2074,13 +2062,45 @@ async def analyze_training_video(file: UploadFile = File(...)):
             speed_confidence = min(max(detection_confidence * 0.65 + sample_confidence * 0.35, 0.0), 1.0)
             return round(speed_kmph, 1), round(speed_confidence, 3)
 
+        def lateral_deviation_px(positions):
+            if len(positions) < 3:
+                return 0.0
+            start = np.array(positions[0], dtype=float)
+            end = np.array(positions[-1], dtype=float)
+            line = end - start
+            line_norm = float(np.linalg.norm(line))
+            if line_norm <= 1e-9:
+                return 0.0
+            pts = np.array(positions, dtype=float)
+            rel = pts - start
+            distances = np.abs(rel[:, 0] * line[1] - rel[:, 1] * line[0]) / line_norm
+            return float(np.max(distances))
+
         speed_result = calculate_speed_kmph(ball_observations, video_fps)
         speed_kmph = speed_result[0] if speed_result is not None else None
         speed_confidence = speed_result[1] if speed_result is not None else 0.0
 
         swing = detect_swing_x(ball_positions)
+        swing_deviation = lateral_deviation_px(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
         trajectory = build_trajectory(ball_observations, frame_width, frame_height)
+        volumetric_3d = None
+        if calibration_points:
+            try:
+                parsed_points = json.loads(calibration_points)
+                from cricknova_engine.processing.volumetric_tracking import build_volumetric_analysis
+
+                volumetric_3d = build_volumetric_analysis(
+                    detections=ball_observations,
+                    calibration_points=parsed_points,
+                    fps=video_fps,
+                )
+            except Exception as exc:
+                volumetric_3d = {
+                    "status": "failed",
+                    "reason": "3D calibration failed",
+                    "detail": str(exc),
+                }
 
         # Normalize spin output for app (leg spin / off spin / none)
         if spin_name == "leg-spin":
@@ -2088,20 +2108,29 @@ async def analyze_training_video(file: UploadFile = File(...)):
         elif spin_name == "off-spin":
             spin_label = "off spin"
         else:
-            spin_label = "none"
+            spin_label = "no measurable spin"
+
+        tracking_sources = sorted({str(item.get("source", "unknown")) for item in ball_observations})
+        analysis_quality = "best_2_yolo" if any("yolo" in source for source in tracking_sources) else "motion_estimate"
+        if len(ball_observations) < 2:
+            analysis_quality = "no_reliable_motion"
 
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
             "speed_type": "best_2_yolo_coordinate_physics",
             "speed_confidence": speed_confidence,
-            "speed_note": "Speed from best-2.pt ball coordinates, real frame gaps, and pitch-length scale",
+            "speed_note": "Speed from detected/motion-tracked coordinates, real frame gaps, and pitch-length scale",
             "fps": round(float(video_fps), 3),
             "swing": swing,
+            "swing_deviation_px": round(float(swing_deviation), 2),
             "spin": spin_label,
             "spin_strength": round(float(spin_turn), 3),
             "trajectory": trajectory,
+            "volumetric_3d": volumetric_3d,
             "model": "best-2.pt",
+            "analysis_quality": analysis_quality,
+            "tracking_sources": tracking_sources,
             "ball_point_count": len(ball_observations),
             "ball_points": [
                 {
@@ -2110,6 +2139,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
                     "y": round(float(item["y"]), 2),
                     "confidence": float(item.get("confidence", 0.0)),
                     "interpolated": bool(item.get("interpolated", False)),
+                    "source": str(item.get("source", "unknown")),
                 }
                 for item in ball_observations
             ],
