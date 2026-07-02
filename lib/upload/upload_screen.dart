@@ -7573,7 +7573,7 @@ class _UploadScreenState extends State<UploadScreen>
 
     // 🔥 Check for cached results first (Same video = Same output)
     final cacheBox = Hive.box('analysis_cache');
-    final cacheKey = _fallbackSeedForVideo(video!).toString();
+    final cacheKey = 'best2_yolo_v1_${_fallbackSeedForVideo(video!)}';
     final cachedData = cacheBox.get(cacheKey);
 
     if (cachedData != null && cachedData is Map) {
@@ -7641,6 +7641,15 @@ class _UploadScreenState extends State<UploadScreen>
       );
 
       final analysis = decoded["analysis"] ?? decoded;
+      if (analysis is! Map) {
+        throw Exception("INVALID_ANALYSIS_RESPONSE");
+      }
+      if (analysis["status"]?.toString().toLowerCase() == "failed") {
+        await _handleNonCricketUploadWarning(
+          analysis["reason"]?.toString() ?? "Ball was not detected clearly.",
+        );
+        return false;
+      }
 
       // 🔥 Cache for identical future uploads
       await cacheBox.put(cacheKey, analysis);
@@ -7657,7 +7666,7 @@ class _UploadScreenState extends State<UploadScreen>
         );
       }
 
-      await _applyAnalysisResult(analysis);
+      await _applyAnalysisResult(Map<String, dynamic>.from(analysis));
       return true;
     } catch (e) {
       debugPrint("UPLOAD ERROR: $e");
@@ -7759,138 +7768,11 @@ class _UploadScreenState extends State<UploadScreen>
       final dynamic speedTypeVal = analysis["speed_type"];
       final dynamic speedNoteVal = analysis["speed_note"];
       final backendSpeed = _extractBackendSpeed(speedVal);
-      final dynamic fpsVal = analysis["fps"];
-      final fpsForFallback = fpsVal is num ? fpsVal.toDouble() : 30.0;
-
-      final videoDerivedSpeed = await _deriveSpeedDirectFromVideo(
-        analysis["trajectory"],
-        backendFps: fpsVal is num ? fpsVal.toDouble() : null,
-      );
-      final fallbackSpeed = _deriveSpeedFromTrajectory(
-        analysis["trajectory"],
-        fps: fpsForFallback,
-      );
-
-      final fingerprint = _fallbackSeedForVideo(video!);
-      final cacheBox = await Hive.openBox("video_results_cache");
-      final cachedSpeed = cacheBox.get(fingerprint);
-      bool usingCachedSpeed = false;
-
-      if (cachedSpeed != null && cachedSpeed is double) {
-        speedKmph = cachedSpeed;
-        speedType = "cached_consistency";
-        speedNote = "Consistency locked";
-        usingCachedSpeed = true;
-      }
-
-      if (!usingCachedSpeed) {
-        if (_selectedSessionType == "Sidearm") {
-          final localSpeed = videoDerivedSpeed ?? fallbackSpeed;
-
-          if (backendSpeed != null) {
-            speedKmph = backendSpeed;
-            speedType = "cached_previous_session";
-            speedNote = "";
-          } else if (localSpeed != null) {
-            // Sidearm Range Expansion Logic:
-            // The user wants 107-145 KMPH. We map raw trajectory (roughly 66-88)
-            // into this wide spectrum using a non-linear sensitivity curve.
-
-            // 1. Normalize input (assume 67 is base, 85 is very fast)
-            final double rawMin = 67.0;
-            final double rawMax = 85.0;
-            double norm = (localSpeed - rawMin) / (rawMax - rawMin);
-            norm = norm.clamp(0.0, 1.8); // Allow for huge outliers
-
-            // 2. Map to target range 107 - 165
-            // Standard performance lands in 107-145.
-            // Elite performance (norm > 1.0) pushes into 145-165 but is HEAVILY throttled.
-            double physicsSpeed = 107.0 + (norm * 38.0);
-
-            if (physicsSpeed > 145.0) {
-              // Super-steep compression to make 145-165 extremely rare
-              physicsSpeed = 145.0 + (physicsSpeed - 145.0) * 0.08;
-            }
-
-            // Final deterministic clamp
-            if (physicsSpeed < 107.0) {
-              physicsSpeed = 107.0 + (localSpeed % 4.0);
-            }
-
-            speedKmph = physicsSpeed.clamp(107.0, 165.0);
-            speedType = "sidearm_physics_v3";
-            speedNote = "Elite-velocity tracking";
-          } else {
-            // True fallback: Range 110-130
-            final seed = video!.lengthSync();
-            final base = 108.0 + (seed % 22);
-            speedKmph = base;
-            speedType = "sidearm_fallback";
-            speedNote = "";
-          }
-        } else {
-          if (backendSpeed != null) {
-            speedKmph = backendSpeed;
-            speedType = speedTypeVal?.toString() ?? "estimated";
-            speedNote = speedNoteVal?.toString() ?? "";
-          } else if (_isSpeedSentinelUnavailable(speedVal)) {
-            if (videoDerivedSpeed != null) {
-              speedKmph = _normalizeNoBackendEstimatedSpeed(
-                videoDerivedSpeed,
-                video!,
-              );
-              speedType = "video_derived";
-            } else if (fallbackSpeed != null) {
-              speedKmph = _resolveTrajectoryFallbackDisplay(
-                fallbackSpeed,
-                video!,
-              );
-              speedType = "trajectory_fallback";
-            } else {
-              speedKmph = _generateUnavailableSpeedFallback(video!);
-              speedType = "display_fallback";
-            }
-          } else if (fallbackSpeed != null) {
-            speedKmph = _resolveTrajectoryFallbackDisplay(
-              fallbackSpeed,
-              video!,
-            );
-            speedType = "trajectory_fallback";
-          } else {
-            speedKmph = _generateUnavailableSpeedFallback(video!);
-            speedType = "display_fallback";
-          }
-        }
-
-        // Apply session boosts to raw trajectory speed ONLY (not sidearm)
-        if (speedKmph != null && _selectedSessionType != "Sidearm") {
-          if (_selectedSessionType == "Match") {
-            speedKmph = speedKmph! + 12.0;
-          } else if (_selectedSessionType == "Solo / Nets Practice") {
-            if (speedKmph! > 95) {
-              speedKmph = speedKmph! + 5.0;
-            } else if (speedKmph! > 75) {
-              speedKmph = speedKmph! + 8.0;
-            } else {
-              speedKmph = speedKmph! + 12.0;
-            }
-          }
-        }
-
-        // Add a tiny variation (up to 2.7 km/h) to make every analysis feel unique
-        if (speedKmph != null) {
-          final math.Random rng = math.Random(fingerprint);
-          final double jitter = (rng.nextDouble() - 0.5) * 2.7;
-          speedKmph = speedKmph! + jitter;
-        }
-      }
-
-      // Save to Consistency Cache (As requested: same video = same speed)
-      if (!usingCachedSpeed && speedKmph != null) {
-        final fingerprint = _fallbackSeedForVideo(video!);
-        final cacheBox = await Hive.openBox("video_results_cache");
-        await cacheBox.put(fingerprint, speedKmph);
-      }
+      speedKmph = backendSpeed;
+      speedType = backendSpeed == null
+          ? "unavailable"
+          : (speedTypeVal?.toString() ?? "best_2_yolo_coordinate_physics");
+      speedNote = speedNoteVal?.toString() ?? "";
 
       // Save to Stats
       if (speedKmph != null) {

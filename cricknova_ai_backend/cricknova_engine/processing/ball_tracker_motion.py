@@ -1,94 +1,235 @@
+import math
+import os
+import time
+from pathlib import Path
+from threading import Lock
+
 import cv2
 import numpy as np
-import math
 
-def track_ball_positions(video_path, max_frames=60):
-    cap = cv2.VideoCapture(video_path)
+os.environ.setdefault("YOLO_CONFIG_DIR", "/tmp/Ultralytics")
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    if fps is None or fps <= 1:
-        fps = 30.0
+_MODEL_LOCK = Lock()
+_BALL_MODEL = None
+_MODEL_LOAD_ATTEMPTED = False
 
-    positions = []
-    prev_position = None
-    prev_direction = None
-    prev_gray = None
-    frame_count = 0
 
-    # scale down once (huge speed boost)
-    TARGET_WIDTH = 640
+def _default_model_path():
+    backend_root = Path(__file__).resolve().parents[2]
+    return backend_root / "models" / "cricket_ball_best.pt"
 
-    while cap.isOpened() and frame_count < max_frames:
-        ret, frame = cap.read()
-        if not ret:
-            break
 
-        frame_count += 1
+def _get_ball_model():
+    global _BALL_MODEL, _MODEL_LOAD_ATTEMPTED
+    if _MODEL_LOAD_ATTEMPTED:
+        return _BALL_MODEL
+    with _MODEL_LOCK:
+        if _MODEL_LOAD_ATTEMPTED:
+            return _BALL_MODEL
+        _MODEL_LOAD_ATTEMPTED = True
+        model_path = Path(os.getenv("CRICKNOVA_BALL_MODEL_PATH", str(_default_model_path())))
+        try:
+            from ultralytics import YOLO
 
-        # downscale frame
-        h, w = frame.shape[:2]
-        scale = TARGET_WIDTH / w
-        frame = cv2.resize(frame, (TARGET_WIDTH, int(h * scale)))
+            if not model_path.is_file():
+                raise FileNotFoundError(f"Ball model not found: {model_path}")
+            _BALL_MODEL = YOLO(str(model_path))
+            print(f"BALL_TRACKER_MODEL_LOADED: {model_path}")
+        except Exception as exc:
+            print(f"BALL_TRACKER_MODEL_UNAVAILABLE: {exc}")
+            _BALL_MODEL = None
+        return _BALL_MODEL
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (7, 7), 0)
 
-        if prev_gray is None:
-            prev_gray = gray
+def _ball_candidates(result, minimum_confidence):
+    candidates = []
+    names = getattr(result, "names", {}) or {}
+    for box in result.boxes or []:
+        class_id = int(box.cls[0])
+        confidence = float(box.conf[0])
+        label = str(names.get(class_id, "")).strip().lower()
+        if label and label not in {"ball", "cricket ball", "-"}:
             continue
-
-        diff = cv2.absdiff(prev_gray, gray)
-        _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
-        thresh = cv2.dilate(thresh, None, iterations=2)
-
-        contours, _ = cv2.findContours(
-            thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        if confidence < minimum_confidence:
+            continue
+        x1, y1, x2, y2 = box.xyxy[0].cpu().tolist()
+        candidates.append(
+            {
+                "x": (float(x1) + float(x2)) / 2.0,
+                "y": (float(y1) + float(y2)) / 2.0,
+                "confidence": confidence,
+                "box_area": max(0.0, (float(x2) - float(x1)) * (float(y2) - float(y1))),
+            }
         )
+    return candidates
 
-        ball_candidate = None
-        max_area = 0
 
-        for c in contours:
-            area = cv2.contourArea(c)
-            if 30 < area < 400 and area > max_area:
-                (x, y, w, h) = cv2.boundingRect(c)
-                cx = x + w // 2
-                cy = y + h // 2
-                ball_candidate = (cx, cy)
-                max_area = area
+def _new_kalman(x, y):
+    kalman = cv2.KalmanFilter(4, 2)
+    kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], dtype=np.float32)
+    kalman.transitionMatrix = np.array(
+        [[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]],
+        dtype=np.float32,
+    )
+    kalman.processNoiseCov = np.diag([0.03, 0.03, 0.28, 0.28]).astype(np.float32)
+    kalman.measurementNoiseCov = np.eye(2, dtype=np.float32) * 0.55
+    kalman.errorCovPost = np.eye(4, dtype=np.float32)
+    kalman.statePost = np.array([[x], [y], [0], [0]], dtype=np.float32)
+    return kalman
 
-        if ball_candidate:
 
-            # Direction consistency filter
-            if prev_position is not None:
-                dx = ball_candidate[0] - prev_position[0]
-                dy = ball_candidate[1] - prev_position[1]
+def _set_dt(kalman, dt):
+    kalman.transitionMatrix = np.array(
+        [[1, 0, dt, 0], [0, 1, 0, dt], [0, 0, 1, 0], [0, 0, 0, 1]],
+        dtype=np.float32,
+    )
 
-                current_direction = (dx, dy)
 
-                if prev_direction is not None:
-                    dot = dx * prev_direction[0] + dy * prev_direction[1]
+def track_ball_observations(video_path, max_frames=420):
+    model = _get_ball_model()
+    if model is None:
+        return []
 
-                    # Ignore sudden direction flips (noise)
-                    if dot < 0:
-                        prev_gray = gray
-                        continue
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return []
 
-                prev_direction = current_direction
+    observations = []
+    frame_index = 0
+    previous = None
+    previous_frame = None
+    previous_confidence = None
+    velocity = None
+    kalman = None
+    kalman_frame = None
+    tracking_started = False
+    misses_after_start = 0
 
-                # Smooth position to reduce jitter
-                smoothed_x = int((ball_candidate[0] + prev_position[0]) / 2)
-                smoothed_y = int((ball_candidate[1] + prev_position[1]) / 2)
-                ball_candidate = (smoothed_x, smoothed_y)
+    minimum_confidence = float(os.getenv("CRICKNOVA_BALL_CONF", "0.35"))
+    search_stride = max(1, int(os.getenv("CRICKNOVA_BALL_SEARCH_STRIDE", "3")))
+    inference_size = max(320, int(os.getenv("CRICKNOVA_BALL_IMGSZ", "640")))
+    target_width = max(640, int(os.getenv("CRICKNOVA_BALL_FRAME_WIDTH", "960")))
+    max_points = max(12, int(os.getenv("CRICKNOVA_BALL_MAX_POINTS", "120")))
+    interpolation_gap = max(0, int(os.getenv("CRICKNOVA_INTERPOLATE_MAX_GAP", "8")))
+    deadline = time.monotonic() + max(8.0, float(os.getenv("CRICKNOVA_BALL_MAX_SECONDS", "45")))
 
-            positions.append(ball_candidate)
-            prev_position = ball_candidate
+    try:
+        while cap.isOpened() and frame_index < max_frames:
+            if time.monotonic() >= deadline:
+                break
+            ok, frame = cap.read()
+            if not ok:
+                break
+            height, width = frame.shape[:2]
+            if width <= 0 or height <= 0:
+                frame_index += 1
+                continue
 
-        prev_gray = gray
+            if not tracking_started and frame_index % search_stride != 0:
+                frame_index += 1
+                continue
 
-        # stop early if enough points found
-        if len(positions) >= 30:
-            break
+            scale = target_width / float(width)
+            resized = cv2.resize(frame, (target_width, max(1, int(height * scale))))
+            result = model.predict(
+                source=resized,
+                imgsz=inference_size,
+                conf=minimum_confidence,
+                iou=0.5,
+                max_det=8,
+                verbose=False,
+            )[0]
+            candidates = _ball_candidates(result, minimum_confidence)
 
-    cap.release()
-    return positions
+            if candidates:
+                tracking_started = True
+                misses_after_start = 0
+                for item in candidates:
+                    item["x"] /= scale
+                    item["y"] /= scale
+                    item["box_area"] /= max(scale * scale, 1e-9)
+
+                if previous is None:
+                    selected = max(candidates, key=lambda item: item["confidence"])
+                else:
+                    expected = previous
+                    if kalman is not None and kalman_frame is not None:
+                        dt = max(1, frame_index - kalman_frame)
+                        _set_dt(kalman, dt)
+                        prediction = kalman.predict()
+                        expected = (float(prediction[0, 0]), float(prediction[1, 0]))
+                        kalman_frame = frame_index
+                    elif velocity is not None and previous_frame is not None:
+                        dt = frame_index - previous_frame
+                        expected = (previous[0] + velocity[0] * dt, previous[1] + velocity[1] * dt)
+
+                    selected = min(
+                        candidates,
+                        key=lambda item: math.hypot(item["x"] - expected[0], item["y"] - expected[1])
+                        - (item["confidence"] * 45.0),
+                    )
+
+                raw_x, raw_y = float(selected["x"]), float(selected["y"])
+                confidence = float(selected["confidence"])
+                if kalman is None:
+                    kalman = _new_kalman(raw_x, raw_y)
+                    kalman_frame = frame_index
+                    smoothed = (raw_x, raw_y)
+                else:
+                    corrected = kalman.correct(np.array([[raw_x], [raw_y]], dtype=np.float32))
+                    smoothed = (float(corrected[0, 0]), float(corrected[1, 0]))
+
+                if previous is not None and previous_frame is not None:
+                    frame_gap = frame_index - previous_frame
+                    if 1 < frame_gap <= interpolation_gap:
+                        for step in range(1, frame_gap):
+                            ratio = step / frame_gap
+                            observations.append(
+                                {
+                                    "frame": previous_frame + step,
+                                    "x": previous[0] + (smoothed[0] - previous[0]) * ratio,
+                                    "y": previous[1] + (smoothed[1] - previous[1]) * ratio,
+                                    "confidence": round(min(previous_confidence or confidence, confidence) * 0.82, 4),
+                                    "interpolated": True,
+                                    "source": "yolo_interpolated",
+                                }
+                            )
+                    if frame_gap > 0:
+                        velocity = ((smoothed[0] - previous[0]) / frame_gap, (smoothed[1] - previous[1]) / frame_gap)
+
+                observations.append(
+                    {
+                        "frame": frame_index,
+                        "x": smoothed[0],
+                        "y": smoothed[1],
+                        "confidence": round(confidence, 4),
+                        "interpolated": False,
+                        "source": "yolo",
+                        "raw_x": round(raw_x, 3),
+                        "raw_y": round(raw_y, 3),
+                    }
+                )
+                previous = smoothed
+                previous_frame = frame_index
+                previous_confidence = confidence
+            elif tracking_started:
+                misses_after_start += 1
+                if kalman is not None and kalman_frame is not None:
+                    dt = max(1, frame_index - kalman_frame)
+                    _set_dt(kalman, dt)
+                    kalman.predict()
+                    kalman_frame = frame_index
+                if len(observations) >= 6 and misses_after_start >= 14:
+                    break
+
+            frame_index += 1
+            if len(observations) >= max_points:
+                break
+    finally:
+        cap.release()
+
+    return observations
+
+
+def track_ball_positions(video_path, max_frames=420):
+    return [(item["x"], item["y"]) for item in track_ball_observations(video_path, max_frames)]

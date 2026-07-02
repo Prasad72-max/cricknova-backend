@@ -127,7 +127,10 @@ def razorpay_ready():
 
 
 
-from cricknova_engine.processing.ball_tracker_motion import track_ball_positions
+from cricknova_engine.processing.ball_tracker_motion import (
+    track_ball_observations,
+    track_ball_positions,
+)
 import time
 
 # Subscription management (external store)
@@ -194,7 +197,26 @@ def subscription_is_active_relaxed(sub):
 # TRAJECTORY NORMALIZATION
 # -----------------------------
 def build_trajectory(ball_positions, frame_width, frame_height):
-    return []
+    if not ball_positions or frame_width <= 0 or frame_height <= 0:
+        return []
+    trajectory = []
+    for index, item in enumerate(ball_positions):
+        if isinstance(item, dict):
+            x = float(item.get("x", 0.0))
+            y = float(item.get("y", 0.0))
+            frame = int(item.get("frame", index))
+        else:
+            x = float(item[0])
+            y = float(item[1])
+            frame = index
+        trajectory.append(
+            {
+                "x": max(0.0, min(1.0, x / float(frame_width))),
+                "y": max(0.0, min(1.0, y / float(frame_height))),
+                "frame": frame,
+            }
+        )
+    return trajectory
 
 
 LIVE_FALLBACK_MODEL = "gemini-2.0-flash-exp"
@@ -1918,9 +1940,7 @@ def calculate_spin_real(ball_positions):
     turn_rad = math.atan2(abs(delta_vx), forward_v)
     raw_turn_deg = math.degrees(turn_rad)
 
-    # ---- Hard clamp to cricket reality (2D camera limit) ----
-    # Any value above 12° is projection noise
-    turn_deg = min(raw_turn_deg, 12.0)
+    turn_deg = raw_turn_deg
 
     # ---- Noise floor (aggressive to avoid fake spin) ----
     if turn_deg < 0.6:
@@ -1960,107 +1980,95 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        ball_positions = track_ball_positions(video_path)
+        ball_observations = track_ball_observations(video_path)
+        ball_positions = [(float(item["x"]), float(item["y"])) for item in ball_observations]
 
-        # Use ONLY the first ball delivery (no best-ball logic)
-        if len(ball_positions) > 30:
-            ball_positions = ball_positions[:30]
-
-        if len(ball_positions) < 5:
+        if len(ball_observations) < 5:
             return {
                 "status": "failed",
                 "reason": "Ball not detected clearly",
-                "speed_kmph": 0,
+                "speed_kmph": None,
+                "speed_confidence": 0.0,
                 "swing": "unknown",
                 "spin": "unknown",
                 "trajectory": []
             }
 
-
         cap = cv2.VideoCapture(video_path)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
         cap.release()
 
         if frame_width <= 0 or frame_height <= 0:
             frame_width, frame_height = 640, 360
+        if video_fps is None or video_fps <= 1:
+            video_fps = 30.0
 
-        pixel_positions = [(x, y) for (x, y) in ball_positions]
+        def robust_positive(values):
+            clean = [float(v) for v in values if math.isfinite(float(v)) and float(v) > 0]
+            if len(clean) < 3:
+                return clean
+            median = float(np.median(clean))
+            mad = float(np.median([abs(v - median) for v in clean]))
+            if mad <= 1e-9:
+                return clean
+            return [v for v in clean if abs(v - median) <= (3.5 * 1.4826 * mad)]
 
-        def calculate_speed_kmph(ball_positions, fps):
-            if len(ball_positions) < 8 or fps <= 1:
+        def calculate_speed_kmph(observations, fps):
+            if len(observations) < 5 or fps <= 1:
                 return None
 
-            # ---- FPS normalization ----
-            fps = min(max(fps, 24), 60)
-
-            # ---- Use only PRE-PITCH frames ----
-            ys = [p[1] for p in ball_positions]
+            ys = [float(p["y"]) for p in observations]
             pitch_idx = int(np.argmax(ys))
-            usable = ball_positions[max(0, pitch_idx - 8):pitch_idx]
+            usable = observations[: max(2, pitch_idx + 1)]
 
-            if len(usable) < 5:
+            if len(usable) < 3:
                 return None
 
-            # ---- Per-frame distances ----
-            distances = []
-            for i in range(1, len(usable)):
-                x1, y1 = usable[i - 1]
-                x2, y2 = usable[i]
-                d = math.hypot(x2 - x1, y2 - y1)
+            px_per_frame = []
+            confidence_samples = []
+            for previous, current in zip(usable, usable[1:]):
+                frame_gap = int(current["frame"]) - int(previous["frame"])
+                if frame_gap <= 0:
+                    continue
+                distance_px = math.hypot(
+                    float(current["x"]) - float(previous["x"]),
+                    float(current["y"]) - float(previous["y"]),
+                )
+                if math.isfinite(distance_px) and distance_px > 0:
+                    px_per_frame.append(distance_px / frame_gap)
+                    confidence_samples.append(
+                        min(
+                            float(previous.get("confidence", 0.0)),
+                            float(current.get("confidence", 0.0)),
+                        )
+                    )
 
-                # Tight noise rejection
-                if 1.5 < d < 35.0:
-                    distances.append(d)
-
-            if len(distances) < 4:
+            px_per_frame = robust_positive(px_per_frame)
+            if not px_per_frame:
                 return None
 
-            # ---- Trimmed median (remove extreme noise) ----
-            distances.sort()
-            trim = int(len(distances) * 0.2)
-            core = distances[trim:len(distances) - trim]
-            if not core:
+            pitch_span_px = float(np.percentile(ys, 95) - np.percentile(ys, 5))
+            if pitch_span_px <= 1:
                 return None
 
-            median_px = float(np.median(core))
-
-            # ---- Pitch length scaling (camera adaptive) ----
-            pitch_px = max(220.0, np.percentile(ys, 90) - np.percentile(ys, 10))
-            meters_per_pixel = 20.12 / pitch_px
-
-            speed_mps = median_px * meters_per_pixel * fps
-            speed_kmph = speed_mps * 3.6 * SPEED_CALIBRATION_FACTOR
-
-            # ICC realistic bowling range
-            if speed_kmph < 80 or speed_kmph > 160:
+            meters_per_pixel = 20.12 / pitch_span_px
+            speed_kmph = float(np.median(px_per_frame)) * float(fps) * meters_per_pixel * 3.6
+            if speed_kmph <= 0 or not math.isfinite(speed_kmph):
                 return None
+            detection_confidence = float(np.mean(confidence_samples)) if confidence_samples else 0.0
+            sample_confidence = min(len(px_per_frame) / 10.0, 1.0)
+            speed_confidence = min(max(detection_confidence * 0.65 + sample_confidence * 0.35, 0.0), 1.0)
+            return round(speed_kmph, 1), round(speed_confidence, 3)
 
-            return round(speed_kmph, 1)
-
-        # Extract reference frame for pitch detection
-        reference_frame = None
-        cap = cv2.VideoCapture(video_path)
-        video_fps = 30.0
-        if cap.isOpened():
-            video_fps = cap.get(cv2.CAP_PROP_FPS)
-            if video_fps is None or video_fps <= 1:
-                video_fps = 30.0
-            ret, frame = cap.read()
-            if ret:
-                reference_frame = frame
-            cap.release()
-
-        raw_speed = calculate_speed_kmph(ball_positions, video_fps)
-
-        # IMPORTANT:
-        # Do NOT force 0.0 when speed is not detected.
-        # Return None so the app can distinguish "no data" vs real zero.
-        speed_kmph = round(raw_speed, 1) if raw_speed is not None else None
+        speed_result = calculate_speed_kmph(ball_observations, video_fps)
+        speed_kmph = speed_result[0] if speed_result is not None else None
+        speed_confidence = speed_result[1] if speed_result is not None else 0.0
 
         swing = detect_swing_x(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
-        trajectory = []
+        trajectory = build_trajectory(ball_observations, frame_width, frame_height)
 
         # Normalize spin output for app (leg spin / off spin / none)
         if spin_name == "leg-spin":
@@ -2073,11 +2081,24 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "speed_kmph": speed_kmph,
-            "speed_type": "pre-pitch",
-            "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
+            "speed_type": "best_2_yolo_coordinate_physics",
+            "speed_confidence": speed_confidence,
+            "speed_note": "Speed from best-2.pt ball coordinates, real frame gaps, and pitch-length scale",
+            "fps": round(float(video_fps), 3),
             "swing": swing,
             "spin": spin_label,
-            "trajectory": []
+            "spin_strength": round(float(spin_turn), 3),
+            "trajectory": trajectory,
+            "ball_points": [
+                {
+                    "frame": int(item["frame"]),
+                    "x": round(float(item["x"]), 2),
+                    "y": round(float(item["y"]), 2),
+                    "confidence": float(item.get("confidence", 0.0)),
+                    "interpolated": bool(item.get("interpolated", False)),
+                }
+                for item in ball_observations
+            ],
         }
 
     finally:
