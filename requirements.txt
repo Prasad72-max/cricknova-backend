@@ -4,6 +4,9 @@ python-dotenv
 python-multipart
 numpy
 opencv-python-headless
+ultralytics
+filterpy
+scipy
 razorpay
 google-generativeai
 google-genai

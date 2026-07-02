@@ -30,6 +30,7 @@ temp_*.mp4
 # ML models / weights
 # =========================
 *.pt
+!models/cricket_ball_best.pt
 
 # =========================
 # OS / Editor

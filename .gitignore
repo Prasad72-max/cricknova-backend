@@ -32,6 +32,7 @@ temp_*.mp4
 # ML models / weights
 # =========================
 *.pt
+!cricknova_ai_backend/models/cricket_ball_best.pt
 
 # =========================
 # OS / Editor

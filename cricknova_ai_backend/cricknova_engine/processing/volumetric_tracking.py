@@ -322,6 +322,169 @@ def process_raw_yolo_detections(
     return output
 
 
+def process_ball_trajectory(
+    raw_detections: Iterable[dict[str, Any]],
+    fps: float = 60.0,
+    meters_per_pixel: float = 1.0,
+    confidence_threshold: float = 0.4,
+    gate_distance_px: float = 80.0,
+    max_missing_frames: int = 10,
+    process_noise: float = 6.0,
+    measurement_noise: float = 35.0,
+) -> list[dict[str, Any]]:
+    """Build a smooth trajectory and per-frame velocity from raw YOLO points.
+
+    Expected input row shape:
+    {"frame": int, "x": float, "y": float, "confidence": float}
+
+    Tuning notes:
+    - R is measurement noise. Increase R for shaky/low-resolution cameras so the
+      filter trusts the motion model more than jittery detector centers.
+    - Q is process noise. Increase Q for close-up/side-on clips where the ball
+      curves sharply or changes apparent speed quickly.
+    - Here R > Q by default, which favors physical prediction over noisy YOLO
+      measurements while still accepting points that pass the 80px gate.
+    """
+    rows = sorted(
+        [
+            item
+            for item in raw_detections
+            if float(item.get("confidence", 0.0)) >= confidence_threshold
+            and _is_finite_xy(item.get("x", item.get("u")), item.get("y", item.get("v")))
+        ],
+        key=lambda item: int(item.get("frame", 0)),
+    )
+    if not rows:
+        process_ball_trajectory.last_median_speed_kmph = None
+        return []
+
+    valid_rows = []
+    previous_xy = None
+    for item in rows:
+        xy = np.array([float(item.get("x", item.get("u"))), float(item.get("y", item.get("v")))], dtype=float)
+        if previous_xy is not None and float(np.linalg.norm(xy - previous_xy)) > gate_distance_px:
+            continue
+        valid_rows.append(item)
+        previous_xy = xy
+
+    if not valid_rows:
+        process_ball_trajectory.last_median_speed_kmph = None
+        return []
+
+    by_frame = {int(item.get("frame", 0)): item for item in valid_rows}
+    frames = np.arange(
+        int(valid_rows[0].get("frame", 0)),
+        int(valid_rows[-1].get("frame", 0)) + 1,
+        dtype=int,
+    )
+
+    dt = 1.0 / max(float(fps), 1.0)
+    kalman = KalmanFilter(dim_x=4, dim_z=2)
+    kalman.F = np.array(
+        [
+            [1.0, 0.0, dt, 0.0],
+            [0.0, 1.0, 0.0, dt],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=float,
+    )
+    kalman.H = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], dtype=float)
+    kalman.P = np.diag([300.0, 300.0, 650.0, 650.0])
+    kalman.Q = np.diag([process_noise, process_noise, process_noise * 4.0, process_noise * 4.0])
+    kalman.R = np.eye(2, dtype=float) * measurement_noise
+
+    first = valid_rows[0]
+    kalman.x = np.array(
+        [
+            [float(first.get("x", first.get("u")))],
+            [float(first.get("y", first.get("v")))],
+            [0.0],
+            [0.0],
+        ],
+        dtype=float,
+    )
+
+    points = []
+    missing_count = 0
+    for frame in frames:
+        item = by_frame.get(int(frame))
+        if frame != frames[0]:
+            kalman.predict()
+
+        is_interpolated = True
+        if item is not None:
+            measurement = np.array(
+                [
+                    [float(item.get("x", item.get("u")))],
+                    [float(item.get("y", item.get("v")))],
+                ],
+                dtype=float,
+            )
+            predicted = np.array([kalman.x[0, 0], kalman.x[1, 0]], dtype=float)
+            if float(np.linalg.norm(measurement.ravel() - predicted)) <= gate_distance_px:
+                kalman.update(measurement)
+                missing_count = 0
+                is_interpolated = False
+            else:
+                missing_count += 1
+        else:
+            missing_count += 1
+
+        if missing_count > max_missing_frames:
+            break
+
+        points.append(
+            {
+                "frame": int(frame),
+                "x": float(kalman.x[0, 0]),
+                "y": float(kalman.x[1, 0]),
+                "is_interpolated": bool(is_interpolated),
+            }
+        )
+
+    if not points:
+        process_ball_trajectory.last_median_speed_kmph = None
+        return []
+
+    frame_values = np.asarray([item["frame"] for item in points], dtype=float)
+    coords = np.asarray([[item["x"], item["y"]] for item in points], dtype=float)
+    if len(points) >= 7:
+        coords[:, 0] = savgol_filter(coords[:, 0], window_length=7, polyorder=2, mode="interp")
+        coords[:, 1] = savgol_filter(coords[:, 1], window_length=7, polyorder=2, mode="interp")
+
+    frame_gaps = np.maximum(np.diff(frame_values), 1.0)
+    distances_px = np.linalg.norm(np.diff(coords, axis=0), axis=1)
+    speed_kmph = np.concatenate(
+        [[0.0], distances_px * max(float(fps), 1.0) / frame_gaps * float(meters_per_pixel) * 3.6]
+    )
+    positive_speeds = speed_kmph[speed_kmph > 0]
+    process_ball_trajectory.last_median_speed_kmph = (
+        round(float(np.median(positive_speeds)), 3) if positive_speeds.size else 0.0
+    )
+
+    return [
+        {
+            "frame": int(points[index]["frame"]),
+            "x_smooth": round(float(coords[index, 0]), 3),
+            "y_smooth": round(float(coords[index, 1]), 3),
+            "is_interpolated": bool(points[index]["is_interpolated"]),
+            "speed_kmph": round(float(speed_kmph[index]), 3),
+        }
+        for index in range(len(points))
+    ]
+
+
+process_ball_trajectory.last_median_speed_kmph = None
+
+
+def _is_finite_xy(x: Any, y: Any) -> bool:
+    try:
+        return np.isfinite(float(x)) and np.isfinite(float(y))
+    except (TypeError, ValueError):
+        return False
+
+
 def _smooth_xy(coords: np.ndarray) -> np.ndarray:
     """Savitzky-Golay smoothing with CubicSpline fallback for short sequences."""
     count = len(coords)
