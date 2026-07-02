@@ -105,8 +105,8 @@ def track_ball_observations(video_path, max_frames=420):
     tracking_started = False
     misses_after_start = 0
 
-    minimum_confidence = float(os.getenv("CRICKNOVA_BALL_CONF", "0.35"))
-    search_stride = max(1, int(os.getenv("CRICKNOVA_BALL_SEARCH_STRIDE", "3")))
+    minimum_confidence = float(os.getenv("CRICKNOVA_BALL_CONF", "0.25"))
+    search_stride = max(1, int(os.getenv("CRICKNOVA_BALL_SEARCH_STRIDE", "1")))
     inference_size = max(320, int(os.getenv("CRICKNOVA_BALL_IMGSZ", "640")))
     target_width = max(640, int(os.getenv("CRICKNOVA_BALL_FRAME_WIDTH", "960")))
     max_points = max(12, int(os.getenv("CRICKNOVA_BALL_MAX_POINTS", "120")))

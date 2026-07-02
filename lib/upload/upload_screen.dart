@@ -7593,6 +7593,7 @@ class _UploadScreenState extends State<UploadScreen>
       }
 
       await _applyAnalysisResult(analysis);
+      await _showBallCoordinatesSheet(analysis);
       return true;
     }
 
@@ -7645,6 +7646,7 @@ class _UploadScreenState extends State<UploadScreen>
         throw Exception("INVALID_ANALYSIS_RESPONSE");
       }
       if (analysis["status"]?.toString().toLowerCase() == "failed") {
+        await _showBallCoordinatesSheet(Map<String, dynamic>.from(analysis));
         await _handleNonCricketUploadWarning(
           analysis["reason"]?.toString() ?? "Ball was not detected clearly.",
         );
@@ -7667,6 +7669,7 @@ class _UploadScreenState extends State<UploadScreen>
       }
 
       await _applyAnalysisResult(Map<String, dynamic>.from(analysis));
+      await _showBallCoordinatesSheet(Map<String, dynamic>.from(analysis));
       return true;
     } catch (e) {
       debugPrint("UPLOAD ERROR: $e");
@@ -7759,6 +7762,157 @@ class _UploadScreenState extends State<UploadScreen>
       debugPrint("VIDEO COPY FALLBACK: $e");
       return source;
     }
+  }
+
+  List<Map<String, dynamic>> _extractBallCoordinateRows(
+    Map<String, dynamic> analysis,
+  ) {
+    final rawPoints = analysis["ball_points"];
+    if (rawPoints is List && rawPoints.isNotEmpty) {
+      return rawPoints
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    final rawTrajectory = analysis["trajectory"];
+    if (rawTrajectory is List) {
+      return rawTrajectory.whereType<Map>().toList().asMap().entries.map((
+        entry,
+      ) {
+        final item = Map<String, dynamic>.from(entry.value);
+        return {
+          "frame": item["frame"] ?? entry.key,
+          "x": item["x"],
+          "y": item["y"],
+          "confidence": item["confidence"],
+          "interpolated": item["interpolated"] == true,
+        };
+      }).toList();
+    }
+    return const [];
+  }
+
+  String _formatBallCoordinatesForCopy(Map<String, dynamic> analysis) {
+    final rows = _extractBallCoordinateRows(analysis);
+    final buffer = StringBuffer();
+    buffer.writeln("model,${analysis["model"] ?? "best-2.pt"}");
+    buffer.writeln("speed_kmph,${analysis["speed_kmph"] ?? ""}");
+    buffer.writeln("speed_confidence,${analysis["speed_confidence"] ?? ""}");
+    buffer.writeln("fps,${analysis["fps"] ?? ""}");
+    buffer.writeln("frame,x,y,confidence,interpolated");
+    for (final row in rows) {
+      buffer.writeln(
+        "${row["frame"] ?? ""},${row["x"] ?? ""},${row["y"] ?? ""},${row["confidence"] ?? ""},${row["interpolated"] ?? false}",
+      );
+    }
+    return buffer.toString();
+  }
+
+  Future<void> _showBallCoordinatesSheet(Map<String, dynamic> analysis) async {
+    if (!mounted) return;
+    final rows = _extractBallCoordinateRows(analysis);
+    final copyText = _formatBallCoordinatesForCopy(analysis);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF07111F),
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.72,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 10, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          "Ball coordinates (${rows.length})",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: "Copy",
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: copyText),
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Ball coordinates copied"),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.copy, color: Colors.white),
+                      ),
+                      IconButton(
+                        tooltip: "Close",
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "Speed: ${analysis["speed_kmph"] ?? "unavailable"} km/h  •  Model: ${analysis["model"] ?? "best-2.pt"}",
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: rows.isEmpty
+                      ? const Center(
+                          child: Text(
+                            "No ball coordinates returned by best-2.pt.",
+                            style: TextStyle(color: Colors.white70),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                          itemCount: rows.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(color: Colors.white12, height: 1),
+                          itemBuilder: (context, index) {
+                            final row = rows[index];
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(
+                                "Frame ${row["frame"] ?? index}",
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              subtitle: Text(
+                                "x=${row["x"]}  y=${row["y"]}  conf=${row["confidence"] ?? "-"}",
+                                style: const TextStyle(color: Colors.white60),
+                              ),
+                              trailing: row["interpolated"] == true
+                                  ? const Text(
+                                      "interp",
+                                      style: TextStyle(color: Colors.amber),
+                                    )
+                                  : null,
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _applyAnalysisResult(Map<String, dynamic> analysis) async {

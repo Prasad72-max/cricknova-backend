@@ -1991,7 +1991,19 @@ async def analyze_training_video(file: UploadFile = File(...)):
                 "speed_confidence": 0.0,
                 "swing": "unknown",
                 "spin": "unknown",
-                "trajectory": []
+                "trajectory": [],
+                "model": "best-2.pt",
+                "ball_point_count": len(ball_observations),
+                "ball_points": [
+                    {
+                        "frame": int(item.get("frame", index)),
+                        "x": round(float(item.get("x", 0.0)), 2),
+                        "y": round(float(item.get("y", 0.0)), 2),
+                        "confidence": float(item.get("confidence", 0.0)),
+                        "interpolated": bool(item.get("interpolated", False)),
+                    }
+                    for index, item in enumerate(ball_observations)
+                ],
             }
 
         cap = cv2.VideoCapture(video_path)
@@ -2089,6 +2101,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
             "spin": spin_label,
             "spin_strength": round(float(spin_turn), 3),
             "trajectory": trajectory,
+            "model": "best-2.pt",
+            "ball_point_count": len(ball_observations),
             "ball_points": [
                 {
                     "frame": int(item["frame"]),
