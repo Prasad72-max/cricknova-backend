@@ -125,7 +125,7 @@ def _motion_candidates(previous_gray, gray, width, height):
     return candidates
 
 
-def _track_motion_observations(video_path, max_frames=420):
+def _track_motion_observations(video_path, max_frames=180):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return []
@@ -138,9 +138,9 @@ def _track_motion_observations(video_path, max_frames=420):
     velocity = None
     kalman = None
     kalman_frame = None
-    max_points = max(12, int(os.getenv("CRICKNOVA_BALL_MAX_POINTS", "120")))
-    target_width = max(480, int(os.getenv("CRICKNOVA_MOTION_FRAME_WIDTH", "720")))
-    deadline = time.monotonic() + max(8.0, float(os.getenv("CRICKNOVA_BALL_MAX_SECONDS", "45")))
+    max_points = max(12, int(os.getenv("CRICKNOVA_BALL_MAX_POINTS", "48")))
+    target_width = max(480, int(os.getenv("CRICKNOVA_MOTION_FRAME_WIDTH", "640")))
+    deadline = time.monotonic() + max(6.0, float(os.getenv("CRICKNOVA_MOTION_MAX_SECONDS", "12")))
 
     try:
         while cap.isOpened() and frame_index < max_frames:
@@ -232,7 +232,7 @@ def _track_motion_observations(video_path, max_frames=420):
     return observations
 
 
-def track_ball_observations(video_path, max_frames=420):
+def track_ball_observations(video_path, max_frames=180):
     model = _get_ball_model()
     if model is None:
         return _track_motion_observations(video_path, max_frames)
@@ -253,12 +253,13 @@ def track_ball_observations(video_path, max_frames=420):
     misses_after_start = 0
 
     minimum_confidence = float(os.getenv("CRICKNOVA_BALL_CONF", "0.25"))
-    search_stride = max(1, int(os.getenv("CRICKNOVA_BALL_SEARCH_STRIDE", "1")))
-    inference_size = max(320, int(os.getenv("CRICKNOVA_BALL_IMGSZ", "640")))
-    target_width = max(640, int(os.getenv("CRICKNOVA_BALL_FRAME_WIDTH", "960")))
-    max_points = max(12, int(os.getenv("CRICKNOVA_BALL_MAX_POINTS", "120")))
+    search_stride = max(1, int(os.getenv("CRICKNOVA_BALL_SEARCH_STRIDE", "3")))
+    inference_stride = max(1, int(os.getenv("CRICKNOVA_BALL_INFERENCE_STRIDE", "2")))
+    inference_size = max(320, int(os.getenv("CRICKNOVA_BALL_IMGSZ", "416")))
+    target_width = max(480, int(os.getenv("CRICKNOVA_BALL_FRAME_WIDTH", "640")))
+    max_points = max(12, int(os.getenv("CRICKNOVA_BALL_MAX_POINTS", "48")))
     interpolation_gap = max(0, int(os.getenv("CRICKNOVA_INTERPOLATE_MAX_GAP", "8")))
-    deadline = time.monotonic() + max(8.0, float(os.getenv("CRICKNOVA_BALL_MAX_SECONDS", "45")))
+    deadline = time.monotonic() + max(8.0, float(os.getenv("CRICKNOVA_BALL_MAX_SECONDS", "22")))
 
     try:
         while cap.isOpened() and frame_index < max_frames:
@@ -273,6 +274,10 @@ def track_ball_observations(video_path, max_frames=420):
                 continue
 
             if not tracking_started and frame_index % search_stride != 0:
+                frame_index += 1
+                continue
+
+            if tracking_started and frame_index % inference_stride != 0:
                 frame_index += 1
                 continue
 
@@ -375,7 +380,7 @@ def track_ball_observations(video_path, max_frames=420):
     finally:
         cap.release()
 
-    if len(observations) < 5 and os.getenv("CRICKNOVA_DISABLE_MOTION_FALLBACK", "0") != "1":
+    if len(observations) < 10 and os.getenv("CRICKNOVA_DISABLE_MOTION_FALLBACK", "0") != "1":
         fallback = _track_motion_observations(video_path, max_frames)
         if len(fallback) > len(observations):
             return fallback
@@ -383,5 +388,5 @@ def track_ball_observations(video_path, max_frames=420):
     return observations
 
 
-def track_ball_positions(video_path, max_frames=420):
+def track_ball_positions(video_path, max_frames=180):
     return [(item["x"], item["y"]) for item in track_ball_observations(video_path, max_frames)]

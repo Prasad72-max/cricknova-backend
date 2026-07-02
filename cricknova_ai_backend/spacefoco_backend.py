@@ -1883,6 +1883,42 @@ def detect_swing_x(ball_positions):
         return "inswing"
 
 
+def calculate_swing_real(ball_positions):
+    """
+    Trajectory-only swing analysis.
+    Returns name, angle in degrees, and lateral deviation in pixels.
+    No scripted defaults: if the measured angle is inside the noise floor,
+    the result is straight with 0-ish measured angle.
+    """
+    if len(ball_positions) < 4:
+        return "straight", 0.0, 0.0
+
+    pts = np.asarray(ball_positions, dtype=float)
+    start = pts[0]
+    end = pts[-1]
+    travel = end - start
+    travel_norm = float(np.linalg.norm(travel))
+    if travel_norm <= 1e-9:
+        return "straight", 0.0, 0.0
+
+    # Signed perpendicular distance from the straight release-to-end line.
+    relative = pts - start
+    signed_distances = (relative[:, 0] * travel[1] - relative[:, 1] * travel[0]) / travel_norm
+    max_index = int(np.argmax(np.abs(signed_distances)))
+    signed_deviation = float(signed_distances[max_index])
+    deviation_px = abs(signed_deviation)
+    angle_deg = math.degrees(math.atan2(deviation_px, travel_norm))
+
+    if angle_deg < 0.25 or deviation_px < 1.2:
+        return "straight", round(float(angle_deg), 3), round(float(deviation_px), 3)
+
+    # From umpire camera: positive signed lateral movement means image-right
+    # curve relative to the delivery line. Label convention follows app's
+    # existing outswing/inswing display.
+    swing_name = "outswing" if signed_deviation > 0 else "inswing"
+    return swing_name, round(float(angle_deg), 3), round(float(deviation_px), 3)
+
+
 # -----------------------------
 # NEARBY REALISTIC SPIN (NON-SCRIPTED)
 # -----------------------------
@@ -2118,8 +2154,8 @@ async def analyze_training_video(
                 speed_kmph = round(float(np.median(clean_speeds)), 1)
                 speed_confidence = max(speed_confidence, min(len(clean_speeds) / 12.0, 1.0) * 0.8)
 
-        swing = detect_swing_x(ball_positions)
-        swing_deviation = lateral_deviation_px(ball_positions)
+        swing, swing_angle_deg, measured_swing_deviation = calculate_swing_real(ball_positions)
+        swing_deviation = measured_swing_deviation or lateral_deviation_px(ball_positions)
         spin_name, spin_turn = calculate_spin_real(ball_positions)
         trajectory = build_trajectory(ball_observations, frame_width, frame_height)
         volumetric_3d = None
@@ -2148,6 +2184,9 @@ async def analyze_training_video(
         else:
             spin_label = "no measurable spin"
 
+        swing_display = f"{swing} ({float(swing_angle_deg):.2f}°)"
+        spin_display = f"{spin_label} ({float(spin_turn):.2f}°)"
+
         tracking_sources = sorted({str(item.get("source", "unknown")) for item in ball_observations})
         analysis_quality = "best_2_yolo" if any("yolo" in source for source in tracking_sources) else "motion_estimate"
         if len(ball_observations) < 2:
@@ -2161,9 +2200,15 @@ async def analyze_training_video(
             "speed_note": "Speed from detected/motion-tracked coordinates, real frame gaps, and pitch-length scale",
             "fps": round(float(video_fps), 3),
             "swing": swing,
+            "swing_label": swing,
+            "swing_angle_deg": round(float(swing_angle_deg), 3),
             "swing_deviation_px": round(float(swing_deviation), 2),
+            "swing_display": swing_display,
             "spin": spin_label,
+            "spin_label": spin_label,
+            "spin_angle_deg": round(float(spin_turn), 3),
             "spin_strength": round(float(spin_turn), 3),
+            "spin_display": spin_display,
             "trajectory": trajectory,
             "volumetric_3d": volumetric_3d,
             "model": "best-2.pt",

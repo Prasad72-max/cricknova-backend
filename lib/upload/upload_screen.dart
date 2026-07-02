@@ -7950,37 +7950,51 @@ class _UploadScreenState extends State<UploadScreen>
 
       final inferred = _inferLabelsFromTrajectory(analysis["trajectory"]);
       final rawSwing = analysis["swing"];
+      final rawSwingAngle = analysis["swing_angle_deg"];
+      final swingAngle = rawSwingAngle is num ? rawSwingAngle.toDouble() : null;
       if (rawSwing is String && rawSwing.trim().isNotEmpty) {
         final lower = rawSwing.trim().toLowerCase();
         if (lower.contains("out")) {
           swing = "OUTSWING";
         } else if (lower.contains("in")) {
           swing = "INSWING";
+        } else if (lower.contains("straight")) {
+          swing = "STRAIGHT";
         } else {
-          swing = inferred["swing"] ?? "INSWING";
+          swing = inferred["swing"] ?? "STRAIGHT";
         }
       } else {
-        swing = inferred["swing"] ?? "INSWING";
+        swing = inferred["swing"] ?? "STRAIGHT";
+      }
+      if (swingAngle != null) {
+        swing = "$swing ${swingAngle.toStringAsFixed(2)}°";
       }
 
       final rawSpin = analysis["spin"];
+      final rawSpinAngle =
+          analysis["spin_angle_deg"] ?? analysis["spin_strength"];
+      final spinAngle = rawSpinAngle is num ? rawSpinAngle.toDouble() : null;
       if (rawSpin is String && rawSpin.trim().isNotEmpty) {
         final lower = rawSpin.trim().toLowerCase();
         if (lower.contains("leg")) {
           spin = "LEG SPIN";
         } else if (lower.contains("off")) {
           spin = "OFF SPIN";
+        } else if (lower.contains("no measurable") || lower.contains("none")) {
+          spin = "NO MEASURABLE SPIN";
         } else {
-          spin = inferred["spin"] ?? "OFF SPIN";
+          spin = inferred["spin"] ?? "NO MEASURABLE SPIN";
         }
       } else {
-        spin = inferred["spin"] ?? "OFF SPIN";
+        spin = inferred["spin"] ?? "NO MEASURABLE SPIN";
+      }
+      if (spinAngle != null) {
+        spin = "$spin ${spinAngle.toStringAsFixed(2)}°";
       }
 
-      final rawStrength = analysis["spin_strength"];
-      spinStrength = rawStrength is num
-          ? "${(rawStrength * 100).toStringAsFixed(0)}%"
-          : "0%";
+      spinStrength = spinAngle != null
+          ? "${spinAngle.toStringAsFixed(2)}°"
+          : "0.00°";
 
       if (mounted) {
         setState(() {
