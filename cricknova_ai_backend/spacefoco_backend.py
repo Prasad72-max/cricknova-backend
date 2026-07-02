@@ -1984,7 +1984,6 @@ async def analyze_training_video(
 
     try:
         ball_observations = track_ball_observations(video_path)
-        ball_positions = [(float(item["x"]), float(item["y"])) for item in ball_observations]
 
         cap = cv2.VideoCapture(video_path)
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -1996,6 +1995,40 @@ async def analyze_training_video(
             frame_width, frame_height = 640, 360
         if video_fps is None or video_fps <= 1:
             video_fps = 30.0
+
+        physics_filtered_points = []
+        if ball_observations:
+            try:
+                from cricknova_engine.processing.volumetric_tracking import process_raw_yolo_detections
+
+                physics_filtered_points = process_raw_yolo_detections(
+                    raw_detections=ball_observations,
+                    fps=video_fps,
+                    min_confidence=0.5,
+                    gate_distance_px=100.0,
+                )
+                if len(physics_filtered_points) >= 2:
+                    source_by_frame = {
+                        int(item.get("frame", index)): str(item.get("source", "unknown"))
+                        for index, item in enumerate(ball_observations)
+                    }
+                    ball_observations = [
+                        {
+                            "frame": int(item["frame"]),
+                            "x": float(item["x"]),
+                            "y": float(item["y"]),
+                            "confidence": float(item.get("confidence", 0.0)),
+                            "interpolated": bool(item.get("is_interpolated", False)),
+                            "source": f"filterpy_{source_by_frame.get(int(item['frame']), 'prediction')}",
+                            "speed_kmph": float(item.get("speed_kmph", 0.0)),
+                            "rejected": bool(item.get("rejected", False)),
+                        }
+                        for item in physics_filtered_points
+                    ]
+            except Exception as exc:
+                print("FILTERPY_TRAJECTORY_POSTPROCESS_FAILED:", exc)
+
+        ball_positions = [(float(item["x"]), float(item["y"])) for item in ball_observations]
 
         def robust_positive(values):
             clean = [float(v) for v in values if math.isfinite(float(v)) and float(v) > 0]
@@ -2079,6 +2112,11 @@ async def analyze_training_video(
         speed_result = calculate_speed_kmph(ball_observations, video_fps)
         speed_kmph = speed_result[0] if speed_result is not None else None
         speed_confidence = speed_result[1] if speed_result is not None else 0.0
+        if physics_filtered_points:
+            clean_speeds = robust_positive([float(item.get("speed_kmph", 0.0)) for item in physics_filtered_points])
+            if clean_speeds:
+                speed_kmph = round(float(np.median(clean_speeds)), 1)
+                speed_confidence = max(speed_confidence, min(len(clean_speeds) / 12.0, 1.0) * 0.8)
 
         swing = detect_swing_x(ball_positions)
         swing_deviation = lateral_deviation_px(ball_positions)
@@ -2131,6 +2169,16 @@ async def analyze_training_video(
             "model": "best-2.pt",
             "analysis_quality": analysis_quality,
             "tracking_sources": tracking_sources,
+            "physics_filtered_points": [
+                {
+                    "frame": int(item["frame"]),
+                    "x": round(float(item["x"]), 2),
+                    "y": round(float(item["y"]), 2),
+                    "speed_kmph": round(float(item.get("speed_kmph", 0.0)), 2),
+                    "is_interpolated": bool(item.get("is_interpolated", False)),
+                }
+                for item in physics_filtered_points
+            ],
             "ball_point_count": len(ball_observations),
             "ball_points": [
                 {

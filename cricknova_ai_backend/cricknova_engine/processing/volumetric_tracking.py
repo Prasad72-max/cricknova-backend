@@ -18,10 +18,13 @@ import cv2
 import numpy as np
 from filterpy.kalman import KalmanFilter
 from scipy.interpolate import CubicSpline
+from scipy.signal import savgol_filter
 
 
 PITCH_LENGTH_M = 20.12
 PITCH_WIDTH_M = 3.05
+DEFAULT_GATE_DISTANCE_PX = 100.0
+DEFAULT_MIN_CONFIDENCE = 0.5
 
 
 @dataclass(frozen=True)
@@ -147,6 +150,198 @@ class BallTracker:
             "confidence": float(confidence),
             "predicted": bool(predicted),
         }
+
+
+class PhysicsAwareBallTracker:
+    """FilterPy Kalman tracker tuned for fast cricket-ball detections."""
+
+    def __init__(
+        self,
+        fps: float = 60.0,
+        process_noise: float = 18.0,
+        measurement_noise: float = 28.0,
+        gate_distance_px: float = DEFAULT_GATE_DISTANCE_PX,
+        min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    ) -> None:
+        self.fps = max(float(fps), 1.0)
+        self.dt = 1.0 / self.fps
+        self.gate_distance_px = float(gate_distance_px)
+        self.min_confidence = float(min_confidence)
+        self.kf = KalmanFilter(dim_x=4, dim_z=2)
+
+        # State vector: [x, y, vx, vy]. Constant velocity is a strong fit for
+        # frame-to-frame cricket ball motion over short clips.
+        self.kf.F = np.array(
+            [
+                [1.0, 0.0, self.dt, 0.0],
+                [0.0, 1.0, 0.0, self.dt],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            dtype=float,
+        )
+        self.kf.H = np.array([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]], dtype=float)
+        self.kf.P = np.diag([450.0, 450.0, 900.0, 900.0])
+
+        # Q controls how much acceleration/curve the filter allows. Cricket
+        # balls can swing and dip quickly, so Q is intentionally higher on
+        # velocity than position to follow real movement without jitter-chasing.
+        self.kf.Q = np.diag(
+            [
+                process_noise,
+                process_noise,
+                process_noise * 8.0,
+                process_noise * 8.0,
+            ]
+        )
+
+        # R controls trust in raw YOLO measurements. A moderate value smooths
+        # bounding-box center jitter while still accepting high-confidence hits.
+        self.kf.R = np.eye(2, dtype=float) * float(measurement_noise)
+        self.initialized = False
+
+    def step(self, frame: int, x: float | None, y: float | None, confidence: float = 0.0) -> dict[str, Any] | None:
+        """Return a filtered state; low-confidence/missing detections are predicted."""
+        measurement_valid = (
+            x is not None
+            and y is not None
+            and np.isfinite(float(x))
+            and np.isfinite(float(y))
+            and float(confidence) >= self.min_confidence
+        )
+
+        if not self.initialized:
+            if not measurement_valid:
+                return None
+            self.kf.x = np.array([[float(x)], [float(y)], [0.0], [0.0]], dtype=float)
+            self.initialized = True
+            return self._state(frame, confidence, is_interpolated=False, rejected=False)
+
+        self.kf.predict()
+        predicted_xy = np.array([self.kf.x[0, 0], self.kf.x[1, 0]], dtype=float)
+
+        rejected = False
+        if measurement_valid:
+            measured_xy = np.array([float(x), float(y)], dtype=float)
+            distance = float(np.linalg.norm(measured_xy - predicted_xy))
+            if distance <= self.gate_distance_px:
+                self.kf.update(measured_xy.reshape(2, 1))
+                return self._state(frame, confidence, is_interpolated=False, rejected=False)
+            rejected = True
+
+        return self._state(frame, confidence, is_interpolated=True, rejected=rejected)
+
+    def _state(
+        self,
+        frame: int,
+        confidence: float,
+        is_interpolated: bool,
+        rejected: bool,
+    ) -> dict[str, Any]:
+        return {
+            "frame": int(frame),
+            "x": float(self.kf.x[0, 0]),
+            "y": float(self.kf.x[1, 0]),
+            "confidence": float(confidence),
+            "is_interpolated": bool(is_interpolated),
+            "rejected": bool(rejected),
+        }
+
+
+def process_raw_yolo_detections(
+    raw_detections: Iterable[dict[str, Any]],
+    fps: float = 60.0,
+    pitch_length_px: float | None = None,
+    pixel_to_meter: float | None = None,
+    pitch_length_m: float = PITCH_LENGTH_M,
+    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    gate_distance_px: float = DEFAULT_GATE_DISTANCE_PX,
+    smooth: bool = True,
+) -> list[dict[str, Any]]:
+    """Clean raw YOLO detections into smooth points with per-frame speed.
+
+    Input rows can contain either x/y or u/v and should include frame and
+    confidence. Missing frames are filled by Kalman prediction, never by a fixed
+    fake coordinate.
+    """
+    rows = sorted(list(raw_detections), key=lambda item: int(item.get("frame", 0)))
+    if not rows:
+        return []
+
+    by_frame = {int(item.get("frame", 0)): item for item in rows}
+    first_frame = int(rows[0].get("frame", 0))
+    last_frame = int(rows[-1].get("frame", first_frame))
+    tracker = PhysicsAwareBallTracker(
+        fps=fps,
+        gate_distance_px=gate_distance_px,
+        min_confidence=min_confidence,
+    )
+
+    filtered = []
+    for frame in range(first_frame, last_frame + 1):
+        item = by_frame.get(frame, {})
+        x = item.get("x", item.get("u"))
+        y = item.get("y", item.get("v"))
+        confidence = float(item.get("confidence", 0.0))
+        state = tracker.step(frame, x, y, confidence)
+        if state is not None:
+            filtered.append(state)
+
+    if not filtered:
+        return []
+
+    frames = np.asarray([item["frame"] for item in filtered], dtype=float)
+    coords = np.asarray([[item["x"], item["y"]] for item in filtered], dtype=float)
+    if smooth and len(filtered) >= 5:
+        coords = _smooth_xy(coords)
+
+    if pixel_to_meter is None:
+        if pitch_length_px is None or pitch_length_px <= 1:
+            y_span = float(np.percentile(coords[:, 1], 95) - np.percentile(coords[:, 1], 5))
+            x_span = float(np.percentile(coords[:, 0], 95) - np.percentile(coords[:, 0], 5))
+            pitch_length_px = max(y_span, float(np.hypot(x_span, y_span)))
+        pixel_to_meter = pitch_length_m / max(float(pitch_length_px), 1.0)
+
+    frame_gaps = np.maximum(np.diff(frames), 1.0)
+    distances_px = np.linalg.norm(np.diff(coords, axis=0), axis=1)
+    speeds_kmph = np.concatenate([[0.0], distances_px * float(fps) / frame_gaps * float(pixel_to_meter) * 3.6])
+
+    output = []
+    for index, item in enumerate(filtered):
+        output.append(
+            {
+                "frame": int(item["frame"]),
+                "x": round(float(coords[index, 0]), 3),
+                "y": round(float(coords[index, 1]), 3),
+                "speed_kmph": round(float(speeds_kmph[index]), 3),
+                "is_interpolated": bool(item["is_interpolated"]),
+                "confidence": round(float(item["confidence"]), 4),
+                "rejected": bool(item["rejected"]),
+            }
+        )
+    return output
+
+
+def _smooth_xy(coords: np.ndarray) -> np.ndarray:
+    """Savitzky-Golay smoothing with CubicSpline fallback for short sequences."""
+    count = len(coords)
+    if count < 5:
+        return coords
+    window = min(11, count if count % 2 == 1 else count - 1)
+    if window >= 5:
+        smoothed = coords.copy()
+        smoothed[:, 0] = savgol_filter(coords[:, 0], window_length=window, polyorder=2, mode="interp")
+        smoothed[:, 1] = savgol_filter(coords[:, 1], window_length=window, polyorder=2, mode="interp")
+        return smoothed
+
+    t = np.arange(count, dtype=float)
+    dense_t = np.arange(count, dtype=float)
+    return np.column_stack(
+        [
+            CubicSpline(t, coords[:, 0], bc_type="natural")(dense_t),
+            CubicSpline(t, coords[:, 1], bc_type="natural")(dense_t),
+        ]
+    )
 
 
 def kalman_track_detections(
