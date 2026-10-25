@@ -2,6 +2,7 @@ print("🔥🔥🔥 RUNNING MAIN.PY (NUCLEAR FIX ACTIVE) 🔥🔥🔥")
 import asyncio
 import base64
 import json
+import mimetypes
 import os
 import sys
 import time
@@ -931,7 +932,7 @@ async def ai_coach_analyze(
     discipline: str | None = Form(None),
     prompt: str | None = Form(None),
 ):
-    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_vision, generate_nvidia_text
+    from nvidia_client import is_nvidia_available, generate_nvidia_vision
     if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
@@ -953,52 +954,38 @@ async def ai_coach_analyze(
         )
     if sub["mistake_used"] >= sub.get("limits", {}).get("mistake", 0):
         raise HTTPException(status_code=403, detail="MISTAKE_LIMIT_REACHED")
-    increment_mistake(user_id)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(await file.read())
+        video_bytes = await file.read()
+        tmp.write(video_bytes)
         video_path = tmp.name
 
     try:
-        # ⚡ Extract real keyframes from video for vision-based inspection
-        frames = extract_video_keyframes(video_path, max_frames=4)
-
         disc_label = (discipline or "").strip().lower()
         if disc_label not in ("batting", "bowling"):
             disc_label = "cricket"
 
-        coaching_prompt = (prompt or "").strip()
-        if not coaching_prompt:
-            coaching_prompt = f"""
-You are an expert cricket coach analyzing this {disc_label} video.
-Look at the player in the video frames and provide an honest technical analysis in valid JSON format:
+        if not video_bytes:
+            raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
 
-{{
-  "mistakes": [
-    "Mistake 1: [Primary technical mistake seen in the video frames]",
-    "Mistake 2: [Secondary technical mistake or flaw seen in the video frames]"
-  ],
-  "impact": "Impact: [Specific performance consequence and impact of these mistakes]",
-  "drill": "How to Fix: [Practical correction drill to fix these mistakes]"
-}}
-
-Return ONLY valid JSON.
+        coaching_prompt = (prompt or "").strip() or f"""
+Inspect the attached video before coaching. First decide from visible evidence whether this is a cricket clip and whether a {disc_label} action is clearly visible.
+If it is not cricket, or the requested {disc_label} action is not visible, do not give cricket technique advice. Return only JSON with cricket_detected=false and observation describing what is actually visible and why cricket coaching cannot be given.
+If the requested cricket action is visible, return only JSON with cricket_detected=true, exactly two video-grounded mistakes, one specific impact explaining their likely performance consequence, and one practical drill that addresses them. Do not infer a player's body position, bat, ball, or action unless visible in the frames. If evidence is unclear, say so in observation and do not invent mistakes.
+Required JSON shape for a clear cricket action: {{"cricket_detected":true,"mistakes":["...","..."],"impact":"...","drill":"..."}}.
+Required JSON shape otherwise: {{"cricket_detected":false,"observation":"..."}}.
 """
 
-        if frames:
-            feedback = generate_nvidia_vision(
-                prompt=coaching_prompt,
-                frames=frames,
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                max_output_tokens=8192,
-                temperature=0.35,
-            )
-        else:
-            feedback = generate_nvidia_text(
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                user_prompt=coaching_prompt,
-                max_output_tokens=8192,
-                temperature=0.35,
-            )
+        feedback = generate_nvidia_vision(
+            prompt=coaching_prompt,
+            video_bytes=video_bytes,
+            video_mime_type=(file.content_type if file.content_type and file.content_type.startswith("video/") else mimetypes.guess_type(file.filename or "")[0] or "video/mp4"),
+            system_instruction="Inspect the provided video. Give cricket coaching only when the requested cricket action is visibly present. Never invent visual evidence.",
+            max_output_tokens=8192,
+            temperature=0.2,
+        )
+        if not feedback.strip():
+            raise HTTPException(status_code=502, detail="AI_EMPTY_RESPONSE")
+        increment_mistake(user_id)
 
         return {
             "status": "success",
@@ -1006,12 +993,10 @@ Return ONLY valid JSON.
             "reply": feedback,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            "status": "failed",
-            "coach_feedback": f"Coach error: {str(e)}",
-            "reply": f"Coach error: {str(e)}"
-        }
+        raise HTTPException(status_code=502, detail="AI_ANALYSIS_FAILED") from e
 
     finally:
         if os.path.exists(video_path):
@@ -1147,8 +1132,6 @@ async def ai_coach_diff(
         raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
     if sub["compare_used"] >= sub.get("limits", {}).get("compare", 0):
         raise HTTPException(status_code=403, detail="COMPARE_LIMIT_REACHED")
-    increment_compare(user_id)
-
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tmp.write(file.file.read())
@@ -1187,9 +1170,13 @@ async def ai_coach_diff(
         )
 
     try:
-        from nvidia_client import extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text
-        left_frames = extract_video_keyframes(left_path, max_frames=3)
-        right_frames = extract_video_keyframes(right_path, max_frames=3)
+        from nvidia_client import generate_nvidia_comparison_vision
+        with open(left_path, "rb") as left_file:
+            left_video_bytes = left_file.read()
+        with open(right_path, "rb") as right_file:
+            right_video_bytes = right_file.read()
+        if not left_video_bytes or not right_video_bytes:
+            raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
 
         base_prompt = (prompt or "").strip()
         if not base_prompt:
@@ -1208,43 +1195,29 @@ Do not give rating/score.
             prompt_lower = base_prompt.lower()
             discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
 
-        if left_frames and right_frames:
-            diff_text = generate_nvidia_comparison_vision(
-                prompt=base_prompt,
-                left_frames=left_frames,
-                right_frames=right_frames,
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                max_output_tokens=8192,
-                temperature=0.55,
-            )
-        else:
-            final_prompt = (
-                base_prompt
-                + f"\n\nINTERNAL_CONTEXT (do not mention): "
-                  f"discipline={discipline_text} "
-                  f"v1_name={(left.filename or 'left.mp4')} "
-                  f"v2_name={(right.filename or 'right.mp4')} "
-                  f"v1_sig={trajectory_signature(left_positions)} "
-                  f"v2_sig={trajectory_signature(right_positions)}\n"
-            )
-
-            diff_text = generate_nvidia_text(
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                user_prompt=final_prompt,
-                max_output_tokens=8192,
-                temperature=0.55,
-            )
+        diff_text = generate_nvidia_comparison_vision(
+            prompt=base_prompt,
+            left_video_bytes=left_video_bytes,
+            right_video_bytes=right_video_bytes,
+            left_video_mime_type=(left.content_type if left.content_type and left.content_type.startswith("video/") else mimetypes.guess_type(left.filename or "")[0] or "video/mp4"),
+            right_video_mime_type=(right.content_type if right.content_type and right.content_type.startswith("video/") else mimetypes.guess_type(right.filename or "")[0] or "video/mp4"),
+            system_instruction="Inspect both attached videos. Report only visible cricket evidence and never invent actions or technique.",
+            max_output_tokens=8192,
+            temperature=0.2,
+        )
+        if not diff_text.strip():
+            raise HTTPException(status_code=502, detail="AI_EMPTY_RESPONSE")
+        increment_compare(user_id)
 
         return {
             "status": "success",
             "difference": diff_text
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            "status": "failed",
-            "difference": f"Coach error: {str(e)}"
-        }
+        raise HTTPException(status_code=502, detail="AI_ANALYSIS_FAILED") from e
 
     finally:
         if os.path.exists(left_path):

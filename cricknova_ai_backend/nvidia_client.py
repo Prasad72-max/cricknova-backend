@@ -211,6 +211,7 @@ def generate_nvidia_vision(
     prompt: str,
     frames: list[bytes] | None = None,
     video_bytes: bytes | None = None,
+    video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
     max_output_tokens: int = 8192,
     temperature: float = 0.55,
@@ -220,7 +221,13 @@ def generate_nvidia_vision(
         {"type": "text", "text": prompt}
     ]
 
-    # Fast frame sampling: 4 key frames is optimal for speed & vision accuracy
+    if video_bytes:
+        content_parts.append({
+            "type": "video_url",
+            "video_url": {
+                "url": f"data:{video_mime_type};base64,{base64.b64encode(video_bytes).decode('ascii')}"
+            },
+        })
     if frames and len(frames) > 0:
         step = max(1, len(frames) // 4)
         sampled = frames[::step][:4]
@@ -230,23 +237,6 @@ def generate_nvidia_vision(
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
             })
-    elif video_bytes and len(video_bytes) > 0:
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-            tmp.write(video_bytes)
-            tmp_path = tmp.name
-
-        extracted = extract_video_keyframes(tmp_path, max_frames=4)
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-        for ef in extracted:
-            b64_img = base64.b64encode(ef).decode("utf-8")
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-            })
-
     messages = [
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": content_parts},
@@ -256,14 +246,16 @@ def generate_nvidia_vision(
         messages,
         max_tokens=max_output_tokens,
         temperature=temperature,
-        timeout=45,
+        timeout=120,
     )
 
 def generate_nvidia_comparison_vision(
     *,
     prompt: str,
-    left_frames: list[bytes],
-    right_frames: list[bytes],
+    left_video_bytes: bytes,
+    right_video_bytes: bytes,
+    left_video_mime_type: str = "video/mp4",
+    right_video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
     max_output_tokens: int = 8192,
     temperature: float = 0.55,
@@ -273,42 +265,31 @@ def generate_nvidia_comparison_vision(
         {
             "type": "text",
             "text": (
-                "You are evaluating two cricket video clips side-by-side.\n\n"
+                "You are evaluating two cricket video clips. The first attached video is Video 1 and the second attached video is Video 2.\n\n"
                 f"{prompt}\n\n"
-                "=== VIDEO 1 (First Video) KEY FRAMES ==="
             )
         }
     ]
 
-    # Add Left video frames
-    for f in left_frames[:4]:
-        b64_img = base64.b64encode(f).decode("utf-8")
+    for video_bytes, mime_type in (
+        (left_video_bytes, left_video_mime_type),
+        (right_video_bytes, right_video_mime_type),
+    ):
         content_parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-        })
-
-    # Add Right video frames
-    content_parts.append({
-        "type": "text",
-        "text": "=== VIDEO 2 (Second Video) KEY FRAMES ==="
-    })
-    for f in right_frames[:4]:
-        b64_img = base64.b64encode(f).decode("utf-8")
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+            "type": "video_url",
+            "video_url": {
+                "url": f"data:{mime_type};base64,{base64.b64encode(video_bytes).decode('ascii')}"
+            },
         })
 
     content_parts.append({
         "type": "text",
         "text": (
-            "Vision Inspection Guidance:\n"
-            "1. Inspect the visual content of both Video 1 and Video 2 frames carefully.\n"
-            "2. If either clip does NOT contain cricket batting or bowling (e.g. empty net, non-cricket video, blank screen), "
-            "clearly state what is actually observed in the video and clarify that cricket analysis cannot be performed on it.\n"
-            "3. If cricket batting/bowling is present, honestly compare the player's technique, body balance, footwork, bat path/arm action, "
-            "and execution between Video 1 and Video 2. Explain what improved, what remains weak, what to do next, and provide 2 practical drills."
+            "First inspect both frame groups and confirm whether each contains a visible cricket clip and the requested cricket action. "
+            "Respond with exactly these two sections for both valid and invalid cricket clips:\n"
+            "[VIDEO 1: What happened]\nDescribe the visible action and execution in Video 1.\n"
+            "[VIDEO 2: Differences vs Video 1]\nFor cricket clips, describe visible differences, what improved, what remains weak, and what to do next. If either clip is not cricket or the requested action is not visible, describe what is actually visible in the clips and explain why a cricket comparison cannot be made. Never provide batting or bowling mistakes for a non-cricket clip. Do not assume Video 2 is better.\n"
+            "Base every claim only on the supplied frames. Do not infer unseen body positions, equipment, or action. If details cannot be established from the frames, say so instead of inventing them."
         )
     })
 
@@ -321,5 +302,5 @@ def generate_nvidia_comparison_vision(
         messages,
         max_tokens=max_output_tokens,
         temperature=temperature,
-        timeout=60,
+        timeout=120,
     )
