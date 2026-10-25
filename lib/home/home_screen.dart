@@ -13,12 +13,14 @@ import '../services/premium_service.dart';
 import '../premium/premium_screen.dart';
 import '../premium/elite_status_screen.dart';
 import '../upload/upload_screen.dart';
+import '../services/analysis_credit_service.dart';
 import '../compare/analyse_yourself_screen.dart';
 import '../premium/premium_expired_screen.dart';
 import '../navigation/main_navigation.dart';
 import 'package:CrickNova_Ai/analysis/analyzing_videos_screen.dart';
 import 'package:CrickNova_Ai/models/pending_video.dart';
 import 'bowling_analyse_screen.dart';
+import '../theme/crickx_colors.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userName;
@@ -305,15 +307,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: CrickXColors.graphite,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+        ),
         duration: const Duration(milliseconds: 1700),
         content: Text(
           'Analysis update ready. Open your video queue.',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: CrickXColors.textPrimary),
         ),
         action: SnackBarAction(
           label: 'View',
-          textColor: const Color(0xFF38BDF8),
+          textColor: CrickXColors.limeSpark,
           onPressed: () {
             Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AnalyzingVideosScreen()),
@@ -712,20 +718,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         title: "Quick Stats",
         value: "$totalUploadedSessions",
         metric: "Sessions Uploaded",
-        accent: const [Color(0xFF8DE0FF), Color(0xFF2FA2FF)],
+        accent: const [CrickXColors.limeSpark, Color(0xFF8CE600)],
       ),
       _QuickStatData(
         title: "Quick Stats",
         value: maxSpeed <= 0 ? "--" : maxSpeed.toStringAsFixed(1),
         metric: "Top Ball Speed",
         suffix: maxSpeed <= 0 ? "" : " km/h",
-        accent: const [Color(0xFF67F7C0), Color(0xFF11C981)],
+        accent: const [Color(0xFFD0FF66), CrickXColors.limeSpark],
       ),
       _QuickStatData(
         title: "Quick Stats",
         value: _currentPlanStatValue,
         metric: "Membership",
-        accent: const [Color(0xFFFFE295), Color(0xFFF2B439)],
+        accent: const [CrickXColors.limeSpark, Color(0xFF6EDC00)],
       ),
     ];
   }
@@ -737,11 +743,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF02040B), Color(0xFF040A18), Color(0xFF010204)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: CrickXColors.graphiteBg,
       ),
       child: Stack(
         children: [
@@ -750,7 +752,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             left: -120,
             child: _meshOrb(
               size: 360,
-              colors: const [Color(0x332A66FF), Color(0x00000000)],
+              colors: const [Colors.transparent, Colors.transparent],
             ),
           ),
           Positioned(
@@ -758,7 +760,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             right: -100,
             child: _meshOrb(
               size: 280,
-              colors: const [Color(0x22218AA8), Color(0x00000000)],
+              colors: const [Colors.transparent, Colors.transparent],
             ),
           ),
           Positioned(
@@ -766,12 +768,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             left: -80,
             child: _meshOrb(
               size: 300,
-              colors: const [Color(0x1F0F4D88), Color(0x00000000)],
+              colors: const [Colors.transparent, Colors.transparent],
             ),
           ),
           RefreshIndicator(
-            color: const Color(0xFF00FF88),
-            backgroundColor: const Color(0xFF0F172A),
+            color: CrickXColors.limeSpark,
+            backgroundColor: CrickXColors.graphite,
             notificationPredicate: (notification) {
               return PremiumService.isPremiumActive && notification.depth == 0;
             },
@@ -792,34 +794,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               children: [
                 Container(
                   padding: EdgeInsets.fromLTRB(
-                    20,
-                    60,
-                    20,
-                    _showEliteWelcomeHeader ? 34 : 32,
+                    16,
+                    54,
+                    16,
+                    _showEliteWelcomeHeader ? 28 : 24,
                   ),
                   width: double.infinity,
                   constraints: BoxConstraints(
-                    minHeight: _showEliteWelcomeHeader ? 290 : 220,
+                    minHeight: _showEliteWelcomeHeader ? 260 : 200,
                   ),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF0A1020).withValues(alpha: 0.9),
-                        const Color(0xFF0A0F1B).withValues(alpha: 0.72),
-                        const Color(0xFF060A13).withValues(alpha: 0.56),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: Colors.black,
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.06),
+                      color: Colors.white.withValues(alpha: 0.08),
                     ),
                     borderRadius: const BorderRadius.vertical(
                       bottom: Radius.circular(28),
                     ),
                     boxShadow: const [
                       BoxShadow(
-                        color: Color(0x66000000),
+                        color: Colors.black,
                         blurRadius: 34,
                         spreadRadius: 1,
                         offset: Offset(0, 6),
@@ -884,7 +878,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(100),
                                 color: active
-                                    ? const Color(0xFFBBD4FF)
+                                    ? CrickXColors.limeSpark
                                     : Colors.white.withValues(alpha: 0.25),
                               ),
                             );
@@ -901,28 +895,39 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     children: [
-                      _actionCard(
-                        title: "Analyze My Cricket Video",
-                        subtitle: "Upload Video & Get AI Analysis",
-                        icon: Icons.cloud_upload_rounded,
-                        iconGradient: const [
-                          Color(0xFF7FDBFF),
-                          Color(0xFF2B77FF),
-                        ],
-                        onTap: () {
-                          unawaited(
-                            AppAnalytics.log(
-                              'upload_clicked',
-                              parameters: {'source': 'home'},
-                            ),
-                          );
-                          Navigator.of(context)
-                              .push(
-                                MaterialPageRoute(
-                                  builder: (_) => const UploadScreen(),
+                      ValueListenableBuilder<int>(
+                        valueListenable:
+                            AnalysisCreditService.instance.creditsNotifier,
+                        builder: (context, credits, _) {
+                          final sub = !PremiumService.isPremiumActive
+                              ? (credits > 0
+                                  ? "$credits AI Analysis credit${credits > 1 ? 's' : ''} available"
+                                  : "Watch Ad to Unlock 4 AI Analyses")
+                              : "Upload Video & Get AI Analysis";
+                          return _actionCard(
+                            title: "Analyze My Cricket Video",
+                            subtitle: sub,
+                            icon: Icons.cloud_upload_rounded,
+                            iconGradient: const [
+                              CrickXColors.limeSpark,
+                              Color(0xFF8CE600),
+                            ],
+                            onTap: () {
+                              unawaited(
+                                AppAnalytics.log(
+                                  'upload_clicked',
+                                  parameters: {'source': 'home'},
                                 ),
-                              )
-                              .then((_) => _syncQuickStats());
+                              );
+                              Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const UploadScreen(),
+                                    ),
+                                  )
+                                  .then((_) => _syncQuickStats());
+                            },
+                          );
                         },
                       ),
                       const SizedBox(height: 14),
@@ -932,8 +937,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             "Compare batting clips and find technique gaps",
                         icon: Icons.analytics_rounded,
                         iconGradient: const [
-                          Color(0xFFF7D173),
-                          Color(0xFFEE8F2A),
+                          CrickXColors.limeSpark,
+                          Color(0xFF6EDC00),
                         ],
                         onTap: () {
                           if (!PremiumService.isLoaded) {
@@ -1001,11 +1006,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       _actionCard(
                         title: "Bowling Analysis",
                         subtitle:
-                            "Open bowling mistake detection and compare in one place",
+                            "Check bowling speed, swing, spin and mistake detection",
                         icon: Icons.sports_baseball_rounded,
                         iconGradient: const [
-                          Color(0xFF7CF0D5),
-                          Color(0xFF1AAE8B),
+                          CrickXColors.limeSpark,
+                          Color(0xFF8CE600),
                         ],
                         onTap: () {
                           if (!PremiumService.isLoaded) {
@@ -1100,16 +1105,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        color: const Color(0xFF111827).withValues(alpha: 0.78),
+        color: CrickXColors.graphite,
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.16),
-          width: 1,
+          color: CrickXColors.graphiteBorder,
+          width: 1.2,
         ),
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x1C000000),
+            color: Colors.black.withValues(alpha: 0.7),
             blurRadius: 18,
-            offset: Offset(0, 8),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -1201,18 +1206,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFF111827).withValues(alpha: 0.76),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.16),
-              width: 1,
+              color: CrickXColors.graphiteBorder,
+              width: 1.2,
             ),
-            boxShadow: const [
+            boxShadow: [
               BoxShadow(
-                color: Color(0x22000000),
-                blurRadius: 14,
+                color: Colors.black.withValues(alpha: 0.7),
+                blurRadius: 18,
                 spreadRadius: 1,
-                offset: Offset(0, 6),
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -1227,8 +1232,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Text(
                       title,
                       style: GoogleFonts.poppins(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
@@ -1338,12 +1343,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final content = Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827).withValues(alpha: 0.74),
+        color: CrickXColors.graphite,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.14),
-          width: 1,
+          color: CrickXColors.graphiteBorder,
+          width: 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.7),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1355,15 +1367,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 "Premium",
                 style: GoogleFonts.poppins(
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                PremiumService.isPremium ? "Premium" : "Free",
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: PremiumService.isPremium ? Colors.green : Colors.grey,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -1411,9 +1416,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF050A14).withValues(alpha: 0.54),
+                    color: Colors.black.withValues(alpha: 0.65),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.16),
+                      color: Colors.white12,
                       width: 1,
                     ),
                   ),
@@ -1426,9 +1431,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  color: const Color(0xFF111827).withValues(alpha: 0.88),
+                  color: CrickXColors.graphite,
                   border: Border.all(
-                    color: const Color(0xFFFFD15C).withValues(alpha: 0.55),
+                    color: CrickXColors.limeSpark.withValues(alpha: 0.55),
                     width: 1,
                   ),
                   boxShadow: [
@@ -1438,7 +1443,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       offset: const Offset(0, 10),
                     ),
                     BoxShadow(
-                      color: const Color(0xFFFFD15C).withValues(alpha: 0.10),
+                      color: CrickXColors.limeSpark.withValues(alpha: 0.15),
                       blurRadius: 18,
                       spreadRadius: 1,
                     ),
@@ -1449,7 +1454,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   children: [
                     const Icon(
                       Icons.lock_open_rounded,
-                      color: Color(0xFFFFD15C),
+                      color: CrickXColors.limeSpark,
                       size: 19,
                     ),
                     const SizedBox(width: 8),
@@ -1522,10 +1527,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF111827).withValues(alpha: 0.74),
+        color: CrickXColors.graphite,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.14),
+          color: CrickXColors.graphiteBorder,
           width: 1,
         ),
       ),
@@ -1540,11 +1545,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ],
           ),
           const SizedBox(height: 14),
-          hiddenRow(0.72, const Color(0xFF8DE0FF)),
+          hiddenRow(0.72, CrickXColors.limeSpark),
           const SizedBox(height: 10),
-          hiddenRow(0.86, const Color(0xFF67F7C0)),
+          hiddenRow(0.86, CrickXColors.limeSpark),
           const SizedBox(height: 10),
-          hiddenRow(0.78, const Color(0xFFFFE295)),
+          hiddenRow(0.78, CrickXColors.limeSpark),
         ],
       ),
     );
@@ -1605,7 +1610,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   fontWeight: FontWeight.w700,
                   color: isLimitReached
                       ? Colors.redAccent
-                      : const Color(0xFFFFD700),
+                      : Colors.white,
                 ),
               ),
               if (isLimitReached) ...[
@@ -1669,221 +1674,109 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: backgroundColors,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(
-                    painter: _EliteStadiumBackdropPainter(
-                      opacity: 0.42 * progress,
-                      slot: greetingTheme.slot,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 10,
-                top: 4,
-                child: Opacity(
-                  opacity: 0.5 * progress,
-                  child: Transform.rotate(
-                    angle: _diamondController.value * math.pi * 2,
-                    child: Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001)
-                        ..rotateY(
-                          math.sin(_diamondController.value * math.pi * 2) *
-                              0.65,
-                        ),
-                      child: const Icon(
-                        Icons.diamond_outlined,
-                        color: Color(0xFFF0D9A4),
-                        size: 24,
+          child: Container(
+            decoration: BoxDecoration(
+              color: CrickXColors.graphite,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: CrickXColors.graphiteBorder),
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _EliteStadiumBackdropPainter(
+                        opacity: 0.35 * progress,
+                        slot: greetingTheme.slot,
                       ),
                     ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 24, 14, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Opacity(
-                      opacity: welcomeOpacity,
-                      child: ShaderMask(
-                        shaderCallback: (bounds) {
-                          return LinearGradient(
-                            colors: accentColors,
-                          ).createShader(bounds);
-                        },
+                Positioned(
+                  right: 14,
+                  top: 14,
+                  child: Opacity(
+                    opacity: 0.5 * progress,
+                    child: Transform.rotate(
+                      angle: _diamondController.value * math.pi * 2,
+                      child: Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateY(
+                            math.sin(_diamondController.value * math.pi * 2) *
+                                0.65,
+                          ),
+                        child: const Icon(
+                          Icons.diamond_outlined,
+                          color: CrickXColors.limeSpark,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Opacity(
+                        opacity: welcomeOpacity,
                         child: Text(
-                          lineOne,
+                          shortGreeting,
                           style: GoogleFonts.playfairDisplay(
-                            fontSize: 28,
+                            fontSize: 27,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
-                            height: 1.0,
-                            shadows: isMidnightTheme
-                                ? [
-                                    Shadow(
-                                      color: accentGlow.withValues(
-                                        alpha: 0.34 * pulse,
-                                      ),
-                                      blurRadius: 22,
-                                    ),
-                                  ]
-                                : null,
+                            height: 1.15,
+                            letterSpacing: 0.2,
                           ),
                         ),
                       ),
-                    ),
-                    Transform.translate(
-                      offset: Offset(22 * (1 - eliteSlide), 0),
-                      child: Opacity(
-                        opacity: eliteSlide,
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              right: -8,
-                              top: 6,
-                              child: Opacity(
-                                opacity: 1 - eliteSlide,
-                                child: Container(
-                                  width: 44,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        accentColors.first.withValues(
-                                          alpha: 0.0,
-                                        ),
-                                        accentColors.last.withValues(
-                                          alpha: 0.5,
-                                        ),
-                                        accentColors.first.withValues(
-                                          alpha: 0.0,
-                                        ),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            ShaderMask(
-                              shaderCallback: (bounds) {
-                                return LinearGradient(
-                                  colors: accentColors,
-                                ).createShader(bounds);
-                              },
-                              child: Text(
-                                lineTwo,
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  height: 1.0,
-                                  shadows: isMidnightTheme
-                                      ? [
-                                          Shadow(
-                                            color: accentGlow.withValues(
-                                              alpha: 0.38 * pulse,
-                                            ),
-                                            blurRadius: 24,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: 160 * lineProgress,
-                        height: 1.5,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(colors: accentColors),
-                          borderRadius: BorderRadius.circular(999),
-                          boxShadow: [
-                            BoxShadow(
-                              color: accentGlow.withValues(alpha: 0.28),
-                              blurRadius: 10,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _greeting.userName,
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Color.lerp(
-                          const Color(0xFFEAF6FF),
-                          Colors.white,
-                          pulse,
-                        ),
-                        shadows: [
-                          Shadow(
-                            color: accentGlow.withValues(
-                              alpha: (isMidnightTheme ? 0.44 : 0.22) * pulse,
-                            ),
-                            blurRadius: isMidnightTheme ? 20 : 14,
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 140 * lineProgress,
+                          height: 1.5,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: accentColors),
+                            borderRadius: BorderRadius.circular(999),
                           ),
-                          if (isMidnightTheme)
-                            Shadow(
-                              color: accentColors.last.withValues(
-                                alpha: 0.28 * pulse,
-                              ),
-                              blurRadius: 28,
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      subtitle,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(
-                          alpha: isMidnightTheme ? 0.86 : 0.72,
                         ),
-                        height: 1.4,
-                        shadows: isMidnightTheme
-                            ? [
-                                Shadow(
-                                  color: accentGlow.withValues(alpha: 0.24),
-                                  blurRadius: 18,
-                                ),
-                              ]
-                            : null,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 10),
+                      Text(
+                        _greeting.userName.isNotEmpty
+                            ? _greeting.userName
+                            : "Player",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Color.lerp(
+                            const Color(0xFFEAF6FF),
+                            Colors.white,
+                            pulse,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white70,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -1982,7 +1875,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
-                  letterSpacing: -0.5,
+                  letterSpacing: -0.3,
                 ),
               ),
               GestureDetector(
@@ -1992,7 +1885,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF38BDF8),
+                    color: CrickXColors.limeSpark,
                   ),
                 ),
               ),
@@ -2021,11 +1914,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: CrickXColors.graphite,
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.2,
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -2072,24 +1973,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       width: 140,
                       margin: const EdgeInsets.symmetric(horizontal: 6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF111827),
+                        color: CrickXColors.graphite,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: isReady
-                              ? const Color(0xFF00FF9D).withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.1),
+                              ? CrickXColors.limeSpark.withValues(alpha: 0.5)
+                              : CrickXColors.graphiteBorder,
+                          width: 1.2,
                         ),
-                        boxShadow: isReady
-                            ? [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF00FF9D,
-                                  ).withValues(alpha: 0.1),
-                                  blurRadius: 12,
-                                  spreadRadius: 1,
-                                ),
-                              ]
-                            : [],
+                        boxShadow: [
+                          BoxShadow(
+                            color: isReady
+                                ? CrickXColors.limeSpark.withValues(alpha: 0.15)
+                                : Colors.black.withValues(alpha: 0.6),
+                            blurRadius: 14,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2106,8 +2006,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     decoration: const BoxDecoration(
                                       gradient: LinearGradient(
                                         colors: [
-                                          Color(0xFF1F2937),
-                                          Color(0xFF111827),
+                                          Color(0xFF2B2F3A),
+                                          Color(0xFF1B1D25),
                                         ],
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
@@ -2117,14 +2017,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   Icon(
                                     Icons.sports_cricket_rounded,
                                     color: isReady
-                                        ? const Color(0xFF00FF9D)
+                                        ? CrickXColors.limeSpark
                                         : Colors.white24,
                                     size: 40,
                                   ),
                                   if (!isReady)
                                     const CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      color: Color(0xFF00C2FF),
+                                      color: CrickXColors.limeSpark,
                                     ),
                                 ],
                               ),
@@ -2149,7 +2049,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                       liveStatusText,
                                       style: GoogleFonts.poppins(
                                         color: isReady
-                                            ? const Color(0xFF00FF9D)
+                                            ? CrickXColors.limeSpark
                                             : Colors.white60,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w700,
@@ -2198,9 +2098,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             width: double.infinity,
             constraints: const BoxConstraints(maxWidth: 400),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.95),
+              color: CrickXColors.graphite,
               borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: Colors.white10),
+              border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2227,21 +2134,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         height: 120,
                         child: CircularProgressIndicator(
                           strokeWidth: 3,
-                          color: Color(0xFF00C2FF),
+                          color: CrickXColors.limeSpark,
                         ),
                       ),
                       Column(
                         children: [
                           const Icon(
                             Icons.auto_awesome_rounded,
-                            color: Color(0xFF00C2FF),
+                            color: CrickXColors.limeSpark,
                             size: 40,
                           ),
                           const SizedBox(height: 12),
                           Text(
                             "TRACKING ACTIVE",
                             style: GoogleFonts.poppins(
-                              color: const Color(0xFF00C2FF),
+                              color: CrickXColors.limeSpark,
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 2,

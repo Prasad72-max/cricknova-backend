@@ -10,6 +10,7 @@ import '../ai/ai_coach_screen.dart';
 import '../analysis/analyzing_videos_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
+import '../theme/crickx_colors.dart';
 import '../upload/upload_screen.dart';
 import 'elite_analytics_screen.dart';
 
@@ -114,26 +115,24 @@ class _EliteBadgeFrame extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         gradient: LinearGradient(
           colors: [
-            const Color(0xFFFFF2C8).withValues(alpha: 0.96),
-            const Color(0xFFE8B84D).withValues(alpha: 0.96),
-            const Color(0xFFC9861E).withValues(alpha: 0.95),
+            CrickXColors.limeSpark,
+            CrickXColors.limeSpark,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          stops: const [0.05, 0.55, 1.0],
         ),
         border: Border.all(
-          color: const Color(0xFFFFE6A2).withValues(alpha: 0.95),
+          color: CrickXColors.limeSpark,
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD166).withValues(alpha: 0.34),
+            color: CrickXColors.limeSpark.withValues(alpha: 0.35),
             blurRadius: expanded ? 18 : 12,
             spreadRadius: expanded ? 1.2 : 0.8,
           ),
           BoxShadow(
-            color: const Color(0x88FFF8D6).withValues(alpha: 0.18),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: expanded ? 12 : 8,
             spreadRadius: 0.4,
             offset: const Offset(0, -1),
@@ -145,7 +144,7 @@ class _EliteBadgeFrame extends StatelessWidget {
         children: [
           Icon(
             Icons.workspace_premium_rounded,
-            color: const Color(0xFF704A10),
+            color: CrickXColors.onLime,
             size: iconSize,
           ),
           const SizedBox(width: 8),
@@ -155,7 +154,7 @@ class _EliteBadgeFrame extends StatelessWidget {
             overflow: TextOverflow.fade,
             softWrap: false,
             style: TextStyle(
-              color: const Color(0xFF5D3C0A),
+              color: CrickXColors.onLime,
               fontWeight: FontWeight.w800,
               fontSize: fontSize,
               letterSpacing: 1.2,
@@ -297,10 +296,10 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Color(0xFF030718),
-                        Color(0xFF081427),
-                        Color(0xFF111C35),
-                        Color(0xFF040A18),
+                        Color(0xFF000000),
+                        Color(0xFF08080A),
+                        Color(0xFF0D0D12),
+                        Color(0xFF000000),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -357,7 +356,7 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
                               "Elite Commander: ${widget.userName}",
                               textAlign: TextAlign.center,
                               style: GoogleFonts.cormorantGaramond(
-                                color: const Color(0xFFFFE9A8),
+                                color: CrickXColors.limeSpark,
                                 fontSize: 34,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.8,
@@ -508,9 +507,7 @@ class _EliteCrest extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: const Color(
-                    0xFFFFD86B,
-                  ).withValues(alpha: 0.14 + (shimmer * 0.12)),
+                  color: CrickXColors.limeSpark.withValues(alpha: 0.14 + (shimmer * 0.12)),
                   blurRadius: 42,
                   spreadRadius: 4,
                 ),
@@ -572,14 +569,10 @@ class _ProfileCoreAvatar extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFE08A), Color(0xFFB8860B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: CrickXColors.limeSpark,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD86B).withValues(alpha: 0.28),
+            color: CrickXColors.limeSpark.withValues(alpha: 0.35),
             blurRadius: 22,
             spreadRadius: 2,
           ),
@@ -600,12 +593,12 @@ class _ProfileCoreAvatar extends StatelessWidget {
 
   Widget _fallbackAvatar(String initials) {
     return Container(
-      color: const Color(0xFF09121E),
+      color: CrickXColors.graphite,
       alignment: Alignment.center,
       child: Text(
         initials,
         style: GoogleFonts.cormorantGaramond(
-          color: Colors.white,
+          color: CrickXColors.limeSpark,
           fontSize: 36,
           fontWeight: FontWeight.w700,
         ),
@@ -635,17 +628,18 @@ class _CurrentPlanCard extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(28),
-            gradient: LinearGradient(
-              colors: [
-                Colors.white.withValues(alpha: 0.1),
-                const Color(0xFF11203A).withValues(alpha: 0.28),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: CrickXColors.graphite,
             border: Border.all(
-              color: const Color(0xFFFFD86B).withValues(alpha: 0.28),
+              color: CrickXColors.graphiteBorder,
+              width: 1.2,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,11 +651,11 @@ class _CurrentPlanCard extends StatelessWidget {
                     height: 42,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFFFFD86B).withValues(alpha: 0.14),
+                      color: CrickXColors.limeSpark.withValues(alpha: 0.14),
                     ),
                     child: const Icon(
                       Icons.auto_awesome_rounded,
-                      color: Color(0xFFFFD86B),
+                      color: CrickXColors.limeSpark,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -669,7 +663,7 @@ class _CurrentPlanCard extends StatelessWidget {
                     child: Text(
                       "Current Plan",
                       style: GoogleFonts.poppins(
-                        color: Colors.white.withValues(alpha: 0.72),
+                        color: Colors.white70,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -677,32 +671,31 @@ class _CurrentPlanCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
               Text(
                 planName,
-                style: GoogleFonts.cormorantGaramond(
-                  color: const Color(0xFFFFE7A0),
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 6),
               Text(
                 expiryLabel,
                 style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 14,
+                  color: CrickXColors.limeSpark,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              if (startedLabel != null) ...[
-                const SizedBox(height: 6),
+              if (startedLabel != null && startedLabel!.isNotEmpty) ...[
+                const SizedBox(height: 4),
                 Text(
                   startedLabel!,
                   style: GoogleFonts.poppins(
-                    color: Colors.white.withValues(alpha: 0.66),
-                    fontSize: 12.5,
+                    color: Colors.white54,
+                    fontSize: 12,
                   ),
                 ),
               ],
@@ -765,18 +758,13 @@ class _ElitePowerSection extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF121826).withValues(alpha: 0.92),
-            const Color(0xFF1C263A).withValues(alpha: 0.88),
-          ],
-        ),
-        border: Border.all(color: const Color(0xFFFFD86B), width: 1.2),
+        color: CrickXColors.graphite,
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD86B).withValues(alpha: 0.18),
-            blurRadius: 20,
-            spreadRadius: 2,
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -785,7 +773,7 @@ class _ElitePowerSection extends StatelessWidget {
           Text(
             "Elite Power Level",
             style: GoogleFonts.poppins(
-              color: const Color(0xFFFFE7A0),
+              color: CrickXColors.limeSpark,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -823,26 +811,28 @@ class _PowerStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12),
+          color: CrickXColors.graphiteElevated,
+          border: Border.all(color: CrickXColors.graphiteBorder),
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11.5),
+              style: GoogleFonts.poppins(color: Colors.white54, fontSize: 11),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
             Text(
               value,
               style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -858,49 +848,43 @@ class _ElitePowerGauge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(begin: 0, end: value.clamp(0, 100)),
-      duration: const Duration(milliseconds: 1400),
-      curve: Curves.easeOutCubic,
-      builder: (context, animatedValue, _) {
-        final progress = (animatedValue / 100).clamp(0.0, 1.0);
-        return SizedBox(
-          height: 160,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              CustomPaint(
-                size: const Size(240, 140),
-                painter: _PowerGaugePainter(progress: progress),
-              ),
-              Positioned(
-                bottom: 26,
-                child: Column(
-                  children: [
-                    Text(
-                      animatedValue.toStringAsFixed(0),
-                      style: GoogleFonts.cormorantGaramond(
-                        color: const Color(0xFFFFE7A0),
-                        fontSize: 38,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      "POWER",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        letterSpacing: 2,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    final progress = (value / 100).clamp(0.0, 1.0);
+    return SizedBox(
+      height: 120,
+      width: 220,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size(220, 120),
+            painter: _PowerGaugePainter(progress: progress),
           ),
-        );
-      },
+          Positioned(
+            bottom: 6,
+            child: Column(
+              children: [
+                Text(
+                  "${value.toStringAsFixed(0)}%",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  "POWER RATING",
+                  style: GoogleFonts.poppins(
+                    color: CrickXColors.limeSpark,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -908,17 +892,18 @@ class _ElitePowerGauge extends StatelessWidget {
 class _PowerGaugePainter extends CustomPainter {
   final double progress;
 
-  _PowerGaugePainter({required this.progress});
+  const _PowerGaugePainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height);
-    final radius = size.height * 0.9;
+    final center = Offset(size.width / 2, size.height - 12);
+    final radius = size.width * 0.42;
+
     final basePaint = Paint()
+      ..color = CrickXColors.graphiteElevated
       ..style = PaintingStyle.stroke
       ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.white.withValues(alpha: 0.12);
+      ..strokeCap = StrokeCap.round;
 
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
@@ -936,7 +921,7 @@ class _PowerGaugePainter extends CustomPainter {
       ..shader = SweepGradient(
         startAngle: math.pi,
         endAngle: math.pi + (math.pi * progress),
-        colors: const [Color(0xFFFFD86B), Color(0xFFFFF3B0), Color(0xFFB3881A)],
+        colors: const [CrickXColors.limeSpark, CrickXColors.limeSpark],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
 
     canvas.drawArc(
@@ -966,8 +951,11 @@ class _MilestoneCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: const Color(0xFFFFD86B), width: 1),
+        color: CrickXColors.graphite,
+        border: Border.all(
+          color: CrickXColors.limeSpark.withValues(alpha: 0.5),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -975,7 +963,7 @@ class _MilestoneCard extends StatelessWidget {
           Text(
             "Next Milestone",
             style: GoogleFonts.poppins(
-              color: const Color(0xFFFFE7A0),
+              color: CrickXColors.limeSpark,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -993,16 +981,19 @@ class _MilestoneCard extends StatelessWidget {
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD86B),
-                foregroundColor: Colors.black,
+                backgroundColor: CrickXColors.limeSpark,
+                foregroundColor: CrickXColors.onLime,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
               onPressed: onTap,
-              child: const Text(
+              child: Text(
                 "Challenge Mode",
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: CrickXColors.onLime,
+                ),
               ),
             ),
           ),
@@ -1036,19 +1027,19 @@ class _ElitePerkGrid extends StatelessWidget {
         _ElitePerkTile(
           title: "CHAT WITH COACH",
           icon: Icons.chat_bubble_rounded,
-          accent: const Color(0xFFFFD86B),
+          accent: CrickXColors.limeSpark,
           onTap: onChatTap,
         ),
         _ElitePerkTile(
           title: "GENERATE WEEKLY\nPDF REPORT",
           icon: Icons.picture_as_pdf_rounded,
-          accent: const Color(0xFF7DD3FC),
+          accent: CrickXColors.limeSpark,
           onTap: onReportTap,
         ),
         _ElitePerkTile(
           title: "EXCLUSIVE\nTRAINING VIDEOS",
           icon: Icons.play_circle_fill_rounded,
-          accent: const Color(0xFFF59E0B),
+          accent: CrickXColors.limeSpark,
           onTap: onVideosTap,
         ),
       ],
@@ -1079,29 +1070,33 @@ class _ElitePerkTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF0E1626).withValues(alpha: 0.95),
-                const Color(0xFF1B253A).withValues(alpha: 0.9),
-              ],
-            ),
+            borderRadius: BorderRadius.circular(20),
+            color: CrickXColors.graphite,
             border: Border.all(
-              color: accent.withValues(alpha: 0.6),
+              color: CrickXColors.graphiteBorder,
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: 0.2),
+                color: Colors.black.withValues(alpha: 0.5),
                 blurRadius: 16,
-                spreadRadius: 1,
+                offset: const Offset(0, 6),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: accent, size: 28),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: CrickXColors.graphiteElevated,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: CrickXColors.graphiteBorder),
+                ),
+                child: Icon(icon, color: CrickXColors.limeSpark, size: 22),
+              ),
               const Spacer(),
               Text(
                 title,
@@ -1140,7 +1135,7 @@ class _CarbonFiberPainter extends CustomPainter {
     }
 
     final overlay = Paint()
-      ..color = const Color(0xFFFFD86B).withValues(alpha: 0.02)
+      ..color = CrickXColors.limeSpark.withValues(alpha: 0.02)
       ..strokeWidth = 1;
     for (double x = 0; x < size.width + size.height; x += spacing * 1.5) {
       canvas.drawLine(
@@ -1179,9 +1174,9 @@ class _EliteAuraPainter extends CustomPainter {
     ];
 
     final colors = <Color>[
-      const Color(0xFFFFD86B).withValues(alpha: 0.18),
-      const Color(0xFFFFC44D).withValues(alpha: 0.13),
-      const Color(0xFF7DD3FC).withValues(alpha: 0.08),
+      CrickXColors.limeSpark.withValues(alpha: 0.18),
+      CrickXColors.limeSparkDark.withValues(alpha: 0.13),
+      CrickXColors.limeSpark.withValues(alpha: 0.08),
     ];
 
     for (var i = 0; i < auraCenters.length; i++) {
@@ -1233,9 +1228,9 @@ class _CrestPainter extends CustomPainter {
       final fillPaint = Paint()
         ..shader = LinearGradient(
           colors: [
-            const Color(0xFFFFE5A3),
-            const Color(0xFFD8A01A),
-            const Color(0xFF7B5310),
+            CrickXColors.limeSpark,
+            CrickXColors.limeSparkDark,
+            CrickXColors.graphite,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -1251,13 +1246,13 @@ class _CrestPainter extends CustomPainter {
           ? Colors.white.withValues(
               alpha: 0.22 + (0.12 * math.sin(progress * math.pi * 2)),
             )
-          : const Color(0xFFFFF0C1).withValues(alpha: 0.95);
+          : CrickXColors.limeSpark.withValues(alpha: 0.95);
     canvas.drawPath(shieldPath, outlinePaint);
 
     final orbitPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
-      ..color = const Color(0xFFFFF0C1).withValues(alpha: 0.26);
+      ..color = CrickXColors.limeSpark.withValues(alpha: 0.26);
     canvas.drawCircle(center, size.width * 0.39, orbitPaint);
     canvas.drawCircle(center, size.width * 0.31, orbitPaint);
   }

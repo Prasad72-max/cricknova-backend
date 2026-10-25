@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math' as math;
+import '../theme/crickx_colors.dart';
 
 enum ClaimRewardType { jersey, gloves, fullKit }
 
@@ -63,14 +63,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
   }
 
   Color _headerColor() {
-    switch (widget.rewardType) {
-      case ClaimRewardType.jersey:
-        return const Color(0xFFD4AF37); // Gold
-      case ClaimRewardType.gloves:
-        return const Color(0xFF38BDF8); // Blue
-      case ClaimRewardType.fullKit:
-        return const Color(0xFF22C55E); // Green
-    }
+    return CrickXColors.limeSpark;
   }
 
   String _title() {
@@ -130,14 +123,6 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
         "isClaimed": true,
       }, SetOptions(merge: true));
 
-      // Trigger Cloud Function email
-      try {
-        await FirebaseFunctions.instance
-            .httpsCallable("sendClaimEmail")
-            .call(doc);
-      } catch (_) {
-        // Best-effort; ignore email errors for UX
-      }
 
       if (mounted) {
         Navigator.pop(context);
@@ -165,9 +150,12 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: const BoxDecoration(
+          color: CrickXColors.graphiteBg,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(
+            top: BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -178,14 +166,14 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: 16,
+                  vertical: 18,
                 ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [headerColor, headerColor.withOpacity(0.7)],
+                    colors: [headerColor, headerColor.withOpacity(0.85)],
                   ),
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20),
+                    top: Radius.circular(24),
                   ),
                 ),
                 child: Column(
@@ -194,8 +182,8 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                     Text(
                       "Claim Now",
                       style: GoogleFonts.poppins(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w700,
+                        color: CrickXColors.onLime,
+                        fontWeight: FontWeight.w800,
                         fontSize: 16,
                       ),
                     ),
@@ -203,7 +191,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                     Text(
                       _title(),
                       style: GoogleFonts.poppins(
-                        color: Colors.black.withOpacity(0.85),
+                        color: CrickXColors.onLime.withOpacity(0.85),
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -288,7 +276,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                             onPressed: _submitting ? null : _submit,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: headerColor,
-                              foregroundColor: Colors.black,
+                              foregroundColor: CrickXColors.onLime,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -300,10 +288,17 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
                                     width: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.4,
-                                      color: Colors.black,
+                                      color: CrickXColors.onLime,
                                     ),
                                   )
-                                : const Text("Submit"),
+                                : Text(
+                                    "Submit",
+                                    style: GoogleFonts.poppins(
+                                      color: CrickXColors.onLime,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
@@ -332,17 +327,25 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
         controller: controller,
         maxLines: maxLines,
         keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white),
+        style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          labelStyle: const TextStyle(color: Colors.white70),
-          hintStyle: const TextStyle(color: Colors.white38),
+          labelStyle: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), fontSize: 13),
+          hintStyle: GoogleFonts.poppins(color: Colors.white38, fontSize: 13),
           filled: true,
-          fillColor: const Color(0xFF1E293B),
+          fillColor: CrickXColors.graphiteElevated,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: CrickXColors.limeSpark, width: 1.2),
+          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
           ),
         ),
         validator:
@@ -369,26 +372,34 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
         builder: (_, value, __) => InputDecorator(
           decoration: InputDecoration(
             labelText: label,
-            labelStyle: const TextStyle(color: Colors.white70),
+            labelStyle: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), fontSize: 13),
             filled: true,
-            fillColor: const Color(0xFF1E293B),
+            fillColor: CrickXColors.graphiteElevated,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: CrickXColors.limeSpark, width: 1.2),
+            ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
             ),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: value,
-              dropdownColor: const Color(0xFF0F172A),
-              iconEnabledColor: Colors.white70,
+              dropdownColor: CrickXColors.graphiteElevated,
+              iconEnabledColor: CrickXColors.limeSpark,
               items: options
                   .map(
                     (o) => DropdownMenuItem(
                       value: o,
                       child: Text(
                         o,
-                        style: const TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
                       ),
                     ),
                   )

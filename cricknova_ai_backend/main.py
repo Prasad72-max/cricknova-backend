@@ -783,6 +783,46 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
+        from nvidia_client import extract_video_keyframes, generate_nvidia_vision
+
+        # ⚡ 1. NVIDIA Nemotron First-Glance Cricket Action Verification
+        frames = extract_video_keyframes(video_path, max_frames=3)
+        cricket_detected = True
+        verification_summary = "Cricketing action detected"
+
+        if frames:
+            try:
+                verify_prompt = (
+                    "Inspect these video frames at first glance.\n"
+                    "Question: Does this video contain real cricket playing action (such as batting, bowling, nets practice, throwdowns, or cricket match play)?\n"
+                    "Respond with a brief 1-2 sentence confirmation.\n"
+                    "If this is NOT cricket (e.g. random room, animal, non-sports, blank screen, driving, talking head), begin your response with 'NON_CRICKET:' and explain what is visible.\n"
+                    "If this IS cricket, start with 'CRICKET_VERIFIED:' and mention whether a batsman, bowler, or cricket nets/pitch are seen."
+                )
+                verif_text = generate_nvidia_vision(
+                    prompt=verify_prompt,
+                    frames=frames,
+                    system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                    max_output_tokens=150,
+                    temperature=0.2,
+                ).strip()
+
+                if verif_text.upper().startswith("NON_CRICKET") or "NO CRICKET" in verif_text.upper():
+                    return {
+                        "status": "non_cricket",
+                        "cricket_detected": False,
+                        "reason": "NO_CRICKET_ACTION",
+                        "message": verif_text.replace("NON_CRICKET:", "").strip() or "No cricketing action detected in this video. Please upload a clear cricket video showing batting or bowling.",
+                        "speed_kmph": None,
+                        "swing": "unknown",
+                        "spin": "unknown",
+                        "trajectory": [],
+                    }
+                else:
+                    verification_summary = verif_text.replace("CRICKET_VERIFIED:", "").strip()
+            except Exception as e:
+                print("⚠️ Cricket action check notice:", e)
+
         ball_positions = track_ball_positions(video_path)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -904,6 +944,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
+            "cricket_detected": True,
+            "cricket_summary": verification_summary,
             "speed_kmph": speed_kmph,
             "speed_type": speed_type,
             "speed_note": speed_note,
@@ -923,9 +965,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
 # AI COACH ANALYSIS API
 # -----------------------------
 @app.post("/coach/analyze")
-async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+async def ai_coach_analyze(
+    request: Request,
+    file: UploadFile = File(...),
+    discipline: str | None = Form(None),
+    prompt: str | None = Form(None),
+):
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_vision, generate_nvidia_text
+    if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     # ---- Subscription/Mistake Limit Check ----
@@ -952,45 +999,71 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        ball_positions = track_ball_positions(video_path)
+        # ⚡ Extract real keyframes from video for vision-based inspection
+        frames = extract_video_keyframes(video_path, max_frames=4)
 
-        if not ball_positions or len(ball_positions) < 6:
-            return {
-                "status": "success",
-                "coach_feedback": "Stay balanced at setup, keep your head steady through impact, and repeat short shadow-batting with a straight bat path."
-            }
+        coaching_prompt = (prompt or "").strip()
+        if not coaching_prompt:
+            disc_label = (discipline or "").strip().lower()
+            if disc_label == "bowling":
+                discipline_focus = "bowling mechanics (run-up, gather, front foot landing, arm slot, release, seam presentation, follow-through)"
+            else:
+                discipline_focus = "batting mechanics (stance, balance, head position, backlift, footwork, bat path, contact control, follow-through)"
 
-        swing = detect_swing_x(ball_positions)
-        spin_name, _ = calculate_spin_real(ball_positions)
+            coaching_prompt = f"""
+You are CricX Universal Cricket Coach analyzing this {disc_label} video.
+Inspect the real visual frames provided carefully.
+Everything must come 100% from what you see in the video frames. Do NOT use hardcoded or pre-assumed results.
 
-        prompt = f"""
-You are an elite cricket batting coach.
+First, check visual evidence:
+- If NO cricket action or cricket player is present, or if user selected batting but there is no batsman, or if selected bowling but there is no bowler:
+Return valid minified JSON:
+{{"mistakes": ["No player or action detected matching {disc_label} in this clip.", "Please upload a clear video clip showing a player {disc_label}."], "impact": "Technique analysis cannot be performed without visible {disc_label} movement.", "drill": "Record your practice session with a clear, steady side-on or front-on camera angle."}}
 
-Observed delivery details:
-- Swing: {swing}
-- Spin: {spin_name}
-- One delivery only
+- If cricket {disc_label} action is present, analyze the player's real motion and return ONLY valid minified JSON with exactly these 4 parts:
+{{
+  "mistakes": [
+    "first real technical mistake observed in {disc_label} from the video",
+    "second real technical mistake or balance/timing flaw observed in {disc_label}"
+  ],
+  "impact": "specific performance impact and risk caused by these technical flaws (e.g. edge risk, loss of control, pace leakage)",
+  "drill": "practical, actionable drill and correction step to fix these mistakes"
+}}
 
-Give short, honest, technical batting feedback.
-Mention one mistake and one improvement.
+Rules:
+- Strictly return valid JSON only. Do not add markdown backticks.
+- Exactly 2 mistakes in the "mistakes" array, exactly 1 impact in "impact", exactly 1 drill in "drill".
+- Total 4 points will be shown to the user: Mistake 1, Mistake 2, Impact, How to Fix.
+- No hardcoded or pre-assumed results. Base every word purely on the actual visual frames.
 """
 
-        feedback = generate_text(
-            system_instruction="You are a professional cricket batting coach.",
-            user_prompt=prompt,
-            max_output_tokens=120,
-            temperature=0.6,
-        )
+        if frames:
+            feedback = generate_nvidia_vision(
+                prompt=coaching_prompt,
+                frames=frames,
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
+        else:
+            feedback = generate_nvidia_text(
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                user_prompt=coaching_prompt,
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
 
         return {
             "status": "success",
-            "coach_feedback": feedback
+            "coach_feedback": feedback,
+            "reply": feedback,
         }
 
     except Exception as e:
         return {
             "status": "failed",
-            "coach_feedback": f"Coach error: {str(e)}"
+            "coach_feedback": f"Coach error: {str(e)}",
+            "reply": f"Coach error: {str(e)}"
         }
 
     finally:
@@ -1007,8 +1080,8 @@ class CoachChatRequest(BaseModel):
 
 @app.post("/coach/chat")
 async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    from nvidia_client import is_nvidia_available
+    if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     message = (req.message or "").strip()
@@ -1055,72 +1128,37 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
         if looks_like_raw_prompt:
             is_bowling_prompt = "bowling" in msg_lower and "batting-only" not in msg_lower
-            coach_role = "bowling" if is_bowling_prompt else "batting"
-            discipline_rules = (
-                "Give bowling-only mistake feedback. Focus on run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. Never provide batting mistakes or batting drills."
-                if is_bowling_prompt
-                else "Give batting-only mistake feedback. Focus on stance, head position, balance, bat path, timing, shot control, and batting footwork. Never provide bowling mistakes or bowling drills."
-            )
+            discipline_label = "bowling" if is_bowling_prompt else "batting"
             reply_text = generate_text(
-                system_instruction=(
-                    f"You are CrickNova {coach_role} coach. "
-                    "Analyze only the provided clip context. "
-                    f"{discipline_rules} "
-                    "Be direct, honest, and unscripted. "
-                    "Avoid repeated generic lines."
-                ),
+                system_instruction=f"You are a universal cricket coach specializing in {discipline_label} analysis. Analyze the clip context and return the requested json format.",
                 user_prompt=message,
-                max_output_tokens=320,
-                temperature=0.72,
+                max_output_tokens=8192,
+                temperature=0.45,
             )
             return {"status": "success", "reply": reply_text}
 
-        history_lines = []
-        for item in history[-8:]:
+        # ⚡ Direct CricX Chat: "You are a universal cricket coach."
+        messages_payload = [
+            {
+                "role": "system",
+                "content": "You are a universal cricket coach. Keep your responses focused on cricket.",
+            }
+        ]
+        for item in history[-12:]:
             if not isinstance(item, dict):
                 continue
-            role = str(item.get("role", "user")).strip().lower()
+            role = "user" if str(item.get("role", "user")).strip().lower() == "user" else "assistant"
             content = str(item.get("content", "")).strip()
-            if not content:
-                continue
-            prefix = "User" if role == "user" else "Coach"
-            history_lines.append(f"{prefix}: {content}")
+            if content:
+                messages_payload.append({"role": role, "content": content})
 
-        history_block = "\n".join(history_lines).strip()
+        messages_payload.append({"role": "user", "content": message})
 
-        prompt = f'''
-You are CrickNova Coach, a real cricket coach powered by CrickNova AI.
-
-Answer the user's actual question in natural coaching language.
-Do not use a fixed 4-point template unless the user explicitly asks for points.
-Do not sound scripted, repetitive, or generic.
-
-Rules:
-- Answer only cricket-related questions.
-- If the question is not about cricket, politely refuse in 1 short sentence and ask the user to ask a cricket question.
-- If the question is about batting, answer batting.
-- If the question is about bowling, answer bowling.
-- If the question is about mindset, match situations, fitness for cricket, fielding, captaincy, or training, answer it naturally.
-- If the question is vague, ask 1 short follow-up or give neutral cricket guidance without forcing batting or bowling.
-- Keep the answer direct, practical, and human.
-- No fake video analysis if no clip context is provided.
-- No unnecessary headings unless they help the answer.
-- Keep the answer concise, but answer the exact question asked.
-- Use the recent chat history only to maintain continuity for follow-up questions like "give tips", "why", or "what next".
-- If the new question changes topic, answer the new topic directly.
-
-Recent chat history:
-{history_block if history_block else "No previous chat context."}
-
-User question:
-{message}
-'''
-
-        reply_text = generate_text(
-            system_instruction="You are CrickNova Coach.",
-            user_prompt=prompt,
-            max_output_tokens=220,
-            temperature=0.72,
+        from nvidia_client import call_nvidia_chat
+        reply_text = call_nvidia_chat(
+            messages_payload,
+            max_tokens=8192,
+            temperature=0.6,
         )
 
         return {
@@ -1145,8 +1183,8 @@ async def ai_coach_diff(
     prompt: str | None = Form(None),
     discipline: str | None = Form(None),
 ):
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
+    from nvidia_client import is_nvidia_available
+    if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     # ---- Subscription/Compare Limit Check ----
@@ -1202,30 +1240,20 @@ async def ai_coach_diff(
         )
 
     try:
-        # Best-effort tracking. Compare should still work even if tracking is weak.
-        try:
-            left_positions = track_ball_positions(left_path) or []
-        except Exception:
-            left_positions = []
-        try:
-            right_positions = track_ball_positions(right_path) or []
-        except Exception:
-            right_positions = []
+        from nvidia_client import extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text
+        left_frames = extract_video_keyframes(left_path, max_frames=3)
+        right_frames = extract_video_keyframes(right_path, max_frames=3)
 
         base_prompt = (prompt or "").strip()
         if not base_prompt:
             base_prompt = """
-You are CrickNova Coach.
-
-Compare the player's two videos honestly in natural coaching language.
+Compare the player's two video clips honestly in natural coaching language.
 Do not force Video 2 to be better than Video 1.
-No fixed template or forced headings.
 Explain what improved, what is still weak, and what to do next.
 Give exactly 2 practical drills.
 - Do not mention speed, swing, or spin.
 - Keep it specific to what changed between the two clips.
 Do not give rating/score.
-Keep the full reply under 260 words and avoid generic wording.
 """
 
         discipline_text = (discipline or "").strip().lower()
@@ -1233,39 +1261,32 @@ Keep the full reply under 260 words and avoid generic wording.
             prompt_lower = base_prompt.lower()
             discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
 
-        if discipline_text == "bowling":
-            system_instruction = (
-                "You are CrickNova bowling coach. "
-                "Give bowling-only comparison and bowling drills only. "
-                "Focus on run-up, gather, front-foot landing, wrist/seam, release point, line/length, and follow-through. "
-                "Never provide batting analysis, batting mistakes, or batting drills. "
-                "Make the response clip-specific and avoid repeating generic lines."
+        if left_frames and right_frames:
+            diff_text = generate_nvidia_comparison_vision(
+                prompt=base_prompt,
+                left_frames=left_frames,
+                right_frames=right_frames,
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                max_output_tokens=8192,
+                temperature=0.55,
             )
         else:
-            system_instruction = (
-                "You are CrickNova batting coach. "
-                "Give batting-only comparison and batting drills only. "
-                "Focus on stance, head position, balance, bat path, timing, shot control, and batting footwork. "
-                "Never provide bowling analysis, bowling mistakes, or bowling drills. "
-                "Make the response clip-specific and avoid repeating generic lines."
+            final_prompt = (
+                base_prompt
+                + f"\n\nINTERNAL_CONTEXT (do not mention): "
+                  f"discipline={discipline_text} "
+                  f"v1_name={(left.filename or 'left.mp4')} "
+                  f"v2_name={(right.filename or 'right.mp4')} "
+                  f"v1_sig={trajectory_signature(left_positions)} "
+                  f"v2_sig={trajectory_signature(right_positions)}\n"
             )
 
-        final_prompt = (
-            base_prompt
-            + f"\n\nINTERNAL_CONTEXT (do not mention): "
-              f"discipline={discipline_text} "
-              f"v1_name={(left.filename or 'left.mp4')} "
-              f"v2_name={(right.filename or 'right.mp4')} "
-              f"v1_sig={trajectory_signature(left_positions)} "
-              f"v2_sig={trajectory_signature(right_positions)}\n"
-        )
-
-        diff_text = generate_text(
-            system_instruction=system_instruction,
-            user_prompt=final_prompt,
-            max_output_tokens=260,
-            temperature=0.6,
-        )
+            diff_text = generate_nvidia_text(
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                user_prompt=final_prompt,
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
 
         return {
             "status": "success",
@@ -1363,6 +1384,8 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
+            "cricket_detected": True,
+            "cricket_summary": verification_summary,
             "speed_kmph": speed_kmph,
             "speed_type": speed_type,
             "speed_note": speed_note,

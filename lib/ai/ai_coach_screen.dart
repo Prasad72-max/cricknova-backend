@@ -15,6 +15,8 @@ import '../services/xp_service.dart';
 import 'chat_sessions_provider.dart';
 import '../widgets/premium_blur_lock.dart';
 import '../navigation/main_navigation.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/crickx_colors.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? payloadContext;
@@ -44,62 +46,6 @@ class _AICoachScreenState extends State<AICoachScreen> {
   bool _lastPremiumState = PremiumService.isPremiumActive;
   String _resolvedUserName = "Player";
 
-  String _formatCoachReply(String raw) {
-    return raw.replaceAll('\r', '').trim();
-  }
-
-  _CoachReplyParts _parseCoachReplyParts(String raw) {
-    final cleaned = raw.replaceAll('\r', '').trim();
-    if (cleaned.isEmpty) {
-      return const _CoachReplyParts(points: [], fallback: "");
-    }
-
-    final lines = cleaned
-        .split('\n')
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList();
-
-    final numberedPattern = RegExp(r'^\s*(\d+)\s*[\]\).\:-]\s*(.+)$');
-    final bulletPattern = RegExp(r'^\s*[-*•]\s*(.+)$');
-    final points = <String>[];
-
-    for (final line in lines) {
-      final numbered = numberedPattern.firstMatch(line);
-      if (numbered != null) {
-        points.add(numbered.group(2)!.trim());
-        continue;
-      }
-
-      final bulleted = bulletPattern.firstMatch(line);
-      if (bulleted != null) {
-        points.add(bulleted.group(1)!.trim());
-      }
-    }
-
-    if (points.length >= 2) {
-      return _CoachReplyParts(points: points.take(4).toList(), fallback: null);
-    }
-
-    if (lines.length >= 2 && lines.length <= 4) {
-      return _CoachReplyParts(points: lines, fallback: null);
-    }
-
-    final sentenceSplit = cleaned
-        .split(RegExp(r'(?<=[.!?])\s+'))
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .toList();
-
-    if (sentenceSplit.length >= 2) {
-      return _CoachReplyParts(
-        points: sentenceSplit.take(4).toList(),
-        fallback: null,
-      );
-    }
-
-    return _CoachReplyParts(points: const [], fallback: cleaned);
-  }
 
   @override
   void initState() {
@@ -247,6 +193,76 @@ class _AICoachScreenState extends State<AICoachScreen> {
     );
   }
 
+  /* ---------------- DIRECT NVIDIA NEMOTRON CLIENT ---------------- */
+
+  Future<String?> _callNvidiaDirect(
+    String userMessage,
+    List<Map<String, dynamic>> history,
+  ) async {
+    try {
+      final key = ApiConfig.nvidiaApiKey.trim();
+      if (key.isEmpty) return null;
+
+      final url = Uri.parse(
+        "https://integrate.api.nvidia.com/v1/chat/completions",
+      );
+
+      final messages = <Map<String, dynamic>>[
+        {
+          "role": "system",
+          "content":
+              "You are a universal cricket coach. Keep your responses focused on cricket.",
+        }
+      ];
+
+      for (final msg in history.take(8)) {
+        final role = msg["role"] == "user" ? "user" : "assistant";
+        final text = (msg["content"] ?? msg["text"] ?? "").toString().trim();
+        if (text.isNotEmpty) {
+          messages.add({
+            "role": role,
+            "content": text,
+          });
+        }
+      }
+
+      messages.add({
+        "role": "user",
+        "content": userMessage,
+      });
+
+      final response = await http
+          .post(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer $key",
+            },
+            body: jsonEncode({
+              "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+              "messages": messages,
+              "temperature": 0.6,
+              "max_tokens": 8192,
+            }),
+          )
+          .timeout(const Duration(seconds: 45));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final choices = data["choices"] as List?;
+        if (choices != null && choices.isNotEmpty) {
+          final text = choices[0]?["message"]?["content"]?.toString().trim();
+          if (text != null && text.isNotEmpty) {
+            return text;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Direct NVIDIA Nemotron error: $e");
+    }
+    return null;
+  }
+
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
@@ -275,6 +291,21 @@ class _AICoachScreenState extends State<AICoachScreen> {
     setState(() {});
 
     try {
+      // ⚡ FAST DIRECT NVIDIA NEMOTRON ATTEMPT (Instant response if client key set)
+      final directReply = await _callNvidiaDirect(
+        userMessage,
+        _chatProvider.recentMessagesForApi(),
+      );
+      if (directReply != null && directReply.trim().isNotEmpty) {
+        await _chatProvider.addCoachMessage(directReply.trim());
+        await _awardAiCoachXp();
+        try {
+          await PremiumService.consumeChat();
+        } catch (_) {}
+        _scheduleScrollToBottomRobust(animated: true);
+        return;
+      }
+
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         loading = false;
@@ -392,7 +423,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
           }
         }
 
-        await _chatProvider.addCoachMessage(_formatCoachReply(coachText));
+        await _chatProvider.addCoachMessage(coachText.trim());
         // Only award XP / consume usage when the backend confirms success.
         if (isSuccess) {
           await _awardAiCoachXp();
@@ -458,38 +489,135 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   Widget buildMessage(Map<String, dynamic> msg) {
     bool isUser = msg["role"] == "user";
-    final content = (msg["content"] ?? msg["text"] ?? "").toString();
+    final content = (msg["content"] ?? msg["text"] ?? "").toString().trim();
 
     Future<void> copy() async {
       await Clipboard.setData(ClipboardData(text: content));
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Copied to clipboard")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Copied to clipboard"),
+          duration: Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
 
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: copy,
+    if (isUser) {
+      return Align(
+        alignment: Alignment.centerRight,
         child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-          padding: const EdgeInsets.all(14),
-          constraints: const BoxConstraints(maxWidth: 320),
-          decoration: BoxDecoration(
-            color: isUser ? const Color(0xFF1E293B) : const Color(0xFF111827),
-            borderRadius: BorderRadius.circular(18),
-            border: isUser
-                ? null
-                : Border.all(color: const Color(0xFF38BDF8), width: 1.2),
+          margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.80,
           ),
-          child: isUser
-              ? Text(content, style: const TextStyle(color: Colors.white))
-              : _CoachReplyView(
-                  raw: content,
-                  parsed: _parseCoachReplyParts(content),
-                ),
+          decoration: BoxDecoration(
+            color: CrickXColors.graphiteElevated,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: CrickXColors.graphiteBorder,
+              width: 1.1,
+            ),
+          ),
+          child: SelectableText(
+            content,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 14.5,
+              height: 1.45,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
+      );
+    }
+
+    // 🤖 ChatGPT-Style Reply (Direct on page, NO enclosing box/container)
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: const BoxDecoration(
+                  color: CrickXColors.limeSpark,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    "X",
+                    style: GoogleFonts.poppins(
+                      color: CrickXColors.onLime,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                "CricX",
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.only(left: 36),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                  content,
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFFECECF1),
+                    fontSize: 15,
+                    height: 1.6,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 0.15,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                InkWell(
+                  onTap: copy,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.copy_rounded,
+                          size: 14,
+                          color: Color(0xFF8E8EA0),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          "Copy",
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF8E8EA0),
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -501,27 +629,129 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   // ---------------- QUICK CHIP + SUGGESTION WIDGETS ----------------
   Widget quickChip(String text) {
-    return ActionChip(
-      backgroundColor: const Color(0xFF0F172A),
-      label: Text(text, style: const TextStyle(color: Colors.white)),
-      onPressed: () {
-        controller.text = text;
-        sendMessage();
-      },
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: () {
+          controller.text = text;
+          sendMessage();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            color: CrickXColors.graphite,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Text(
+            text,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   Widget suggestionTile(String text) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-        text,
-        style: const TextStyle(color: Colors.white70, fontSize: 13),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: CrickXColors.graphite,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      onTap: () {
-        controller.text = text;
-        sendMessage();
-      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          splashColor: Colors.white.withValues(alpha: 0.06),
+          highlightColor: CrickXColors.graphiteElevated,
+          onTap: () {
+            controller.text = text;
+            sendMessage();
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: CrickXColors.graphiteElevated,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: CrickXColors.graphiteBorder),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: CrickXColors.limeSpark,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        text,
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Tap to get instant coaching analysis",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white38,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: CrickXColors.graphiteElevated,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: CrickXColors.graphiteBorder),
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: CrickXColors.textSecondary,
+                    size: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -529,7 +759,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   Widget buildHistoryDrawer(ChatSessionsProvider provider) {
     return Drawer(
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: CrickXColors.graphiteBg,
       child: SafeArea(
         child: Column(
           children: [
@@ -557,14 +787,14 @@ class _AICoachScreenState extends State<AICoachScreen> {
                       ),
                     ),
                   ),
-                  const Text(
+                  Text(
                     "Chat History",
-                    style: TextStyle(color: Colors.white, fontSize: 18),
+                    style: GoogleFonts.poppins(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
                   ),
                   const Spacer(),
                   IconButton(
                     tooltip: "New Chat",
-                    icon: const Icon(Icons.add_circle, color: Colors.white),
+                    icon: const Icon(Icons.add_circle, color: CrickXColors.limeSpark),
                     onPressed: () async {
                       await provider.startNewChat();
                       if (mounted) Navigator.pop(context);
@@ -576,28 +806,20 @@ class _AICoachScreenState extends State<AICoachScreen> {
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.transparent,
-                    Colors.white.withValues(alpha: 0.34),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
+              color: CrickXColors.graphiteBorder,
             ),
             Expanded(
               child: provider.loadingList
                   ? const Center(
                       child: CircularProgressIndicator(
-                        color: Color(0xFF38BDF8),
+                        color: CrickXColors.limeSpark,
                       ),
                     )
                   : provider.sessions.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         "No previous chats",
-                        style: TextStyle(color: Colors.white54),
+                        style: GoogleFonts.poppins(color: CrickXColors.textSecondary, fontSize: 13),
                       ),
                     )
                   : ListView.builder(
@@ -606,12 +828,14 @@ class _AICoachScreenState extends State<AICoachScreen> {
                         final session = provider.sessions[i];
                         final selected = session.id == provider.currentChatId;
                         return ListTile(
+                          tileColor: selected ? CrickXColors.graphiteElevated : null,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           title: Text(
                             session.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white,
+                            style: GoogleFonts.poppins(
+                              color: selected ? CrickXColors.limeSpark : Colors.white,
                               fontSize: 14,
                               fontWeight: selected
                                   ? FontWeight.w700
@@ -622,7 +846,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                           trailing: IconButton(
                             icon: const Icon(
                               Icons.delete_outline,
-                              color: Colors.white54,
+                              color: CrickXColors.textMuted,
                             ),
                             onPressed: () async {
                               await provider.deleteChat(session.id);
@@ -668,9 +892,9 @@ class _AICoachScreenState extends State<AICoachScreen> {
           }
           return Scaffold(
             drawer: buildHistoryDrawer(provider),
-            backgroundColor: const Color(0xFF020617),
+            backgroundColor: CrickXColors.graphiteBg,
             appBar: AppBar(
-              backgroundColor: const Color(0xFF020617),
+              backgroundColor: CrickXColors.graphiteBg,
               elevation: 0,
               leading: Builder(
                 builder: (context) => IconButton(
@@ -682,11 +906,12 @@ class _AICoachScreenState extends State<AICoachScreen> {
                   ),
                 ),
               ),
-              title: const Text(
-                "CrickNova Coach",
-                style: TextStyle(
-                  color: Color(0xFFE5E7EB),
-                  fontWeight: FontWeight.w600,
+              title: Text(
+                "CricX Coach",
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -702,20 +927,31 @@ class _AICoachScreenState extends State<AICoachScreen> {
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: Container(
-                                  padding: const EdgeInsets.all(14),
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF111827),
-                                    borderRadius: BorderRadius.circular(18),
+                                    color: CrickXColors.graphite,
+                                    borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: const Color(0xFF38BDF8),
+                                      color: CrickXColors.graphiteBorder,
                                       width: 1.2,
                                     ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.6),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 6),
+                                      ),
+                                    ],
                                   ),
-                                  child: const Text(
-                                    "CrickNova Coach: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
+                                  child: Text(
+                                    "CricX Coach: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
                                     maxLines: 2,
                                     overflow: TextOverflow.fade,
-                                    style: TextStyle(color: Colors.white),
+                                    style: GoogleFonts.poppins(
+                                      color: Colors.white,
+                                      fontSize: 13.5,
+                                      height: 1.45,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -730,10 +966,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                 ),
                                 child: PremiumBlurLock(
                                   locked: true,
-                                  ctaText: "TALK TO CRICKNOVA COACH",
-                                  title: "CrickNova Coach Locked",
+                                  ctaText: "TALK TO CRICX COACH",
+                                  title: "CricX Coach Locked",
                                   subtitle:
-                                      "See full CrickNova coaching, personalised mistakes and drills with Premium.",
+                                      "See full CricX coaching, personalised mistakes and drills with Premium.",
                                   onUnlock: unlock,
                                   child: ListView(
                                     controller: _scrollController,
@@ -769,37 +1005,116 @@ class _AICoachScreenState extends State<AICoachScreen> {
                       : (!hasMessages
                             ? SingleChildScrollView(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 20,
+                                  horizontal: 18,
+                                  vertical: 18,
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // 👤 Coach Greeting
-                                    Row(
-                                      children: [
-                                        const CircleAvatar(
-                                          radius: 22,
-                                          backgroundColor: Color(0xFF0F172A),
-                                          child: Icon(
-                                            Icons.sports_cricket,
-                                            color: Color(0xFF38BDF8),
-                                          ),
+                                    // 👤 Coach Greeting Card (Upload Screen Luxury Style)
+                                    Container(
+                                      padding: const EdgeInsets.all(20),
+                                      decoration: BoxDecoration(
+                                        color: CrickXColors.graphite,
+                                        borderRadius: BorderRadius.circular(22),
+                                        border: Border.all(
+                                          color: CrickXColors.graphiteBorder,
+                                          width: 1.2,
                                         ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Text(
-                                            "Hello ${getUserName()}!\nI am your CrickNova Coach. How can I help you improve your game today?",
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 14,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.7),
+                                            blurRadius: 18,
+                                            offset: const Offset(0, 8),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Container(
+                                                width: 48,
+                                                height: 48,
+                                                decoration: BoxDecoration(
+                                                  color: CrickXColors.graphiteElevated,
+                                                  borderRadius: BorderRadius.circular(16),
+                                                  border: Border.all(
+                                                    color: CrickXColors.graphiteBorder,
+                                                    width: 1.2,
+                                                  ),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.smart_toy_rounded,
+                                                  color: CrickXColors.limeSpark,
+                                                  size: 26,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 14),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          "CRICKNOVA AI",
+                                                          style: GoogleFonts.poppins(
+                                                            color: const Color(0xFFE2E8F0),
+                                                            fontSize: 11.5,
+                                                            fontWeight: FontWeight.w700,
+                                                            letterSpacing: 1.1,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            "ONLINE",
+                                                            style: GoogleFonts.poppins(
+                                                              color: CrickXColors.limeSpark,
+                                                              fontSize: 9.5,
+                                                              fontWeight: FontWeight.w700,
+                                                              letterSpacing: 0.5,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 3),
+                                                    Text(
+                                                      "Hello, ${getUserName()}! 👋",
+                                                      style: GoogleFonts.poppins(
+                                                        color: Colors.white,
+                                                        fontSize: 17,
+                                                        fontWeight: FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 14),
+                                          Text(
+                                            "I am your personal AI cricket coach. Ask me anything about your batting stance, seam release, bowling action, or tactical match strategy.",
+                                            style: GoogleFonts.poppins(
+                                              color: Colors.white.withValues(alpha: 0.72),
+                                              fontSize: 13.5,
+                                              height: 1.45,
+                                              fontWeight: FontWeight.w400,
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
 
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 22),
 
                                     // ⚡ Quick Action Chips
                                     Wrap(
@@ -812,17 +1127,18 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                       ],
                                     ),
 
-                                    const SizedBox(height: 28),
+                                    const SizedBox(height: 26),
 
                                     // 🏆 Suggested Questions
-                                    const Text(
+                                    Text(
                                       "Suggested Questions",
-                                      style: TextStyle(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white70,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: 12),
                                     suggestionTile(
                                       "How to play a perfect cover drive?",
                                     ),
@@ -850,94 +1166,180 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                 },
                               )),
                 ),
-                // Clean AI analyzing indicator
+                // ChatGPT-style unboxed AI thinking indicator
                 if (loading)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Column(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SizedBox(
-                          height: 28,
-                          width: 28,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation(
-                              Color(0xFF38BDF8),
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: const BoxDecoration(
+                            color: CrickXColors.limeSpark,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              "X",
+                              style: GoogleFonts.poppins(
+                                color: CrickXColors.onLime,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
-                            backgroundColor: Color(0xFF0F172A),
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0, end: 1),
-                          duration: const Duration(seconds: 2),
-                          builder: (context, value, child) {
-                            int dots = (value * 3).floor();
-                            return Text(
-                              "Analyzing${"." * dots}",
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            );
-                          },
-                          onEnd: () {
-                            if (mounted && loading) {
-                              setState(() {});
-                            }
-                          },
+                        const SizedBox(width: 12),
+                        Text(
+                          "CricX is thinking...",
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFF8E8EA0),
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.8,
+                            valueColor: AlwaysStoppedAnimation(CrickXColors.limeSpark),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
+
+                // 🚀 ChatGPT-Style Big Input Bar with Mic & Send Inside It
+                SafeArea(
+                  top: false,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
+                      decoration: BoxDecoration(
+                        color: CrickXColors.graphite,
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(
+                          color: CrickXColors.graphiteBorder,
+                          width: 1.2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            blurRadius: 16,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Expanded(
                             child: AbsorbPointer(
                               absorbing: locked,
                               child: TextField(
                                 controller: controller,
-                                style: const TextStyle(color: Colors.white),
+                                minLines: 1,
+                                maxLines: 5,
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w400,
+                                ),
+                                cursorColor: CrickXColors.limeSpark,
                                 decoration: InputDecoration(
-                                  hintText: "Ask CrickNova Coach...",
-                                  hintStyle: const TextStyle(
-                                    color: Color(0xFF64748B),
+                                  hintText: "Message CricX...",
+                                  hintStyle: GoogleFonts.poppins(
+                                    color: CrickXColors.textMuted,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w400,
                                   ),
-                                  filled: true,
-                                  fillColor: const Color(0xFF0F172A),
+                                  border: InputBorder.none,
+                                  isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
+                                    horizontal: 6,
                                     vertical: 12,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide.none,
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                          IconButton(
-                            icon: Icon(
-                              isListening ? Icons.mic : Icons.mic_none,
-                              color: isListening ? Colors.red : Colors.white,
+                          const SizedBox(width: 4),
+
+                          // 🎙️ Mic Icon (Inside the Bar)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(999),
+                                onTap: locked ? unlock : toggleMic,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: isListening
+                                        ? const Color(0xFFEF4444).withValues(alpha: 0.2)
+                                        : Colors.transparent,
+                                    shape: BoxShape.circle,
+                                    border: isListening
+                                        ? Border.all(color: const Color(0xFFEF4444), width: 1.5)
+                                        : null,
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                                      color: isListening
+                                          ? const Color(0xFFEF4444)
+                                          : const Color(0xFF94A3B8),
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                            onPressed: locked ? unlock : toggleMic,
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.send, color: Colors.white),
-                            onPressed: locked ? unlock : sendMessage,
+                          const SizedBox(width: 6),
+
+                          // ⬆️ Send Button (ChatGPT Round Upward Arrow Inside the Bar)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(999),
+                                onTap: locked ? unlock : sendMessage,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: _charCount > 0
+                                        ? CrickXColors.limeSpark
+                                        : CrickXColors.graphiteElevated,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.arrow_upward_rounded,
+                                      color: _charCount > 0
+                                          ? CrickXColors.onLime
+                                          : CrickXColors.textMuted,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ],
@@ -949,132 +1351,3 @@ class _AICoachScreenState extends State<AICoachScreen> {
   }
 }
 
-class _CoachReplyParts {
-  final List<String> points;
-  final String? fallback;
-
-  const _CoachReplyParts({required this.points, required this.fallback});
-
-  bool get hasPoints => points.isNotEmpty;
-}
-
-class _CoachReplyView extends StatelessWidget {
-  final String raw;
-  final _CoachReplyParts parsed;
-
-  const _CoachReplyView({required this.raw, required this.parsed});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!parsed.hasPoints) {
-      return SelectableText(
-        parsed.fallback ?? raw,
-        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.45),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: const Color(0xFF38BDF8).withValues(alpha: 0.28),
-            ),
-          ),
-          child: const Text(
-            "Coach Notes",
-            style: TextStyle(
-              color: Color(0xFFBAE6FD),
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ),
-        for (int i = 0; i < parsed.points.length; i++)
-          Padding(
-            padding: EdgeInsets.only(
-              bottom: i == parsed.points.length - 1 ? 0 : 10,
-            ),
-            child: _CoachPointTile(index: i + 1, text: parsed.points[i]),
-          ),
-      ],
-    );
-  }
-}
-
-class _CoachPointTile extends StatelessWidget {
-  final int index;
-  final String text;
-
-  const _CoachPointTile({required this.index, required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white.withValues(alpha: 0.07),
-            Colors.white.withValues(alpha: 0.03),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF38BDF8).withValues(alpha: 0.28),
-                  const Color(0xFF1D4ED8).withValues(alpha: 0.18),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.34),
-              ),
-            ),
-            child: Text(
-              "$index",
-              style: const TextStyle(
-                color: Color(0xFFBAE6FD),
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: SelectableText(
-              text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14.5,
-                height: 1.4,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

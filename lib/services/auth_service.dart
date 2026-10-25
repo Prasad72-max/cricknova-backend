@@ -47,7 +47,7 @@ class AuthService {
         print("🔥 FULL_FIREBASE_TOKEN=$idToken");
 
         // 🔐 Sync premium & limits from backend (authoritative)
-        await PremiumService.syncFromBackend();
+        await PremiumService.syncFromBackend(user.uid);
       }
 
       return user;

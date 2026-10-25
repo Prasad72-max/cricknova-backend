@@ -8,6 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:video_player/video_player.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/pending_video.dart';
+import '../theme/crickx_colors.dart';
 
 import 'analysis_queue_store.dart';
 
@@ -276,13 +277,15 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F14),
+      backgroundColor: CrickXColors.graphiteBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0F14),
+        backgroundColor: CrickXColors.graphiteBg,
         foregroundColor: Colors.white,
         title: const Text("Analyzing Vid"),
       ),
       body: RefreshIndicator(
+        color: CrickXColors.limeSpark,
+        backgroundColor: CrickXColors.graphiteElevated,
         onRefresh: _loadJobs,
         child: ListView(
           padding: const EdgeInsets.all(18),
@@ -290,9 +293,19 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: const Color(0xFF121821).withValues(alpha: 0.78),
+                color: CrickXColors.graphite,
                 borderRadius: BorderRadius.circular(22),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                border: Border.all(
+                  color: CrickXColors.graphiteBorder,
+                  width: 1.2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,40 +335,57 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
               const Center(
                 child: Padding(
                   padding: EdgeInsets.only(top: 48),
-                  child: CircularProgressIndicator(color: Color(0xFF00C2FF)),
+                  child: CircularProgressIndicator(color: CrickXColors.limeSpark),
                 ),
               )
             else if (_jobs.isEmpty)
               Container(
-                padding: const EdgeInsets.all(22),
+                padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF121821).withValues(alpha: 0.62),
+                  color: CrickXColors.graphite,
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.08),
+                    color: CrickXColors.graphiteBorder,
+                    width: 1.2,
                   ),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.video_library_outlined,
-                      color: Color(0xFF00C2FF),
-                      size: 36,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
                     ),
-                    SizedBox(height: 12),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: CrickXColors.graphiteElevated,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: CrickXColors.graphiteBorder),
+                      ),
+                      child: const Icon(
+                        Icons.video_library_outlined,
+                        color: CrickXColors.limeSpark,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     Text(
                       "No pending analyses",
-                      style: TextStyle(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    SizedBox(height: 8),
+                    const SizedBox(height: 8),
                     Text(
                       "Videos that need extra processing will appear here automatically.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70, height: 1.45),
+                      style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), fontSize: 12.5, height: 1.45),
                     ),
                   ],
                 ),
@@ -414,22 +444,21 @@ class _AnalysisJobCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF121821).withValues(alpha: 0.76),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(22),
             border: Border.all(
               color: isReady
-                  ? const Color(0xFF00FF9D).withValues(alpha: 0.32)
-                  : Colors.white.withValues(alpha: 0.08),
+                  ? CrickXColors.limeSpark.withValues(alpha: 0.5)
+                  : CrickXColors.graphiteBorder,
+              width: 1.2,
             ),
-            boxShadow: isReady
-                ? [
-                    BoxShadow(
-                      color: const Color(0xFF00C2FF).withValues(alpha: 0.14),
-                      blurRadius: 18,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : const [],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -441,14 +470,8 @@ class _AnalysisJobCard extends StatelessWidget {
                     Container(
                       width: 86,
                       height: 86,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: isReady
-                              ? const [Color(0xFF183247), Color(0xFF10212D)]
-                              : const [Color(0xFF1A212D), Color(0xFF121821)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                      decoration: const BoxDecoration(
+                        color: CrickXColors.graphiteElevated,
                       ),
                     ),
                     if (!isReady)
@@ -463,7 +486,7 @@ class _AnalysisJobCard extends StatelessWidget {
                     else
                       const Icon(
                         Icons.sports_cricket_rounded,
-                        color: Color(0xFF00FF9D),
+                        color: CrickXColors.limeSpark,
                         size: 34,
                       ),
                   ],
@@ -503,16 +526,12 @@ class _AnalysisJobCard extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: isReady
-                                ? const Color(
-                                    0xFF00FF9D,
-                                  ).withValues(alpha: 0.12)
+                                ? CrickXColors.limeSpark.withValues(alpha: 0.14)
                                 : Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: isReady
-                                  ? const Color(
-                                      0xFF00FF9D,
-                                    ).withValues(alpha: 0.35)
+                                  ? CrickXColors.limeSpark.withValues(alpha: 0.35)
                                   : Colors.white.withValues(alpha: 0.08),
                             ),
                           ),
@@ -525,22 +544,22 @@ class _AnalysisJobCard extends StatelessWidget {
                                   height: 12,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 1.8,
-                                    color: Color(0xFF00C2FF),
+                                    color: CrickXColors.limeSpark,
                                   ),
                                 )
                               else
                                 const Icon(
                                   Icons.check_circle_rounded,
-                                  color: Color(0xFF00FF9D),
+                                  color: CrickXColors.limeSpark,
                                   size: 14,
                                 ),
                               const SizedBox(width: 8),
                               Text(
                                 isReady ? 'Ready' : 'Analyzing...',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w700,
+                                style: TextStyle(
+                                  color: isReady ? CrickXColors.limeSpark : Colors.white70,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
@@ -630,17 +649,17 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
   Widget build(BuildContext context) {
     final controller = _controller;
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F14),
+      backgroundColor: CrickXColors.graphiteBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0F14),
+        backgroundColor: CrickXColors.graphiteBg,
         foregroundColor: Colors.white,
         title: Text(widget.title),
       ),
       body: Center(
         child: _loading
-            ? const CircularProgressIndicator(color: Color(0xFF00C2FF))
+            ? const CircularProgressIndicator(color: CrickXColors.limeSpark)
             : _error != null
-            ? Text(_error!, style: const TextStyle(color: Colors.white70))
+            ? Text(_error!, style: GoogleFonts.poppins(color: Colors.white70))
             : controller == null
             ? const SizedBox.shrink()
             : Padding(
@@ -657,7 +676,7 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
                           controller,
                           allowScrubbing: true,
                           colors: const VideoProgressColors(
-                            playedColor: Color(0xFF00C2FF),
+                            playedColor: CrickXColors.limeSpark,
                             bufferedColor: Colors.white24,
                             backgroundColor: Colors.white10,
                           ),
@@ -844,21 +863,21 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     final videoController = _videoController;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F14),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0F14),
+        backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text("Analysis Result"),
       ),
       body: _loading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00C2FF)),
+              child: CircularProgressIndicator(color: CrickXColors.limeSpark),
             )
           : _job == null
-          ? const Center(
+          ? Center(
               child: Text(
                 "Result not found.",
-                style: TextStyle(color: Colors.white70),
+                style: GoogleFonts.poppins(color: Colors.white70),
               ),
             )
           : ListView(
@@ -867,25 +886,29 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF102536), Color(0xFF121821)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: CrickXColors.graphite,
                     borderRadius: BorderRadius.circular(24),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.10),
+                      color: CrickXColors.graphiteBorder,
+                      width: 1.2,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         "Your CrickNova result is ready",
-                        style: TextStyle(
+                        style: GoogleFonts.poppins(
                           color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -893,8 +916,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                         (_job!['discipline'] ?? 'batting') == 'bowling'
                             ? 'Bowling analysis'
                             : 'Training analysis',
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: GoogleFonts.poppins(
+                          color: CrickXColors.limeSpark,
+                          fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
                       ),
@@ -912,22 +936,22 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                 _ResultMetricCard(
                   label: 'Speed',
                   value: _job!['speedLabel']?.toString() ?? 'Unavailable',
-                  accent: const Color(0xFF00C2FF),
+                  accent: CrickXColors.limeSpark,
                 ),
                 _ResultMetricCard(
                   label: 'Swing',
                   value: _job!['swing']?.toString() ?? 'Unavailable',
-                  accent: const Color(0xFF00FF9D),
+                  accent: CrickXColors.limeSpark,
                 ),
                 _ResultMetricCard(
                   label: 'Spin',
                   value: _job!['spin']?.toString() ?? 'Unavailable',
-                  accent: const Color(0xFFFFC857),
+                  accent: CrickXColors.limeSpark,
                 ),
                 _ResultMetricCard(
                   label: 'DRS',
                   value: drsDecision,
-                  accent: const Color(0xFFFF6B6B),
+                  accent: CrickXColors.limeSpark,
                 ),
               ],
             ),
@@ -961,14 +985,14 @@ class _InlineVideoCard extends StatelessWidget {
             child: Stack(
               alignment: Alignment.bottomCenter,
               children: [
-                Container(color: const Color(0xFF121821)),
+                Container(color: CrickXColors.graphite),
                 if (ready) VideoPlayer(c),
                 if (ready)
                   VideoProgressIndicator(
                     c,
                     allowScrubbing: true,
                     colors: const VideoProgressColors(
-                      playedColor: Color(0xFF00C2FF),
+                      playedColor: CrickXColors.limeSpark,
                       bufferedColor: Colors.white24,
                       backgroundColor: Colors.white10,
                     ),
@@ -1063,24 +1087,31 @@ class _InlineVideoCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF121821).withValues(alpha: 0.76),
+              color: CrickXColors.graphite,
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.5),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.video_library_outlined, color: Color(0xFF00C2FF)),
-                SizedBox(width: 10),
+                const Icon(Icons.video_library_outlined, color: CrickXColors.limeSpark),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     "Open video full screen",
-                    style: TextStyle(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, color: Colors.white60),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white60),
               ],
             ),
           ),
@@ -1108,9 +1139,16 @@ class _ResultMetricCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: const Color(0xFF121821).withValues(alpha: 0.76),
+          color: CrickXColors.graphite,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -1120,6 +1158,7 @@ class _ResultMetricCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: accent.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: accent.withValues(alpha: 0.3)),
               ),
               child: Icon(Icons.insights_rounded, color: accent),
             ),
@@ -1130,15 +1169,15 @@ class _ResultMetricCard extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     value,
-                    style: const TextStyle(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 18,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],

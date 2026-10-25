@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../theme/crickx_colors.dart';
+
 enum LegalDocType { privacy, terms, about }
 
 class DocSection {
@@ -186,8 +188,8 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFFD86B),
-                foregroundColor: Colors.black,
+                backgroundColor: CrickXColors.limeSpark,
+                foregroundColor: CrickXColors.onLime,
               ),
               onPressed: () => Navigator.pop(context, controller.text.trim()),
               child: const Text("Find"),
@@ -215,7 +217,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("No results found."),
-          backgroundColor: Color(0xFF0B1220),
+          backgroundColor: CrickXColors.graphite,
         ),
       );
       return;
@@ -256,7 +258,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
         TextSpan(
           text: text.substring(index, index + query.length),
           style: style.copyWith(
-            color: const Color(0xFFFFD86B),
+            color: CrickXColors.limeSpark,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -273,7 +275,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
     final bottomInset = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
           const _LogoWatermark(),
@@ -303,7 +305,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                 actions: [
                   IconButton(
                     onPressed: _openSearch,
-                    icon: const Icon(Icons.search, color: Color(0xFFFFD86B)),
+                    icon: const Icon(Icons.search, color: CrickXColors.limeSpark),
                   ),
                 ],
                 flexibleSpace: ClipRect(
@@ -322,7 +324,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                       return LinearProgressIndicator(
                         value: value,
                         minHeight: 2.5,
-                        color: const Color(0xFFFFD86B),
+                        color: CrickXColors.limeSpark,
                         backgroundColor: Colors.white.withValues(alpha: 0.08),
                       );
                     },
@@ -343,7 +345,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                       "\"Empowering every gully cricketer with the power of AI.\"",
                       textAlign: TextAlign.center,
                       style: GoogleFonts.playfairDisplay(
-                        color: const Color(0xFFFFE7A0),
+                        color: Colors.white,
                         fontSize: 18,
                         fontStyle: FontStyle.italic,
                         height: 1.4,
@@ -372,7 +374,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                         headingSpan: _highlightedText(
                           section.heading,
                           GoogleFonts.playfairDisplay(
-                            color: const Color(0xFFFFD86B),
+                            color: CrickXColors.limeSpark,
                             fontWeight: FontWeight.w700,
                             fontSize: 16,
                           ),
@@ -540,8 +542,8 @@ class _TimelineCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.white.withValues(alpha: 0.05),
-        border: Border.all(color: Colors.white12),
+        color: CrickXColors.graphite,
+        border: Border.all(color: CrickXColors.graphiteBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -549,7 +551,7 @@ class _TimelineCard extends StatelessWidget {
           Text(
             "Founding Story",
             style: GoogleFonts.playfairDisplay(
-              color: const Color(0xFFFFD86B),
+              color: CrickXColors.limeSpark,
               fontWeight: FontWeight.w700,
               fontSize: 16,
             ),
@@ -586,7 +588,7 @@ class _TimelineRow extends StatelessWidget {
               height: 10,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: Color(0xFFFFD86B),
+                color: CrickXColors.limeSpark,
               ),
             ),
             if (!isLast)
@@ -660,10 +662,10 @@ class _SectionCard extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: CrickXColors.graphite,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: const Color(0xFFFFD86B).withValues(alpha: 0.25),
+                color: CrickXColors.graphiteBorder,
               ),
             ),
             child: Column(

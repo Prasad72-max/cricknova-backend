@@ -6,11 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import 'package:hive/hive.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../ai/ai_coach_screen.dart';
+import '../theme/crickx_colors.dart';
 import 'edge_saved_reviews_screen.dart';
 
 class ReviewPlayerScreen extends StatefulWidget {
@@ -273,82 +275,92 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
   Future<void> _openLanguagePicker() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: const Color(0xFF06101C),
+      backgroundColor: CrickXColors.graphiteBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final languages = _filteredLanguages;
             return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 16,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 42,
+                      width: 44,
                       height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: CrickXColors.graphiteBorder,
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    Text(
+                      'Choose CC Language',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
+                      style: GoogleFonts.poppins(color: Colors.white),
+                      onChanged: (value) =>
+                          setSheetState(() => _languageSearch = value),
                       decoration: InputDecoration(
-                        hintText: 'Search language',
-                        hintStyle: const TextStyle(color: Colors.white54),
+                        hintText: 'Search language...',
+                        hintStyle: GoogleFonts.poppins(color: Colors.white38),
                         prefixIcon: const Icon(
                           Icons.search_rounded,
-                          color: Colors.white70,
+                          color: CrickXColors.limeSpark,
                         ),
                         filled: true,
-                        fillColor: const Color(0xFF0B1727),
+                        fillColor: CrickXColors.graphite,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+                        ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Colors.white24),
+                          borderSide: BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Colors.white70),
+                          borderSide: const BorderSide(color: CrickXColors.limeSpark, width: 1.2),
                         ),
                       ),
-                      onChanged: (value) {
-                        setSheetState(() => _languageSearch = value);
-                      },
                     ),
-                    const SizedBox(height: 14),
-                    Flexible(
-                      child: ListView.separated(
+                    const SizedBox(height: 10),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 340),
+                      child: ListView.builder(
                         shrinkWrap: true,
                         itemCount: languages.length,
-                        separatorBuilder: (_, _) =>
-                            const Divider(color: Colors.white10, height: 1),
                         itemBuilder: (context, index) {
                           final language = languages[index];
-                          final selected = language == _targetLanguage;
+                          final selected =
+                              language.toLowerCase() ==
+                              _targetLanguage.toLowerCase();
                           return ListTile(
-                            onTap: () => Navigator.of(context).pop(language),
+                            onTap: () => Navigator.pop(context, language),
                             leading: Icon(
                               selected
                                   ? Icons.check_circle_rounded
                                   : Icons.language_rounded,
-                              color: Colors.white,
+                              color: selected ? CrickXColors.limeSpark : Colors.white70,
                             ),
                             title: Text(
                               language,
-                              style: const TextStyle(
+                              style: GoogleFonts.poppins(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -356,7 +368,7 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                             trailing: selected
                                 ? const Icon(
                                     Icons.done_rounded,
-                                    color: Color(0xFF00E5FF),
+                                    color: CrickXColors.limeSpark,
                                   )
                                 : null,
                           );
@@ -392,7 +404,7 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
     }
     setState(() => _saving = true);
     try {
-      final result = await ImageGallerySaver.saveFile(
+      final result = await ImageGallerySaverPlus.saveFile(
         widget.videoPath,
         name: p.basenameWithoutExtension(widget.videoPath),
       );
@@ -513,16 +525,21 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: const Color(0xFF02060C),
+        backgroundColor: Colors.black,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF02060C),
+          backgroundColor: Colors.black,
           foregroundColor: Colors.white,
-          title: const Text('CrickNova Edge Review'),
-          bottom: const TabBar(
-            indicatorColor: Color(0xFF00E5FF),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white54,
-            tabs: [
+          title: Text(
+            'CrickNova Edge Review',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+          ),
+          bottom: TabBar(
+            indicatorColor: CrickXColors.limeSpark,
+            labelColor: CrickXColors.limeSpark,
+            unselectedLabelColor: Colors.white60,
+            indicatorWeight: 2.5,
+            labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            tabs: const [
               Tab(icon: Icon(Icons.video_library_rounded), text: 'Video + CC'),
               Tab(icon: Icon(Icons.closed_caption_rounded), text: 'CC + Voice'),
             ],
@@ -536,8 +553,8 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
   Widget _buildVideoTab() {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
-      return const Center(
-        child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+      return Center(
+        child: CircularProgressIndicator(color: CrickXColors.limeSpark),
       );
     }
     return SafeArea(
@@ -569,7 +586,7 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                         controller,
                         allowScrubbing: true,
                         colors: const VideoProgressColors(
-                          playedColor: Color(0xFF00E5FF),
+                          playedColor: CrickXColors.limeSpark,
                           bufferedColor: Colors.white24,
                           backgroundColor: Colors.white10,
                         ),
@@ -579,6 +596,10 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           IconButton.filled(
+                            style: IconButton.styleFrom(
+                              backgroundColor: CrickXColors.limeSpark,
+                              foregroundColor: CrickXColors.onLime,
+                            ),
                             onPressed: () {
                               controller.value.isPlaying
                                   ? controller.pause()
@@ -589,13 +610,24 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                               controller.value.isPlaying
                                   ? Icons.pause_rounded
                                   : Icons.play_arrow_rounded,
+                              color: CrickXColors.onLime,
                             ),
                           ),
                           const SizedBox(width: 10),
                           FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: CrickXColors.limeSpark,
+                              foregroundColor: CrickXColors.onLime,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
                             onPressed: _saving ? null : _saveVideoWithCaptions,
-                            icon: const Icon(Icons.download_rounded),
-                            label: Text(_saving ? 'Saving...' : 'Save Video'),
+                            icon: Icon(Icons.download_rounded, color: CrickXColors.onLime),
+                            label: Text(
+                              _saving ? 'Saving...' : 'Save Video',
+                              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: CrickXColors.onLime),
+                            ),
                           ),
                         ],
                       ),
@@ -608,15 +640,15 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
           Container(
             width: double.infinity,
             constraints: const BoxConstraints(maxHeight: 220),
-            decoration: const BoxDecoration(
-              color: Color(0xFF06101C),
-              border: Border(top: BorderSide(color: Colors.white10)),
+            decoration: BoxDecoration(
+              color: CrickXColors.graphiteBg,
+              border: Border(top: BorderSide(color: CrickXColors.graphiteBorder)),
             ),
             child: _displayMarkers.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'No AI reply timeline available yet.',
-                      style: TextStyle(color: Colors.white54),
+                      style: GoogleFonts.poppins(color: const Color(0xFF94A3B8)),
                     ),
                   )
                 : Column(
@@ -628,14 +660,14 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                           children: [
                             const Icon(
                               Icons.auto_awesome_rounded,
-                              color: Color(0xFF00E5FF),
+                              color: CrickXColors.limeSpark,
                             ),
                             const SizedBox(width: 8),
-                            const Text(
+                            Text(
                               'AI Reply Timeline',
-                              style: TextStyle(
+                              style: GoogleFonts.poppins(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 15,
                               ),
                             ),
@@ -657,7 +689,7 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                             return InkWell(
                               onTap: () {
                                 controller.seekTo(
-                                  Duration(seconds: marker.offsetSeconds),
+                                    Duration(seconds: marker.offsetSeconds),
                                 );
                                 controller.play();
                                 setState(() => _activeMarker = marker);
@@ -667,13 +699,13 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: isActive
-                                      ? const Color(0xFF0D2230)
-                                      : const Color(0xFF0A1524),
+                                      ? CrickXColors.graphiteElevated
+                                      : CrickXColors.graphite,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: isActive
-                                        ? const Color(0xFF00E5FF)
-                                        : Colors.white12,
+                                        ? CrickXColors.limeSpark
+                                        : CrickXColors.graphiteBorder,
                                   ),
                                 ),
                                 child: Column(
@@ -681,18 +713,18 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                                   children: [
                                     Text(
                                       'AI replied at ${marker.offsetSeconds}s',
-                                      style: const TextStyle(
-                                        color: Color(0xFF00E5FF),
-                                        fontWeight: FontWeight.w800,
+                                      style: GoogleFonts.poppins(
+                                        color: CrickXColors.limeSpark,
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
                                       marker.note,
-                                      style: const TextStyle(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         height: 1.35,
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
@@ -727,27 +759,34 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                       vertical: 14,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF07111F),
+                      color: CrickXColors.graphite,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white24),
+                      border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           Icons.translate_rounded,
-                          color: Colors.white,
+                          color: CrickXColors.limeSpark,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Generate language CC',
-                                style: TextStyle(
-                                  color: Colors.white54,
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFF94A3B8),
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -757,27 +796,27 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
                                     : _targetLanguage == 'Original'
                                     ? 'Choose a language'
                                     : 'Generated $_targetLanguage',
-                                style: const TextStyle(
+                                style: GoogleFonts.poppins(
                                   color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14.5,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
                           ),
                         ),
                         _translating
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: CrickXColors.limeSpark,
                                 ),
                               )
                             : const Icon(
                                 Icons.keyboard_arrow_down_rounded,
-                                color: Colors.white,
+                                color: Colors.white70,
                               ),
                       ],
                     ),
@@ -786,19 +825,34 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
               ),
               const SizedBox(width: 10),
               IconButton.filled(
+                style: IconButton.styleFrom(
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: CrickXColors.onLime,
+                ),
                 tooltip: _voiceLabel,
                 onPressed: _displayMarkers.isEmpty ? null : _toggleVoice,
                 icon: Icon(
                   _speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+                  color: CrickXColors.onLime,
                 ),
               ),
               const SizedBox(width: 10),
               FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: CrickXColors.onLime,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 onPressed: _displayMarkers.isEmpty || _savingCcVoice
                     ? null
                     : _saveCcVoiceToHive,
-                icon: const Icon(Icons.bookmark_add_rounded),
-                label: Text(_savingCcVoice ? 'Saving...' : 'Save'),
+                icon: Icon(Icons.bookmark_add_rounded, color: CrickXColors.onLime),
+                label: Text(
+                  _savingCcVoice ? 'Saving...' : 'Save',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: CrickXColors.onLime),
+                ),
               ),
             ],
           ),
@@ -809,22 +863,22 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               _captionHeading,
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 15,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
         ),
         if (_translating)
-          const LinearProgressIndicator(color: Color(0xFF00E5FF)),
+          LinearProgressIndicator(color: CrickXColors.limeSpark),
         Expanded(
           child: _displayMarkers.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     'No coach captions were recorded.',
-                    style: TextStyle(color: Colors.white54),
+                    style: GoogleFonts.poppins(color: const Color(0xFF94A3B8)),
                   ),
                 )
               : ListView.separated(
@@ -857,11 +911,19 @@ class _MarkerCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xEE07111F),
-        borderRadius: BorderRadius.circular(8),
+        color: CrickXColors.graphite,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: const Color(0xFF00E5FF).withValues(alpha: 0.45),
+          color: CrickXColors.graphiteBorder,
+          width: 1.2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -869,25 +931,31 @@ class _MarkerCard extends StatelessWidget {
         children: [
           Text(
             '${marker.offsetSeconds}s',
-            style: const TextStyle(
-              color: Color(0xFF00E5FF),
-              fontWeight: FontWeight.w900,
+            style: GoogleFonts.poppins(
+              color: CrickXColors.limeSpark,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             marker.note,
-            style: const TextStyle(
+            style: GoogleFonts.poppins(
               color: Colors.white,
               height: 1.35,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 10),
           TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: CrickXColors.limeSpark,
+            ),
             onPressed: onAskCoach,
-            icon: const Icon(Icons.auto_awesome_rounded),
-            label: const Text('Ask CrickNova to Fix This'),
+            icon: const Icon(Icons.auto_awesome_rounded, color: CrickXColors.limeSpark),
+            label: Text(
+              'Ask CrickNova to Fix This',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: CrickXColors.limeSpark),
+            ),
           ),
         ],
       ),

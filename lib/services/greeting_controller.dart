@@ -86,29 +86,29 @@ class GreetingController {
       case GreetingTimeSlot.morning:
         return const GreetingThemeData(
           slot: GreetingTimeSlot.morning,
-          backgroundColors: [0xFF10223B, 0xFF183A63, 0xFF2A6F97],
-          accentColors: [0xFFF9C74F, 0xFFFFE29A],
+          backgroundColors: [0xFF16181F, 0xFF23262F, 0xFF2B2F3A],
+          accentColors: [0xFFB6FF2E, 0xFF96E018],
           glowEnabled: false,
         );
       case GreetingTimeSlot.afternoon:
         return const GreetingThemeData(
           slot: GreetingTimeSlot.afternoon,
-          backgroundColors: [0xFF1C1A1A, 0xFF472D1D, 0xFF8C5319],
-          accentColors: [0xFFFF8A3D, 0xFFFFD166],
+          backgroundColors: [0xFF16181F, 0xFF23262F, 0xFF2B2F3A],
+          accentColors: [0xFFB6FF2E, 0xFF96E018],
           glowEnabled: false,
         );
       case GreetingTimeSlot.evening:
         return const GreetingThemeData(
           slot: GreetingTimeSlot.evening,
-          backgroundColors: [0xFF081827, 0xFF102D45, 0xFF1F4D6B],
-          accentColors: [0xFF67E8F9, 0xFFA5F3FC],
+          backgroundColors: [0xFF16181F, 0xFF23262F, 0xFF2B2F3A],
+          accentColors: [0xFFB6FF2E, 0xFF96E018],
           glowEnabled: false,
         );
       case GreetingTimeSlot.midnight:
         return const GreetingThemeData(
           slot: GreetingTimeSlot.midnight,
-          backgroundColors: [0xFF03040A, 0xFF090B18, 0xFF111827],
-          accentColors: [0xFF00E5FF, 0xFF7C3AED],
+          backgroundColors: [0xFF16181F, 0xFF23262F, 0xFF2B2F3A],
+          accentColors: [0xFFB6FF2E, 0xFF96E018],
           glowEnabled: true,
         );
     }

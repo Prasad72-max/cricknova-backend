@@ -9,6 +9,7 @@ import 'performance_certificate.dart';
 import 'certificate_preview_screen.dart';
 import 'dart:math' as math;
 import '../services/premium_service.dart';
+import '../theme/crickx_colors.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -335,7 +336,7 @@ class _InsightsScreenState extends State<InsightsScreen>
     final choice = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF07111F),
+        backgroundColor: CrickXColors.graphite,
         title: const Text(
           "Delete Options",
           style: TextStyle(color: Colors.white),
@@ -377,7 +378,7 @@ class _InsightsScreenState extends State<InsightsScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF07111F),
+        backgroundColor: CrickXColors.graphite,
         title: Text(title, style: const TextStyle(color: Colors.white)),
         content: Text(
           "$body This cannot be recovered.",
@@ -410,7 +411,7 @@ class _InsightsScreenState extends State<InsightsScreen>
   void _showComingSoon(String label) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: const Color(0xFF07111F),
+        backgroundColor: CrickXColors.graphite,
         content: Text(
           "$label will be available soon.",
           style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
@@ -430,7 +431,7 @@ class _InsightsScreenState extends State<InsightsScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          backgroundColor: const Color(0xFF111827),
+          backgroundColor: CrickXColors.graphite,
           content: Text(
             "Certificate unlocks at 95+ KMPH and above 72% accuracy. "
             "Your session: ${top.toStringAsFixed(0)} KMPH, ${accuracyPercent.toStringAsFixed(0)}%.",
@@ -487,11 +488,11 @@ class _InsightsScreenState extends State<InsightsScreen>
     final insightLines = _buildInsightLines(speedHistory, avgAccuracy);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: CrickXColors.graphiteBg,
       body: SafeArea(
         child: RefreshIndicator(
-          color: const Color(0xFF22D3EE),
-          backgroundColor: const Color(0xFF0F172A),
+          color: CrickXColors.limeSpark,
+          backgroundColor: CrickXColors.graphite,
           notificationPredicate: (notification) {
             return PremiumService.isPremiumActive && notification.depth == 0;
           },
@@ -562,7 +563,7 @@ class _InsightsScreenState extends State<InsightsScreen>
                 child: _ChartTelemetryCard(
                   title: "Speed Trend",
                   subtitle: "Session Peak ${topSpeed.toStringAsFixed(1)} km/h",
-                  accent: const Color(0xFF22D3EE),
+                  accent: CrickXColors.limeSpark,
                   height: 340,
                   child: speedHistory.isEmpty
                       ? const _EmptyAnalyticsState(
@@ -579,7 +580,7 @@ class _InsightsScreenState extends State<InsightsScreen>
                   title: "Accuracy Trend",
                   subtitle:
                       "Session Accuracy ${avgAccuracy.toStringAsFixed(0)}%",
-                  accent: const Color(0xFF00FFC8),
+                  accent: CrickXColors.limeSpark,
                   height: 340,
                   child: accuracyScores.isEmpty
                       ? const _EmptyAnalyticsState(
@@ -664,7 +665,7 @@ class _AnalyticsHeader extends StatelessWidget {
           ),
         ),
         PopupMenuButton<String>(
-          color: const Color(0xFF07111F),
+          color: const Color(0xFF141416),
           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white),
           onSelected: onMenuSelected,
           itemBuilder: (context) => const [
@@ -729,7 +730,7 @@ class _GlassCard extends StatelessWidget {
   const _GlassCard({
     required this.child,
     this.padding = const EdgeInsets.all(18),
-    this.borderColor = const Color(0x2638BDF8),
+    this.borderColor = CrickXColors.graphiteBorder,
     this.gradient,
   });
 
@@ -748,23 +749,15 @@ class _GlassCard extends StatelessWidget {
           width: double.infinity,
           padding: padding,
           decoration: BoxDecoration(
-            gradient:
-                gradient ??
-                LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.095),
-                    Colors.white.withValues(alpha: 0.035),
-                  ],
-                ),
+            color: CrickXColors.graphite,
+            gradient: gradient,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor),
+            border: Border.all(color: borderColor, width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF22D3EE).withValues(alpha: 0.08),
-                blurRadius: 30,
-                offset: const Offset(0, 18),
+                color: Colors.black.withValues(alpha: 0.7),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -825,16 +818,6 @@ class _HeroPerformanceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _GlassCard(
       padding: const EdgeInsets.all(20),
-      borderColor: const Color(0x6638BDF8),
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          const Color(0xFF082032).withValues(alpha: 0.95),
-          const Color(0xFF020617).withValues(alpha: 0.92),
-          const Color(0xFF111827).withValues(alpha: 0.9),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -844,8 +827,8 @@ class _HeroPerformanceCard extends StatelessWidget {
                 child: Text(
                   "Performance Score",
                   style: GoogleFonts.poppins(
-                    color: const Color(0xFFBAE6FD),
-                    fontSize: 13,
+                    color: Colors.white,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -864,14 +847,14 @@ class _HeroPerformanceCard extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFD166).withValues(alpha: 0.12),
+                      color: CrickXColors.limeSpark.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(999),
                       border: Border.all(
-                        color: const Color(0xFFFFD166).withValues(alpha: 0.55),
+                        color: CrickXColors.limeSpark.withValues(alpha: 0.55),
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFFD166).withValues(alpha: 0.2),
+                          color: CrickXColors.limeSpark.withValues(alpha: 0.2),
                           blurRadius: 18,
                         ),
                       ],
@@ -879,7 +862,7 @@ class _HeroPerformanceCard extends StatelessWidget {
                     child: Text(
                       "🚀 New Personal Best",
                       style: GoogleFonts.poppins(
-                        color: const Color(0xFFFFD166),
+                        color: CrickXColors.limeSpark,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                       ),
@@ -935,7 +918,7 @@ class _HeroPerformanceCard extends StatelessWidget {
                   value: topSpeed,
                   suffix: " km/h",
                   decimals: 1,
-                  color: const Color(0xFF22D3EE),
+                  color: CrickXColors.limeSpark,
                 ),
               ),
               Expanded(
@@ -943,7 +926,7 @@ class _HeroPerformanceCard extends StatelessWidget {
                   label: "Accuracy",
                   value: accuracy,
                   suffix: "%",
-                  color: const Color(0xFFFFD166),
+                  color: CrickXColors.limeSpark,
                 ),
               ),
               Expanded(
@@ -951,7 +934,7 @@ class _HeroPerformanceCard extends StatelessWidget {
                   label: "Consistency",
                   value: consistency,
                   suffix: "%",
-                  color: const Color(0xFF34D399),
+                  color: CrickXColors.limeSpark,
                 ),
               ),
             ],
@@ -1014,7 +997,6 @@ class _AiInsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _GlassCard(
-      borderColor: const Color(0x5538BDF8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1025,17 +1007,17 @@ class _AiInsightCard extends StatelessWidget {
                 height: 34,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF22D3EE).withValues(alpha: 0.14),
+                  color: CrickXColors.limeSpark.withValues(alpha: 0.14),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF22D3EE).withValues(alpha: 0.22),
+                      color: CrickXColors.limeSpark.withValues(alpha: 0.22),
                       blurRadius: 18,
                     ),
                   ],
                 ),
                 child: const Icon(
                   Icons.auto_awesome_rounded,
-                  color: Color(0xFF22D3EE),
+                  color: CrickXColors.limeSpark,
                   size: 18,
                 ),
               ),
@@ -1061,7 +1043,7 @@ class _AiInsightCard extends StatelessWidget {
                     padding: EdgeInsets.only(top: 5),
                     child: Icon(
                       Icons.circle,
-                      color: Color(0xFF22D3EE),
+                      color: CrickXColors.limeSpark,
                       size: 6,
                     ),
                   ),
@@ -1110,7 +1092,7 @@ class _SessionSwitcher extends StatelessWidget {
           IconButton(
             onPressed: canGoBack ? onBack : null,
             icon: const Icon(Icons.chevron_left_rounded),
-            color: const Color(0xFF22D3EE),
+            color: CrickXColors.limeSpark,
             disabledColor: Colors.white24,
           ),
           Expanded(
@@ -1127,7 +1109,7 @@ class _SessionSwitcher extends StatelessWidget {
           IconButton(
             onPressed: canGoForward ? onForward : null,
             icon: const Icon(Icons.chevron_right_rounded),
-            color: const Color(0xFF22D3EE),
+            color: CrickXColors.limeSpark,
             disabledColor: Colors.white24,
           ),
         ],
@@ -1161,19 +1143,14 @@ class _ChartTelemetryCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: const Color(0xFF081223).withValues(alpha: 0.94),
+            color: const Color(0xFF0D0D12),
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            border: Border.all(color: const Color(0xFF23232A), width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.36),
-                blurRadius: 42,
-                offset: const Offset(0, 24),
-              ),
-              BoxShadow(
-                color: accent.withValues(alpha: 0.08),
-                blurRadius: 34,
-                offset: const Offset(0, 14),
+                color: Colors.black.withValues(alpha: 0.7),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
@@ -1267,7 +1244,6 @@ class _GoalTrackerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _GlassCard(
-      borderColor: const Color(0x6638BDF8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1290,7 +1266,7 @@ class _GoalTrackerCard extends StatelessWidget {
                 minHeight: 12,
                 value: value,
                 backgroundColor: Colors.white.withValues(alpha: 0.08),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF22D3EE)),
+                valueColor: const AlwaysStoppedAnimation(CrickXColors.limeSpark),
               ),
             ),
           ),
@@ -1298,7 +1274,7 @@ class _GoalTrackerCard extends StatelessWidget {
           Text(
             "${speed.toStringAsFixed(1)} / ${target.toStringAsFixed(0)} km/h",
             style: GoogleFonts.poppins(
-              color: const Color(0xFFBAE6FD),
+              color: CrickXColors.limeSpark,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
@@ -1328,7 +1304,6 @@ class _AchievementsCard extends StatelessWidget {
       ("⚡", "Consistency Master", consistency >= 85),
     ];
     return _GlassCard(
-      borderColor: const Color(0x44FFD166),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1372,13 +1347,13 @@ class _AchievementBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = unlocked ? const Color(0xFFFFD166) : Colors.white38;
+    final color = unlocked ? CrickXColors.limeSpark : Colors.white38;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 350),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: unlocked
-            ? const Color(0xFFFFD166).withValues(alpha: 0.12)
+            ? CrickXColors.limeSpark.withValues(alpha: 0.15)
             : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
@@ -1387,7 +1362,7 @@ class _AchievementBadge extends StatelessWidget {
         boxShadow: unlocked
             ? [
                 BoxShadow(
-                  color: const Color(0xFFFFD166).withValues(alpha: 0.18),
+                  color: CrickXColors.limeSpark.withValues(alpha: 0.2),
                   blurRadius: 18,
                 ),
               ]
@@ -1402,8 +1377,8 @@ class _AchievementBadge extends StatelessWidget {
             label,
             style: GoogleFonts.poppins(
               color: color,
-              fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -1430,13 +1405,13 @@ class _PremiumCertificateButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         gradient: LinearGradient(
           colors: unlocked
-              ? const [Color(0xFFFFD166), Color(0xFF22D3EE)]
-              : const [Color(0xFF1E293B), Color(0xFF0F172A)],
+              ? const [Color(0xFFD0FF66), CrickXColors.limeSpark]
+              : const [Color(0xFF2B2F3A), Color(0xFF23262F)],
         ),
         boxShadow: [
           if (unlocked)
             BoxShadow(
-              color: const Color(0xFF22D3EE).withValues(alpha: 0.22),
+              color: CrickXColors.limeSpark.withValues(alpha: 0.25),
               blurRadius: 24,
               offset: const Offset(0, 12),
             ),
@@ -1450,7 +1425,7 @@ class _PremiumCertificateButton extends StatelessWidget {
           backgroundColor: Colors.transparent,
           disabledBackgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
-          foregroundColor: unlocked ? Colors.black : Colors.white70,
+          foregroundColor: unlocked ? CrickXColors.onLime : Colors.white70,
           disabledForegroundColor: Colors.white38,
           minimumSize: const Size.fromHeight(58),
           shape: RoundedRectangleBorder(
@@ -1795,7 +1770,7 @@ class SpeedChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..shader = const LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+        colors: [Color(0xFFD0FF66), CrickXColors.limeSpark, Color(0xFF8CE600)],
       ).createShader(chart);
 
     final glowLinePaint = Paint()
@@ -1804,7 +1779,7 @@ class SpeedChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..shader = const LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+        colors: [Color(0xFFD0FF66), CrickXColors.limeSpark, Color(0xFF8CE600)],
       ).createShader(chart)
       ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 32);
 
@@ -1814,8 +1789,8 @@ class SpeedChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          const Color(0xFF00FFC8).withValues(alpha: 0.20),
-          const Color(0xFF00FFC8).withValues(alpha: 0.0),
+          CrickXColors.limeSpark.withValues(alpha: 0.25),
+          CrickXColors.limeSpark.withValues(alpha: 0.0),
         ],
       ).createShader(chart);
 
@@ -1901,7 +1876,7 @@ class SpeedChartPainter extends CustomPainter {
       size: size,
       anchor: Offset(chart.right - 18, avgY),
       text: "Avg ${averageSpeed.toStringAsFixed(1)} km/h",
-      bg: const Color(0xFF081223).withValues(alpha: 0.92),
+      bg: const Color(0xFF121215).withValues(alpha: 0.94),
       fg: const Color(0xFFB6F9FF),
     );
 
@@ -1935,7 +1910,7 @@ class SpeedChartPainter extends CustomPainter {
         p,
         22 * pulse,
         Paint()
-          ..color = const Color(0xFF00FFC8).withValues(alpha: 0.20)
+          ..color = CrickXColors.limeSpark.withValues(alpha: 0.20)
           ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 28),
       );
     }
@@ -1944,13 +1919,13 @@ class SpeedChartPainter extends CustomPainter {
       final p = points[i];
       final isSel = selectedIndex == i;
       final glowDot = Paint()
-        ..color = const Color(0xFF00FFC8).withValues(alpha: isSel ? 0.38 : 0.24)
+        ..color = CrickXColors.limeSpark.withValues(alpha: isSel ? 0.38 : 0.24)
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 24 : 16);
       canvas.drawCircle(p, isSel ? 17 : 12, glowDot);
       canvas.drawCircle(
         p,
         isSel ? 7 : 4,
-        Paint()..color = const Color(0xFF00E5FF),
+        Paint()..color = CrickXColors.limeSpark,
       );
       canvas.drawCircle(p, isSel ? 3.5 : 2.4, Paint()..color = Colors.white);
     }
@@ -1985,7 +1960,7 @@ class SpeedChartPainter extends CustomPainter {
         anchor: p + const Offset(0, -34),
         text:
             "#${selectedIndex! + 1}: ${speeds[selectedIndex!].toStringAsFixed(1)} km/h",
-        bg: const Color(0xFF0B1220).withValues(alpha: 0.90),
+        bg: const Color(0xFF121215).withValues(alpha: 0.94),
         fg: const Color(0xFF00FFC8),
       );
     } else if (peakIndex >= 0 && peakIndex < points.length) {
@@ -2115,7 +2090,7 @@ class AccuracyChartPainter extends CustomPainter {
       text: TextSpan(
         text: text,
         style: const TextStyle(
-          color: Color(0xFFFFD166),
+          color: CrickXColors.limeSpark,
           fontSize: 11,
           fontWeight: FontWeight.w900,
         ),
@@ -2135,12 +2110,12 @@ class AccuracyChartPainter extends CustomPainter {
     );
     canvas.drawRRect(
       rect,
-      Paint()..color = const Color(0xFF101826).withValues(alpha: 0.94),
+      Paint()..color = CrickXColors.graphite.withValues(alpha: 0.94),
     );
     canvas.drawRRect(
       rect,
       Paint()
-        ..color = const Color(0xFFFFD166).withValues(alpha: 0.38)
+        ..color = CrickXColors.limeSpark.withValues(alpha: 0.38)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
@@ -2171,7 +2146,7 @@ class AccuracyChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..shader = const LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+        colors: [Color(0xFFD0FF66), CrickXColors.limeSpark, Color(0xFF8CE600)],
       ).createShader(chart);
 
     final glowLinePaint = Paint()
@@ -2180,7 +2155,7 @@ class AccuracyChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
       ..shader = const LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFF00FFC8), Color(0xFF7CFF00)],
+        colors: [Color(0xFFD0FF66), CrickXColors.limeSpark, Color(0xFF8CE600)],
       ).createShader(chart)
       ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 32);
 
@@ -2190,8 +2165,8 @@ class AccuracyChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          const Color(0xFF00FFC8).withValues(alpha: 0.20),
-          const Color(0xFF00FFC8).withValues(alpha: 0.0),
+          CrickXColors.limeSpark.withValues(alpha: 0.25),
+          CrickXColors.limeSpark.withValues(alpha: 0.0),
         ],
       ).createShader(chart);
 
@@ -2269,8 +2244,8 @@ class AccuracyChartPainter extends CustomPainter {
       size: size,
       anchor: Offset(chart.right - 18, avgY),
       text: "Avg ${avgAccuracy.toStringAsFixed(0)}%",
-      bg: const Color(0xFF081223).withValues(alpha: 0.92),
-      fg: const Color(0xFFB6F9FF),
+      bg: CrickXColors.graphite.withValues(alpha: 0.94),
+      fg: CrickXColors.limeSpark,
     );
 
     canvas.save();
@@ -2300,7 +2275,7 @@ class AccuracyChartPainter extends CustomPainter {
         p,
         22 * pulse,
         Paint()
-          ..color = const Color(0xFF00FFC8).withValues(alpha: 0.20)
+          ..color = CrickXColors.limeSpark.withValues(alpha: 0.20)
           ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 28),
       );
     }
@@ -2312,13 +2287,13 @@ class AccuracyChartPainter extends CustomPainter {
       final p = pts[i];
       final isSel = selectedIndex == i;
       final glowDot = Paint()
-        ..color = const Color(0xFF00FFC8).withValues(alpha: isSel ? 0.38 : 0.24)
+        ..color = CrickXColors.limeSpark.withValues(alpha: isSel ? 0.38 : 0.24)
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, isSel ? 14 : 10);
       canvas.drawCircle(p, isSel ? 17 : 12, glowDot);
       canvas.drawCircle(
         p,
         isSel ? 7 : 4,
-        Paint()..color = const Color(0xFF00E5FF),
+        Paint()..color = CrickXColors.limeSpark,
       );
       canvas.drawCircle(p, isSel ? 3.5 : 2.4, Paint()..color = Colors.white);
     }
@@ -2354,7 +2329,7 @@ class AccuracyChartPainter extends CustomPainter {
         anchor: p + const Offset(0, -34),
         text:
             "#${selectedIndex! + 1}: ${accuracy[selectedIndex!].toStringAsFixed(0)}%",
-        bg: const Color(0xFF0B1220).withValues(alpha: 0.90),
+        bg: const Color(0xFF121215).withValues(alpha: 0.94),
         fg: const Color(0xFF00FFC8),
       );
     } else if (bestIndex >= 0 && bestIndex < pts.length) {

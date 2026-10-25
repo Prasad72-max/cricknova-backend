@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'premium_screen.dart';
 import '../services/premium_service.dart';
+import '../theme/crickx_colors.dart';
 
 class PremiumExpiredScreen extends StatelessWidget {
   const PremiumExpiredScreen({super.key});
@@ -9,7 +10,7 @@ class PremiumExpiredScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: CrickXColors.graphiteBg,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 30),
@@ -19,7 +20,7 @@ class PremiumExpiredScreen extends StatelessWidget {
               const Icon(
                 Icons.workspace_premium,
                 size: 80,
-                color: Color(0xFFFFD700),
+                color: CrickXColors.limeSpark,
               ),
               const SizedBox(height: 24),
               Text(
@@ -78,7 +79,7 @@ class PremiumExpiredScreen extends StatelessWidget {
               const SizedBox(height: 32),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFD700),
+                  backgroundColor: CrickXColors.limeSpark,
                   padding: const EdgeInsets.symmetric(
                       horizontal: 40, vertical: 14),
                   shape: RoundedRectangleBorder(
@@ -97,7 +98,7 @@ class PremiumExpiredScreen extends StatelessWidget {
                 child: const Text(
                   "Renew Now",
                   style: TextStyle(
-                    color: Colors.black,
+                    color: CrickXColors.onLime,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

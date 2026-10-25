@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../theme/crickx_colors.dart';
 
 class PremiumBlurLock extends StatelessWidget {
   const PremiumBlurLock({
@@ -88,13 +89,13 @@ class _LockCta extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: const LinearGradient(
-                colors: [Color(0xFFFFD700), Color(0xFFB45309)],
+                colors: [CrickXColors.limeSpark, CrickXColors.limeSparkDark],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFFD700).withOpacity(0.38),
+                  color: CrickXColors.limeSpark.withOpacity(0.38),
                   blurRadius: 24,
                   spreadRadius: 1,
                 ),
@@ -102,7 +103,7 @@ class _LockCta extends StatelessWidget {
             ),
             child: const Icon(
               Icons.lock_rounded,
-              color: Colors.black,
+              color: CrickXColors.onLime,
               size: 30,
             ),
           ),
@@ -157,19 +158,14 @@ class _PremiumCtaButton extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             gradient: const LinearGradient(
-              colors: [Color(0xFF8B5CF6), Color(0xFF22D3EE)],
+              colors: [CrickXColors.limeSpark, CrickXColors.limeSparkDark],
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF22D3EE).withOpacity(0.26),
+                color: CrickXColors.limeSpark.withOpacity(0.35),
                 blurRadius: 22,
-                spreadRadius: 1,
-              ),
-              BoxShadow(
-                color: const Color(0xFF8B5CF6).withOpacity(0.22),
-                blurRadius: 26,
                 spreadRadius: 1,
               ),
             ],
@@ -181,7 +177,7 @@ class _PremiumCtaButton extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: Colors.white,
+              color: CrickXColors.onLime,
               fontWeight: FontWeight.w900,
               letterSpacing: 0.8,
             ),

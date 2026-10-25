@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../theme/crickx_colors.dart';
+
 class EliteSupportChatScreen extends StatefulWidget {
   const EliteSupportChatScreen({super.key});
 
@@ -78,9 +80,9 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
   Widget build(BuildContext context) {
     if (_uid == null || _messagesRef == null) {
       return Scaffold(
-        backgroundColor: const Color(0xFF020617),
+        backgroundColor: Colors.black,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF020617),
+          backgroundColor: Colors.black,
           title: const Text("Elite Coach Support"),
         ),
         body: Center(
@@ -93,9 +95,9 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF020617),
+        backgroundColor: Colors.black,
         title: Text(
           "Elite Coach Support",
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -109,44 +111,42 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
                   .orderBy("clientAt", descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFFFFD86B)),
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      "Failed to load messages",
+                      style: GoogleFonts.poppins(color: Colors.white70),
+                    ),
                   );
                 }
-
-                if (snapshot.hasError) {
-                  final errorText = snapshot.error.toString();
-                  final message = errorText.contains('permission-denied') ||
-                          errorText.contains('PERMISSION_DENIED')
-                      ? 'Support chat access is not available yet. Please refresh after Firestore rules are published.'
-                      : 'Unable to load support chat right now. Please try again shortly.';
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: CrickXColors.limeSpark),
+                  );
+                }
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
                   return Center(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding: const EdgeInsets.all(24),
                       child: Text(
-                        message,
+                        "Elite 24/7 dedicated support is ready.\nAsk any technical or cricket coaching question.",
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.poppins(color: Colors.white70),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          height: 1.45,
+                        ),
                       ),
                     ),
                   );
                 }
 
-                final docs = snapshot.data?.docs ?? [];
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      "Start the conversation with Elite Support.",
-                      style: GoogleFonts.poppins(color: Colors.white70),
-                    ),
-                  );
-                }
-
                 return ListView.builder(
-                  controller: _scrollController,
                   reverse: true,
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
                     final data = docs[index].data();
@@ -161,10 +161,10 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0B1220),
+            decoration: const BoxDecoration(
+              color: CrickXColors.graphite,
               border: Border(
-                top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                top: BorderSide(color: CrickXColors.graphiteBorder),
               ),
             ),
             child: Row(
@@ -179,10 +179,18 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
                       hintText: "Type your message",
                       hintStyle: GoogleFonts.poppins(color: Colors.white54),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.06),
+                      fillColor: CrickXColors.graphiteBg,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
+                        borderSide: const BorderSide(color: CrickXColors.graphiteBorder),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: CrickXColors.graphiteBorder),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: CrickXColors.limeSpark),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -198,11 +206,11 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: CrickXColors.limeSpark),
                         )
                       : const Icon(
                           Icons.send_rounded,
-                          color: Color(0xFFFFD86B),
+                          color: CrickXColors.limeSpark,
                         ),
                 ),
               ],
@@ -223,8 +231,8 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bubbleColor = isMe
-        ? const Color(0xFFFFD86B).withValues(alpha: 0.18)
-        : Colors.white.withValues(alpha: 0.08);
+        ? CrickXColors.limeSpark.withValues(alpha: 0.18)
+        : CrickXColors.graphiteElevated;
     final align = isMe ? Alignment.centerRight : Alignment.centerLeft;
     final radius = isMe
         ? const BorderRadius.only(

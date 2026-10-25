@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive/hive.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'review_player_screen.dart';
+import '../theme/crickx_colors.dart';
 
 String edgeSavedReviewsBoxName(String uid) => 'edge_saved_reviews_$uid';
 
@@ -50,9 +52,9 @@ class _EdgeSavedReviewsScreenState extends State<EdgeSavedReviewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: const Text('Saved Edge Reviews'),
       ),
@@ -60,8 +62,8 @@ class _EdgeSavedReviewsScreenState extends State<EdgeSavedReviewsScreen> {
         future: _boxFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            return Center(
+              child: CircularProgressIndicator(color: CrickXColors.limeSpark),
             );
           }
           final box = snapshot.data!;
@@ -199,12 +201,13 @@ class _EdgeSavedReviewDetailScreenState
       widget.entry['created_at']?.toString() ?? '',
     );
     return Scaffold(
-      backgroundColor: const Color(0xFF02060C),
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF02060C),
+        backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         title: Text(
           mode == 'cc_voice' ? 'Saved CC + Voice' : 'Saved Video + CC',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         actions: [
           IconButton(
@@ -212,6 +215,7 @@ class _EdgeSavedReviewDetailScreenState
             onPressed: _captions.isEmpty ? null : _toggleVoice,
             icon: Icon(
               _speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+              color: CrickXColors.limeSpark,
             ),
           ),
         ],
@@ -222,9 +226,9 @@ class _EdgeSavedReviewDetailScreenState
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Color(0xFF07111F),
-              border: Border(bottom: BorderSide(color: Colors.white10)),
+            decoration: BoxDecoration(
+              color: CrickXColors.graphiteBg,
+              border: Border(bottom: BorderSide(color: CrickXColors.graphiteBorder)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,17 +237,17 @@ class _EdgeSavedReviewDetailScreenState
                   language == 'Original'
                       ? 'Original coach captions'
                       : 'Generated $language captions',
-                  style: const TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 16,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if (createdAt != null) ...[
                   const SizedBox(height: 6),
                   Text(
                     '${createdAt.day}/${createdAt.month}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}',
-                    style: const TextStyle(color: Colors.white54),
+                    style: GoogleFonts.poppins(color: const Color(0xFF94A3B8), fontSize: 13),
                   ),
                 ],
               ],
@@ -251,10 +255,10 @@ class _EdgeSavedReviewDetailScreenState
           ),
           Expanded(
             child: _captions.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       'No saved caption lines available.',
-                      style: TextStyle(color: Colors.white60),
+                      style: GoogleFonts.poppins(color: const Color(0xFF94A3B8)),
                     ),
                   )
                 : ListView.separated(
@@ -269,18 +273,25 @@ class _EdgeSavedReviewDetailScreenState
                       return Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF07111F),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white12),
+                          color: CrickXColors.graphite,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               '$second s',
-                              style: const TextStyle(
-                                color: Color(0xFF00E5FF),
-                                fontWeight: FontWeight.w800,
+                              style: GoogleFonts.poppins(
+                                color: CrickXColors.limeSpark,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -325,11 +336,18 @@ class _SavedReviewCard extends StatelessWidget {
         .map((item) => item['note']?.toString().trim() ?? '')
         .firstWhere((item) => item.isNotEmpty, orElse: () => '');
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF07111F),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white12),
+        color: CrickXColors.graphite,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.7),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,17 +357,19 @@ class _SavedReviewCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
-                  vertical: 6,
+                  vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                  color: CrickXColors.limeSpark.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: CrickXColors.limeSpark.withOpacity(0.3)),
                 ),
                 child: Text(
                   mode == 'cc_voice' ? 'CC + Voice' : 'Video + CC',
-                  style: const TextStyle(
-                    color: Color(0xFF00E5FF),
-                    fontWeight: FontWeight.w800,
+                  style: GoogleFonts.poppins(
+                    color: CrickXColors.limeSpark,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
                   ),
                 ),
               ),
@@ -357,17 +377,17 @@ class _SavedReviewCard extends StatelessWidget {
               if (createdAt != null)
                 Text(
                   '${createdAt.day}/${createdAt.month}/${createdAt.year}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: GoogleFonts.poppins(color: const Color(0xFF71717A), fontSize: 12),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             language == 'Original' ? 'Original captions' : '$language captions',
-            style: const TextStyle(
+            style: GoogleFonts.poppins(
               color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              fontSize: 15.5,
             ),
           ),
           if (preview.isNotEmpty) ...[
@@ -376,29 +396,44 @@ class _SavedReviewCard extends StatelessWidget {
               preview,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white70,
-                height: 1.35,
-                fontWeight: FontWeight.w600,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFFA1A1AA),
+                height: 1.4,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
               ),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: onOpenText,
                   icon: const Icon(Icons.notes_rounded),
-                  label: const Text('Open Saved'),
+                  label: Text('Open Saved', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: CrickXColors.limeSpark,
+                    side: BorderSide(color: CrickXColors.limeSpark),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
                   onPressed: onOpenVideo,
-                  icon: const Icon(Icons.play_circle_fill_rounded),
-                  label: const Text('Open Review'),
+                  icon: Icon(Icons.play_circle_fill_rounded, color: CrickXColors.onLime),
+                  label: Text('Open Review', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: CrickXColors.onLime)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: CrickXColors.limeSpark,
+                    foregroundColor: CrickXColors.onLime,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
             ],

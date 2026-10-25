@@ -19,6 +19,7 @@ import 'cricknova_onboarding_store.dart';
 import 'cricknova_paywall_reel_screen.dart';
 import 'onboarding_ui_tokens.dart';
 import 'cricknova_mistake_analysis_step.dart';
+import '../theme/crickx_colors.dart';
 
 class CricknovaPrePaywallFlowScreen extends StatefulWidget {
   final String userName;
@@ -398,9 +399,9 @@ class _CricknovaPrePaywallFlowScreenState
     );
   }
 
-  Color get _bg => const Color(0xFF05080C);
-  Color get _teal => const Color(0xFF10B981);
-  Color get _tealSoft => const Color(0xFF34D399);
+  Color get _bg => CrickXColors.graphiteBg;
+  Color get _teal => CrickXColors.limeSpark;
+  Color get _tealSoft => CrickXColors.limeSparkDark;
 
   @override
   Widget build(BuildContext context) {
@@ -410,10 +411,10 @@ class _CricknovaPrePaywallFlowScreenState
     final loggedIn = FirebaseAuth.instance.currentUser != null;
     final bool isReelStep = _step == _PrePaywallStep.reel;
     final bool isTrialStep = _step == _PrePaywallStep.trial;
-    final Color activeAccent = isReelStep ? const Color(0xFFFFD700) : _teal;
+    final Color activeAccent = CrickXColors.limeSpark;
 
     return Scaffold(
-      backgroundColor: isReelStep ? const Color(0xFF080808) : _bg,
+      backgroundColor: CrickXColors.graphiteBg,
       body: SafeArea(
         child: Stack(
           children: [
@@ -1037,7 +1038,7 @@ class _TrialStep extends StatelessWidget {
 
     if (trialLoading) {
       return const Center(
-        child: CircularProgressIndicator(color: Color(0xFFFFD700)),
+        child: CircularProgressIndicator(color: CrickXColors.limeSpark),
       );
     }
 
@@ -1179,8 +1180,8 @@ class _TrialStep extends StatelessWidget {
                   child: ElevatedButton(
                     onPressed: onStartTrial,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFD700),
-                      foregroundColor: Colors.black,
+                      backgroundColor: CrickXColors.limeSpark,
+                      foregroundColor: CrickXColors.onLime,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
@@ -1255,8 +1256,8 @@ class _CalAITimeline extends StatelessWidget {
       children: [
         _CalAITimelineItem(
           iconData: Icons.lock_open_rounded,
-          iconBg: const Color(0xFFFFD700),
-          iconColor: Colors.white,
+          iconBg: CrickXColors.limeSpark,
+          iconColor: CrickXColors.onLime,
           title: 'Today',
           subtitle:
               'Unlock all premium features like AI batting analysis, bowling coach, and more.',
@@ -1316,7 +1317,7 @@ class _CalAITimelineItem extends StatelessWidget {
                 height: compact ? 36 : 42,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(999),
-                  color: const Color(0xFFFFD700),
+                  color: CrickXColors.limeSpark,
                 ),
               ),
           ],
@@ -1558,7 +1559,7 @@ class _TrialPlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final borderColor = selected
-        ? const Color(0xFFFFD700)
+        ? CrickXColors.limeSpark
         : Colors.white.withValues(alpha: 0.24);
 
     return Stack(
@@ -1581,7 +1582,7 @@ class _TrialPlanCard extends StatelessWidget {
                 compact ? 10 : 12,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFF191919),
+                color: selected ? CrickXColors.graphiteElevated : CrickXColors.graphite,
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: borderColor,
@@ -1621,12 +1622,12 @@ class _TrialPlanCard extends StatelessWidget {
                     height: compact ? 26 : 30,
                     decoration: BoxDecoration(
                       color: selected
-                          ? const Color(0xFFFFD700)
+                          ? CrickXColors.limeSpark
                           : Colors.transparent,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: selected
-                            ? const Color(0xFFFFD700)
+                            ? CrickXColors.limeSpark
                             : Colors.white.withValues(alpha: 0.50),
                         width: 2,
                       ),
@@ -1634,7 +1635,7 @@ class _TrialPlanCard extends StatelessWidget {
                     child: selected
                         ? const Icon(
                             Icons.check_rounded,
-                            color: Colors.black,
+                            color: CrickXColors.onLime,
                             size: 20,
                           )
                         : null,
@@ -1656,7 +1657,7 @@ class _TrialPlanCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xFF1A1A1A),
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0xFFFFD700), width: 1.4),
+                border: Border.all(color: CrickXColors.limeSpark, width: 1.4),
               ),
               child: Text(
                 '3 DAYS FREE',
@@ -1686,7 +1687,7 @@ class _NoPaymentLine extends StatelessWidget {
         children: [
           const Icon(
             Icons.check_circle_rounded,
-            color: Color(0xFFFFD700),
+            color: CrickXColors.limeSpark,
             size: 22,
           ),
           const SizedBox(width: 8),
@@ -1719,9 +1720,9 @@ class _YearlyTrialCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: const Color(0xFFFFD700), width: 1.8),
+            border: Border.all(color: CrickXColors.limeSpark, width: 1.8),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.18),
@@ -1772,15 +1773,15 @@ class _YearlyTrialCard extends StatelessWidget {
                 height: 28,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFFFD700),
+                  color: CrickXColors.limeSpark,
                   border: Border.all(
-                    color: const Color(0xFFFFD700),
+                    color: CrickXColors.limeSpark,
                     width: 1.6,
                   ),
                 ),
                 child: const Icon(
                   Icons.check_rounded,
-                  color: Colors.black,
+                  color: CrickXColors.onLime,
                   size: 18,
                 ),
               ),
@@ -1795,7 +1796,7 @@ class _YearlyTrialCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: const Color(0xFFFFD700), width: 1),
+              border: Border.all(color: CrickXColors.limeSpark, width: 1),
             ),
             child: Text(
               '3 DAYS FREE',

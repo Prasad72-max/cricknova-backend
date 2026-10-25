@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
-import '../onboarding/cricknova_paywall_screen.dart';
 import '../services/premium_service.dart';
 
 class PhoneLoginScreen extends StatefulWidget {
@@ -101,19 +100,9 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     await CricknovaOnboardingStore.syncOnboardingNameFromFirestore(user.uid);
     await CricknovaOnboardingStore.markCompleted(user.uid);
     if (!mounted) return;
-    if (PremiumService.isPremiumActive) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => MainNavigation(userName: userName)),
-        (_) => false,
-      );
-      return;
-    }
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (_) => CricknovaPaywallScreen(userName: userName),
-      ),
+      MaterialPageRoute(builder: (_) => MainNavigation(userName: userName)),
       (_) => false,
     );
   }

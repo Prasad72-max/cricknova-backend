@@ -25,29 +25,29 @@ class NovaTokens {
 }
 
 class NovaColors {
-  // Near-black base (avoids pure black for a premium feel).
-  static const Color bgBase = Color(0xFF07070A);
-  static const Color bgSurface = Color(0xFF101016);
-  static const Color bgSurface2 = Color(0xFF14141C);
-  static const Color bgElevated = Color(0xFF171722);
+  // Graphite base and surfaces
+  static const Color bgBase = Color(0xFF16181F);
+  static const Color bgSurface = Color(0xFF23262F); // Graphite
+  static const Color bgSurface2 = Color(0xFF282C37);
+  static const Color bgElevated = Color(0xFF2B2F3A);
 
-  static const Color textPrimary = Color(0xFFEDEDF0);
-  static const Color textSecondary = Color(0xFFA6A6B2);
-  static const Color textMuted = Color(0xFF777789);
-  static const Color textDisabled = Color(0xFF5B5B6A);
+  static const Color textPrimary = Color(0xFFF4F5F7);
+  static const Color textSecondary = Color(0xFFA0A5B5);
+  static const Color textMuted = Color(0xFF6B7280);
+  static const Color textDisabled = Color(0xFF4A4F5B);
 
-  static const Color border = Color(0xFF242430);
-  static const Color borderSubtle = Color.fromRGBO(237, 237, 240, 0.08);
+  static const Color border = Color(0xFF353A47);
+  static const Color borderSubtle = Color(0xFF2E323E);
 
-  // One accent color for the entire onboarding (premium sports-tech cyan/teal).
-  static const Color accent = Color(0xFF5EF2C7);
+  // Lime Spark accent color
+  static const Color accent = Color(0xFFB6FF2E);
 
-  static const Color ctaText = Color(0xFF07070A);
+  static const Color ctaText = Color(0xFF14161C);
 
-  static const Color progressTrack = Color(0xFF20202B);
+  static const Color progressTrack = Color(0xFF2E323E);
   static const Color progressFill = accent;
 
-  static Color accentGlow([double opacity = 0.22]) =>
+  static Color accentGlow([double opacity = 0.35]) =>
       accent.withValues(alpha: opacity);
 }
 

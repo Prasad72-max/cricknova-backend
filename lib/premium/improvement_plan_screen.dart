@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../services/improvement_plan_service.dart';
+import '../theme/crickx_colors.dart';
 
 const List<String> _eliteMotivationLines = [
   'Remember every person who said you would never get selected. Train until your name makes the list.',
@@ -196,7 +197,7 @@ class _ImprovementPlanScreenState extends State<ImprovementPlanScreen> {
                         if (widget.embedded) ...[
                           _ImprovementTrackCard(
                             title: 'Batting Focus',
-                            accent: const Color(0xFFFFD86B),
+                            accent: CrickXColors.limeSpark,
                             icon: Icons.sports_cricket_rounded,
                             entry: entryFor('batting'),
                             fixedEntries: fixedFor('batting'),
@@ -204,7 +205,7 @@ class _ImprovementPlanScreenState extends State<ImprovementPlanScreen> {
                           const SizedBox(height: 16),
                           _ImprovementTrackCard(
                             title: 'Bowling Focus',
-                            accent: const Color(0xFF7DD3FC),
+                            accent: CrickXColors.limeSpark,
                             icon: Icons.sports_baseball_rounded,
                             entry: entryFor('bowling'),
                             fixedEntries: fixedFor('bowling'),
@@ -225,7 +226,7 @@ class _ImprovementPlanScreenState extends State<ImprovementPlanScreen> {
                                 ? _ImprovementTrackCard(
                                     key: const ValueKey('bowling-plan'),
                                     title: 'Bowling Focus',
-                                    accent: const Color(0xFF7DD3FC),
+                                    accent: CrickXColors.limeSpark,
                                     icon: Icons.sports_baseball_rounded,
                                     entry: entryFor('bowling'),
                                     fixedEntries: fixedFor('bowling'),
@@ -233,7 +234,7 @@ class _ImprovementPlanScreenState extends State<ImprovementPlanScreen> {
                                 : _ImprovementTrackCard(
                                     key: const ValueKey('batting-plan'),
                                     title: 'Batting Focus',
-                                    accent: const Color(0xFFFFD86B),
+                                    accent: CrickXColors.limeSpark,
                                     icon: Icons.sports_cricket_rounded,
                                     entry: entryFor('batting'),
                                     fixedEntries: fixedFor('batting'),
@@ -248,7 +249,7 @@ class _ImprovementPlanScreenState extends State<ImprovementPlanScreen> {
       ],
     );
     if (widget.embedded) return body;
-    return Scaffold(backgroundColor: const Color(0xFF020617), body: body);
+    return Scaffold(backgroundColor: Colors.black, body: body);
   }
 }
 
@@ -263,10 +264,10 @@ class _ImprovementBackdrop extends StatelessWidget {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              Color(0xFF030718),
-              Color(0xFF081427),
-              Color(0xFF111C35),
-              Color(0xFF040A18),
+              CrickXColors.graphiteBg,
+              CrickXColors.graphite,
+              CrickXColors.graphiteElevated,
+              CrickXColors.graphiteBg,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -281,7 +282,7 @@ class _ImprovementBackdropPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final pathPaint = Paint()
-      ..color = const Color(0xFFFFD86B).withOpacity(0.18)
+      ..color = CrickXColors.limeSpark.withOpacity(0.18)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6;
 
@@ -306,7 +307,7 @@ class _ImprovementBackdropPainter extends CustomPainter {
     canvas.drawPath(path, pathPaint);
 
     final glowPaint = Paint()
-      ..color = const Color(0xFFFFD86B).withOpacity(0.06);
+      ..color = CrickXColors.limeSpark.withOpacity(0.06);
     canvas.drawCircle(
       Offset(size.width * 0.12, size.height * 0.86),
       44,
@@ -321,7 +322,7 @@ class _ImprovementBackdropPainter extends CustomPainter {
       Offset(size.width * 0.52, size.height * 0.76),
       76,
       Paint()
-        ..color = const Color(0xFFFFE7A0).withOpacity(0.28)
+        ..color = CrickXColors.limeSpark.withOpacity(0.28)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
@@ -344,11 +345,11 @@ class _ImprovementTopBar extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           color: Colors.white,
           style: IconButton.styleFrom(
-            backgroundColor: const Color(0xFF111827).withOpacity(0.78),
+            backgroundColor: CrickXColors.graphite,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: const Color(0xFFFFD86B).withOpacity(0.28),
+              side: const BorderSide(
+                color: CrickXColors.graphiteBorder,
               ),
             ),
           ),
@@ -358,7 +359,7 @@ class _ImprovementTopBar extends StatelessWidget {
           child: Text(
             'CrickNova Elite',
             style: GoogleFonts.poppins(
-              color: const Color(0xFFFFE7A0),
+              color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
@@ -384,7 +385,7 @@ class _ProgressDots extends StatelessWidget {
           margin: const EdgeInsets.only(left: 7),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: (index == 2 ? const Color(0xFFFFD86B) : Colors.white)
+            color: (index == 2 ? CrickXColors.limeSpark : Colors.white)
                 .withOpacity(index == 2 ? 0.95 : 0.30),
           ),
         );
@@ -417,12 +418,12 @@ class _HeroCard extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: const LinearGradient(
-                colors: [Color(0xFFFFE08A), Color(0xFFB8860B)],
+                colors: [CrickXColors.limeSpark, CrickXColors.limeSparkDark],
               ),
-              border: Border.all(color: const Color(0xFFFFE7A0)),
+              border: Border.all(color: CrickXColors.limeSpark),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFFD86B).withOpacity(0.22),
+                  color: CrickXColors.limeSpark.withOpacity(0.25),
                   blurRadius: 18,
                   spreadRadius: 1,
                 ),
@@ -430,7 +431,7 @@ class _HeroCard extends StatelessWidget {
             ),
             child: const Icon(
               Icons.route_rounded,
-              color: Color(0xFF111827),
+              color: CrickXColors.onLime,
               size: 28,
             ),
           ),
@@ -481,7 +482,7 @@ class _MotivationFuelCard extends StatelessWidget {
 
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF080D18),
+      backgroundColor: CrickXColors.graphiteBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -508,7 +509,7 @@ class _MotivationFuelCard extends StatelessWidget {
                       children: [
                         const Icon(
                           Icons.local_fire_department_rounded,
-                          color: Color(0xFFFFD86B),
+                          color: CrickXColors.limeSpark,
                         ),
                         const SizedBox(width: 10),
                         Expanded(
@@ -531,17 +532,10 @@ class _MotivationFuelCard extends StatelessWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              const Color(0xFF111827).withOpacity(0.92),
-                              const Color(0xFF1C263A).withOpacity(0.84),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: CrickXColors.graphite,
                           borderRadius: BorderRadius.circular(18),
                           border: Border.all(
-                            color: const Color(0xFFFFD86B).withOpacity(0.24),
+                            color: CrickXColors.graphiteBorder,
                           ),
                         ),
                         child: Column(
@@ -549,7 +543,7 @@ class _MotivationFuelCard extends StatelessWidget {
                           children: [
                             const Icon(
                               Icons.bolt_rounded,
-                              color: Color(0xFFFFD86B),
+                              color: CrickXColors.limeSpark,
                               size: 30,
                             ),
                             const SizedBox(height: 12),
@@ -587,8 +581,8 @@ class _MotivationFuelCard extends StatelessWidget {
                           });
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFD86B),
-                          foregroundColor: const Color(0xFF111827),
+                          backgroundColor: CrickXColors.limeSpark,
+                          foregroundColor: CrickXColors.onLime,
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
@@ -634,17 +628,10 @@ class _MotivationFuelCard extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF111827).withOpacity(0.88),
-                const Color(0xFF1C263A).withOpacity(0.78),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: const Color(0xFFFFD86B).withOpacity(0.26),
+              color: CrickXColors.graphiteBorder,
             ),
           ),
           child: Row(
@@ -655,14 +642,14 @@ class _MotivationFuelCard extends StatelessWidget {
                 height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFFFD86B).withOpacity(0.14),
+                  color: CrickXColors.limeSpark.withOpacity(0.14),
                   border: Border.all(
-                    color: const Color(0xFFFFD86B).withOpacity(0.30),
+                    color: CrickXColors.limeSpark.withOpacity(0.30),
                   ),
                 ),
                 child: const Icon(
                   Icons.local_fire_department_rounded,
-                  color: Color(0xFFFFD86B),
+                  color: CrickXColors.limeSpark,
                   size: 20,
                 ),
               ),
@@ -677,7 +664,7 @@ class _MotivationFuelCard extends StatelessWidget {
                           child: Text(
                             'Remember who doubted you',
                             style: GoogleFonts.poppins(
-                              color: const Color(0xFFFFE7A0),
+                              color: Colors.white,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w800,
                             ),
@@ -689,23 +676,19 @@ class _MotivationFuelCard extends StatelessWidget {
                             _showRandomLine(context);
                           },
                           style: IconButton.styleFrom(
-                            backgroundColor: const Color(
-                              0xFFFFD86B,
-                            ).withOpacity(0.12),
+                            backgroundColor: CrickXColors.graphiteElevated,
                             minimumSize: const Size(34, 34),
                             padding: EdgeInsets.zero,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
-                              side: BorderSide(
-                                color: const Color(
-                                  0xFFFFD86B,
-                                ).withOpacity(0.26),
+                              side: const BorderSide(
+                                color: CrickXColors.graphiteBorder,
                               ),
                             ),
                           ),
                           icon: const Icon(
                             Icons.shuffle_rounded,
-                            color: Color(0xFFFFD86B),
+                            color: CrickXColors.limeSpark,
                             size: 18,
                           ),
                         ),
@@ -725,7 +708,7 @@ class _MotivationFuelCard extends StatelessWidget {
                     Text(
                       'Tap the side icon to shuffle',
                       style: GoogleFonts.poppins(
-                        color: const Color(0xFFFFD86B),
+                        color: CrickXColors.limeSpark,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                       ),
@@ -758,7 +741,7 @@ class _SkillTabsHeader extends StatelessWidget {
           child: _SkillTabChip(
             label: 'Batting',
             icon: Icons.sports_cricket_rounded,
-            accent: const Color(0xFFFFD86B),
+            accent: CrickXColors.limeSpark,
             selected: selectedDiscipline == 'batting',
             onTap: () => onChanged('batting'),
           ),
@@ -768,7 +751,7 @@ class _SkillTabsHeader extends StatelessWidget {
           child: _SkillTabChip(
             label: 'Bowling',
             icon: Icons.sports_baseball_rounded,
-            accent: const Color(0xFF7DD3FC),
+            accent: CrickXColors.limeSpark,
             selected: selectedDiscipline == 'bowling',
             onTap: () => onChanged('bowling'),
           ),
@@ -806,23 +789,23 @@ class _SkillTabChip extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected
                 ? accent.withOpacity(0.16)
-                : const Color(0xFF111827).withOpacity(0.78),
+                : CrickXColors.graphite,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected
-                  ? accent.withOpacity(0.72)
-                  : accent.withOpacity(0.34),
+                  ? accent
+                  : CrickXColors.graphiteBorder,
             ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: accent, size: 18),
+              Icon(icon, color: selected ? accent : Colors.white70, size: 18),
               const SizedBox(width: 8),
               Text(
                 label,
                 style: GoogleFonts.poppins(
-                  color: selected ? accent : Colors.white,
+                  color: selected ? accent : Colors.white70,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w800,
                 ),
@@ -860,25 +843,18 @@ class _ImprovementTrackCard extends StatelessWidget {
       duration: const Duration(milliseconds: 280),
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF121826).withOpacity(0.94),
-            const Color(0xFF1C263A).withOpacity(0.88),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: CrickXColors.graphite,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: completed
-              ? const Color(0xFF22C55E).withOpacity(0.55)
-              : accent.withOpacity(0.34),
+              ? CrickXColors.limeSpark.withOpacity(0.8)
+              : CrickXColors.graphiteBorder,
         ),
         boxShadow: [
           BoxShadow(
             color: accent.withOpacity(0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 16),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
@@ -891,7 +867,7 @@ class _ImprovementTrackCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: accent.withOpacity(0.12),
+                  color: CrickXColors.graphiteElevated,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: accent.withOpacity(0.40)),
                 ),
@@ -939,12 +915,12 @@ class _ImprovementTrackCard extends StatelessWidget {
                 _MetricChip(
                   icon: Icons.timer_outlined,
                   label: '${activeEntry.maxDays} days max',
-                  color: const Color(0xFFF59E0B),
+                  color: CrickXColors.limeSpark,
                 ),
                 _MetricChip(
                   icon: Icons.replay_rounded,
                   label: '${activeEntry.attempts} checks',
-                  color: completed ? const Color(0xFF22C55E) : accent,
+                  color: completed ? CrickXColors.limeSpark : accent,
                 ),
               ],
             ),
@@ -1040,9 +1016,9 @@ class _MaxFixSummary extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF59E0B).withOpacity(0.10),
+        color: CrickXColors.graphiteElevated,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.26)),
+        border: Border.all(color: CrickXColors.graphiteBorder),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1053,15 +1029,15 @@ class _MaxFixSummary extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFF59E0B).withOpacity(0.16),
+              color: CrickXColors.limeSpark.withOpacity(0.16),
               border: Border.all(
-                color: const Color(0xFFF59E0B).withOpacity(0.34),
+                color: CrickXColors.limeSpark.withOpacity(0.34),
               ),
             ),
             child: Text(
               '${entry.maxDays}',
               style: GoogleFonts.orbitron(
-                color: const Color(0xFFFFD86B),
+                color: CrickXColors.limeSpark,
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
               ),
@@ -1075,7 +1051,7 @@ class _MaxFixSummary extends StatelessWidget {
                 Text(
                   'Max days to fix: ${entry.maxDays}',
                   style: GoogleFonts.poppins(
-                    color: const Color(0xFFFFE7A0),
+                    color: Colors.white,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w800,
                   ),
@@ -1168,7 +1144,7 @@ class _DeadlineNotice extends StatelessWidget {
     final deadline = entry.createdAt.add(Duration(days: entry.maxDays));
     final remaining = deadline.difference(DateTime.now()).inDays;
     final overdue = remaining < 0;
-    final color = overdue ? const Color(0xFFE34234) : const Color(0xFFFFD86B);
+    final color = overdue ? const Color(0xFFE34234) : CrickXColors.limeSpark;
     final text = overdue
         ? 'Max window crossed. Upload a fresh ${entry.discipline} clip to check if it is fixed.'
         : '$remaining day${remaining == 1 ? '' : 's'} left before max fix window.';
@@ -1269,9 +1245,9 @@ class _EmptyState extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.18),
+        color: CrickXColors.graphiteBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: CrickXColors.graphiteBorder),
       ),
       child: Row(
         children: [
@@ -1311,7 +1287,7 @@ class _DailyPlanPreview extends StatelessWidget {
   void _showAllDays(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF080D18),
+      backgroundColor: CrickXColors.graphiteBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -1454,11 +1430,11 @@ class _DayTile extends StatelessWidget {
           : const BoxConstraints(),
       padding: EdgeInsets.all(compact ? 9 : 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withOpacity(0.72),
+        color: CrickXColors.graphite,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: completed
-              ? const Color(0xFF22C55E).withOpacity(0.42)
+              ? CrickXColors.limeSpark.withOpacity(0.5)
               : accent.withOpacity(0.22),
         ),
       ),
@@ -1468,7 +1444,7 @@ class _DayTile extends StatelessWidget {
               children: [
                 Icon(
                   completed ? Icons.check_circle_rounded : Icons.flag_rounded,
-                  color: completed ? const Color(0xFF22C55E) : accent,
+                  color: completed ? CrickXColors.limeSpark : accent,
                   size: 18,
                 ),
                 const SizedBox(height: 6),

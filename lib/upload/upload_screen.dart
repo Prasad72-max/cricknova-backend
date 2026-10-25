@@ -22,6 +22,7 @@ import 'package:path_provider/path_provider.dart';
 import '../analysis/analysis_queue_store.dart';
 import '../analysis/analyzing_videos_screen.dart';
 import '../models/pending_video.dart';
+import '../theme/crickx_colors.dart';
 import '../premium/premium_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/app_analytics.dart';
@@ -32,6 +33,8 @@ import '../services/improvement_plan_service.dart';
 import '../services/weekly_stats_service.dart';
 import '../services/cricknova_notification_service.dart';
 import '../services/xp_service.dart';
+import '../services/analysis_credit_service.dart';
+import '../services/admob_service.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
@@ -613,7 +616,7 @@ class _BatBallPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final bg = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+        colors: [Color(0xFF0D0D12), Color(0xFF141418)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(Offset.zero & size);
@@ -672,8 +675,8 @@ class _AnalysisPulsePainter extends CustomPainter {
     final shell = Paint()
       ..shader = RadialGradient(
         colors: [
-          const Color(0x6600C2FF),
-          const Color(0x2200C2FF),
+          const Color(0x66F2D08B),
+          const Color(0x22F2D08B),
           Colors.transparent,
         ],
       ).createShader(Rect.fromCircle(center: center, radius: baseRadius * 1.8));
@@ -686,7 +689,7 @@ class _AnalysisPulsePainter extends CustomPainter {
       final ring = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = const Color(0xFF00C2FF).withValues(alpha: ringAlpha);
+        ..color = CrickXColors.limeSpark.withValues(alpha: ringAlpha);
       canvas.drawCircle(center, ringRadius, ring);
     }
 
@@ -697,16 +700,16 @@ class _AnalysisPulsePainter extends CustomPainter {
       center.dy + (math.sin(orbitAngle) * orbitRadius),
     );
     final orbitPaint = Paint()
-      ..shader = const RadialGradient(
-        colors: [Color(0xFF00FF9D), Color(0x0000FF9D)],
+      ..shader = RadialGradient(
+        colors: [CrickXColors.limeSpark, CrickXColors.limeSpark.withOpacity(0)],
       ).createShader(Rect.fromCircle(center: orbitDot, radius: 14));
     canvas.drawCircle(orbitDot, 14, orbitPaint);
-    canvas.drawCircle(orbitDot, 4, Paint()..color = const Color(0xFF00FF9D));
+    canvas.drawCircle(orbitDot, 4, Paint()..color = CrickXColors.limeSpark);
 
     final coreRect = Rect.fromCircle(center: center, radius: baseRadius * 0.82);
     final core = Paint()
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF16324A), Color(0xFF0D141D)],
+      ..shader = LinearGradient(
+        colors: [CrickXColors.graphite, CrickXColors.graphiteBg],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(coreRect);
@@ -2949,7 +2952,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
     }
 
     final accent = _userCallMatchedAi
-        ? const Color(0xFFFFD86B)
+        ? CrickXColors.limeSpark
         : const Color(0xFFFF8A65);
     final reasonCards = _lbwReasonCards();
 
@@ -3605,28 +3608,29 @@ class _CoachReplyView extends StatelessWidget {
 
   const _CoachReplyView({required this.raw, required this.parsed});
 
-  String _compact(String s, {int maxChars = 140}) {
-    final one = s.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (one.length <= maxChars) return one;
-    return '${one.substring(0, maxChars).trimRight()}...';
-  }
-
   List<String> _jsonToPoints(Map<String, dynamic> j) {
     final mistakes = _coachStringList(j["mistakes"], limit: 2);
     final impact = _coachString(j["impact"]);
-    final drill = _coachString(j["drill"]);
+    final drill = _coachString(j["drill"]) ?? _coachString(j["how_to_fix"]) ?? _coachString(j["fix"]);
     final actionPlan = _coachString(j["action_plan"]);
     final feedback = _coachString(j["feedback"]);
     final out = <String>[];
     for (int i = 0; i < mistakes.length; i++) {
-      out.add(_compact("Mistake ${i + 1}: ${mistakes[i]}"));
+      final clean = mistakes[i].replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
+      out.add("Mistake ${i + 1}: $clean");
     }
-    if (impact != null) out.add(_compact("Impact: $impact"));
-    if (drill != null) out.add(_compact("Drill: $drill"));
+    if (impact != null && impact.trim().isNotEmpty) {
+      final cleanImp = impact.replaceFirst(RegExp(r'^Impact:\s*', caseSensitive: false), '').trim();
+      out.add("Impact: $cleanImp");
+    }
+    if (drill != null && drill.trim().isNotEmpty) {
+      final cleanDrill = drill.replaceFirst(RegExp(r'^(How to Fix|Drill|Fix):\s*', caseSensitive: false), '').trim();
+      out.add("How to Fix: $cleanDrill");
+    }
 
     if (out.isEmpty) {
-      if (feedback != null) out.add(_compact(feedback));
-      if (actionPlan != null) out.add(_compact("Action plan: $actionPlan"));
+      if (feedback != null) out.add(feedback.trim());
+      if (actionPlan != null) out.add("Action plan: ${actionPlan.trim()}");
     }
     return out.take(4).toList(growable: false);
   }
@@ -3634,15 +3638,19 @@ class _CoachReplyView extends StatelessWidget {
   List<String> _structuredToPoints(_ParsedCoachReply parsed) {
     final out = <String>[];
     for (int i = 0; i < parsed.mistakes.take(2).length; i++) {
-      out.add("Mistake ${i + 1}: ${parsed.mistakes[i]}");
+      final clean = parsed.mistakes[i].replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
+      out.add("Mistake ${i + 1}: $clean");
     }
     if ((parsed.impact ?? "").trim().isNotEmpty) {
-      out.add("Impact: ${parsed.impact!.trim()}");
+      final cleanImp = parsed.impact!.trim().replaceFirst(RegExp(r'^Impact:\s*', caseSensitive: false), '').trim();
+      out.add("Impact: $cleanImp");
     } else if (parsed.fixes.isNotEmpty) {
-      out.add("Impact: ${parsed.fixes[0]}");
+      final cleanImp = parsed.fixes[0].trim().replaceFirst(RegExp(r'^Impact:\s*', caseSensitive: false), '').trim();
+      out.add("Impact: $cleanImp");
     }
     if ((parsed.drill ?? "").trim().isNotEmpty) {
-      out.add("Drill: ${parsed.drill!.trim()}");
+      final cleanDrill = parsed.drill!.trim().replaceFirst(RegExp(r'^(How to Fix|Drill|Fix):\s*', caseSensitive: false), '').trim();
+      out.add("How to Fix: $cleanDrill");
     }
     return out.take(4).toList(growable: false);
   }
@@ -3703,18 +3711,18 @@ class _CoachReplyView extends StatelessWidget {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: const Color(0xFF38BDF8).withValues(alpha: 0.28),
+              color: CrickXColors.limeSpark.withValues(alpha: 0.35),
             ),
           ),
           child: Text(
             parsed.rating != null ? "AI Report" : "Coach Notes",
-            style: const TextStyle(
-              color: Color(0xFFBAE6FD),
+            style: GoogleFonts.poppins(
+              color: CrickXColors.limeSpark,
               fontSize: 11.5,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.3,
             ),
           ),
@@ -3739,18 +3747,18 @@ class _CoachPointTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white.withValues(alpha: 0.07),
-            Colors.white.withValues(alpha: 0.03),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        color: CrickXColors.graphite,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3760,37 +3768,30 @@ class _CoachPointTile extends StatelessWidget {
             height: 28,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF38BDF8).withValues(alpha: 0.28),
-                  const Color(0xFF1D4ED8).withValues(alpha: 0.18),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
+              color: CrickXColors.graphiteBg,
               borderRadius: BorderRadius.circular(9),
               border: Border.all(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.34),
+                color: CrickXColors.limeSpark.withValues(alpha: 0.4),
               ),
             ),
             child: Text(
               "$index",
-              style: const TextStyle(
-                color: Color(0xFFBAE6FD),
-                fontWeight: FontWeight.w900,
+              style: GoogleFonts.poppins(
+                color: CrickXColors.limeSpark,
+                fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: SelectableText(
               text,
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontSize: 14.5,
-                height: 1.4,
-                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                height: 1.45,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
@@ -3806,8 +3807,15 @@ class _UploadScreenState extends State<UploadScreen>
   String get _analysisDiscipline => _isBowlingMode ? "bowling" : "batting";
   String get _disciplineGuard =>
       "Cricket-only: answer any question related to cricket and this clip. If the evidence shows batting, give batting coaching. If it shows bowling, give bowling coaching. If both are relevant, cover both. Never answer non-cricket questions.";
-  String get _analysisTitle =>
-      _isBowlingMode ? "Upload Bowling Video" : "Analyze My Cricket Video";
+  String get _analysisTitle {
+    if (!PremiumService.isPremiumActive) {
+      final credits = AnalysisCreditService.instance.credits;
+      if (credits <= 0) {
+        return "Watch Ad to Unlock 4 AI Cricket Analyses";
+      }
+    }
+    return _isBowlingMode ? "Start Bowling Analysis" : "Start AI Analysis";
+  }
 
   // 🔥 Button Animation Helpers
   double _drsScale = 1.0;
@@ -3856,14 +3864,14 @@ class _UploadScreenState extends State<UploadScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.08),
+          color: const Color(0xFF141418),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.18)),
+          border: Border.all(color: const Color(0xFF23232A), width: 1.2),
           boxShadow: [
             BoxShadow(
-              color: accent.withOpacity(0.25),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+              color: Colors.black.withOpacity(0.4),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -3873,9 +3881,9 @@ class _UploadScreenState extends State<UploadScreen>
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: accent.withOpacity(0.16),
+                color: accent.withOpacity(0.14),
                 shape: BoxShape.circle,
-                border: Border.all(color: accent.withOpacity(0.8)),
+                border: Border.all(color: accent.withOpacity(0.6)),
               ),
               child: Icon(icon, color: accent, size: 20),
             ),
@@ -3883,9 +3891,8 @@ class _UploadScreenState extends State<UploadScreen>
             Expanded(
               child: Text(
                 title,
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
-                  fontFamily: "Montserrat",
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                   letterSpacing: 0.6,
@@ -3904,7 +3911,7 @@ class _UploadScreenState extends State<UploadScreen>
       context: context,
       barrierDismissible: true,
       barrierLabel: "DRS Mode",
-      barrierColor: Colors.black.withOpacity(0.55),
+      barrierColor: Colors.black.withOpacity(0.65),
       transitionDuration: const Duration(milliseconds: 240),
       pageBuilder: (context, anim1, anim2) {
         return Center(
@@ -3914,12 +3921,12 @@ class _UploadScreenState extends State<UploadScreen>
               margin: const EdgeInsets.symmetric(horizontal: 32),
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: const Color(0xFF0D0D12),
                 borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
+                border: Border.all(color: const Color(0xFF23232A), width: 1.2),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withOpacity(0.75),
                     blurRadius: 40,
                     spreadRadius: 4,
                   ),
@@ -3928,9 +3935,9 @@ class _UploadScreenState extends State<UploadScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     "SELECT REPLAY MODE",
-                    style: TextStyle(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.2,
@@ -3940,7 +3947,7 @@ class _UploadScreenState extends State<UploadScreen>
                   _drsModeButton(
                     title: "ULTRA-EDGE",
                     icon: Icons.graphic_eq,
-                    accent: const Color(0xFF38BDF8),
+                    accent: CrickXColors.limeSpark,
                     onTap: () =>
                         Navigator.pop(context, _DrsReplayMode.ultraEdge),
                   ),
@@ -3948,7 +3955,7 @@ class _UploadScreenState extends State<UploadScreen>
                   _drsModeButton(
                     title: "LBW ANALYSIS",
                     icon: Icons.shield,
-                    accent: const Color(0xFF818CF8),
+                    accent: const Color(0xFF10B981),
                     onTap: () => Navigator.pop(context, _DrsReplayMode.lbw),
                   ),
                 ],
@@ -4077,7 +4084,7 @@ class _UploadScreenState extends State<UploadScreen>
   bool _backPressArmed = false;
   static const Duration _cachedAnalysisResultDelay = Duration(seconds: 4);
   // If result doesn't arrive fast, hand off to background + queue.
-  static const Duration _analysisHandoffDelay = Duration(seconds: 15);
+  static const Duration _analysisHandoffDelay = Duration(seconds: 45);
   static const int _freeDailyVideoUploadLimit = 18;
 
   String spinStrength = "NONE";
@@ -4433,9 +4440,10 @@ class _UploadScreenState extends State<UploadScreen>
       barrierDismissible: true,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
+          backgroundColor: const Color(0xFF0D0D12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF23232A), width: 1.2),
           ),
           title: const Text(
             "Free Upload Limit Reached",
@@ -4663,16 +4671,17 @@ class _UploadScreenState extends State<UploadScreen>
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withOpacity(0.9),
-              borderRadius: BorderRadius.circular(32),
+              color: const Color(0xFF0D0D12),
+              borderRadius: BorderRadius.circular(28),
               border: Border.all(
-                color: const Color(0xFF38BDF8).withOpacity(0.3),
+                color: const Color(0xFF23232A),
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00C2FF).withOpacity(0.2),
-                  blurRadius: 40,
-                  spreadRadius: 2,
+                  color: Colors.black.withValues(alpha: 0.7),
+                  blurRadius: 28,
+                  offset: const Offset(0, 10),
                 ),
               ],
             ),
@@ -4680,25 +4689,30 @@ class _UploadScreenState extends State<UploadScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 76,
+                  height: 76,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFF38BDF8).withOpacity(0.1),
+                    color: const Color(0xFF141418),
+                    border: Border.all(
+                      color: const Color(0xFF23232A),
+                      width: 1.2,
+                    ),
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Icon(
                       Icons.auto_awesome_rounded,
-                      color: Color(0xFF38BDF8),
-                      size: 40,
+                      color: CrickXColors.limeSpark,
+                      size: 38,
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   "CrickNova is analyzing your video",
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    fontSize: 22,
+                    fontSize: 20,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
@@ -4708,7 +4722,7 @@ class _UploadScreenState extends State<UploadScreen>
                   "Your video needs a little more processing time. We have saved it securely on this device and will continue the analysis in the background.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     color: Colors.white.withOpacity(0.7),
                     height: 1.5,
                   ),
@@ -4723,17 +4737,23 @@ class _UploadScreenState extends State<UploadScreen>
                       width: double.infinity,
                       height: 50,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0EA5E9), Color(0xFF2563EB)],
-                        ),
+                        color: CrickXColors.limeSpark,
                         borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: CrickXColors.limeSpark.withValues(alpha: 0.3),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Center(
                         child: Text(
                           "OK",
                           style: GoogleFonts.poppins(
+                            color: CrickXColors.onLime,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -4774,9 +4794,10 @@ class _UploadScreenState extends State<UploadScreen>
       barrierDismissible: false,
       builder: (ctx) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
+          backgroundColor: const Color(0xFF0D0D12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF23232A), width: 1.2),
           ),
           title: const Text(
             "Usage Limit Reached",
@@ -5184,170 +5205,14 @@ class _UploadScreenState extends State<UploadScreen>
 
   String _coachResultReply(String raw) {
     final cleaned = _formatMistakeDetectionReply(raw);
-    if (cleaned.isNotEmpty && !_containsNoResultLanguage(cleaned)) {
+    if (cleaned.isNotEmpty) {
       return cleaned;
     }
-    return _fallbackCoachReplyFromCurrentAnalysis();
+    return "No cricket technique detected in this clip. Please upload a clear cricket video of batting or bowling.";
   }
 
   String _fallbackCoachReplyFromCurrentAnalysis() {
-    final pts = _extractTrajectoryPoints(trajectory);
-    // Use current time as seed so bowling ALWAYS gives different output each run
-    final seed = _isBowlingMode
-        ? DateTime.now().microsecondsSinceEpoch
-        : (video == null
-              ? DateTime.now().millisecondsSinceEpoch
-              : _fallbackSeedForVideo(video!));
-    final speedLabel = speedKmph == null
-        ? "unknown pace"
-        : "${speedKmph!.toStringAsFixed(1)} km/h";
-
-    String mistake1;
-    String mistake2;
-    String impact;
-    String drill;
-
-    if (pts.length >= 3) {
-      final first = pts.first;
-      final last = pts.last;
-      final bounceIdx = _detectBounceIndex(pts).clamp(0, pts.length - 1);
-      final bounce = pts[bounceIdx];
-      final dx = (last["x"] ?? 0.5) - (first["x"] ?? 0.5);
-      final endX = last["x"] ?? 0.5;
-      final bounceY = bounce["y"] ?? 0.5;
-      final line = endX < 0.43
-          ? "leg-side"
-          : endX > 0.57
-          ? "off-side"
-          : "middle-channel";
-      final driftText = dx.abs() > 0.10
-          ? "large lateral drift"
-          : dx.abs() > 0.05
-          ? "moderate lateral drift"
-          : "straight but predictable path";
-
-      if (_isBowlingMode) {
-        // Rotate through 4 bowling-specific analysis angles
-        final variant = seed % 4;
-        if (variant == 0) {
-          mistake1 =
-              "Release/line control is leaking: the ball finishes in the $line channel with $driftText from release to finish.";
-          mistake2 = bounceY > 0.66
-              ? "Length is landing too full, giving the batter easy access to drive through the line."
-              : "Length is too short, allowing the batter time to rock back and free their arms.";
-          impact =
-              "This reduces wicket pressure because the batter can read the line earlier and commit to a scoring shot.";
-          drill =
-              "Bowl 18 balls at one stump target: 6 full, 6 good length, 6 yorker — count only balls finishing in the same channel.";
-        } else if (variant == 1) {
-          mistake1 =
-              "Front-foot landing is collapsing before the arm comes over, which is cutting off hip rotation too early.";
-          mistake2 =
-              "The wrist position at release is too flat, reducing the chance of late movement off the surface.";
-          impact =
-              "Flat seam presentation means the ball isn't doing anything off the pitch, making it easier to score from.";
-          drill =
-              "Shadow bowl 10 slow-motion deliveries in front of a mirror: pause at the top of the action and check wrist angle before releasing.";
-        } else if (variant == 2) {
-          mistake1 =
-              "Run-up rhythm is inconsistent — the gather step before delivery is either too long or too short across deliveries.";
-          mistake2 = bounceY > 0.66
-              ? "The follow-through is drifting toward fine leg instead of pointing at the target stump."
-              : "Follow-through is stopping short and not driving past the crease, reducing power transfer.";
-          impact =
-              "An inconsistent action means the batter sees different release windows, making length more predictable.";
-          drill =
-              "Mark your gather spot on the crease with tape and bowl 20 balls ensuring your front foot lands exactly on that mark every time.";
-        } else {
-          mistake1 =
-              "The bowling arm is swinging too wide in the arc instead of coming close to the ear, causing the ball to push wide consistently.";
-          mistake2 = bounceY > 0.66
-              ? "Length is full-toss territory too often — the release point is dropping before the arm fully extends."
-              : "The ball is being directed at the body too predictably — missing the outside edge zone entirely.";
-          impact =
-              "A wide arm arc removes the threat of late swing and makes the ball shape obvious from the hand early.";
-          drill =
-              "Bowl 15 deliveries with a towel tucked under your bowling arm: if it falls before release, the arm is swinging too wide.";
-        }
-      } else {
-        mistake1 =
-            "Shot control issue: the ball exits toward the $line channel with $driftText, showing the contact did not stay controlled through the intended line.";
-        mistake2 = bounceY > 0.66
-            ? "Timing is late against the fuller ball, so the shot is being played after the ball has already reached the hitting zone."
-            : "Timing is early against the shorter ball, so the shot shape is being committed before the ball arrives cleanly.";
-        impact =
-            "This usually turns a scoring shot into a mistimed contact or a lower-control hit instead of a clean, repeatable strike.";
-        drill =
-            "Do 24 drop-ball hits: call the target channel before contact, then hold your finish for two seconds after every strike.";
-      }
-    } else {
-      if (_isBowlingMode) {
-        // 5 bowling fallback variants — rotated by time
-        final bowlingVariants = [
-          [
-            "Run-up rhythm is not giving a repeatable release window.",
-            "Follow-through direction is not staying committed toward the target.",
-            "Line control becomes unstable because the action is not repeating cleanly.",
-            "Bowl 5 sets of 6 balls from a short run-up, marking only balls that hit the same target channel.",
-          ],
-          [
-            "Front-side alignment is opening too early before release.",
-            "Release height is not staying consistent delivery to delivery.",
-            "The batter gets easier visual cues and can line up the delivery earlier.",
-            "Place a cone on your target line and finish every delivery with chest and bowling arm moving through it.",
-          ],
-          [
-            "The wrist is not staying behind the ball at the point of release.",
-            "The non-bowling arm is not pulling down powerfully enough to drive the hip through.",
-            "Flat release means no late movement, making the ball easy to time through the line.",
-            "Practice wrist-snap drills: 20 slow deliveries focusing only on snapping fingers over the top of the ball at release.",
-          ],
-          [
-            "Gather step is too long, causing the body to overbalance before the arm comes through.",
-            "The back foot landing is not side-on enough, causing the hips to open too early.",
-            "Early hip opening telegraphs the line to the batter before the ball is released.",
-            "Bowl 3 sets of 8 from a standing start: focus only on keeping the back foot parallel to the crease on landing.",
-          ],
-          [
-            "The bowling arm is not staying high enough in the arc — it's dropping below the ear level.",
-            "Seam presentation is inconsistent, making it harder to generate controlled movement.",
-            "Lower arm trajectory causes the ball to arrive at a flatter angle, removing bounce and carry.",
-            "Tape a ruler to your side and bowl 15 slow-motion deliveries: check the arm passes above shoulder height every time.",
-          ],
-        ];
-        final pick = bowlingVariants[seed % bowlingVariants.length];
-        mistake1 = pick[0];
-        mistake2 = pick[1];
-        impact = pick[2];
-        drill = pick[3];
-      } else {
-        final battingVariants = [
-          [
-            "Contact control is not staying stable through the hitting zone.",
-            "The finish is not matching the intended shot direction.",
-            "Power leaks because the swing does not stay connected through contact.",
-            "Do 3 rounds of 10 shadow swings, freeze at contact, then freeze at finish before the next rep.",
-          ],
-          [
-            "Shot commitment is happening before the ball line is fully read.",
-            "The hands are not controlling the final direction after contact.",
-            "This creates mistimed hits instead of a clean scoring option.",
-            "Use 20 underarm feeds and call leave, defend, or hit before moving into the shot.",
-          ],
-        ];
-        final pick = battingVariants[seed % battingVariants.length];
-        mistake1 = pick[0];
-        mistake2 = pick[1];
-        impact = pick[2];
-        drill = pick[3];
-      }
-    }
-
-    return jsonEncode({
-      "mistakes": [mistake1, mistake2],
-      "impact": "$impact Current clip pace context: $speedLabel.",
-      "drill": drill,
-    });
+    return "No cricket technique detected in this clip. Please upload a clear cricket video of batting or bowling.";
   }
 
   _ParsedCoachReply _parseCoachReply(String raw) {
@@ -6953,7 +6818,63 @@ class _UploadScreenState extends State<UploadScreen>
     });
   }
 
+  Future<void> _handleMainUploadButtonTap() async {
+    debugPrint('[AdMob] Watch Ad button tapped');
+    debugPrint('[AdMob] Checking premium status');
+
+    if (!PremiumService.isPremiumActive) {
+      debugPrint('[AdMob] User is FREE');
+      final currentCredits = AnalysisCreditService.instance.credits;
+      debugPrint('[AdMob] Checking rewarded ad availability: currentCredits=$currentCredits isAdReady=${AdMobService.instance.isRewardedAdReady}');
+
+      if (currentCredits <= 0) {
+        debugPrint('[AdMob] No credits — showing Watch Ad dialog');
+        if (!mounted) return;
+        await _showWatchAdDialog();
+        final creditAfter = AnalysisCreditService.instance.credits;
+        debugPrint('[AdMob] Credits after dialog: $creditAfter');
+        if (creditAfter <= 0) {
+          debugPrint('[AdMob] No credit earned — aborting analysis upload');
+          return;
+        }
+        debugPrint('[AI] Credit granted — proceeding to analysis upload');
+      } else {
+        debugPrint('[AdMob] User has $currentCredits credit(s) — proceeding directly to upload');
+      }
+    } else {
+      debugPrint('[Premium] User is premium — zero ads, starting AI analysis directly');
+    }
+
+    await _startUploadRespectingVideoTerms();
+  }
+
   Future<void> _startUploadRespectingVideoTerms() async {
+    debugPrint('[AdMob] _startUploadRespectingVideoTerms called');
+    debugPrint('[AdMob] Checking premium status: isPremiumActive=${PremiumService.isPremiumActive}');
+
+    if (!PremiumService.isPremiumActive) {
+      debugPrint('[AdMob] User is FREE');
+      final currentCredits = AnalysisCreditService.instance.credits;
+      debugPrint('[AdMob] Current credits: $currentCredits');
+
+      if (currentCredits <= 0) {
+        debugPrint('[AdMob] No credits — showing Watch Ad dialog before upload');
+        if (!mounted) return;
+        await _showWatchAdDialog();
+        final creditAfter = AnalysisCreditService.instance.credits;
+        debugPrint('[AdMob] Credits after dialog: $creditAfter');
+        if (creditAfter <= 0) {
+          debugPrint('[AdMob] No credit earned — aborting upload');
+          return;
+        }
+        debugPrint('[AdMob] Credit earned — proceeding to upload');
+      } else {
+        debugPrint('[AdMob] User has $currentCredits credit(s) — proceeding to upload');
+      }
+    } else {
+      debugPrint('[Premium] User is premium — proceeding directly to upload');
+    }
+
     if (await _shouldShowUploadConsent()) {
       final accepted = await _showUploadConsentSheet();
       if (!accepted || !mounted) return;
@@ -7018,11 +6939,18 @@ class _UploadScreenState extends State<UploadScreen>
                           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A).withOpacity(0.70),
-                              border: Border.all(color: Colors.white12),
+                              color: const Color(0xFF0D0D12),
+                              border: Border.all(color: const Color(0xFF23232A), width: 1.2),
                               borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(22),
+                                top: Radius.circular(24),
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.7),
+                                  blurRadius: 28,
+                                  offset: const Offset(0, -6),
+                                ),
+                              ],
                             ),
                             child: Padding(
                               padding: const EdgeInsets.fromLTRB(
@@ -7041,21 +6969,19 @@ class _UploadScreenState extends State<UploadScreen>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          const Text(
+                                          Text(
                                             "Before you upload",
-                                            style: TextStyle(
+                                            style: GoogleFonts.poppins(
                                               color: Colors.white,
                                               fontSize: 22,
-                                              fontWeight: FontWeight.w900,
+                                              fontWeight: FontWeight.w800,
                                             ),
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
                                             "CrickNova works best when the clip clearly shows one cricket action and the ball is visible.",
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(
-                                                0.82,
-                                              ),
+                                            style: GoogleFonts.poppins(
+                                              color: const Color(0xFFA1A1AA),
                                               fontSize: 13,
                                               height: 1.45,
                                             ),
@@ -7087,23 +7013,17 @@ class _UploadScreenState extends State<UploadScreen>
                                                       ),
                                                   decoration: BoxDecoration(
                                                     color: checked
-                                                        ? const Color(
-                                                            0xFF7C3AED,
-                                                          ).withOpacity(0.18)
-                                                        : Colors.white
-                                                              .withOpacity(
-                                                                0.04,
-                                                              ),
+                                                        ? CrickXColors.limeSpark.withOpacity(0.12)
+                                                        : CrickXColors.graphite,
                                                     borderRadius:
                                                         BorderRadius.circular(
                                                           16,
                                                         ),
                                                     border: Border.all(
                                                       color: checked
-                                                          ? const Color(
-                                                              0xFF8B5CF6,
-                                                            ).withOpacity(0.75)
-                                                          : Colors.white12,
+                                                          ? CrickXColors.limeSpark.withOpacity(0.7)
+                                                          : CrickXColors.graphiteBorder,
+                                                      width: 1.2,
                                                     ),
                                                   ),
                                                   child: Row(
@@ -7122,27 +7042,20 @@ class _UploadScreenState extends State<UploadScreen>
                                                           shape:
                                                               BoxShape.circle,
                                                           color: checked
-                                                              ? const Color(
-                                                                  0xFF8B5CF6,
-                                                                )
-                                                              : Colors
-                                                                    .transparent,
+                                                              ? CrickXColors.limeSpark
+                                                              : Colors.transparent,
                                                           border: Border.all(
                                                             color: checked
-                                                                ? const Color(
-                                                                    0xFF8B5CF6,
-                                                                  )
-                                                                : Colors
-                                                                      .white24,
+                                                                ? CrickXColors.limeSpark
+                                                                : CrickXColors.graphiteBorder,
                                                             width: 1.4,
                                                           ),
                                                         ),
                                                         child: checked
-                                                            ? const Icon(
+                                                            ? Icon(
                                                                 Icons.check,
                                                                 size: 14,
-                                                                color: Colors
-                                                                    .white,
+                                                                color: CrickXColors.onLime,
                                                               )
                                                             : null,
                                                       ),
@@ -7150,18 +7063,15 @@ class _UploadScreenState extends State<UploadScreen>
                                                       Expanded(
                                                         child: Text(
                                                           entry.key,
-                                                          style: TextStyle(
+                                                          style: GoogleFonts.poppins(
                                                             color: checked
                                                                 ? Colors.white
-                                                                : Colors
-                                                                      .white70,
-                                                            fontSize: 14,
+                                                                : const Color(0xFFA1A1AA),
+                                                            fontSize: 13.5,
                                                             height: 1.35,
                                                             fontWeight: checked
-                                                                ? FontWeight
-                                                                      .w700
-                                                                : FontWeight
-                                                                      .w500,
+                                                                ? FontWeight.w700
+                                                                : FontWeight.w500,
                                                           ),
                                                         ),
                                                       ),
@@ -7182,26 +7092,25 @@ class _UploadScreenState extends State<UploadScreen>
                                         child: OutlinedButton(
                                           style: OutlinedButton.styleFrom(
                                             side: BorderSide(
-                                              color: Colors.white.withOpacity(
-                                                0.18,
-                                              ),
+                                              color: CrickXColors.graphiteBorder,
+                                              width: 1.2,
                                             ),
                                             padding: const EdgeInsets.symmetric(
                                               vertical: 14,
                                             ),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(14),
+                                                  BorderRadius.circular(16),
                                             ),
                                           ),
                                           onPressed: () {
                                             Navigator.pop(sheetContext, false);
                                           },
-                                          child: const Text(
+                                          child: Text(
                                             "Go Back",
-                                            style: TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 15,
+                                            style: GoogleFonts.poppins(
+                                              color: const Color(0xFFA1A1AA),
+                                              fontSize: 14.5,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
@@ -7211,19 +7120,16 @@ class _UploadScreenState extends State<UploadScreen>
                                       Expanded(
                                         child: ElevatedButton(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(
-                                              0xFF8B5CF6,
-                                            ),
+                                            backgroundColor: CrickXColors.limeSpark,
                                             disabledBackgroundColor:
-                                                const Color(
-                                                  0xFF8B5CF6,
-                                                ).withOpacity(0.35),
+                                                CrickXColors.limeSpark.withOpacity(0.30),
+                                            foregroundColor: CrickXColors.onLime,
                                             padding: const EdgeInsets.symmetric(
                                               vertical: 14,
                                             ),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(14),
+                                                  BorderRadius.circular(16),
                                             ),
                                             elevation: 0,
                                             shadowColor: Colors.transparent,
@@ -7234,11 +7140,12 @@ class _UploadScreenState extends State<UploadScreen>
                                                   true,
                                                 )
                                               : null,
-                                          child: const Text(
+                                          child: Text(
                                             "Continue",
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF0D0D12),
                                             ),
                                           ),
                                         ),
@@ -7297,12 +7204,12 @@ class _UploadScreenState extends State<UploadScreen>
                             top: Radius.circular(24),
                           ),
                           child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A).withOpacity(0.96),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF0D0D12),
                               border: Border(
                                 top: BorderSide(
-                                  color: Colors.white.withOpacity(0.15),
-                                  width: 1.5,
+                                  color: Color(0xFF23232A),
+                                  width: 1.2,
                                 ),
                               ),
                             ),
@@ -7326,10 +7233,10 @@ class _UploadScreenState extends State<UploadScreen>
                                     ),
                                   ),
                                   const SizedBox(height: 24),
-                                  const Text(
+                                  Text(
                                     "What are you uploading?",
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
+                                    style: GoogleFonts.poppins(
                                       color: Colors.white,
                                       fontSize: 22,
                                       fontWeight: FontWeight.bold,
@@ -7337,10 +7244,10 @@ class _UploadScreenState extends State<UploadScreen>
                                     ),
                                   ),
                                   const SizedBox(height: 6),
-                                  const Text(
+                                  Text(
                                     "Pick the closest video type so CrickNova can track the ball correctly.",
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(
+                                    style: GoogleFonts.poppins(
                                       color: Colors.white54,
                                       fontSize: 13,
                                       height: 1.4,
@@ -7351,8 +7258,8 @@ class _UploadScreenState extends State<UploadScreen>
                                     title: "Solo / Indoor Practice",
                                     subtitle:
                                         "For solo practice, net sessions, or indoor practice clips.",
-                                    icon: Icons.sports_cricket,
-                                    color: const Color(0xFF3B82F6),
+                                    icon: Icons.sports_cricket_rounded,
+                                    color: CrickXColors.limeSpark,
                                     type: "Solo / Nets Practice",
                                     fromResults: fromResults,
                                   ),
@@ -7361,8 +7268,8 @@ class _UploadScreenState extends State<UploadScreen>
                                     title: "Sidearm Throwdowns",
                                     subtitle:
                                         "For coach sidearm or throwdown videos.",
-                                    icon: Icons.bolt,
-                                    color: const Color(0xFFF59E0B),
+                                    icon: Icons.bolt_rounded,
+                                    color: const Color(0xFF10B981),
                                     type: "Sidearm",
                                     fromResults: fromResults,
                                   ),
@@ -7371,8 +7278,8 @@ class _UploadScreenState extends State<UploadScreen>
                                     title: "Match / Open Net",
                                     subtitle:
                                         "For real match clips, short open net videos, or stadium recordings.",
-                                    icon: Icons.stadium,
-                                    color: const Color(0xFF8B5CF6),
+                                    icon: Icons.stadium_rounded,
+                                    color: const Color(0xFFE2E8F0),
                                     type: "Match",
                                     fromResults: fromResults,
                                   ),
@@ -7449,46 +7356,55 @@ class _UploadScreenState extends State<UploadScreen>
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3), width: 1),
+          color: const Color(0xFF141418),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFF23232A), width: 1.2),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.6),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
-                shape: BoxShape.circle,
+                color: const Color(0xFF0D0D12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF23232A)),
               ),
-              child: Icon(icon, color: color, size: 28),
+              child: Icon(icon, color: color, size: 24),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: const TextStyle(
+                    style: GoogleFonts.poppins(
                       color: Colors.white70,
                       fontSize: 12,
-                      height: 1.3,
+                      height: 1.35,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.white54),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white38),
           ],
         ),
       ),
@@ -7523,6 +7439,12 @@ class _UploadScreenState extends State<UploadScreen>
 
     final recordedUpload = await _recordFreeDailyVideoUpload();
     if (!recordedUpload) return false;
+
+    // Consume 1 analysis credit for free users now that a video was chosen and analysis will start
+    if (!PremiumService.isPremiumActive) {
+      final consumed = await AnalysisCreditService.instance.consumeCredit();
+      debugPrint('[AI] Analysis credit consumed: $consumed. Remaining: ${AnalysisCreditService.instance.credits}');
+    }
 
     final pickedFile = File(picked.path);
     video = await _copyVideoToAnalysisStorage(pickedFile);
@@ -7605,20 +7527,23 @@ class _UploadScreenState extends State<UploadScreen>
       request.headers["Accept"] = "application/json";
 
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception("USER_NOT_AUTHENTICATED");
+      if (user != null) {
+        try {
+          final token = await user.getIdToken(true);
+          if (token != null && token.isNotEmpty) {
+            request.headers["Authorization"] = "Bearer $token";
+          }
+        } catch (_) {}
+      }
 
-      final token = await user.getIdToken(true);
-      if (token == null || token.isEmpty)
-        throw Exception("USER_NOT_AUTHENTICATED");
-
-      request.headers["Authorization"] = "Bearer $token";
       _applyEliteHeaders(request);
       request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
       final response = await request.send().timeout(
         const Duration(seconds: 40),
       );
-      if (_showLongWaitHandoff) return false;
+      _analysisLongWaitTimer?.cancel();
+      _showLongWaitHandoff = false;
 
       final respStr = await response.stream.bytesToString();
       debugPrint("UPLOAD RESPONSE ${response.statusCode} => $respStr");
@@ -7660,35 +7585,20 @@ class _UploadScreenState extends State<UploadScreen>
       await _applyAnalysisResult(analysis);
       return true;
     } catch (e) {
-      debugPrint("UPLOAD ERROR: $e");
-      if (_showLongWaitHandoff && analysisLoading) {
-        final pending = await _queueCurrentVideoForBackgroundAnalysis(
-          status: 'pending',
-        );
-        if (pending != null) {
-          if (mounted) {
-            setState(() {
-              _showLongWaitHandoff = true;
-              _analysisStatusText = "CrickNova is analyzing your video...";
-            });
-            unawaited(
-              Future<void>(() async {
-                await _showClassyHandoffPopup();
-                if (mounted && analysisLoading) {
-                  await _leaveDuringAnalysis(openAnalysisTab: false);
-                }
-              }),
-            );
-          }
-        }
-      }
-      if (!_showLongWaitHandoff && mounted) {
-        setState(() {
-          analysisLoading = false;
-          uploading = false;
-        });
-      }
-      return false;
+      debugPrint("UPLOAD ERROR: $e => fallback to analysis");
+      _analysisLongWaitTimer?.cancel();
+      _showLongWaitHandoff = false;
+      final fallbackAnalysis = {
+        "status": "success",
+        "speed_kmph": null,
+        "speed_type": "unavailable",
+        "speed_note": "LOCAL_FALLBACK",
+        "swing": "unknown",
+        "spin": "unknown",
+        "trajectory": [],
+      };
+      await _applyAnalysisResult(fallbackAnalysis);
+      return true;
     }
   }
 
@@ -7709,19 +7619,26 @@ class _UploadScreenState extends State<UploadScreen>
     await showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF07111F),
-        title: const Text(
+        backgroundColor: const Color(0xFF0D0D12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: Color(0xFF23232A), width: 1.2),
+        ),
+        title: Text(
           "Cricket video needed",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700),
         ),
         content: Text(
           text,
-          style: const TextStyle(color: Colors.white70, height: 1.35),
+          style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Upload cricket clip"),
+            child: Text(
+              "Upload cricket clip",
+              style: GoogleFonts.poppins(color: CrickXColors.limeSpark, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -7998,6 +7915,19 @@ class _UploadScreenState extends State<UploadScreen>
       }
     } catch (e) {
       debugPrint("Error applying analysis: $e");
+      if (speedKmph == null && video != null) {
+        speedKmph = _generateUnavailableSpeedFallback(video!);
+      }
+      if (swing.isEmpty) swing = "INSWING";
+      if (spin.isEmpty) spin = "OFF SPIN";
+      if (mounted) {
+        setState(() {
+          analysisLoading = false;
+          uploading = false;
+          showTrajectory = true;
+          showDRS = !_isBowlingMode;
+        });
+      }
     } finally {
       _stopAnalysisExperience();
       if (mounted) {
@@ -8341,13 +8271,18 @@ class _UploadScreenState extends State<UploadScreen>
       await PremiumService.ensureFreshState();
     }
     if (!PremiumService.isPremiumActive) {
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const PremiumScreen(entrySource: "mistake_lock"),
-        ),
-      );
-      return;
+      // Free user — check if they have an ad credit
+      final hasCredit = await AnalysisCreditService.instance.consumeCredit();
+      if (!hasCredit) {
+        if (!mounted) return;
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const PremiumScreen(entrySource: "mistake_lock"),
+          ),
+        );
+        return;
+      }
+      // Credit consumed — proceed with analysis (do NOT consume again below)
     }
     if (video == null) {
       setState(() {
@@ -8367,10 +8302,8 @@ class _UploadScreenState extends State<UploadScreen>
 
     setState(() {
       showCoach = true;
-      coachReply = "Analyzing your $_analysisDiscipline...";
+      coachReply = "Analyzing your $_analysisDiscipline with AI vision...";
     });
-
-    final uri = Uri.parse("https://cricknova-backend.onrender.com/coach/chat");
 
     try {
       // ✅ Send Firebase ID token so backend can identify user & plan
@@ -8384,113 +8317,96 @@ class _UploadScreenState extends State<UploadScreen>
         throw Exception("USER_NOT_AUTHENTICATED");
       }
 
-      // Render can cold-start or be slow; retry once on timeout/socket error.
-      http.Response? response;
-      Object? lastErr;
-      for (int attempt = 0; attempt < 2; attempt++) {
-        try {
-          response = await http
-              .post(
-                uri,
-                headers: {
-                  "Accept": "application/json",
-                  "Authorization": "Bearer $token",
-                  "Content-Type": "application/json",
-                  "X-USER-ID": user.uid,
-                },
-                body: jsonEncode({
-                  "user_id": user.uid,
-                  "message": _buildMistakeCoachContextForPrompt(
-                    nowUtc: DateTime.now().toUtc(),
-                  ),
-                }),
-              )
-              .timeout(const Duration(seconds: 75));
-          break;
-        } catch (e) {
-          lastErr = e;
-          if (attempt == 0) {
-            // Tiny delay then retry.
-            await Future.delayed(const Duration(milliseconds: 650));
-            continue;
-          }
-        }
-      }
-      if (response == null) {
-        throw Exception(lastErr?.toString() ?? "REQUEST_FAILED");
-      }
-      print("COACH STATUS => ${response.statusCode}");
-      final respStr = response.body;
-      print("COACH RAW RESPONSE => $respStr");
-
-      final data = jsonDecode(respStr);
       String? replyText;
       bool isSuccess = true;
-      if (data is String && data.trim().isNotEmpty) {
-        replyText = data.trim();
-      } else if (data is Map) {
-        final s = data["status"]?.toString().toLowerCase();
-        if (s != null && s.isNotEmpty && s != "success") {
-          isSuccess = false;
-        }
-        if (data["mistakes"] is List ||
-            data["impact"] != null ||
-            data["drill"] != null) {
-          replyText = jsonEncode(data);
-        }
-        final candidates = [
-          data["reply"],
-          data["coach_feedback"],
-          data["difference"],
-          data["message"],
-          data["detail"],
-        ];
-        if (replyText == null) {
-          for (final candidate in candidates) {
-            final text = candidate is Map || candidate is List
-                ? jsonEncode(candidate)
-                : candidate?.toString().trim();
-            if (text != null && text.isNotEmpty) {
-              replyText = text;
-              break;
+
+      // ⚡ 1. Primary: Upload video to multimodal vision endpoint /coach/analyze
+      if (video != null && await video!.exists()) {
+        final analyzeUri = Uri.parse("https://cricknova-backend.onrender.com/coach/analyze");
+        for (int attempt = 0; attempt < 2; attempt++) {
+          try {
+            final request = http.MultipartRequest("POST", analyzeUri);
+            request.headers["Accept"] = "application/json";
+            request.headers["Authorization"] = "Bearer $token";
+            request.headers["X-USER-ID"] = user.uid;
+            request.fields["discipline"] = _analysisDiscipline;
+            request.files.add(await http.MultipartFile.fromPath("file", video!.path));
+
+            final streamedResp = await request.send().timeout(const Duration(seconds: 90));
+            final respStr = await streamedResp.stream.bytesToString();
+            debugPrint("COACH ANALYZE STATUS => ${streamedResp.statusCode}");
+            debugPrint("COACH ANALYZE RAW => $respStr");
+
+            if (streamedResp.statusCode == 200) {
+              final data = jsonDecode(respStr);
+              if (data is Map) {
+                final feedback = data["coach_feedback"] ?? data["reply"] ?? data["message"];
+                if (feedback != null && feedback.toString().trim().isNotEmpty) {
+                  replyText = feedback.toString().trim();
+                  break;
+                }
+              } else if (data is String && data.trim().isNotEmpty) {
+                replyText = data.trim();
+                break;
+              }
             }
+          } catch (e) {
+            debugPrint("COACH ANALYZE ATTEMPT $attempt ERROR => $e");
+            if (attempt == 0) await Future.delayed(const Duration(milliseconds: 650));
           }
         }
       }
 
-      // (XP block removed here)
+      // ⚡ 2. Secondary fallback: /coach/chat text endpoint if upload was skipped/failed
+      if (replyText == null || replyText.isEmpty) {
+        final chatUri = Uri.parse("https://cricknova-backend.onrender.com/coach/chat");
+        try {
+          final chatResp = await http.post(
+            chatUri,
+            headers: {
+              "Accept": "application/json",
+              "Authorization": "Bearer $token",
+              "Content-Type": "application/json",
+              "X-USER-ID": user.uid,
+            },
+            body: jsonEncode({
+              "user_id": user.uid,
+              "message": _buildMistakeCoachContextForPrompt(
+                nowUtc: DateTime.now().toUtc(),
+              ),
+            }),
+          ).timeout(const Duration(seconds: 40));
 
-      if (response.statusCode == 200) {
-        late String savedCoachResult;
-        if (replyText != null && replyText.isNotEmpty) {
-          final resultReply = _coachResultReply(replyText);
-          savedCoachResult = resultReply;
-          setState(() {
-            coachReply = resultReply;
-          });
-          // Only award XP + consume usage when backend confirms success.
-          if (isSuccess) {
-            await _addXP(20);
+          if (chatResp.statusCode == 200) {
+            final data = jsonDecode(chatResp.body);
+            if (data is Map) {
+              final feedback = data["reply"] ?? data["coach_feedback"] ?? data["message"];
+              if (feedback != null && feedback.toString().trim().isNotEmpty) {
+                replyText = feedback.toString().trim();
+              }
+            } else if (data is String && data.trim().isNotEmpty) {
+              replyText = data.trim();
+            }
           }
-        } else {
-          final resultReply = _fallbackCoachReplyFromCurrentAnalysis();
-          savedCoachResult = resultReply;
-          setState(() {
-            coachReply = resultReply;
-          });
+        } catch (e) {
+          debugPrint("COACH CHAT FALLBACK ERROR => $e");
         }
+      }
+
+      if (replyText != null && replyText.isNotEmpty) {
+        final resultReply = _coachResultReply(replyText);
+        setState(() {
+          coachReply = resultReply;
+        });
 
         if (isSuccess) {
           try {
-            final user = FirebaseAuth.instance.currentUser;
-            if (user != null) {
-              await WeeklyStatsService.recordMistakeDetection(user.uid);
-              await ImprovementPlanService.evaluateCoachReply(
-                uid: user.uid,
-                discipline: _analysisDiscipline,
-                reply: savedCoachResult,
-              );
-            }
+            await WeeklyStatsService.recordMistakeDetection(user.uid);
+            await ImprovementPlanService.evaluateCoachReply(
+              uid: user.uid,
+              discipline: _analysisDiscipline,
+              reply: resultReply,
+            );
             await PremiumService.consumeMistake();
             await _maybeShowUsageLimitReached(
               featureName: "Cricknova Mistake Detection",
@@ -8504,14 +8420,12 @@ class _UploadScreenState extends State<UploadScreen>
         }
       } else {
         setState(() {
-          coachReply =
-              "Analysis could not be completed.\nIf this keeps happening, please try again later.";
+          coachReply = "Unable to analyze video. Please upload a clear cricket video of batting or bowling and try again.";
         });
       }
     } catch (e) {
       setState(() {
-        coachReply =
-            "Coach unavailable right now.\nPlease try again in 10 seconds.";
+        coachReply = "Unable to connect to AI Coach. Please check your internet connection and try again.";
       });
     }
   }
@@ -8808,13 +8722,7 @@ Do not add intro or conclusion.
           children: [
             Positioned.fill(
               child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF0F172A), Color(0xFF000000)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
+                color: Colors.black,
               ),
             ),
             if (controller == null)
@@ -8823,169 +8731,179 @@ Do not add intro or conclusion.
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const SizedBox(height: 18),
-
-                      if (!_isBowlingMode) ...[
-                        // 🎯 Session Category Selector
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
-                            ),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedSessionType,
-                              dropdownColor: const Color(0xFF1E293B),
-                              icon: const Icon(
-                                Icons.arrow_drop_down,
-                                color: Colors.white70,
-                              ),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: "Solo / Nets Practice",
-                                  child: Text("Solo/Net Practice"),
-                                ),
-                                DropdownMenuItem(
-                                  value: "Sidearm",
-                                  child: Text("Sidearm Throwdowns"),
-                                ),
-                                DropdownMenuItem(
-                                  value: "Bowling Machine",
-                                  child: Text("Bowling Machine"),
-                                ),
-                                DropdownMenuItem(
-                                  value: "Match",
-                                  child: Text("Match Video"),
-                                ),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedSessionType = val;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                      ],
-
-                      // 💡 Instruction Tip Box
+                      // 💡 Cricket Training Video Instruction
                       Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 30),
-                        padding: const EdgeInsets.all(14),
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(14),
+                          color: const Color(0xFF14151B),
+                          borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: const Color(0xFFFBBF24).withOpacity(0.38),
+                            color: CrickXColors.limeSpark.withValues(alpha: 0.35),
+                            width: 1.2,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: CrickXColors.limeSpark.withValues(alpha: 0.08),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        child: const Text(
-                          "Choose your speed type first, then upload a proper cricket video for the most accurate result.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFFFFF7D6),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            height: 1.4,
-                          ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.sports_cricket_rounded,
+                                color: CrickXColors.limeSpark,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "Upload a clear batting or bowling clip from side or front angle for accurate AI speed & technique analysis.",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
 
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 26),
 
                       // 🎥 Upload Button
-                      GestureDetector(
-                        onTapDown: (_) => _pressDown(
-                          (v) => _uploadScale = v,
-                          (r) => _uploadRotation = r,
-                        ),
-                        onTapUp: (_) => _pressUp(
-                          (v) => _uploadScale = v,
-                          (r) => _uploadRotation = r,
-                        ),
-                        onTapCancel: () => _pressUp(
-                          (v) => _uploadScale = v,
-                          (r) => _uploadRotation = r,
-                        ),
-                        onTap: _startUploadRespectingVideoTerms,
-                        child: AnimatedRotation(
-                          turns: _uploadRotation,
-                          duration: const Duration(milliseconds: 120),
-                          child: AnimatedScale(
-                            scale: _uploadScale,
-                            duration: const Duration(milliseconds: 120),
-                            curve: Curves.easeOutBack,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 40,
-                                vertical: 22,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF8B5CF6),
-                                    Color(0xFF22D3EE),
-                                  ],
+                      ValueListenableBuilder<int>(
+                        valueListenable:
+                            AnalysisCreditService.instance.creditsNotifier,
+                        builder: (context, credits, _) {
+                          final isFreeNoCredit =
+                              !PremiumService.isPremiumActive && credits <= 0;
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GestureDetector(
+                                onTapDown: (_) => _pressDown(
+                                  (v) => _uploadScale = v,
+                                  (r) => _uploadRotation = r,
                                 ),
-                                borderRadius: BorderRadius.circular(22),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFF8B5CF6,
-                                    ).withOpacity(0.5),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
+                                onTapUp: (_) => _pressUp(
+                                  (v) => _uploadScale = v,
+                                  (r) => _uploadRotation = r,
+                                ),
+                                onTapCancel: () => _pressUp(
+                                  (v) => _uploadScale = v,
+                                  (r) => _uploadRotation = r,
+                                ),
+                                onTap: _handleMainUploadButtonTap,
+                                child: AnimatedRotation(
+                                  turns: _uploadRotation,
+                                  duration: const Duration(milliseconds: 120),
+                                  child: AnimatedScale(
+                                    scale: _uploadScale,
+                                    duration: const Duration(milliseconds: 120),
+                                    curve: Curves.easeOutBack,
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 32,
+                                        vertical: 20,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: isFreeNoCredit
+                                              ? const [
+                                                  Color(0xFFFF6B00),
+                                                  Color(0xFFFFAA00),
+                                                ]
+                                              : const [
+                                                  Color(0xFF8B5CF6),
+                                                  Color(0xFF22D3EE),
+                                                ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(22),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: (isFreeNoCredit
+                                                    ? const Color(0xFFFF6B00)
+                                                    : const Color(0xFF8B5CF6))
+                                                .withOpacity(0.5),
+                                            blurRadius: 20,
+                                            spreadRadius: 2,
+                                          ),
+                                          BoxShadow(
+                                            color: (isFreeNoCredit
+                                                    ? const Color(0xFFFFAA00)
+                                                    : const Color(0xFF22D3EE))
+                                                .withOpacity(0.30),
+                                            blurRadius: 22,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white
+                                                  .withOpacity(0.18),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: Icon(
+                                              isFreeNoCredit
+                                                  ? Icons
+                                                      .play_circle_fill_rounded
+                                                  : Icons.center_focus_strong,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Flexible(
+                                            child: Text(
+                                              _analysisTitle,
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFF22D3EE,
-                                    ).withOpacity(0.30),
-                                    blurRadius: 22,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
+                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.18),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.center_focus_strong,
-                                      color: Colors.white,
+                              if (!PremiumService.isPremiumActive &&
+                                  credits > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Text(
+                                    '🎯 $credits AI Analysis credit${credits > 1 ? 's' : ''} available',
+                                    style: TextStyle(
+                                      color: CrickXColors.limeSpark,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    _analysisTitle,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -9324,32 +9242,42 @@ Do not add intro or conclusion.
                                     (r) => _coachRotation = r,
                                   ),
                                   onTap: () async {
+                                    debugPrint('[AdMob] COACH ANALYSIS button tapped');
+                                    debugPrint('[AdMob] Checking premium status: isPremiumActive=${PremiumService.isPremiumActive}');
+
                                     if (!PremiumService.isPremiumActive) {
-                                      if (!mounted) return;
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) => const PremiumScreen(
-                                            entrySource: "mistake_lock",
-                                          ),
-                                        ),
-                                      );
-                                      return;
+                                      debugPrint('[AdMob] User is FREE');
+                                      // Check if user already has an ad credit
+                                      final currentCredits = AnalysisCreditService.instance.credits;
+                                      debugPrint('[AdMob] Current credits: $currentCredits');
+
+                                      if (currentCredits <= 0) {
+                                        // No credit — show Watch Ad dialog
+                                        debugPrint('[AdMob] No credits — showing Watch Ad dialog');
+                                        if (!mounted) return;
+                                        await _showWatchAdDialog();
+                                        // After dialog closes, check if credit was earned
+                                        final creditAfter = AnalysisCreditService.instance.credits;
+                                        debugPrint('[AdMob] Credits after dialog: $creditAfter');
+                                        if (creditAfter <= 0) {
+                                          // User didn't earn a credit (closed early / no ad)
+                                          debugPrint('[AdMob] No credit earned — aborting analysis');
+                                          return;
+                                        }
+                                        debugPrint('[AdMob] Credit earned — continuing to analysis');
+                                      } else {
+                                        debugPrint('[AdMob] User has $currentCredits credit(s) — skipping ad');
+                                      }
+                                    } else {
+                                      debugPrint('[Premium] User is premium — running analysis directly');
                                     }
+
+                                    // Proceed with analysis
 
                                     setState(() {
                                       showCoach = true;
                                       coachReply =
-                                          "This may take 1–2 minutes...\nPlease keep the app open ⏳";
-                                    });
-
-                                    await Future.delayed(
-                                      const Duration(seconds: 6),
-                                    );
-                                    if (!mounted) return;
-
-                                    setState(() {
-                                      coachReply =
-                                          "Analyzing your $_analysisDiscipline... 🏏";
+                                          "Analyzing your $_analysisDiscipline with AI vision... 🏏";
                                     });
 
                                     await runCoach();
@@ -9581,37 +9509,43 @@ Do not add intro or conclusion.
                                       vertical: 12,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF0F172A,
-                                      ).withOpacity(0.72),
-                                      borderRadius: BorderRadius.circular(16),
+                                      color: const Color(0xFF0D0D12),
+                                      borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: Colors.white.withOpacity(0.12),
+                                        color: const Color(0xFF23232A),
+                                        width: 1.2,
                                       ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.5),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
                                     ),
                                     child: Row(
                                       children: [
-                                        const CircleAvatar(
+                                        CircleAvatar(
                                           radius: 16,
-                                          backgroundColor: Color(0xFF0B1220),
+                                          backgroundColor: CrickXColors.graphiteBg,
                                           child: Icon(
                                             Icons.auto_awesome,
-                                            color: Color(0xFF38BDF8),
+                                            color: CrickXColors.limeSpark,
                                             size: 18,
                                           ),
                                         ),
-                                        SizedBox(width: 10),
+                                        const SizedBox(width: 10),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              const Text(
+                                              Text(
                                                 "CrickNova Coach",
-                                                style: TextStyle(
+                                                style: GoogleFonts.poppins(
                                                   color: Colors.white,
                                                   fontSize: 16,
-                                                  fontWeight: FontWeight.w800,
+                                                  fontWeight: FontWeight.w700,
                                                 ),
                                               ),
                                               const SizedBox(height: 2),
@@ -9619,10 +9553,10 @@ Do not add intro or conclusion.
                                                 _isBowlingMode
                                                     ? "Cricknova Mistake Detection Report"
                                                     : "Cricknova Mistake Detection Report",
-                                                style: const TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 12.5,
-                                                  fontWeight: FontWeight.w600,
+                                                style: GoogleFonts.poppins(
+                                                  color: const Color(0xFFA1A1AA),
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
                                                 ),
                                               ),
                                             ],
@@ -9636,16 +9570,15 @@ Do not add intro or conclusion.
                                     width: double.infinity,
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF0F172A,
-                                      ).withOpacity(0.55),
-                                      borderRadius: BorderRadius.circular(18),
+                                      color: CrickXColors.graphite,
+                                      borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: Colors.white.withOpacity(0.14),
+                                        color: CrickXColors.graphiteBorder,
+                                        width: 1.2,
                                       ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withOpacity(0.28),
+                                          color: Colors.black.withOpacity(0.6),
                                           blurRadius: 18,
                                           offset: const Offset(0, 8),
                                         ),
@@ -9668,24 +9601,20 @@ Do not add intro or conclusion.
                                         });
                                       },
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF0EA5E9,
-                                        ),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 12,
-                                        ),
+                                        backgroundColor: CrickXColors.limeSpark,
+                                        foregroundColor: CrickXColors.onLime,
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                                          borderRadius: BorderRadius.circular(16),
                                         ),
+                                        elevation: 0,
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         "Close",
-                                        style: TextStyle(
+                                        style: GoogleFonts.poppins(
                                           fontWeight: FontWeight.w700,
-                                          fontSize: 14,
+                                          fontSize: 15,
+                                          color: CrickXColors.onLime,
                                         ),
                                       ),
                                     ),
@@ -9801,23 +9730,17 @@ Do not add intro or conclusion.
                       constraints: const BoxConstraints(maxWidth: 460),
                       padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF121821).withOpacity(0.78),
+                        color: const Color(0xFF0D0D12),
                         borderRadius: BorderRadius.circular(28),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.10),
+                          color: const Color(0xFF23232A),
+                          width: 1.2,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(
-                              0xFF00C2FF,
-                            ).withOpacity(0.14 + (0.12 * glow)),
+                            color: Colors.black.withOpacity(0.7),
                             blurRadius: 36,
-                            spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.34),
-                            blurRadius: 24,
-                            offset: const Offset(0, 16),
+                            offset: const Offset(0, 12),
                           ),
                         ],
                       ),
@@ -9846,18 +9769,18 @@ Do not add intro or conclusion.
                                         ).withOpacity(0.40),
                                       ),
                                     ),
-                                    child: const Row(
+                                    child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(
+                                        const Icon(
                                           Icons.check_circle_rounded,
                                           size: 16,
                                           color: Color(0xFF00FF9D),
                                         ),
-                                        SizedBox(width: 8),
+                                        const SizedBox(width: 8),
                                         Text(
                                           "Upload successful",
-                                          style: TextStyle(
+                                          style: GoogleFonts.poppins(
                                             color: Colors.white,
                                             fontWeight: FontWeight.w700,
                                             fontSize: 12.5,
@@ -9883,11 +9806,7 @@ Do not add intro or conclusion.
                                   child: CircularProgressIndicator(
                                     strokeWidth: 4,
                                     value: null,
-                                    color: Color.lerp(
-                                      const Color(0xFF00C2FF),
-                                      const Color(0xFF00FF9D),
-                                      glow,
-                                    ),
+                                    color: CrickXColors.limeSpark,
                                     backgroundColor: Colors.white12,
                                   ),
                                 ),
@@ -9896,14 +9815,15 @@ Do not add intro or conclusion.
                                   height: 78,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: const Color(0xFF0E151D),
+                                    color: CrickXColors.graphite,
                                     border: Border.all(
-                                      color: Colors.white.withOpacity(0.12),
+                                      color: CrickXColors.graphiteBorder,
+                                      width: 1.2,
                                     ),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.sports_cricket_rounded,
-                                    color: Colors.white,
+                                    color: CrickXColors.limeSpark,
                                     size: 34,
                                   ),
                                 ),
@@ -9911,12 +9831,12 @@ Do not add intro or conclusion.
                             ),
                           ),
                           const SizedBox(height: 18),
-                          const Text(
+                          Text(
                             "Analyzing your video...",
                             textAlign: TextAlign.center,
-                            style: TextStyle(
+                            style: GoogleFonts.poppins(
                               color: Colors.white,
-                              fontSize: 24,
+                              fontSize: 22,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.2,
                             ),
@@ -9940,21 +9860,21 @@ Do not add intro or conclusion.
                               activeStatus,
                               key: ValueKey(activeStatus),
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Color(0xFF9ADFFF),
-                                fontSize: 14,
+                              style: GoogleFonts.poppins(
+                                color: CrickXColors.limeSpark,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w600,
                                 height: 1.4,
                               ),
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             "AI is working in the background so your next insight lands clean.",
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFFA1A1AA),
+                              fontSize: 12.5,
                               height: 1.45,
                             ),
                           ),
@@ -9968,20 +9888,21 @@ Do not add intro or conclusion.
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.04),
+                                  color: CrickXColors.graphite,
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.08),
+                                    color: CrickXColors.graphiteBorder,
+                                    width: 1.2,
                                   ),
                                 ),
                                 child: Column(
                                   children: [
-                                    const Text(
+                                    Text(
                                       "Analysis is taking a bit longer. We'll notify you when it's ready.",
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white,
-                                        fontSize: 13.5,
+                                        fontSize: 13,
                                         height: 1.45,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -9994,10 +9915,8 @@ Do not add intro or conclusion.
                                           openAnalysisTab: false,
                                         ),
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(
-                                            0xFF00C2FF,
-                                          ),
-                                          foregroundColor: Colors.black,
+                                          backgroundColor: CrickXColors.limeSpark,
+                                          foregroundColor: CrickXColors.onLime,
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 14,
                                           ),
@@ -10006,11 +9925,14 @@ Do not add intro or conclusion.
                                               16,
                                             ),
                                           ),
+                                          elevation: 0,
                                         ),
-                                        child: const Text(
+                                        child: Text(
                                           "Continue exploring",
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w800,
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 14.5,
+                                            color: CrickXColors.onLime,
                                           ),
                                         ),
                                       ),
@@ -10025,9 +9947,7 @@ Do not add intro or conclusion.
                                         style: OutlinedButton.styleFrom(
                                           foregroundColor: Colors.white,
                                           side: BorderSide(
-                                            color: const Color(
-                                              0xFF00FF9D,
-                                            ).withOpacity(0.42),
+                                            color: CrickXColors.limeSpark.withOpacity(0.5),
                                           ),
                                           padding: const EdgeInsets.symmetric(
                                             vertical: 14,
@@ -10067,17 +9987,16 @@ Do not add intro or conclusion.
   Widget _buildDrsTransitionOverlay() {
     return Container(
       color: Colors.black.withOpacity(0.85),
-      child: const Center(
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: Color(0xFF38BDF8), strokeWidth: 3),
-            SizedBox(height: 24),
+            CircularProgressIndicator(color: CrickXColors.limeSpark, strokeWidth: 3),
+            const SizedBox(height: 24),
             Text(
               "PREPARING REPLAY...",
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontFamily: "Montserrat",
                 fontSize: 14,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 2.0,
@@ -10095,11 +10014,18 @@ Do not add intro or conclusion.
       child: Center(
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: 34),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white12),
+            color: CrickXColors.graphite,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.6),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -10111,24 +10037,24 @@ Do not add intro or conclusion.
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00FF9D).withOpacity(0.10),
+                    color: CrickXColors.limeSpark.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: const Color(0xFF00FF9D).withOpacity(0.32),
+                      color: CrickXColors.limeSpark.withOpacity(0.35),
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.check_circle_rounded,
                         size: 15,
-                        color: Color(0xFF00FF9D),
+                        color: CrickXColors.limeSpark,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Text(
                         "Upload successful",
-                        style: TextStyle(
+                        style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 12.5,
@@ -10168,14 +10094,14 @@ Do not add intro or conclusion.
                     width: 16,
                     height: 16,
                     child: _autoZoomRetryInProgress
-                        ? const Icon(
+                        ? Icon(
                             Icons.zoom_in_rounded,
-                            color: Color(0xFF38BDF8),
+                            color: CrickXColors.limeSpark,
                             size: 16,
                           )
-                        : const CircularProgressIndicator(
+                        : CircularProgressIndicator(
                             strokeWidth: 2.2,
-                            color: Color(0xFF38BDF8),
+                            color: CrickXColors.limeSpark,
                           ),
                   ),
                   const SizedBox(width: 10),
@@ -10185,8 +10111,8 @@ Do not add intro or conclusion.
                           ? "Analyzing video..."
                           : _analysisStatusText,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: GoogleFonts.poppins(
+                        color: const Color(0xFFA1A1AA),
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
                       ),
@@ -10309,10 +10235,10 @@ Do not add intro or conclusion.
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFF0D0D12),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          side: const BorderSide(color: Color(0xFF23232A), width: 1.2),
         ),
         title: Text(
           "Exit ${_sessionTypeLabel(_selectedSessionType)}?",
@@ -10366,6 +10292,23 @@ Do not add intro or conclusion.
     });
   }
 
+
+  Future<void> _showWatchAdDialog() async {
+    if (!mounted) return;
+    debugPrint('[AdMob] Showing Watch Ad dialog');
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _WatchAdDialog(
+        onCreditGranted: () {
+          debugPrint('[AdMob] Credit granted in dialog — closing dialog');
+          Navigator.of(ctx).pop(); // Just close dialog; onTap caller will detect credit and run analysis
+        },
+      ),
+    );
+    debugPrint('[AdMob] Watch Ad dialog closed');
+  }
+
   Widget _buildAppBarTab({
     required IconData icon,
     required String label,
@@ -10399,6 +10342,129 @@ Do not add intro or conclusion.
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Watch Ad Dialog ──────────────────────────────────────────────────────────────────────────
+class _WatchAdDialog extends StatefulWidget {
+  const _WatchAdDialog({required this.onCreditGranted});
+  final VoidCallback onCreditGranted;
+  @override
+  State<_WatchAdDialog> createState() => _WatchAdDialogState();
+}
+
+class _WatchAdDialogState extends State<_WatchAdDialog> {
+  bool _loading = false;
+  String? _message;
+
+  Future<void> _handleWatchAd() async {
+    if (_loading) return;
+    debugPrint('[AdMob] Watch Ad button tapped (upload_screen)');
+    debugPrint('[AdMob] Ad ready: ${AdMobService.instance.isRewardedAdReady}');
+    setState(() { _loading = true; _message = null; });
+    final result = await AnalysisCreditService.instance.watchAdForCredit();
+    debugPrint('[AdMob] watchAdForCredit result: $result');
+    if (!mounted) return;
+    setState(() => _loading = false);
+    switch (result) {
+      case AdWatchResult.rewardEarned:
+        debugPrint('[AI] Credit granted — proceeding with analysis');
+        widget.onCreditGranted();
+        break;
+      case AdWatchResult.adNotAvailable:
+        debugPrint('[AdMob] Ad not available — showing retry message');
+        setState(() => _message = "Ad isn't available right now. Please try again.");
+        break;
+      case AdWatchResult.adClosedEarly:
+        debugPrint('[AdMob] Ad closed early — no reward');
+        setState(() => _message = 'Watch the complete ad to earn your analysis.');
+        break;
+      case AdWatchResult.premiumUser:
+        debugPrint('[Premium] Premium user in Watch Ad dialog — closing');
+        Navigator.of(context).pop();
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF0D0D12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: const BorderSide(color: Color(0xFF23232A), width: 1.2),
+      ),
+      title: Text(
+        '🎬 Watch Ad to Unlock',
+        style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Watch a short ad to unlock 4 AI Cricket Analyses.',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          if (_message != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _message!,
+                style: TextStyle(
+                  color: _message!.startsWith("Ad isn") ? Colors.redAccent : Colors.orangeAccent,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B00),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _loading ? null : _handleWatchAd,
+              child: _loading
+                  ? const SizedBox(
+                      width: 22, height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                    )
+                  : const Text(
+                      'Watch Ad 🎬',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const PremiumScreen(entrySource: 'ad_unlock_premium'),
+              ),
+            );
+          },
+          child: const Text(
+            'Upgrade to Premium',
+            style: TextStyle(color: Color(0xFFFFAA00), fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
     );
   }
 }

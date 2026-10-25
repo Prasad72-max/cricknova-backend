@@ -12,6 +12,8 @@ import 'premium_service.dart';
 import 'trial_access_service.dart';
 
 class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
+  static final SubscriptionProvider instance = SubscriptionProvider();
+
   SubscriptionProvider({
     InAppPurchase? inAppPurchase,
     FirebaseFirestore? firestore,
@@ -28,6 +30,43 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const String oneYearPlanId = 'one-year-plan';
   static const String oneYearElitePlanId = 'one-year-elite';
   static const Set<String> _productIds = <String>{premiumProductId};
+
+  /// Matches base plan IDs considering hyphens, underscores, and aliases.
+  static bool basePlanMatches(String planBasePlanId, String targetBasePlanId) {
+    if (planBasePlanId.toLowerCase() == targetBasePlanId.toLowerCase()) return true;
+    final normalizedA = planBasePlanId.toLowerCase().replaceAll('-', '_');
+    final normalizedB = targetBasePlanId.toLowerCase().replaceAll('-', '_');
+    if (normalizedA == normalizedB) return true;
+
+    if (normalizedB == 'monthly_plan' || normalizedB == 'monthly') {
+      return normalizedA == 'monthly_plan' ||
+          normalizedA == 'monthly' ||
+          normalizedA == 'in_99';
+    }
+    if (normalizedB == 'six_month_plan' || normalizedB == '6_month_plan') {
+      return normalizedA == 'six_month_plan' ||
+          normalizedA == '6_month_plan' ||
+          normalizedA == '6months' ||
+          normalizedA == 'in_299';
+    }
+    if (normalizedB == 'one_year_plan' ||
+        normalizedB == '1_year_plan' ||
+        normalizedB == 'yearly') {
+      return normalizedA == 'one_year_plan' ||
+          normalizedA == '1_year_plan' ||
+          normalizedA == 'yearly' ||
+          normalizedA == 'in_499';
+    }
+    if (normalizedB == 'one_year_elite' ||
+        normalizedB == 'elite' ||
+        normalizedB == 'ultra') {
+      return normalizedA == 'one_year_elite' ||
+          normalizedA == 'elite' ||
+          normalizedA == 'ultra' ||
+          normalizedA == 'in_1999';
+    }
+    return false;
+  }
 
   static const String _lastSelectedBasePlanKey =
       'google_play_last_selected_base_plan';
@@ -438,18 +477,21 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) {
     if (requireFreeTrial) {
       for (final GooglePlaySubscriptionPlan plan in _plans) {
-        if (plan.basePlanId == basePlanId && plan.hasFreeTrial) {
+        if (basePlanMatches(plan.basePlanId, basePlanId) && plan.hasFreeTrial) {
           return plan;
         }
       }
       return null;
     }
     if (!allowFreeTrial) {
-      final plan = _noTrialPlansByBasePlan[basePlanId];
-      if (plan != null) return plan;
+      for (final entry in _noTrialPlansByBasePlan.entries) {
+        if (basePlanMatches(entry.key, basePlanId)) {
+          return entry.value;
+        }
+      }
     }
     for (final GooglePlaySubscriptionPlan plan in _plans) {
-      if (plan.basePlanId == basePlanId) {
+      if (basePlanMatches(plan.basePlanId, basePlanId)) {
         return plan;
       }
     }
@@ -816,32 +858,33 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   DateTime _fallbackExpiryForPlan(String basePlanId) {
     final DateTime now = DateTime.now();
-    switch (basePlanId) {
-      case monthlyPlanId:
-        return DateTime(now.year, now.month + 1, now.day, now.hour, now.minute);
-      case sixMonthPlanId:
-        return DateTime(now.year, now.month + 6, now.day, now.hour, now.minute);
-      case oneYearPlanId:
-      case oneYearElitePlanId:
-        return DateTime(now.year + 1, now.month, now.day, now.hour, now.minute);
-      default:
-        return now.add(const Duration(days: 30));
+    if (basePlanMatches(basePlanId, monthlyPlanId)) {
+      return DateTime(now.year, now.month + 1, now.day, now.hour, now.minute);
     }
+    if (basePlanMatches(basePlanId, sixMonthPlanId)) {
+      return DateTime(now.year, now.month + 6, now.day, now.hour, now.minute);
+    }
+    if (basePlanMatches(basePlanId, oneYearPlanId) ||
+        basePlanMatches(basePlanId, oneYearElitePlanId)) {
+      return DateTime(now.year + 1, now.month, now.day, now.hour, now.minute);
+    }
+    return now.add(const Duration(days: 30));
   }
 
   int _aiLimitForPlan(String basePlanId) {
-    switch (basePlanId) {
-      case monthlyPlanId:
-        return 30;
-      case sixMonthPlanId:
-        return 100;
-      case oneYearPlanId:
-        return 180;
-      case oneYearElitePlanId:
-        return 365;
-      default:
-        return 0;
+    if (basePlanMatches(basePlanId, monthlyPlanId)) {
+      return 30;
     }
+    if (basePlanMatches(basePlanId, sixMonthPlanId)) {
+      return 100;
+    }
+    if (basePlanMatches(basePlanId, oneYearPlanId)) {
+      return 180;
+    }
+    if (basePlanMatches(basePlanId, oneYearElitePlanId)) {
+      return 365;
+    }
+    return 0;
   }
 
   bool _isIndiaStoreCatalog() {
@@ -861,44 +904,46 @@ class SubscriptionProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   String _premiumServicePlanIdForBasePlan(String basePlanId) {
     final bool isIndiaPlan = _isIndiaStoreCatalog();
-    switch (basePlanId) {
-      case monthlyPlanId:
-        return isIndiaPlan ? 'IN_99' : 'INTL_MONTHLY';
-      case sixMonthPlanId:
-        return isIndiaPlan ? 'IN_299' : 'INTL_6M';
-      case oneYearPlanId:
-        return isIndiaPlan ? 'IN_499' : 'INTL_YEARLY';
-      case oneYearElitePlanId:
-        return isIndiaPlan ? 'IN_1999' : 'INTL_ULTRA';
-      default:
-        return 'FREE';
+    if (basePlanMatches(basePlanId, monthlyPlanId)) {
+      return isIndiaPlan ? 'IN_99' : 'INTL_MONTHLY';
     }
+    if (basePlanMatches(basePlanId, sixMonthPlanId)) {
+      return isIndiaPlan ? 'IN_299' : 'INTL_6M';
+    }
+    if (basePlanMatches(basePlanId, oneYearPlanId)) {
+      return isIndiaPlan ? 'IN_499' : 'INTL_YEARLY';
+    }
+    if (basePlanMatches(basePlanId, oneYearElitePlanId)) {
+      return isIndiaPlan ? 'IN_1999' : 'INTL_ULTRA';
+    }
+    return 'FREE';
   }
 
   ({int chat, int mistake, int compare}) _premiumLimitsForBasePlan(
     String basePlanId,
   ) {
     final bool isIndiaPlan = _isIndiaStoreCatalog();
-    switch (basePlanId) {
-      case monthlyPlanId:
-        return isIndiaPlan
-            ? (chat: 200, mistake: 15, compare: 0)
-            : (chat: 250, mistake: 15, compare: 15);
-      case sixMonthPlanId:
-        return isIndiaPlan
-            ? (chat: 1200, mistake: 30, compare: 0)
-            : (chat: 1500, mistake: 30, compare: 30);
-      case oneYearPlanId:
-        return isIndiaPlan
-            ? (chat: 3000, mistake: 60, compare: 60)
-            : (chat: 5000, mistake: 60, compare: 60);
-      case oneYearElitePlanId:
-        return isIndiaPlan
-            ? (chat: 5000, mistake: 150, compare: 150)
-            : (chat: 999999, mistake: 150, compare: 150);
-      default:
-        return (chat: 0, mistake: 0, compare: 0);
+    if (basePlanMatches(basePlanId, monthlyPlanId)) {
+      return isIndiaPlan
+          ? (chat: 200, mistake: 15, compare: 0)
+          : (chat: 250, mistake: 15, compare: 15);
     }
+    if (basePlanMatches(basePlanId, sixMonthPlanId)) {
+      return isIndiaPlan
+          ? (chat: 1200, mistake: 30, compare: 0)
+          : (chat: 1500, mistake: 30, compare: 30);
+    }
+    if (basePlanMatches(basePlanId, oneYearPlanId)) {
+      return isIndiaPlan
+          ? (chat: 3000, mistake: 60, compare: 60)
+          : (chat: 5000, mistake: 60, compare: 60);
+    }
+    if (basePlanMatches(basePlanId, oneYearElitePlanId)) {
+      return isIndiaPlan
+          ? (chat: 5000, mistake: 150, compare: 150)
+          : (chat: 999999, mistake: 150, compare: 150);
+    }
+    return (chat: 0, mistake: 0, compare: 0);
   }
 
   DateTime? _parseExpiry(dynamic rawExpiry) {

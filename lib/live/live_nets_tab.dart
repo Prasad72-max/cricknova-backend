@@ -10,14 +10,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive/hive.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../config/api_config.dart';
 import '../navigation/main_navigation.dart';
 import '../services/premium_service.dart';
+import '../theme/crickx_colors.dart';
 import 'edge_saved_reviews_screen.dart';
 import 'review_player_screen.dart';
 
@@ -67,35 +69,59 @@ class LiveNetsAccessCard extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
           decoration: BoxDecoration(
-            color: const Color(0xFF07111F),
-            borderRadius: BorderRadius.circular(18),
+            color: CrickXColors.graphite,
+            borderRadius: BorderRadius.circular(22),
             border: Border.all(
-              color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+              color: CrickXColors.graphiteBorder,
+              width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
-                blurRadius: 24,
+                color: Colors.black.withValues(alpha: 0.7),
+                blurRadius: 18,
+                spreadRadius: 1,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
           child: ListTile(
-            leading: const Icon(
-              Icons.sports_cricket_rounded,
-              color: Color(0xFF00E5FF),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            leading: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: CrickXColors.graphiteBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: CrickXColors.graphiteBorder,
+                  width: 1.1,
+                ),
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: CrickXColors.limeSpark,
+                size: 20,
+              ),
             ),
-            title: const Text(
+            title: Text(
               'CrickNova Edge',
-              style: TextStyle(color: Colors.white),
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 15.5,
+              ),
             ),
             subtitle: Text(
-              'Balance ${formatBalance(balanceMs)}. Live AI net feedback with coach voice.',
-              style: const TextStyle(color: Colors.white60, fontSize: 12.5),
+              'Balance ${formatBalance(balanceMs)} • Live AI net session with coach voice',
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF94A3B8),
+                fontSize: 12,
+              ),
             ),
             trailing: const Icon(
               Icons.arrow_forward_ios_rounded,
-              color: Color(0xFF00E5FF),
-              size: 18,
+              color: Color(0xFF71717A),
+              size: 14,
             ),
             onTap: () => Navigator.of(
               context,
@@ -209,11 +235,12 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
       barrierDismissible: false,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF07111F),
+          backgroundColor: CrickXColors.graphiteBg,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(22),
             side: BorderSide(
               color: const Color(0xFFFF3B30).withValues(alpha: 0.55),
+              width: 1.2,
             ),
           ),
           title: const Text(
@@ -253,18 +280,27 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
     final user = FirebaseAuth.instance.currentUser;
     return Theme(
       data: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0A0E1A),
+        scaffoldBackgroundColor: Colors.black,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF0A0E1A),
+          backgroundColor: Colors.black,
           foregroundColor: Colors.white,
+          elevation: 0,
         ),
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: Colors.black,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF0A0E1A),
+          backgroundColor: Colors.black,
+          elevation: 0,
           foregroundColor: Colors.white,
-          title: const Text('CrickNova Edge'),
+          title: const Text(
+            'CrickNova Edge',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 19,
+            ),
+          ),
           actions: [
             if (user != null)
               IconButton(
@@ -276,14 +312,14 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                     ),
                   );
                 },
-                icon: const Icon(Icons.bookmark_rounded),
+                icon: const Icon(Icons.bookmark_rounded, color: CrickXColors.limeSpark),
               ),
           ],
         ),
         body: user == null
             ? const Center(
                 child: Text(
-                  'Sign in to use Live Nets.',
+                  'Sign in to use CrickNova Edge.',
                   style: TextStyle(color: Colors.white70),
                 ),
               )
@@ -293,68 +329,65 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                     .doc(user.uid)
                     .snapshots(),
                 builder: (context, snapshot) {
-                  final balanceMs = LiveNetsAccessCard.balanceMsFrom(
-                    snapshot.data?.data() ?? {},
-                  );
-                  return Padding(
+                  final data = snapshot.data?.data();
+                  final balanceMs = (data?['edgeBalanceMs'] as num?)?.toInt() ?? 0;
+                  return SingleChildScrollView(
                     padding: const EdgeInsets.all(18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _CoachControlsRow(
-                          language: _selectedLanguage,
-                          discipline: _selectedDiscipline,
-                          onLanguageChanged: (value) {
-                            setState(() => _selectedLanguage = value);
-                            unawaited(_saveEdgePrefs());
-                          },
-                          onDisciplineChanged: (value) {
-                            setState(() => _selectedDiscipline = value);
-                            unawaited(_saveEdgePrefs());
-                          },
-                        ),
-                        const SizedBox(height: 16),
                         Container(
-                          padding: const EdgeInsets.all(18),
+                          padding: const EdgeInsets.all(22),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF07111F),
-                            borderRadius: BorderRadius.circular(10),
+                            color: CrickXColors.graphite,
+                            borderRadius: BorderRadius.circular(22),
                             border: Border.all(
-                              color: const Color(
-                                0xFF00E5FF,
-                              ).withValues(alpha: 0.6),
+                              color: CrickXColors.graphiteBorder,
+                              width: 1.2,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Icon(
-                                    Icons.sports_cricket_rounded,
-                                    color: Color(0xFF00E5FF),
-                                    size: 20,
+                                  const Icon(
+                                    Icons.auto_awesome,
+                                    color: CrickXColors.limeSpark,
+                                    size: 18,
                                   ),
-                                  SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'CrickNova Edge Balance',
-                                    style: TextStyle(color: Colors.white60),
+                                    'Edge Session Balance',
+                                    style: GoogleFonts.poppins(
+                                      color: const Color(0xFFA1A1AA),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 10),
                               Text(
                                 LiveNetsAccessCard.formatBalance(balanceMs),
-                                style: const TextStyle(
+                                style: GoogleFonts.poppins(
                                   color: Colors.white,
-                                  fontSize: 38,
-                                  fontWeight: FontWeight.w900,
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 16),
                         Expanded(
                           child: SingleChildScrollView(
                             child: Column(
@@ -398,13 +431,21 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                         ElevatedButton.icon(
                           onPressed: balanceMs > 0 ? _openCareSheet : null,
                           icon: const Icon(Icons.videocam_rounded),
-                          label: const Text('Start CrickNova Edge'),
+                          label: Text(
+                            'Start CrickNova Edge',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: CrickXColors.onLime,
+                            ),
+                          ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00E5FF),
-                            foregroundColor: Colors.black,
+                            backgroundColor: CrickXColors.limeSpark,
+                            foregroundColor: CrickXColors.onLime,
                             padding: const EdgeInsets.symmetric(vertical: 16),
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                           ),
                         ),
@@ -434,45 +475,56 @@ class _EdgeInstructionCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.045),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: CrickXColors.graphite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(9),
+              color: CrickXColors.graphiteBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: CrickXColors.graphiteBorder,
+                width: 1.1,
+              ),
             ),
-            child: Icon(icon, color: const Color(0xFF00E5FF), size: 21),
+            child: Icon(icon, color: CrickXColors.limeSpark, size: 20),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w900,
-                    height: 1.2,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   body,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12.8,
-                    height: 1.42,
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFFA1A1AA),
+                    fontSize: 12.5,
+                    height: 1.45,
                   ),
                 ),
               ],
@@ -491,9 +543,9 @@ class _MoneyCareSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0A0E1A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      decoration: BoxDecoration(
+        color: CrickXColors.graphiteBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
         top: false,
@@ -512,12 +564,12 @@ class _MoneyCareSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 18),
-            const Text(
+            Text(
               'Your Money Matters',
-              style: TextStyle(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 21,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 14),
@@ -536,29 +588,51 @@ class _MoneyCareSheet extends StatelessWidget {
               text:
                   'Place your phone stable and side-on so the coach can see your full movement.',
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context, false),
                     icon: const Icon(Icons.close_rounded),
-                    label: const Text('Not Ready'),
+                    label: Text(
+                      'Not Ready',
+                      style: GoogleFonts.poppins(
+                        color: const Color(0xFFA1A1AA),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white24),
+                      foregroundColor: const Color(0xFFA1A1AA),
+                      side: BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => Navigator.pop(context, true),
                     icon: const Icon(Icons.bolt_rounded),
-                    label: const Text('Start Live Session'),
+                    label: Text(
+                      'Start Live Session',
+                      style: GoogleFonts.poppins(
+                        color: CrickXColors.onLime,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                      ),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00E5FF),
-                      foregroundColor: Colors.black,
+                      backgroundColor: CrickXColors.limeSpark,
+                      foregroundColor: CrickXColors.onLime,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
@@ -583,12 +657,12 @@ class _CareBullet extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF00E5FF), size: 20),
+          Icon(icon, color: CrickXColors.limeSpark, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(color: Colors.white70, height: 1.35),
+              style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4, fontSize: 13),
             ),
           ),
         ],
@@ -617,22 +691,27 @@ class _CoachControlsRow extends StatelessWidget {
       children: [
         _ChoiceSection(
           title: 'Coach Language',
-          children: ['English', 'Hindi', 'Marathi']
+          children: ['English', 'Hindi', 'Marathi', 'Tamil', 'Telugu']
               .map(
                 (value) => ChoiceChip(
                   label: Text(value),
                   selected: language == value,
                   onSelected: (_) => onLanguageChanged(value),
-                  labelStyle: TextStyle(
-                    color: language == value ? Colors.black : Colors.white,
+                  labelStyle: GoogleFonts.poppins(
+                    color: language == value ? CrickXColors.onLime : Colors.white,
                     fontWeight: FontWeight.w700,
+                    fontSize: 13,
                   ),
-                  selectedColor: const Color(0xFF00E5FF),
-                  backgroundColor: const Color(0xFF1E293B),
+                  selectedColor: CrickXColors.limeSpark,
+                  backgroundColor: CrickXColors.graphite,
                   side: BorderSide(
                     color: language == value
-                        ? const Color(0xFF00E5FF)
-                        : Colors.white.withValues(alpha: 0.15),
+                        ? CrickXColors.limeSpark
+                        : CrickXColors.graphiteBorder,
+                    width: 1.2,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               )
@@ -647,16 +726,21 @@ class _CoachControlsRow extends StatelessWidget {
                   label: Text(value),
                   selected: discipline == value,
                   onSelected: (_) => onDisciplineChanged(value),
-                  labelStyle: TextStyle(
-                    color: discipline == value ? Colors.black : Colors.white,
+                  labelStyle: GoogleFonts.poppins(
+                    color: discipline == value ? CrickXColors.onLime : Colors.white,
                     fontWeight: FontWeight.w700,
+                    fontSize: 13,
                   ),
-                  selectedColor: const Color(0xFF00E5FF),
-                  backgroundColor: const Color(0xFF1E293B),
+                  selectedColor: CrickXColors.limeSpark,
+                  backgroundColor: CrickXColors.graphite,
                   side: BorderSide(
                     color: discipline == value
-                        ? const Color(0xFF00E5FF)
-                        : Colors.white.withValues(alpha: 0.15),
+                        ? CrickXColors.limeSpark
+                        : CrickXColors.graphiteBorder,
+                    width: 1.2,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               )
@@ -741,8 +825,8 @@ class _LiveCountdownState extends State<_LiveCountdown> {
           child: Text(
             '$_count',
             key: ValueKey(_count),
-            style: const TextStyle(
-              color: Color(0xFF00E5FF),
+            style: GoogleFonts.poppins(
+              color: CrickXColors.limeSpark,
               fontSize: 92,
               fontWeight: FontWeight.w900,
             ),
@@ -1235,7 +1319,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           setState(() {
             _chunksAnalysed = clipIndex;
             _coachProcessing = false;
-            _status = 'Gemini feedback failed';
+            _status = 'AI feedback failed';
           });
         }
         return;
@@ -1246,7 +1330,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           setState(() {
             _chunksAnalysed = clipIndex;
             _coachProcessing = false;
-            _status = 'Gemini response unreadable';
+            _status = 'AI response unreadable';
           });
         }
         return;
@@ -1284,7 +1368,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         debugPrint('CrickNova Edge feedback empty for clip #$clipIndex');
         if (mounted) {
           setState(() {
-            _status = 'Waiting for real Gemini feedback';
+            _status = 'Waiting for AI feedback';
           });
         }
       }
@@ -1294,7 +1378,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         setState(() {
           _chunksAnalysed = clipIndex;
           _coachProcessing = false;
-          _status = 'Gemini upload failed';
+          _status = 'AI upload failed';
         });
       }
     } finally {
@@ -1411,11 +1495,12 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF07111F),
+        backgroundColor: CrickXColors.graphiteBg,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
           side: BorderSide(
             color: const Color(0xFFFF3B30).withValues(alpha: 0.55),
+            width: 1.2,
           ),
         ),
         title: Text(
@@ -1834,7 +1919,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     if (reviewSource != null && _recordedPath != null) {
       try {
         await File(reviewSource).copy(_recordedPath!);
-        await ImageGallerySaver.saveFile(
+        await ImageGallerySaverPlus.saveFile(
           _recordedPath!,
           name: p.basename(_recordedPath!),
         );
@@ -1910,8 +1995,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           if (camera != null && camera.value.isInitialized)
             Positioned.fill(child: CameraPreview(camera))
           else
-            const Center(
-              child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+            Center(
+              child: CircularProgressIndicator(color: CrickXColors.limeSpark),
             ),
           Positioned(
             left: 18,
@@ -1920,10 +2005,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
             child: Row(
               children: [
                 Material(
-                  color: Colors.black.withValues(alpha: 0.62),
-                  borderRadius: BorderRadius.circular(10),
+                  color: CrickXColors.graphiteBg.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(14),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                     onTap: _goBack,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -1931,16 +2016,15 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: const Color(
-                            0xFF00E5FF,
-                          ).withValues(alpha: 0.55),
+                          color: CrickXColors.graphiteBorder,
+                          width: 1.2,
                         ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.arrow_back_rounded,
-                        color: Color(0xFF00E5FF),
+                        color: CrickXColors.limeSpark,
                         size: 20,
                       ),
                     ),
@@ -1950,23 +2034,24 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                      horizontal: 14,
+                      vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.62),
-                      borderRadius: BorderRadius.circular(10),
+                      color: CrickXColors.graphiteBg.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: const Color(0xFF00E5FF).withValues(alpha: 0.55),
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.2,
                       ),
                     ),
                     child: Text(
                       remaining == null
                           ? _status
                           : LiveNetsAccessCard.formatBalance(remaining),
-                      style: const TextStyle(
-                        color: Color(0xFF00E5FF),
-                        fontWeight: FontWeight.w800,
+                      style: GoogleFonts.poppins(
+                        color: CrickXColors.limeSpark,
+                        fontWeight: FontWeight.w700,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1983,8 +2068,8 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xDD0B1118),
-                  borderRadius: BorderRadius.circular(10),
+                  color: CrickXColors.graphite,
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: const Color(0xFFFF6B6B).withValues(alpha: 0.45),
                   ),
@@ -1999,7 +2084,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                     const SizedBox(height: 10),
                     TextButton(
                       onPressed: _retryStart,
-                      child: const Text('Try Again'),
+                      child: Text('Try Again', style: GoogleFonts.poppins(color: CrickXColors.limeSpark, fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
@@ -2012,14 +2097,15 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
               top: 84 + MediaQuery.of(context).padding.top,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
+                  horizontal: 14,
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.58),
-                  borderRadius: BorderRadius.circular(10),
+                  color: CrickXColors.graphiteBg.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: const Color(0xFF00E5FF).withValues(alpha: 0.35),
+                    color: CrickXColors.graphiteBorder,
+                    width: 1.2,
                   ),
                 ),
                 child: Row(
@@ -2056,17 +2142,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                             : 'Live: clips $_chunksSent, feedback $_chunksAnalysed',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: GoogleFonts.poppins(
                           color: Colors.white,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           fontSize: 12.5,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(
+                    Icon(
                       Icons.graphic_eq_rounded,
-                      color: Color(0xFF00E5FF),
+                      color: CrickXColors.limeSpark,
                       size: 18,
                     ),
                   ],
@@ -2088,18 +2174,19 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(10),
+                      color: CrickXColors.graphiteBg.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.2,
                       ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.closed_caption_rounded,
-                          color: Color(0xFF00E5FF),
+                          color: CrickXColors.limeSpark,
                           size: 18,
                         ),
                         const SizedBox(width: 10),
@@ -2125,20 +2212,20 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.62),
-                      borderRadius: BorderRadius.circular(10),
+                      color: CrickXColors.graphiteBg.withOpacity(0.92),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.10),
+                        color: CrickXColors.graphiteBorder,
                       ),
                     ),
                     child: Row(
                       children: [
-                        const SizedBox(
+                        SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Color(0xFF00E5FF),
+                            color: CrickXColors.limeSpark,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -2149,8 +2236,9 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                                 : 'Coach is reading your movement and preparing feedback...',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white70,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF94A3B8),
+                              fontSize: 12,
                               height: 1.3,
                             ),
                           ),
@@ -2174,19 +2262,19 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.06),
-                                borderRadius: BorderRadius.circular(8),
+                                color: CrickXColors.graphiteBg.withOpacity(0.92),
+                                borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.08),
+                                  color: CrickXColors.graphiteBorder,
                                 ),
                               ),
                               child: Text(
                                 caption,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12.5,
+                                style: GoogleFonts.poppins(
+                                  color: const Color(0xFFCBD5E1),
+                                  fontSize: 12,
                                   height: 1.25,
                                 ),
                               ),
@@ -2214,11 +2302,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                           ? Icons.play_circle_outline_rounded
                           : Icons.pause_circle_outline_rounded,
                     ),
-                    label: Text(_paused ? 'Resume' : 'Pause'),
+                    label: Text(
+                      _paused ? 'Resume' : 'Pause',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF00E5FF),
-                      side: const BorderSide(color: Color(0xFF00E5FF)),
+                      foregroundColor: CrickXColors.limeSpark,
+                      side: BorderSide(color: CrickXColors.limeSpark),
                       padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
                 ),
@@ -2229,11 +2323,17 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         ? null
                         : _endSession,
                     icon: const Icon(Icons.stop_circle_outlined),
-                    label: const Text('End & Save'),
+                    label: Text(
+                      'End & Save',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                    ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00E5FF),
-                      foregroundColor: Colors.black,
+                      backgroundColor: const Color(0xFFE11D48),
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
                 ),

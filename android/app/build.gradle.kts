@@ -12,6 +12,8 @@ plugins {
 configurations.all {
     resolutionStrategy {
         force("com.razorpay:checkout:1.6.38")
+        force("com.android.billingclient:billing:8.0.0")
+        force("com.android.billingclient:billing-ktx:8.0.0")
     }
 }
 
@@ -93,6 +95,10 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.13.0")
+
+    // ✅ Google Play Billing Library 8.0.0 compliance
+    implementation("com.android.billingclient:billing:8.0.0")
+    implementation("com.android.billingclient:billing-ktx:8.0.0")
 
     // ✅ Force single compatible Razorpay SDK to avoid AnalyticsUtil crash
     implementation("com.razorpay:checkout:1.6.38")

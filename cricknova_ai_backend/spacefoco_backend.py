@@ -58,26 +58,24 @@ def alive():
         "has_google_credentials": bool(os.getenv("GOOGLE_APPLICATION_CREDENTIALS")),
     }
 
+@app.get("/__test_nvidia")
 @app.get("/__test_gemini")
-async def test_gemini():
+async def test_nvidia():
     try:
-        api_key = _current_gemini_api_key()
-        if not api_key:
-            return {"success": False, "error": "No API key configured in environment variables (GOOGLE_API_KEY and GEMINI_API_KEY are empty)"}
+        from nvidia_client import generate_nvidia_text, get_primary_nvidia_key, NVIDIA_MODEL
+        key = get_primary_nvidia_key()
+        if not key:
+            return {"success": False, "error": "No NVIDIA API key configured in environment variables (NVIDIA_API_KEY, NV_API_KEY, etc.)"}
         
-        client = Client(api_key=api_key)
-        # Try a simple text prompt first to check key and client
-        model_name = _resolve_vision_model_name()
-        resp = client.models.generate_content(
-            model=model_name,
-            contents="Say hello in Marathi in exactly 5 words."
+        reply = generate_nvidia_text(
+            system_instruction="You are CrickNova Coach.",
+            user_prompt="Say hello in exactly 5 words.",
+            max_output_tokens=30,
         )
         return {
             "success": True,
-            "response": getattr(resp, "text", str(resp)),
-            "test_model": model_name,
-            "resolved_vision_model": _resolve_vision_model_name(),
-            "resolved_live_model": _resolve_live_model_name()
+            "response": reply,
+            "model": NVIDIA_MODEL,
         }
     except Exception as e:
         import traceback
@@ -314,35 +312,16 @@ def _live_gemini() -> Client:
 
 
 def _gemini_api_keys() -> list[str]:
-    keys: list[str] = []
-    for env_name in ("GEMINI_API_KEYS", "GOOGLE_API_KEYS"):
-        raw = os.getenv(env_name, "")
-        for item in re.split(r"[,\s]+", raw):
-            clean = item.strip()
-            if clean and clean not in keys:
-                keys.append(clean)
-    for index in range(1, 11):
-        for env_name in (
-            f"GEMINI_API_KEY_{index}",
-            f"GOOGLE_API_KEY_{index}",
-            f"GEMINI_KEY_{index}",
-            f"GOOGLE_KEY_{index}",
-        ):
-            clean = (os.getenv(env_name) or "").strip()
-            if clean and clean not in keys:
-                keys.append(clean)
-    for env_name in ("GOOGLE_API_KEY", "GEMINI_API_KEY"):
-        clean = (os.getenv(env_name) or "").strip()
-        if clean and clean not in keys:
-            keys.append(clean)
-    return keys
+    from nvidia_client import get_nvidia_api_keys
+    return get_nvidia_api_keys()
 
 
 def _current_gemini_api_key() -> str:
-    keys = _gemini_api_keys()
-    if not keys:
-        raise RuntimeError("GOOGLE_API_KEY or GEMINI_API_KEY is required")
-    return keys[_vision_key_index % len(keys)]
+    from nvidia_client import get_primary_nvidia_key
+    k = get_primary_nvidia_key()
+    if not k:
+        raise RuntimeError("NVIDIA_API_KEY is required in environment variables")
+    return k
 
 
 def _vision_gemini() -> Client:
@@ -736,46 +715,24 @@ def _classify_active_cricket_action(frames: list[bytes]) -> str:
         "STRICT_POLICY_VIOLATION - if this is clearly not cricket-related.\n"
         "If unsure, return ACTIVE_CRICKET_ACTION."
     )
-    frame_parts = [
-        types.Part.from_bytes(data=frame, mime_type="image/jpeg")
-        for frame in usable_frames
-    ]
-    contents = _content_from_parts([
-        _text_part_for_gemini(classifier_prompt),
-        *frame_parts,
-    ])
 
-    def request_label(model_name: str) -> str:
-        response = _generate_vision_content_with_key_rotation(
-            model=model_name,
-            contents=contents,
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                max_output_tokens=12,
-            ),
-        )
-        return " ".join(_extract_gemini_text(response).upper().split())
-
-    for model_name in _vision_model_candidates()[:1]:
-        executor = ThreadPoolExecutor(max_workers=1)
-        try:
-            label = executor.submit(request_label, model_name).result(timeout=8)
-            print(f"CRICKET_ACTION_CLASSIFIER model={model_name} label={label}")
-            if label == "STRICT_POLICY_VIOLATION":
-                return "violation"
-            if label == "ACTIVE_CRICKET_ACTION":
-                return "active"
-        except FutureTimeoutError:
-            print(f"CRICKET_ACTION_CLASSIFIER_TIMEOUT model={model_name}")
-            return "unknown"
-        except Exception as exc:
-            if _is_gemini_quota_error(exc):
-                print(f"GEMINI_QUOTA_EXHAUSTED classifier model={model_name}: {exc}")
-                continue
-            print(f"CRICKET_ACTION_CLASSIFIER_FAILED model={model_name}: {exc}")
-        finally:
-            executor.shutdown(wait=False, cancel_futures=True)
-    return "unknown"
+    try:
+        from nvidia_client import generate_nvidia_vision
+        label = generate_nvidia_vision(
+            prompt=classifier_prompt,
+            frames=usable_frames,
+            max_output_tokens=15,
+            temperature=0.0,
+        ).strip().upper()
+        print(f"NVIDIA_CRICKET_ACTION_CLASSIFIER label={label}")
+        if "STRICT_POLICY_VIOLATION" in label:
+            return "violation"
+        if "ACTIVE_CRICKET_ACTION" in label:
+            return "active"
+        return "active"
+    except Exception as exc:
+        print(f"⚠️ NVIDIA Classifier check failed: {exc}")
+        return "active"
 
 
 def _classify_uploaded_cricket_video(video_path: str) -> str:
@@ -789,60 +746,32 @@ def _classify_uploaded_cricket_video(video_path: str) -> str:
         print(f"UPLOAD_VIDEO_LOCAL_VISIBILITY_CHECK_FAILED: {exc}")
         return "unknown"
 
-    def request_video_label() -> str:
-        client = _vision_gemini()
-        uploaded_file = None
-        try:
-            uploaded_file = _upload_gemini_video_file(client, video_path)
-            uploaded_file = _wait_for_gemini_file_active(
-                client,
-                uploaded_file,
-                max_attempts=8,
-            )
-            classifier_prompt = (
-                "Check this uploaded video only.\n"
-                "Return exactly one label:\n"
-                "ACTIVE_CRICKET_ACTION - if this is a cricket-related video.\n"
-                "STRICT_POLICY_VIOLATION - if this is clearly not cricket-related.\n"
-                "If unsure, return ACTIVE_CRICKET_ACTION."
-            )
-            contents = _content_from_parts([
-                _file_part_for_gemini(uploaded_file),
-                _text_part_for_gemini(classifier_prompt),
-            ])
-            response = _generate_vision_content_with_key_rotation(
-                model=_vision_model_candidates()[0],
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    temperature=0.0,
-                    max_output_tokens=12,
-                ),
-            )
-            return " ".join(_extract_gemini_text(response).upper().split())
-        finally:
-            if uploaded_file is not None:
-                _delete_gemini_file(client, uploaded_file)
-
-    executor = ThreadPoolExecutor(max_workers=1)
+    classifier_prompt = (
+        "Check this uploaded cricket video only.\n"
+        "Return exactly one label:\n"
+        "ACTIVE_CRICKET_ACTION - if this is a cricket-related video (batting, bowling, fielding, nets, practice).\n"
+        "STRICT_POLICY_VIOLATION - if this is clearly not cricket-related.\n"
+        "If unsure, return ACTIVE_CRICKET_ACTION."
+    )
     try:
-        label = executor.submit(request_video_label).result(timeout=10)
-        print(f"UPLOAD_CRICKET_VIDEO_CLASSIFIER label={label}")
-        if label == "STRICT_POLICY_VIOLATION":
+        from nvidia_client import generate_nvidia_vision
+        action_frames = _sample_video_frames(video_bytes, max_frames=6)
+        label = generate_nvidia_vision(
+            prompt=classifier_prompt,
+            video_bytes=video_bytes,
+            frames=action_frames,
+            max_output_tokens=15,
+            temperature=0.0,
+        ).strip().upper()
+        print(f"UPLOAD_CRICKET_VIDEO_CLASSIFIER NVIDIA label={label}")
+        if "STRICT_POLICY_VIOLATION" in label:
             return "violation"
-        if label == "ACTIVE_CRICKET_ACTION":
+        if "ACTIVE_CRICKET_ACTION" in label:
             return "active"
-        return "unknown"
-    except FutureTimeoutError:
-        print("UPLOAD_CRICKET_VIDEO_CLASSIFIER_TIMEOUT")
-        return "unknown"
+        return "active"
     except Exception as exc:
-        if _is_gemini_quota_error(exc):
-            print(f"GEMINI_QUOTA_EXHAUSTED upload_video_classifier: {exc}")
-        else:
-            print(f"UPLOAD_CRICKET_VIDEO_CLASSIFIER_FAILED: {exc}")
-        return "unknown"
-    finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+        print(f"⚠️ NVIDIA Upload Classifier failed: {exc}")
+        return "active"
 
 
 def _non_cricket_upload_response(source: str) -> dict[str, Any]:
@@ -996,168 +925,46 @@ async def _analyze_live_frame(
 ) -> tuple[str, str]:
     def run() -> str:
         prompt = _live_edge_prompt(coach_name, language, discipline)
-        model_candidates = _vision_model_candidates()
-        print(f"VIDEO_ANALYSIS_STARTED models={model_candidates} is_video={is_video}")
+        print(f"NVIDIA_VIDEO_ANALYSIS_STARTED is_video={is_video}")
         try:
-            client = _vision_gemini()
-
+            from nvidia_client import generate_nvidia_vision
             if is_video and isinstance(frame_bytes, (bytes, bytearray)):
-                video_path = None
-                uploaded_file = None
-                try:
-                    if not _video_has_visible_action(bytes(frame_bytes)):
-                        print("VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
-                        return "STRICT_POLICY_VIOLATION"
-                    action_frames = _sample_video_frames(bytes(frame_bytes), max_frames=6)
-                    action_label = _classify_active_cricket_action(action_frames)
-                    if action_label == "violation":
-                        print("VIDEO_SKIPPED_NON_CRICKET_ACTION")
-                        return "STRICT_POLICY_VIOLATION"
-                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-                        tmp.write(bytes(frame_bytes))
-                        video_path = tmp.name
-                    print(f"VIDEO_RECEIVED bytes={len(frame_bytes)} path={video_path}")
-                    uploaded_file = _upload_gemini_video_file(client, video_path)
-                    print(f"VIDEO_UPLOADED file={uploaded_file}")
-                    uploaded_file = _wait_for_gemini_file_active(client, uploaded_file)
-                    file_part = _file_part_for_gemini(uploaded_file)
-                    video_contents = _content_from_parts([
-                        file_part,
-                        _text_part_for_gemini(prompt),
-                    ])
+                if not _video_has_visible_action(bytes(frame_bytes)):
+                    print("VIDEO_SKIPPED_TOO_DARK_OR_BLANK")
+                    return "STRICT_POLICY_VIOLATION"
+                action_frames = _sample_video_frames(bytes(frame_bytes), max_frames=6)
+                action_label = _classify_active_cricket_action(action_frames)
+                if action_label == "violation":
+                    print("VIDEO_SKIPPED_NON_CRICKET_ACTION")
+                    return "STRICT_POLICY_VIOLATION"
 
-                    for model_name in model_candidates:
-                        for attempt in range(2):
-                            if attempt > 0:
-                                print(f"GEMINI_RETRY video model={model_name}")
-                            try:
-                                response = _generate_vision_content_with_key_rotation(
-                                    model=model_name,
-                                    contents=video_contents,
-                                    config=types.GenerateContentConfig(
-                                        temperature=0.7,
-                                        max_output_tokens=300,
-                                    ),
-                                )
-                            except Exception as model_exc:
-                                if _is_gemini_quota_error(model_exc):
-                                    print(
-                                        f"GEMINI_QUOTA_EXHAUSTED video model={model_name}: "
-                                        f"{model_exc}"
-                                    )
-                                    break
-                                raise
-                            _debug_gemini_response(
-                                "VIDEO_ANALYSIS_RESPONSE",
-                                response,
-                                model_name,
-                            )
-                            text = _extract_usable_gemini_text(response)
-                            if text:
-                                print(f"VIDEO_ANALYSIS_SUCCESS model={model_name} text={text}")
-                                return text
-                        print(f"GEMINI_EMPTY_RESPONSE video model={model_name}")
-                except Exception as video_exc:
-                    if _is_gemini_quota_error(video_exc):
-                        print(f"GEMINI_QUOTA_EXHAUSTED video: {video_exc}")
-                    print(f"❌ VIDEO_ANALYSIS_FAILED: {video_exc}")
-                finally:
-                    if uploaded_file is not None:
-                        _delete_gemini_file(client, uploaded_file)
-                    if video_path:
-                        with suppress(Exception):
-                            os.remove(video_path)
-
-                print("FRAME_FALLBACK_STARTED")
-                frames = _sample_video_frames(bytes(frame_bytes), max_frames=8)
-                if frames:
-                    frame_parts = [
-                        types.Part.from_bytes(data=frame, mime_type="image/jpeg")
-                        for frame in frames
-                    ]
-                    frame_contents = _content_from_parts([
-                        _text_part_for_gemini(prompt),
-                        *frame_parts,
-                    ])
-                    for model_name in model_candidates:
-                        for attempt in range(2):
-                            if attempt > 0:
-                                print(f"GEMINI_RETRY frames model={model_name}")
-                            try:
-                                response = _generate_vision_content_with_key_rotation(
-                                    model=model_name,
-                                    contents=frame_contents,
-                                    config=types.GenerateContentConfig(
-                                        temperature=0.7,
-                                        max_output_tokens=300,
-                                    ),
-                                )
-                            except Exception as model_exc:
-                                if _is_gemini_quota_error(model_exc):
-                                    print(
-                                        f"GEMINI_QUOTA_EXHAUSTED frames model={model_name}: "
-                                        f"{model_exc}"
-                                    )
-                                    break
-                                raise
-                            _debug_gemini_response(
-                                "FRAME_FALLBACK_RESPONSE",
-                                response,
-                                model_name,
-                            )
-                            text = _extract_usable_gemini_text(response)
-                            if text:
-                                print(f"FRAME_FALLBACK_SUCCESS model={model_name} text={text}")
-                                return text
-                        print(f"GEMINI_EMPTY_RESPONSE frames model={model_name}")
-                print("GEMINI_EMPTY_RESPONSE frame_fallback")
-                return ""
-
-            frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
-            if frames and all(_is_frame_too_dark(frame) for frame in frames if isinstance(frame, (bytes, bytearray))):
-                print("FRAME_SKIPPED_TOO_DARK_OR_BLANK")
-                return ""
-            frame_parts = [
-                types.Part.from_bytes(data=frame, mime_type="image/jpeg")
-                for frame in frames
-            ]
-            frame_contents = _content_from_parts([
-                _text_part_for_gemini(prompt),
-                *frame_parts,
-            ])
-            for model_name in model_candidates:
-                for attempt in range(2):
-                    if attempt > 0:
-                        print(f"GEMINI_RETRY frames model={model_name}")
-                    try:
-                        response = _generate_vision_content_with_key_rotation(
-                            model=model_name,
-                            contents=frame_contents,
-                            config=types.GenerateContentConfig(
-                                temperature=0.7,
-                                max_output_tokens=300,
-                            ),
-                        )
-                    except Exception as model_exc:
-                        if _is_gemini_quota_error(model_exc):
-                            print(
-                                f"GEMINI_QUOTA_EXHAUSTED frames model={model_name}: "
-                                f"{model_exc}"
-                            )
-                            break
-                        raise
-                    _debug_gemini_response("FRAME_RESPONSE", response, model_name)
-                    text = _extract_usable_gemini_text(response)
-                    if text:
-                        print(f"FRAME_FALLBACK_SUCCESS model={model_name} text={text}")
-                        return text
-                print(f"GEMINI_EMPTY_RESPONSE frames model={model_name}")
-            print("GEMINI_EMPTY_RESPONSE frames")
+                text = generate_nvidia_vision(
+                    prompt=prompt,
+                    video_bytes=bytes(frame_bytes),
+                    frames=action_frames,
+                    max_output_tokens=300,
+                    temperature=0.7,
+                )
+                if text:
+                    print(f"NVIDIA_VIDEO_ANALYSIS_SUCCESS text={text}")
+                    return text
+            else:
+                frames = frame_bytes if isinstance(frame_bytes, list) else [frame_bytes]
+                if frames and all(_is_frame_too_dark(f) for f in frames if isinstance(f, (bytes, bytearray))):
+                    print("FRAME_SKIPPED_TOO_DARK_OR_BLANK")
+                    return ""
+                text = generate_nvidia_vision(
+                    prompt=prompt,
+                    frames=frames,
+                    max_output_tokens=300,
+                    temperature=0.7,
+                )
+                if text:
+                    print(f"NVIDIA_FRAME_ANALYSIS_SUCCESS text={text}")
+                    return text
             return ""
         except Exception as exc:
-            if _is_gemini_quota_error(exc):
-                print(f"GEMINI_QUOTA_EXHAUSTED model_candidates={model_candidates}: {exc}")
-            print(f"❌ _analyze_live_frame FAILED: {exc}")
+            print(f"❌ NVIDIA _analyze_live_frame FAILED: {exc}")
             return ""
 
     raw = await asyncio.to_thread(run)
@@ -1960,6 +1767,46 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
+        from nvidia_client import extract_video_keyframes, generate_nvidia_vision
+
+        # ⚡ 1. NVIDIA Nemotron First-Glance Cricket Action Verification
+        frames = extract_video_keyframes(video_path, max_frames=3)
+        cricket_detected = True
+        verification_summary = "Cricketing action detected"
+
+        if frames:
+            try:
+                verify_prompt = (
+                    "Inspect these video frames at first glance.\n"
+                    "Question: Does this video contain real cricket playing action (such as batting, bowling, nets practice, throwdowns, or cricket match play)?\n"
+                    "Respond with a brief 1-2 sentence confirmation.\n"
+                    "If this is NOT cricket (e.g. random room, animal, non-sports, blank screen, driving, talking head), begin your response with 'NON_CRICKET:' and explain what is visible.\n"
+                    "If this IS cricket, start with 'CRICKET_VERIFIED:' and mention whether a batsman, bowler, or cricket nets/pitch are seen."
+                )
+                verif_text = generate_nvidia_vision(
+                    prompt=verify_prompt,
+                    frames=frames,
+                    system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                    max_output_tokens=150,
+                    temperature=0.2,
+                ).strip()
+
+                if verif_text.upper().startswith("NON_CRICKET") or "NO CRICKET" in verif_text.upper():
+                    return {
+                        "status": "non_cricket",
+                        "cricket_detected": False,
+                        "reason": "NO_CRICKET_ACTION",
+                        "message": verif_text.replace("NON_CRICKET:", "").strip() or "No cricketing action detected in this video. Please upload a clear cricket video showing batting or bowling.",
+                        "speed_kmph": None,
+                        "swing": "unknown",
+                        "spin": "unknown",
+                        "trajectory": [],
+                    }
+                else:
+                    verification_summary = verif_text.replace("CRICKET_VERIFIED:", "").strip()
+            except Exception as e:
+                print("⚠️ Cricket action check notice:", e)
+
         ball_positions = track_ball_positions(video_path)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -2072,6 +1919,8 @@ async def analyze_training_video(file: UploadFile = File(...)):
 
         return {
             "status": "success",
+            "cricket_detected": True,
+            "cricket_summary": verification_summary,
             "speed_kmph": speed_kmph,
             "speed_type": "pre-pitch",
             "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",
@@ -2091,8 +1940,14 @@ async def analyze_training_video(file: UploadFile = File(...)):
 # AI COACH ANALYSIS API
 # -----------------------------
 @app.post("/coach/analyze")
-async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
-    if not _gemini_api_keys():
+async def ai_coach_analyze(
+    request: Request,
+    file: UploadFile = File(...),
+    discipline: str | None = Form(None),
+    prompt: str | None = Form(None),
+):
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text, extract_video_keyframes, generate_nvidia_vision, generate_nvidia_text
+    if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     # ---- Subscription/Mistake Limit Check ----
@@ -2117,42 +1972,71 @@ async def ai_coach_analyze(request: Request, file: UploadFile = File(...)):
         except Exception as e:
             print("⚠️ Mistake usage bypassed for active subscriber:", e)
 
-        ball_positions = track_ball_positions(video_path)
+        # ⚡ Extract actual keyframes for multimodal vision inspection
+        frames = extract_video_keyframes(video_path, max_frames=4)
 
-        if not ball_positions or len(ball_positions) < 6:
-            return {
-                "status": "success",
-                "coach_feedback": ""
-            }
+        coaching_prompt = (prompt or "").strip()
+        if not coaching_prompt:
+            disc_label = (discipline or "").strip().lower()
+            if disc_label == "bowling":
+                discipline_focus = "bowling mechanics (run-up, gather, front foot landing, arm slot, release, seam presentation, follow-through)"
+            else:
+                discipline_focus = "batting mechanics (stance, balance, head position, backlift, footwork, bat path, contact control, follow-through)"
 
-        swing = detect_swing_x(ball_positions)
-        spin_name, _ = calculate_spin_real(ball_positions)
+            coaching_prompt = f"""
+You are CricX Universal Cricket Coach analyzing this {disc_label} video.
+Inspect the real visual frames provided carefully.
+Everything must come 100% from what you see in the video frames. Do NOT use hardcoded or pre-assumed results.
 
-        prompt = """
-You are CrickNova Coach.
+First, check visual evidence:
+- If NO cricket action or cricket player is present, or if user selected batting but there is no batsman, or if selected bowling but there is no bowler:
+Return valid minified JSON:
+{{"mistakes": ["No player or action detected matching {disc_label} in this clip.", "Please upload a clear video clip showing a player {disc_label}."], "impact": "Technique analysis cannot be performed without visible {disc_label} movement.", "drill": "Record your practice session with a clear, steady side-on or front-on camera angle."}}
 
-Give short, honest batting feedback.
-Mention one mistake and one improvement.
-Focus on batting mechanics like stance, balance, bat path, timing, footwork, body alignment, and shot control.
-Do not mention speed, swing, or spin.
+- If cricket {disc_label} action is present, analyze the player's real motion and return ONLY valid minified JSON with exactly these 4 parts:
+{{
+  "mistakes": [
+    "first real technical mistake observed in {disc_label} from the video",
+    "second real technical mistake or balance/timing flaw observed in {disc_label}"
+  ],
+  "impact": "specific performance impact and risk caused by these technical flaws (e.g. edge risk, loss of control, pace leakage)",
+  "drill": "practical, actionable drill and correction step to fix these mistakes"
+}}
+
+Rules:
+- Strictly return valid JSON only. Do not add markdown backticks.
+- Exactly 2 mistakes in the "mistakes" array, exactly 1 impact in "impact", exactly 1 drill in "drill".
+- Total 4 points will be shown to the user: Mistake 1, Mistake 2, Impact, How to Fix.
+- No hardcoded or pre-assumed results. Base every word purely on the actual visual frames.
 """
 
-        feedback = generate_text(
-            system_instruction="You are CrickNova Coach.",
-            user_prompt=prompt,
-            max_output_tokens=90,
-            temperature=0.55,
-        )
+        if frames:
+            feedback = generate_nvidia_vision(
+                prompt=coaching_prompt,
+                frames=frames,
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
+        else:
+            feedback = generate_nvidia_text(
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                user_prompt=coaching_prompt,
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
 
         return {
             "status": "success",
-            "coach_feedback": feedback
+            "coach_feedback": feedback,
+            "reply": feedback,
         }
 
     except Exception as e:
         return {
             "status": "failed",
-            "coach_feedback": f"Coach error: {str(e)}"
+            "coach_feedback": f"Coach error: {str(e)}",
+            "reply": f"Coach error: {str(e)}"
         }
 
     finally:
@@ -2169,7 +2053,8 @@ class CoachChatRequest(BaseModel):
 
 @app.post("/coach/chat")
 async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
-    if not _gemini_api_keys():
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text
+    if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     message = (req.message or "").strip()
@@ -2217,61 +2102,38 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             or "[drill]" in msg_lower
         )
         if looks_like_raw_prompt:
+            is_bowling_prompt = "bowling" in msg_lower and "batting-only" not in msg_lower
+            discipline_label = "bowling" if is_bowling_prompt else "batting"
             reply_text = generate_text(
-                system_instruction=(
-                    "You are CrickNova batting coach. "
-                    "Analyze only the provided clip context. "
-                    "Be direct, honest, and unscripted. "
-                    "Avoid repeated generic lines."
-                ),
+                system_instruction=f"You are a universal cricket coach specializing in {discipline_label} analysis. Analyze the clip context and return the requested json format.",
                 user_prompt=message,
-                max_output_tokens=320,
-                temperature=0.72,
+                max_output_tokens=8192,
+                temperature=0.45,
             )
             return {"status": "success", "reply": reply_text}
 
-        history_lines = []
-        for item in history[-8:]:
+        # ⚡ Direct CricX Chat: "You are a universal cricket coach."
+        messages_payload = [
+            {
+                "role": "system",
+                "content": "You are a universal cricket coach. Keep your responses focused on cricket.",
+            }
+        ]
+        for item in history[-12:]:
             if not isinstance(item, dict):
                 continue
-            role = str(item.get("role", "user")).strip().lower()
+            role = "user" if str(item.get("role", "user")).strip().lower() == "user" else "assistant"
             content = str(item.get("content", "")).strip()
-            if not content:
-                continue
-            prefix = "User" if role == "user" else "Coach"
-            history_lines.append(f"{prefix}: {content}")
+            if content:
+                messages_payload.append({"role": role, "content": content})
 
-        history_block = "\n".join(history_lines).strip()
+        messages_payload.append({"role": "user", "content": message})
 
-        prompt = f'''
-You are CrickNova Coach, a real cricket coach powered by CrickNova AI.
-
-Answer the user's actual question in natural coaching language.
-Do not use a fixed 4-point template unless the user explicitly asks for points.
-Do not sound scripted, repetitive, or generic.
-
-Rules:
-- Answer every cricket-related question.
-- If the question is vague, ask 1 short follow-up or give neutral cricket guidance.
-- Keep the answer direct, practical, and human.
-- No fake video analysis if no clip context is provided.
-- No unnecessary headings unless they help the answer.
-- Keep the answer concise, but answer the exact question asked.
-- Use the recent chat history only to maintain continuity for follow-up questions like "give tips", "why", or "what next".
-- If the new question changes topic, answer the new topic directly.
-
-Recent chat history:
-{history_block if history_block else "No previous chat context."}
-
-User question:
-{message}
-'''
-
-        reply_text = generate_text(
-            system_instruction="You are CrickNova Coach.",
-            user_prompt=prompt,
-            max_output_tokens=220,
-            temperature=0.72,
+        from nvidia_client import call_nvidia_chat
+        reply_text = call_nvidia_chat(
+            messages_payload,
+            max_tokens=8192,
+            temperature=0.6,
         )
 
         return {
@@ -2294,8 +2156,10 @@ async def ai_coach_diff(
     left: UploadFile = File(...),
     right: UploadFile = File(...),
     prompt: str | None = Form(None),
+    discipline: str | None = Form(None),
 ):
-    if not _gemini_api_keys():
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text
+    if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
     # ---- Subscription/Compare Limit Check ----
@@ -2353,51 +2217,63 @@ async def ai_coach_diff(
         except Exception as e:
             print("⚠️ Compare usage bypassed for active subscriber:", e)
 
+        left_positions = []
+        right_positions = []
         try:
-            left_positions = track_ball_positions(left_path) or []
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f1 = executor.submit(track_ball_positions, left_path)
+                f2 = executor.submit(track_ball_positions, right_path)
+                left_positions = f1.result(timeout=1.0) or []
+                right_positions = f2.result(timeout=1.0) or []
         except Exception:
-            left_positions = []
-        try:
-            right_positions = track_ball_positions(right_path) or []
-        except Exception:
-            right_positions = []
+            pass
+
+        left_frames = extract_video_keyframes(left_path, max_frames=3)
+        right_frames = extract_video_keyframes(right_path, max_frames=3)
 
         base_prompt = (prompt or "").strip()
         if not base_prompt:
             base_prompt = """
-You are CrickNova Coach.
-
-Compare the player's two videos honestly in natural coaching language.
+Compare the player's two video clips honestly in natural coaching language.
 Do not force Video 2 to be better than Video 1.
-No fixed template or forced headings.
 Explain what improved, what is still weak, and what to do next.
 Give exactly 2 practical drills.
 - Do not mention speed, swing, or spin.
 - Keep it specific to what changed between the two clips.
 Do not give rating/score.
-Keep the full reply under 260 words and avoid generic wording.
 """
 
-        final_prompt = (
-            base_prompt
-            + f"\n\nINTERNAL_CONTEXT (do not mention): "
-              f"v1_name={(left.filename or 'left.mp4')} "
-              f"v2_name={(right.filename or 'right.mp4')} "
-              f"v1_sig={trajectory_signature(left_positions)} "
-              f"v2_sig={trajectory_signature(right_positions)}\n"
-        )
+        discipline_text = (discipline or "").strip().lower()
+        if discipline_text not in ("batting", "bowling"):
+            prompt_lower = base_prompt.lower()
+            discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
 
-        diff_text = generate_text(
-            system_instruction=(
-                "You are CrickNova batting coach. "
-                "Give batting-only comparison and batting drills only. "
-                "Never provide bowling analysis. "
-                "Make the response clip-specific and avoid repeating generic lines."
-            ),
-            user_prompt=final_prompt,
-            max_output_tokens=260,
-            temperature=0.6,
-        )
+        if left_frames and right_frames:
+            diff_text = generate_nvidia_comparison_vision(
+                prompt=base_prompt,
+                left_frames=left_frames,
+                right_frames=right_frames,
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
+        else:
+            final_prompt = (
+                base_prompt
+                + f"\n\nINTERNAL_CONTEXT (do not mention): "
+                  f"discipline={discipline_text} "
+                  f"v1_name={(left.filename or 'left.mp4')} "
+                  f"v2_name={(right.filename or 'right.mp4')} "
+                  f"v1_sig={trajectory_signature(left_positions)} "
+                  f"v2_sig={trajectory_signature(right_positions)}\n"
+            )
+
+            diff_text = generate_nvidia_text(
+                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                user_prompt=final_prompt,
+                max_output_tokens=8192,
+                temperature=0.55,
+            )
 
         return {
             "status": "success",

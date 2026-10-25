@@ -7,6 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../premium/premium_screen.dart';
 import '../ai/ai_coach_screen.dart';
+import '../services/analysis_credit_service.dart';
+import '../services/premium_service.dart';
+import '../services/admob_service.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key});
@@ -257,9 +260,33 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   // --------------- PICK VIDEO -------------------
   Future<void> _pickVideo(BuildContext context) async {
+    // ── CREDIT GATE ─────────────────────────────────────────────────────────
+    // For free users, check credits BEFORE picking video.
+    // Consume credit only after a file is actually selected.
+    if (!PremiumService.isPremiumActive) {
+      final credits = AnalysisCreditService.instance.credits;
+      if (credits <= 0) {
+        // No credits — show Watch Ad dialog first, then retry
+        if (!context.mounted) return;
+        await _showWatchAdDialog(context);
+        return;
+      }
+    }
+
     final picked = await FilePicker.platform.pickFiles(type: FileType.video);
 
     if (picked == null) return;
+
+    // Consume 1 credit now that a file was actually selected
+    if (!PremiumService.isPremiumActive) {
+      final consumed = await AnalysisCreditService.instance.consumeCredit();
+      if (!consumed) {
+        // Rare race — credits ran out between check and consume; show dialog again
+        if (!context.mounted) return;
+        await _showWatchAdDialog(context);
+        return;
+      }
+    }
 
     final file = File(picked.files.single.path!);
 
@@ -388,17 +415,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final request = http.MultipartRequest("POST", Uri.parse(backendUrl));
 
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception("USER_NOT_AUTHENTICATED");
+      if (user != null) {
+        try {
+          final token = await user.getIdToken(true);
+          if (token != null && token.isNotEmpty) {
+            request.headers["Authorization"] = "Bearer $token";
+          }
+        } catch (_) {}
       }
-
-      final token = await user.getIdToken(true);
-      if (token == null || token.isEmpty) {
-        throw Exception("USER_NOT_AUTHENTICATED");
-      }
-
-      // Canonical Authorization header
-      request.headers["Authorization"] = "Bearer $token";
 
       request.files.add(await http.MultipartFile.fromPath("file", file.path));
 
@@ -523,6 +547,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ),
     );
   }
+
+  // --------------- WATCH AD DIALOG -------------------
+  Future<void> _showWatchAdDialog(BuildContext ctx) async {
+    await showDialog<void>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogCtx) => _WatchAdDialog(
+        onCreditGranted: () {
+          Navigator.of(dialogCtx).pop();
+          // Re-trigger pick after credit granted
+          _pickVideo(ctx);
+        },
+      ),
+    );
+  }
 }
 
 class _TrajectoryPainter extends CustomPainter {
@@ -570,4 +609,135 @@ class _TrajectoryPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// ── Watch Ad Dialog ──────────────────────────────────────────────────────────
+class _WatchAdDialog extends StatefulWidget {
+  const _WatchAdDialog({required this.onCreditGranted});
+  final VoidCallback onCreditGranted;
+  @override
+  State<_WatchAdDialog> createState() => _WatchAdDialogState();
+}
+
+class _WatchAdDialogState extends State<_WatchAdDialog> {
+  bool _loading = false;
+  String? _message;
+
+  Future<void> _handleWatchAd() async {
+    if (_loading) return;
+    debugPrint('[AdMob] Watch Ad button tapped (analysis_screen)');
+    debugPrint('[AdMob] Ad ready: ${AdMobService.instance.isRewardedAdReady}');
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+    final result = await AnalysisCreditService.instance.watchAdForCredit();
+    debugPrint('[AdMob] watchAdForCredit result: $result');
+    if (!mounted) return;
+    setState(() => _loading = false);
+    switch (result) {
+      case AdWatchResult.rewardEarned:
+        debugPrint('[AI] Credit granted — proceeding with analysis');
+        widget.onCreditGranted();
+        break;
+      case AdWatchResult.adNotAvailable:
+        debugPrint('[AdMob] Ad not available — showing retry message');
+        setState(() => _message = "Ad isn't available right now. Please try again.");
+        break;
+      case AdWatchResult.adClosedEarly:
+        debugPrint('[AdMob] Ad closed early — no reward');
+        setState(() => _message = 'Watch the complete ad to earn your analysis.');
+        break;
+      case AdWatchResult.premiumUser:
+        debugPrint('[Premium] Premium user in Watch Ad dialog — closing');
+        Navigator.of(context).pop();
+        break;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF0E1621),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        '🎬 Watch Ad to Unlock',
+        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Watch a short ad to unlock 4 AI Bowling Analyses.',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          if (_message != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _message!,
+                style: TextStyle(
+                  color: _message!.startsWith("Ad isn")
+                      ? Colors.redAccent
+                      : Colors.orangeAccent,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B00),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _loading ? null : _handleWatchAd,
+              child: _loading
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.5, color: Colors.white),
+                    )
+                  : const Text(
+                      'Watch Ad 🎬',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel',
+              style: TextStyle(color: Colors.white54)),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) =>
+                    const PremiumScreen(entrySource: 'ad_unlock_premium'),
+              ),
+            );
+          },
+          child: const Text(
+            'Upgrade to Premium',
+            style: TextStyle(
+                color: Color(0xFFFFAA00), fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    );
+  }
 }

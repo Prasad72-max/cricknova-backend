@@ -14,6 +14,7 @@ import '../navigation/main_navigation.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/backend_warmup_service.dart';
 import '../services/premium_service.dart';
+import '../theme/crickx_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.startupFuture});
@@ -377,7 +378,7 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Text(
                 'Retry',
                 style: OnboardingTextStyles.uiSans(
-                  color: const Color(0xFFD4AF37),
+                  color: CrickXColors.limeSpark,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                 ),
@@ -408,10 +409,8 @@ class _SplashScreenState extends State<SplashScreen> {
             center: Alignment.center,
             radius: 1.0,
             colors: [
-              Color(
-                0xFF151718,
-              ), // Elegant warm charcoal center (matches center of your image)
-              Color(0xFF050506), // Deep near-black vignette outer edges
+              CrickXColors.graphite,
+              CrickXColors.graphiteBg,
             ],
           ),
         ),
@@ -467,20 +466,16 @@ class _SplashScreenState extends State<SplashScreen> {
                           shape: BoxShape.circle,
                           color: Colors.transparent,
                           boxShadow: [
-                            // Intense gold lighting splash behind brand logo
+                            // Vibrant lime spark lighting splash behind brand logo
                             BoxShadow(
-                              color: const Color(
-                                0xFFFFD700,
-                              ).withValues(alpha: 0.3 * t),
-                              blurRadius: 20 * t,
-                              spreadRadius: 1 * t,
+                              color: CrickXColors.limeSpark.withValues(alpha: 0.3 * t),
+                              blurRadius: 24 * t,
+                              spreadRadius: 2 * t,
                             ),
                             BoxShadow(
-                              color: const Color(
-                                0xFFD4AF37,
-                              ).withValues(alpha: 0.2 * t),
-                              blurRadius: 30 * t,
-                              spreadRadius: 3 * t,
+                              color: CrickXColors.limeSpark.withValues(alpha: 0.15 * t),
+                              blurRadius: 36 * t,
+                              spreadRadius: 4 * t,
                             ),
                           ],
                         ),
@@ -493,23 +488,19 @@ class _SplashScreenState extends State<SplashScreen> {
                       Stack(
                         alignment: Alignment.center,
                         children: [
-                          // Soft gold glow behind the logo
+                          // Soft lime glow behind the logo
                           Text(
-                            'CrickNova',
+                            'CrickX',
                             style:
                                 OnboardingTextStyles.serif(
-                                  color: const Color(
-                                    0xFFD4AF37,
-                                  ).withValues(alpha: 0.2 * t),
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.25 * t),
                                   fontSize: 52,
                                   fontWeight: FontWeight.w300,
                                   letterSpacing: letterSpacing,
                                 ).copyWith(
                                   shadows: [
                                     Shadow(
-                                      color: const Color(
-                                        0xFFD4AF37,
-                                      ).withValues(alpha: 0.4 * t),
+                                      color: CrickXColors.limeSpark.withValues(alpha: 0.45 * t),
                                       blurRadius: 30 * t,
                                     ),
                                   ],
@@ -517,7 +508,7 @@ class _SplashScreenState extends State<SplashScreen> {
                           ),
                           // Main white logo text
                           Text(
-                            'CrickNova',
+                            'CrickX',
                             style: OnboardingTextStyles.serif(
                               color: const Color(0xFFFAFAF9),
                               fontSize: 52,

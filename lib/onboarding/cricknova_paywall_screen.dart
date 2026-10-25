@@ -14,6 +14,7 @@ import '../services/premium_service.dart';
 import '../services/pricing_location_service.dart';
 import '../services/subscription_provider.dart';
 import '../services/trial_access_service.dart';
+import '../theme/crickx_colors.dart';
 
 class CricknovaPaywallScreen extends StatefulWidget {
   final String userName;
@@ -28,8 +29,8 @@ enum _PlanChoice { monthly, yearly }
 
 class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
     with SingleTickerProviderStateMixin {
-  static const Color _bg = Color(0xFF080808);
-  static const Color _gold = Color(0xFFFFD700);
+  static const Color _bg = CrickXColors.graphiteBg;
+  static const Color _gold = CrickXColors.limeSpark;
   static const String _yearlyProductId = 'cricknova_premium';
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
@@ -456,7 +457,7 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
             children: <Widget>[
               Icon(
                 Icons.check_circle_rounded,
-                color: const Color(0xFFFFD700),
+                color: CrickXColors.limeSpark,
                 size: 20 * scale,
               ),
               const SizedBox(width: 8),
@@ -480,8 +481,8 @@ class _CricknovaPaywallScreenState extends State<CricknovaPaywallScreen>
           child: ElevatedButton(
             onPressed: _purchasePending ? null : _startLockedPurchase,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFD700),
-              foregroundColor: Colors.black,
+              backgroundColor: CrickXColors.limeSpark,
+              foregroundColor: CrickXColors.onLime,
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -741,7 +742,7 @@ class _NoPaymentRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: <Widget>[
-        const Icon(Icons.check_rounded, color: Color(0xFFFFD700), size: 20),
+        const Icon(Icons.check_rounded, color: CrickXColors.limeSpark, size: 20),
         const SizedBox(width: 8),
         Text(
           'No Payment Due Now',
@@ -770,8 +771,8 @@ class _FlowActionButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFFFD700),
-          foregroundColor: Colors.black,
+          backgroundColor: CrickXColors.limeSpark,
+          foregroundColor: CrickXColors.onLime,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(30),
           ),
@@ -808,7 +809,7 @@ class _DeviceMockupCardState extends State<_DeviceMockupCard>
     },
     {
       'text': 'Recommended Drill: Static Wall Lean',
-      'color': const Color(0xFFFFD700),
+      'color': CrickXColors.limeSpark,
     },
   ];
 
@@ -1143,8 +1144,8 @@ class _DarkTimeline extends StatelessWidget {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0xFFFFD700),
-                  Color(0xFFFFD700),
+                  CrickXColors.limeSpark,
+                  CrickXColors.limeSpark,
                   Color(0xFF2A2A2A),
                 ],
               ),
@@ -1155,8 +1156,8 @@ class _DarkTimeline extends StatelessWidget {
           children: [
             _DarkTimelineItem(
               iconData: Icons.lock_open_rounded,
-              iconBg: const Color(0xFFFFD700),
-              iconColor: Colors.white,
+              iconBg: CrickXColors.limeSpark,
+              iconColor: CrickXColors.onLime,
               title: 'Today',
               subtitle:
                   'Unlock all premium features like AI batting analysis, bowling coach, and more.',
@@ -1164,8 +1165,8 @@ class _DarkTimeline extends StatelessWidget {
             SizedBox(height: itemSpacing),
             _DarkTimelineItem(
               iconData: Icons.notifications_active_rounded,
-              iconBg: const Color(0xFFFFD700),
-              iconColor: Colors.white,
+              iconBg: CrickXColors.limeSpark,
+              iconColor: CrickXColors.onLime,
               title: 'In 2 Days – Reminder',
               subtitle:
                   'We\'ll send you a reminder that your trial is ending soon.',
@@ -1279,9 +1280,9 @@ class _DarkPlanCard extends StatelessWidget {
           margin: const EdgeInsets.only(top: 12),
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFFFD700), width: 2),
+            border: Border.all(color: CrickXColors.limeSpark, width: 2),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1313,11 +1314,11 @@ class _DarkPlanCard extends StatelessWidget {
                 height: 28,
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Color(0xFFFFD700),
+                  color: CrickXColors.limeSpark,
                 ),
                 child: const Icon(
                   Icons.check_rounded,
-                  color: Colors.black,
+                  color: CrickXColors.onLime,
                   size: 18,
                 ),
               ),
@@ -1331,7 +1332,7 @@ class _DarkPlanCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.black,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: const Color(0xFFFFD700), width: 1),
+              border: Border.all(color: CrickXColors.limeSpark, width: 1),
             ),
             child: Text(
               '3 DAYS FREE',
@@ -1693,11 +1694,11 @@ class _TrialButton extends StatelessWidget {
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: <Color>[Color(0xFFFFD700), Color(0xFFFFA500)],
+            colors: <Color>[CrickXColors.limeSpark, CrickXColors.limeSparkDark],
           ),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: _CricknovaPaywallScreenState._gold.withValues(alpha: 0.36),
+              color: CrickXColors.limeSpark.withValues(alpha: 0.36),
               blurRadius: 24,
               offset: const Offset(0, 12),
             ),
@@ -1710,13 +1711,13 @@ class _TrialButton extends StatelessWidget {
                 height: 22,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.4,
-                  color: Colors.black,
+                  color: CrickXColors.onLime,
                 ),
               )
             : Text(
                 'Start My 3-Day Free Trial',
                 style: GoogleFonts.inter(
-                  color: Colors.black,
+                  color: CrickXColors.onLime,
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
                 ),
@@ -1797,10 +1798,10 @@ class _TimelinePoint extends StatelessWidget {
               height: 34,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0x1AFFD700),
-                border: Border.all(color: const Color(0x66FFD700)),
+                color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                border: Border.all(color: CrickXColors.limeSpark.withValues(alpha: 0.40)),
               ),
-              child: Icon(icon, color: const Color(0xFFFFD700), size: 18),
+              child: Icon(icon, color: CrickXColors.limeSpark, size: 18),
             ),
             if (!isLast)
               Container(
@@ -1862,7 +1863,7 @@ class _YearlyPricingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0x66FFD700)),
+        border: Border.all(color: CrickXColors.limeSpark.withValues(alpha: 0.40)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1879,7 +1880,7 @@ class _YearlyPricingCard extends StatelessWidget {
           Text(
             priceLabel,
             style: GoogleFonts.cormorantGaramond(
-              color: const Color(0xFFFFD700),
+              color: CrickXColors.limeSpark,
               fontSize: 40,
               fontWeight: FontWeight.w700,
               height: 0.95,
@@ -1948,7 +1949,7 @@ class _DirectPlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color borderColor = highlighted
-        ? const Color(0xFFFFD700)
+        ? CrickXColors.limeSpark
         : Colors.white.withValues(alpha: 0.24);
     final double borderWidth = highlighted ? 2.4 : 1.4;
 
@@ -1962,7 +1963,7 @@ class _DirectPlanCard extends StatelessWidget {
             duration: const Duration(milliseconds: 220),
             padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: highlighted ? CrickXColors.graphiteElevated : CrickXColors.graphite,
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: borderColor, width: borderWidth),
               boxShadow: [
@@ -1973,7 +1974,7 @@ class _DirectPlanCard extends StatelessWidget {
                 ),
                 if (highlighted)
                   BoxShadow(
-                    color: const Color(0xFFFFD700).withValues(alpha: 0.18),
+                    color: CrickXColors.limeSpark.withValues(alpha: 0.18),
                     blurRadius: 24,
                     spreadRadius: 0.5,
                   ),
@@ -2023,11 +2024,11 @@ class _DirectPlanCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: highlighted
-                        ? const Color(0xFFFFD700)
+                        ? CrickXColors.limeSpark
                         : Colors.white10,
                     border: Border.all(
                       color: highlighted
-                          ? const Color(0xFFFFD700)
+                          ? CrickXColors.limeSpark
                           : Colors.white54,
                       width: 1.6,
                     ),
@@ -2035,7 +2036,7 @@ class _DirectPlanCard extends StatelessWidget {
                   child: highlighted
                       ? const Icon(
                           Icons.check_rounded,
-                          color: Colors.black,
+                          color: CrickXColors.onLime,
                           size: 18,
                         )
                       : null,
@@ -2053,12 +2054,12 @@ class _DirectPlanCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: const Color(0xFFFFD700), width: 1),
+                border: Border.all(color: CrickXColors.limeSpark, width: 1),
               ),
               child: Text(
                 'BEST VALUE',
                 style: GoogleFonts.inter(
-                  color: const Color(0xFFFFD700),
+                  color: CrickXColors.limeSpark,
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.7,
@@ -2091,7 +2092,7 @@ class _ConfettiBurstState extends State<_ConfettiBurst>
       dx: (math.Random(i + 11).nextDouble() * 2) - 1,
       dy: (math.Random(i + 31).nextDouble() * -1.1) - 0.2,
       size: 6 + math.Random(i + 51).nextDouble() * 8,
-      color: i.isEven ? const Color(0xFFFFD700) : Colors.white,
+      color: i.isEven ? CrickXColors.limeSpark : Colors.white,
     ),
   );
 
@@ -2202,17 +2203,17 @@ class _PaywallPlanCard extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFF1A1500)
-                  : const Color(0xFF181818),
+                  ? CrickXColors.graphiteElevated
+                  : CrickXColors.graphite,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: selected ? const Color(0xFFFFD700) : Colors.white24,
+                color: selected ? CrickXColors.limeSpark : Colors.white24,
                 width: selected ? 2.0 : 1.2,
               ),
               boxShadow: selected
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFFFD700).withValues(alpha: 0.10),
+                        color: CrickXColors.limeSpark.withValues(alpha: 0.10),
                         blurRadius: 18,
                         spreadRadius: 1,
                       ),
@@ -2240,7 +2241,7 @@ class _PaywallPlanCard extends StatelessWidget {
                         price,
                         style: GoogleFonts.inter(
                           color: selected
-                              ? const Color(0xFFFFD700)
+                              ? CrickXColors.limeSpark
                               : Colors.white,
                           fontSize: priceFontSize,
                           fontWeight: FontWeight.w800,
@@ -2257,11 +2258,11 @@ class _PaywallPlanCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: selected
-                        ? const Color(0xFFFFD700)
+                        ? CrickXColors.limeSpark
                         : Colors.transparent,
                     border: Border.all(
                       color: selected
-                          ? const Color(0xFFFFD700)
+                          ? CrickXColors.limeSpark
                           : Colors.white38,
                       width: 2,
                     ),
@@ -2270,7 +2271,7 @@ class _PaywallPlanCard extends StatelessWidget {
                       ? Icon(
                           Icons.check,
                           size: checkIconSize,
-                          color: Colors.black,
+                          color: CrickXColors.onLime,
                         )
                       : null,
                 ),
@@ -2291,7 +2292,7 @@ class _PaywallPlanCard extends StatelessWidget {
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: const Color(0xFFFFD700),
+                    color: CrickXColors.limeSpark,
                     width: 1.5,
                   ),
                 ),
@@ -2347,17 +2348,17 @@ class _BigPlanCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
             decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFF1E1A0E)
-                  : const Color(0xFF181818),
+                  ? CrickXColors.graphiteElevated
+                  : CrickXColors.graphite,
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: selected ? const Color(0xFFFFD700) : Colors.white24,
+                color: selected ? CrickXColors.limeSpark : Colors.white24,
                 width: selected ? 2.2 : 1.2,
               ),
               boxShadow: selected
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFFFD700).withValues(alpha: 0.12),
+                        color: CrickXColors.limeSpark.withValues(alpha: 0.12),
                         blurRadius: 20,
                         spreadRadius: 1,
                       ),
@@ -2386,7 +2387,7 @@ class _BigPlanCard extends StatelessWidget {
                         price,
                         style: GoogleFonts.inter(
                           color: selected
-                              ? const Color(0xFFFFD700)
+                              ? CrickXColors.limeSpark
                               : Colors.white,
                           fontSize: 42,
                           fontWeight: FontWeight.w800,
@@ -2412,17 +2413,17 @@ class _BigPlanCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: selected
-                        ? const Color(0xFFFFD700)
+                        ? CrickXColors.limeSpark
                         : Colors.transparent,
                     border: Border.all(
                       color: selected
-                          ? const Color(0xFFFFD700)
+                          ? CrickXColors.limeSpark
                           : Colors.white38,
                       width: 2,
                     ),
                   ),
                   child: selected
-                      ? const Icon(Icons.check, size: 18, color: Colors.black)
+                      ? const Icon(Icons.check, size: 18, color: CrickXColors.onLime)
                       : null,
                 ),
               ],
@@ -2442,7 +2443,7 @@ class _BigPlanCard extends StatelessWidget {
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: const Color(0xFFFFD700),
+                    color: CrickXColors.limeSpark,
                     width: 1.5,
                   ),
                 ),
@@ -2492,10 +2493,10 @@ class _DarkPlanOption extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: selected ? CrickXColors.graphiteElevated : CrickXColors.graphite,
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                color: selected ? const Color(0xFFFFD700) : Colors.white24,
+                color: selected ? CrickXColors.limeSpark : Colors.white24,
                 width: selected ? 2 : 1.2,
               ),
             ),
@@ -2530,16 +2531,16 @@ class _DarkPlanOption extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: selected
-                        ? const Color(0xFFFFD700)
+                        ? CrickXColors.limeSpark
                         : Colors.transparent,
                     border: Border.all(
                       color: selected
-                          ? const Color(0xFFFFD700)
+                          ? CrickXColors.limeSpark
                           : Colors.white54,
                     ),
                   ),
                   child: selected
-                      ? const Icon(Icons.check, size: 16, color: Colors.black)
+                      ? const Icon(Icons.check, size: 16, color: CrickXColors.onLime)
                       : null,
                 ),
               ],
@@ -2558,7 +2559,7 @@ class _DarkPlanOption extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: const Color(0xFFFFD700)),
+                  border: Border.all(color: CrickXColors.limeSpark),
                 ),
                 child: Text(
                   '3 DAYS FREE',
@@ -2586,7 +2587,7 @@ class _ComparisonTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isIndia =
         PricingLocationService.currentRegion == PricingRegion.india;
-    const Color gold = Color(0xFFFFD700);
+    const Color gold = CrickXColors.limeSpark;
 
     return Column(
       children: [

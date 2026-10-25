@@ -33,10 +33,7 @@ subprojects {
 
 fun Project.fallbackNamespace(): String {
     val sanitizedName = name.replace(Regex("[^A-Za-z0-9_]"), "_")
-    return when (sanitizedName) {
-        "image_gallery_saver" -> "com.example.image_gallery_saver"
-        else -> "com.cricknova.generated.$sanitizedName"
-    }
+    return "com.cricknova.generated.$sanitizedName"
 }
 
 subprojects {
@@ -48,6 +45,20 @@ subprojects {
             compileOptions {
                 sourceCompatibility = JavaVersion.VERSION_17
                 targetCompatibility = JavaVersion.VERSION_17
+            }
+        }
+    }
+
+    // Strip legacy package attribute from pub subproject manifests to satisfy AGP 8+
+    tasks.withType<com.android.build.gradle.tasks.ManifestProcessorTask>().configureEach {
+        doFirst {
+            val manifestFile = file("src/main/AndroidManifest.xml")
+            if (manifestFile.exists()) {
+                val content = manifestFile.readText()
+                if (content.contains("package=")) {
+                    val updated = content.replace(Regex("""package="[^"]+""""), "")
+                    manifestFile.writeText(updated)
+                }
             }
         }
     }

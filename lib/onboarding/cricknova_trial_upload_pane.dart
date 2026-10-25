@@ -302,82 +302,19 @@ Map<String, dynamic> _fallbackMistakeReportFromAnalysis(
   Map<String, dynamic>? data,
   double? speedKmph,
 ) {
-  final pts = _unmirrorX(_sanitizeTraj(data?['trajectory']));
   final discipline = (data?['discipline'] ?? data?['mode'] ?? '')
       .toString()
       .toLowerCase();
   final isBowling = discipline.contains('bowl');
-  final speedLabel = speedKmph == null
-      ? 'unknown pace'
-      : '${speedKmph.toStringAsFixed(1)} KMPH';
-
-  String mistake1;
-  String mistake2;
-  String impact;
-  String drill;
-
-  if (pts.length >= 3) {
-    final first = pts.first;
-    final last = pts.last;
-    final bounceIndex = _bounceIdx(pts).clamp(0, pts.length - 1);
-    final bounce = pts[bounceIndex];
-    final dx = (last['x'] ?? 0.5) - (first['x'] ?? 0.5);
-    final endX = last['x'] ?? 0.5;
-    final bounceY = bounce['y'] ?? 0.5;
-    final line = endX < 0.43
-        ? 'leg-side'
-        : endX > 0.57
-        ? 'off-side'
-        : 'middle-channel';
-    final driftText = dx.abs() > 0.10
-        ? 'large lateral drift'
-        : dx.abs() > 0.05
-        ? 'moderate lateral drift'
-        : 'straight but predictable path';
-
-    if (isBowling) {
-      mistake1 =
-          'Release/line control is leaking: the ball finishes in the $line channel with $driftText from release to finish.';
-      mistake2 = bounceY > 0.66
-          ? 'Length is landing too full, giving the batter easy access to drive through the line.'
-          : 'Length is too short, allowing the batter time to rock back and free their arms.';
-      impact =
-          'This reduces wicket pressure because the batter can read the line earlier and commit to a scoring shot. Current clip pace context: $speedLabel.';
-      drill =
-          'Bowl 18 balls at one stump target: 6 full, 6 good length, 6 yorker, and count only balls finishing in the same channel.';
-    } else {
-      mistake1 =
-          'Shot control issue: the ball exits toward the $line channel with $driftText, showing contact did not stay controlled through the intended line.';
-      mistake2 = bounceY > 0.66
-          ? 'Timing is late against the fuller ball, so the shot is being played after the ball has already reached the hitting zone.'
-          : 'Timing is early against the shorter ball, so the shot shape is committed before the ball arrives cleanly.';
-      impact =
-          'This turns a scoring shot into mistimed contact instead of a clean, repeatable strike. Current clip pace context: $speedLabel.';
-      drill =
-          'Do 24 drop-ball hits: call the target channel before contact, then hold your finish for two seconds after every strike.';
-    }
-  } else if (isBowling) {
-    mistake1 = 'Run-up rhythm is not giving a repeatable release window.';
-    mistake2 =
-        'Follow-through direction is not staying committed toward the target.';
-    impact =
-        'Line control becomes unstable because the action is not repeating cleanly. Current clip pace context: $speedLabel.';
-    drill =
-        'Bowl 5 sets of 6 balls from a short run-up, marking only balls that hit the same target channel.';
-  } else {
-    mistake1 =
-        'Contact control is not staying stable through the hitting zone.';
-    mistake2 = 'The finish is not matching the intended shot direction.';
-    impact =
-        'Power leaks because the swing does not stay connected through contact. Current clip pace context: $speedLabel.';
-    drill =
-        'Do 3 rounds of 10 shadow swings, freeze at contact, then freeze at finish before the next rep.';
-  }
 
   return {
-    'mistakes': [mistake1, mistake2],
-    'impact': impact,
-    'drill': drill,
+    'mistakes': [
+      isBowling
+          ? 'Bowler motion requires clearer camera angle for full release tracking.'
+          : 'Batter shot mechanics require clearer camera angle for full contact tracking.'
+    ],
+    'impact': 'Ensure the camera has an unobstructed view of the player from setup to finish.',
+    'drill': 'Record practice with a steady angle 5-8 meters away at chest height.',
   };
 }
 

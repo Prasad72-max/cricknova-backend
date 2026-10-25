@@ -24,7 +24,14 @@ class RazorpayService {
           });
           return;
         }
-        final String token = await user.getIdToken(true);
+        final String? token = await user.getIdToken(true);
+        if (token == null || token.isEmpty) {
+          onError({
+            "code": "USER_NOT_LOGGED_IN",
+            "message": "Failed to get authentication token",
+          });
+          return;
+        }
 
         final verifyRes = await http.post(
           Uri.parse("https://cricknova-backend.onrender.com/payment/verify-payment"),
@@ -98,7 +105,10 @@ class RazorpayService {
     if (user == null) {
       throw Exception("User not logged in");
     }
-    final String token = await user.getIdToken(true);
+    final String? token = await user.getIdToken(true);
+    if (token == null || token.isEmpty) {
+      throw Exception("Failed to get authentication token");
+    }
 
     final res = await http.post(
       Uri.parse("https://cricknova-backend.onrender.com/payment/create-order"),

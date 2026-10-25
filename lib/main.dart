@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:CrickNova_Ai/splash/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,10 +16,13 @@ import 'package:CrickNova_Ai/models/pending_video.dart';
 import 'package:CrickNova_Ai/services/background_analysis_service.dart';
 import 'package:CrickNova_Ai/services/backend_warmup_service.dart';
 import 'package:CrickNova_Ai/services/app_analytics.dart';
+import 'package:CrickNova_Ai/services/admob_service.dart';
+import 'package:CrickNova_Ai/services/analysis_credit_service.dart';
 import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'firebase_options.dart';
+import 'theme/crickx_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,6 +125,16 @@ Future<void> _warmStartup() async {
     // Start background analysis checker only when its Firebase dependency is ready.
     BackgroundAnalysisService.instance.start();
   }
+
+  // Initialize AdMob (no-op for premium users)
+  try {
+    unawaited(AdMobService.instance.initialize());
+  } catch (_) {}
+
+  // Load analysis credits for current user
+  try {
+    unawaited(AnalysisCreditService.instance.loadCredits());
+  } catch (_) {}
 }
 
 class MyApp extends StatefulWidget {
@@ -137,7 +151,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.dark;
 
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
@@ -194,6 +208,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           unawaited(
             PlayBillingService.instance.syncEntitlementToPremiumService(),
           );
+          // Reload credits on auth change
+          unawaited(AnalysisCreditService.instance.onUserChanged());
         } catch (e) {
           debugPrint("❌ Premium refresh failed: $e");
         }
@@ -201,6 +217,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
 
     if (Firebase.apps.isNotEmpty) {
+      unawaited(SubscriptionProvider.instance.initialize());
       unawaited(PlayBillingService.instance.initialize());
     }
     unawaited(_initAppLinks());
@@ -235,49 +252,93 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<SubscriptionProvider>(
-      create: (_) => SubscriptionProvider(),
+    return ChangeNotifierProvider<SubscriptionProvider>.value(
+      value: SubscriptionProvider.instance,
       child: MaterialApp(
         navigatorKey: appNavigatorKey,
         navigatorObservers: [FirestoreScreenObserver()],
         debugShowCheckedModeBanner: false,
         themeMode: _themeMode,
 
-        // 🌞 LIGHT THEME
+        // 🌙 CRICKX LIME SPARK + GRAPHITE THEME
         theme: ThemeData(
-          brightness: Brightness.light,
-          scaffoldBackgroundColor: Colors.grey[100],
-          cardColor: Colors.white,
-          dividerColor: Colors.black12,
-          textTheme: const TextTheme(
-            bodyLarge: TextStyle(color: Colors.black),
-            bodyMedium: TextStyle(color: Colors.black),
-            bodySmall: TextStyle(color: Colors.black87),
+          brightness: Brightness.dark,
+          primaryColor: CrickXColors.limeSpark,
+          scaffoldBackgroundColor: CrickXColors.graphiteBg,
+          cardColor: CrickXColors.graphite,
+          dividerColor: CrickXColors.graphiteBorder,
+          colorScheme: const ColorScheme.dark(
+            primary: CrickXColors.limeSpark,
+            secondary: CrickXColors.limeSpark,
+            surface: CrickXColors.graphite,
+            onPrimary: CrickXColors.onLime,
+            onSecondary: CrickXColors.onLime,
+            onSurface: CrickXColors.textPrimary,
+          ),
+          fontFamily: GoogleFonts.poppins().fontFamily,
+          textTheme: GoogleFonts.poppinsTextTheme(
+            const TextTheme(
+              bodyLarge: TextStyle(color: CrickXColors.textPrimary),
+              bodyMedium: TextStyle(color: CrickXColors.textPrimary),
+              bodySmall: TextStyle(color: CrickXColors.textSecondary),
+            ),
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.white,
-            iconTheme: IconThemeData(color: Colors.white),
-            actionsIconTheme: IconThemeData(color: Colors.white),
+            backgroundColor: CrickXColors.graphiteBg,
+            foregroundColor: CrickXColors.textPrimary,
+            iconTheme: IconThemeData(color: CrickXColors.limeSpark),
+            actionsIconTheme: IconThemeData(color: CrickXColors.limeSpark),
+          ),
+          floatingActionButtonTheme: const FloatingActionButtonThemeData(
+            backgroundColor: CrickXColors.limeSpark,
+            foregroundColor: CrickXColors.onLime,
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: CrickXColors.limeSpark,
+              foregroundColor: CrickXColors.onLime,
+            ),
           ),
         ),
 
-        // 🌙 DARK THEME (GLOBAL)
+        // 🌙 CRICKX DARK THEME (GLOBAL)
         darkTheme: ThemeData(
           brightness: Brightness.dark,
-          scaffoldBackgroundColor: const Color(0xFF050505),
-          cardColor: const Color(0xFF111111),
-          dividerColor: Colors.white12,
-          textTheme: const TextTheme(
-            bodyLarge: TextStyle(color: Colors.white),
-            bodyMedium: TextStyle(color: Colors.white),
-            bodySmall: TextStyle(color: Colors.white70),
+          primaryColor: CrickXColors.limeSpark,
+          scaffoldBackgroundColor: CrickXColors.graphiteBg,
+          cardColor: CrickXColors.graphite,
+          dividerColor: CrickXColors.graphiteBorder,
+          colorScheme: const ColorScheme.dark(
+            primary: CrickXColors.limeSpark,
+            secondary: CrickXColors.limeSpark,
+            surface: CrickXColors.graphite,
+            onPrimary: CrickXColors.onLime,
+            onSecondary: CrickXColors.onLime,
+            onSurface: CrickXColors.textPrimary,
+          ),
+          fontFamily: GoogleFonts.poppins().fontFamily,
+          textTheme: GoogleFonts.poppinsTextTheme(
+            const TextTheme(
+              bodyLarge: TextStyle(color: CrickXColors.textPrimary),
+              bodyMedium: TextStyle(color: CrickXColors.textPrimary),
+              bodySmall: TextStyle(color: CrickXColors.textSecondary),
+            ),
           ),
           appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF050505),
-            foregroundColor: Colors.white,
-            iconTheme: IconThemeData(color: Colors.white),
-            actionsIconTheme: IconThemeData(color: Colors.white),
+            backgroundColor: CrickXColors.graphiteBg,
+            foregroundColor: CrickXColors.textPrimary,
+            iconTheme: IconThemeData(color: CrickXColors.limeSpark),
+            actionsIconTheme: IconThemeData(color: CrickXColors.limeSpark),
+          ),
+          floatingActionButtonTheme: const FloatingActionButtonThemeData(
+            backgroundColor: CrickXColors.limeSpark,
+            foregroundColor: CrickXColors.onLime,
+          ),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: CrickXColors.limeSpark,
+              foregroundColor: CrickXColors.onLime,
+            ),
           ),
         ),
         home: SplashScreen(startupFuture: widget.startupFuture),

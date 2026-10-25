@@ -11,7 +11,10 @@ Future<Map<String, String>> authHeader() async {
   }
 
   // Force refresh to avoid expired / malformed tokens
-  final String idToken = await user.getIdToken(true);
+  final String? idToken = await user.getIdToken(true);
+  if (idToken == null || idToken.isEmpty) {
+    throw Exception("USER_NOT_LOGGED_IN");
+  }
 
   return {
     "Authorization": "Bearer $idToken",

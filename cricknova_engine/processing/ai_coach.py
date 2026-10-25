@@ -28,13 +28,12 @@ def get_db():
     return db
 
 # -----------------------------
-# OPENAI CLIENT
+# NVIDIA CLIENT
 # -----------------------------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    OPENAI_API_KEY = None
-
-client = OpenAI(api_key=OPENAI_API_KEY)
+try:
+    from nvidia_client import is_nvidia_available, generate_nvidia_text
+except ImportError:
+    from cricknova_ai_backend.nvidia_client import is_nvidia_available, generate_nvidia_text
 
 # -----------------------------
 # TEMP OVERRIDE FLAG
@@ -281,8 +280,8 @@ async def ai_coach(
         return {"reply": "Ask a cricket-related question."}
 
     # ❗ AI CONFIG CHECK (do this BEFORE usage / premium checks)
-    if not OPENAI_API_KEY:
-        print("❌ OPENAI_API_KEY missing on server")
+    if not is_nvidia_available():
+        print("❌ NVIDIA_API_KEY missing on server")
         return {
             "reply": "AI Coach is temporarily unavailable. Please try again later.",
             "coach_feedback": "AI Coach is temporarily unavailable. Please try again later."
@@ -339,16 +338,16 @@ Situation / Question:
 """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+        reply_content = generate_nvidia_text(
+            system_instruction="You are an elite professional cricket coach.",
+            user_prompt=prompt,
+            max_output_tokens=220,
             temperature=0.4,
-            max_tokens=180
         )
 
         return {
             "success": True,
-            "reply": response.choices[0].message.content.strip(),
+            "reply": reply_content.strip(),
             "usage": limit_info,
             "plan": plan,
             "premium_required": False

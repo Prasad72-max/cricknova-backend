@@ -65,6 +65,44 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
+    // CRICKNOVA REELS
+    match /reels/{reelId} {
+      // Public reels or author or followers can read
+      allow read: if resource.data.visibility == 'public'
+                  || (request.auth != null && (resource.data.userId == request.auth.uid || resource.data.visibility == 'followers'));
+      // Only authenticated users can create their own reels
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      // Author can update details, or authed users can update engagement counters (likesCount, commentsCount, viewsCount, savesCount)
+      allow update: if request.auth != null
+                    && (resource.data.userId == request.auth.uid
+                        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'viewsCount', 'savesCount', 'updatedAt']));
+      // Only author can delete their reel
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+
+      // Reel Likes subcollection
+      match /likes/{userId} {
+        allow read: if true;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Reel Comments subcollection
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        allow delete: if request.auth != null
+                      && (resource.data.userId == request.auth.uid
+                          || get(/databases/$(database)/documents/reels/$(reelId)).data.userId == request.auth.uid);
+      }
+    }
+
+    // Reel Reports
+    match /reel_reports/{reportId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

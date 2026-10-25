@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../theme/crickx_colors.dart';
+
 class FaqScreen extends StatefulWidget {
   const FaqScreen({super.key});
 
@@ -13,10 +15,10 @@ class _FaqScreenState extends State<FaqScreen> {
   final TextEditingController _searchController = TextEditingController();
   final Set<String> _expandedTitles = <String>{};
 
-  static const Color _bg = Color(0xFF050505);
+  static const Color _bg = CrickXColors.graphiteBg;
   static const Color _slate = Color(0xFFA0A0A0);
-  static const Color _glass = Color(0x14FFFFFF);
-  static const Color _gold = Color(0xFFFFD86B);
+  static const Color _glass = CrickXColors.graphite;
+  static const Color _gold = CrickXColors.limeSpark;
 
   final List<_FaqCategory> _items = const [
     _FaqCategory(
@@ -76,7 +78,7 @@ class _FaqScreenState extends State<FaqScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black.withValues(alpha: 0.45),
         surfaceTintColor: Colors.transparent,

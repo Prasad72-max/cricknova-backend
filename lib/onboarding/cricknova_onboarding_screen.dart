@@ -26,6 +26,7 @@ import 'cricknova_paywall_screen.dart';
 import 'cricknova_onboarding_store.dart';
 import 'onboarding_ui_tokens.dart';
 import 'cricknova_trial_upload_pane.dart';
+import '../theme/crickx_colors.dart';
 
 class CricknovaOnboardingScreen extends StatefulWidget {
   final String userName;
@@ -4058,8 +4059,8 @@ class _RatingStepPaneState extends State<_RatingStepPane>
                           child: Icon(
                             Icons.star_rounded,
                             color: Color.lerp(
-                              const Color(0xFF8E7424),
-                              const Color(0xFFFFD86B),
+                              CrickXColors.limeSparkDark,
+                              CrickXColors.limeSpark,
                               math.sin(phase * math.pi).clamp(0.0, 1.0),
                             ),
                             size: 34,

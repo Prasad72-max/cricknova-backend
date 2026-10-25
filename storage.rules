@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Users can read public reels, or author can manage their own reels
+    match /users/{userId}/reels/{reelId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

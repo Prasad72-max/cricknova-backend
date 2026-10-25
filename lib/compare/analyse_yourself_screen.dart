@@ -13,6 +13,7 @@ import '../services/premium_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/weekly_stats_service.dart';
 import '../services/xp_service.dart';
+import '../theme/crickx_colors.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   final bool bowlingMode;
@@ -164,24 +165,21 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
           insetPadding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
             decoration: BoxDecoration(
+              color: CrickXColors.graphiteBg,
               borderRadius: BorderRadius.circular(28),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF020617)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
               border: Border.all(
-                color: const Color(0xFF38BDF8).withOpacity(0.35),
+                color: CrickXColors.graphiteBorder,
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF38BDF8).withOpacity(0.18),
+                  color: Colors.black.withOpacity(0.7),
                   blurRadius: 28,
-                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,26 +190,27 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withOpacity(0.14),
+                    color: CrickXColors.graphite,
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: const Color(0xFF38BDF8).withOpacity(0.35),
+                      color: CrickXColors.graphiteBorder,
+                      width: 1.1,
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     "BETTER COMPARISON GUIDE",
-                    style: TextStyle(
-                      color: Color(0xFFBAE6FD),
+                    style: GoogleFonts.poppins(
+                      color: CrickXColors.limeSpark,
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1,
                     ),
                   ),
                 ),
                 const SizedBox(height: 14),
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
@@ -221,53 +220,54 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
                 const SizedBox(height: 10),
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 14,
+                  style: GoogleFonts.poppins(
+                    color: const Color(0xFFA1A1AA),
+                    fontSize: 13.5,
                     height: 1.5,
                   ),
                 ),
                 const SizedBox(height: 18),
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF3B30).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(14),
+                    color: CrickXColors.graphite,
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: const Color(0xFFFF3B30).withOpacity(0.35),
+                      color: CrickXColors.graphiteBorder,
+                      width: 1.1,
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     "For the clearest result, use genuine cricket practice clips where your full action is visible. Avoid dark, shaky, cropped, or unrelated videos.",
-                    style: TextStyle(
-                      color: Colors.white,
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFFE2E8F0),
                       fontSize: 13,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 20),
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
+                       child: OutlinedButton(
                         onPressed: () => Navigator.pop(dialogContext, false),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                            color: Colors.white.withOpacity(0.16),
+                          side: const BorderSide(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.2,
                           ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text(
+                        child: Text(
                           "Not Now",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w700,
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFFA1A1AA),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
                           ),
                         ),
                       ),
@@ -277,16 +277,21 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(dialogContext, true),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF38BDF8),
-                          foregroundColor: Colors.black,
+                          backgroundColor: CrickXColors.limeSpark,
+                          foregroundColor: CrickXColors.onLime,
+                          elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: const Text(
+                        child: Text(
                           "Choose Video",
-                          style: TextStyle(fontWeight: FontWeight.w800),
+                          style: GoogleFonts.poppins(
+                            color: CrickXColors.onLime,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14.5,
+                          ),
                         ),
                       ),
                     ),
@@ -472,9 +477,10 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
         context: context,
         barrierDismissible: false,
         builder: (_) => AlertDialog(
-          backgroundColor: const Color(0xFF020617),
+          backgroundColor: CrickXColors.graphiteBg,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
           ),
           title: const Text(
             "🚀 Analyse Limit Reached",
@@ -494,10 +500,12 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF38BDF8),
+                backgroundColor: CrickXColors.limeSpark,
+                foregroundColor: CrickXColors.onLime,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
+                elevation: 0,
               ),
               onPressed: () {
                 Navigator.pop(context);
@@ -508,10 +516,10 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
                   ),
                 );
               },
-              child: const Text(
+              child: Text(
                 "Upgrade Now",
-                style: TextStyle(
-                  color: Colors.black,
+                style: GoogleFonts.poppins(
+                  color: CrickXColors.onLime,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -639,12 +647,14 @@ Do not give rating/score.
         } catch (_) {}
         await XpService.award(uid: user.uid, amount: 40, source: 'COMPARE');
 
-        await PremiumService.consumeCompare();
-        try {
-          final usage = await PremiumService.fetchMonthlyUsage();
-          await _maybeShowCompareLimitReached(usage.swingUsed);
-        } catch (e) {
-          debugPrint("USAGE TRACK ERROR (COMPARE) => $e");
+        if (PremiumService.hasCompareAccess) {
+          await PremiumService.consumeCompare();
+          try {
+            final usage = await PremiumService.fetchMonthlyUsage();
+            await _maybeShowCompareLimitReached(usage.swingUsed);
+          } catch (e) {
+            debugPrint("USAGE TRACK ERROR (COMPARE) => $e");
+          }
         }
       } else if (response.statusCode == 401) {
         setState(() {
@@ -663,21 +673,25 @@ Do not give rating/score.
               context: context,
               barrierDismissible: false,
               builder: (_) => AlertDialog(
-                backgroundColor: const Color(0xFF020617),
-                title: const Text(
-                  "Analyse Limit Reached",
-                  style: TextStyle(color: Colors.white),
+                backgroundColor: CrickXColors.graphiteBg,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                  side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
                 ),
-                content: const Text(
+                title: Text(
+                  "Analyse Limit Reached",
+                  style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+                content: Text(
                   "Your Cricknova Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
-                  style: TextStyle(color: Colors.white70),
+                  style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4),
                 ),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text(
+                    child: Text(
                       "Upgrade",
-                      style: TextStyle(color: Color(0xFF38BDF8)),
+                      style: GoogleFonts.poppins(color: CrickXColors.limeSpark, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ],
@@ -743,27 +757,32 @@ Do not give rating/score.
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF020617),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
-          "Analyse Limit Reached",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        backgroundColor: CrickXColors.graphiteBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
         ),
-        content: const Text(
+        title: Text(
+          "Analyse Limit Reached",
+          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
           "You've reached your monthly Cricknova Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
-          style: TextStyle(color: Colors.white70, height: 1.5),
+          style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Later", style: TextStyle(color: Colors.white54)),
+            child: Text("Later", style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA))),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF38BDF8),
+              backgroundColor: CrickXColors.limeSpark,
+              foregroundColor: CrickXColors.onLime,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
+              elevation: 0,
             ),
             onPressed: () {
               Navigator.pop(context);
@@ -774,10 +793,10 @@ Do not give rating/score.
                 ),
               );
             },
-            child: const Text(
+            child: Text(
               "Upgrade Now",
-              style: TextStyle(
-                color: Colors.black,
+              style: GoogleFonts.poppins(
+                color: CrickXColors.onLime,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -897,9 +916,9 @@ Do not give rating/score.
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E11),
+      backgroundColor: CrickXColors.graphiteBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0B0E11),
+        backgroundColor: CrickXColors.graphiteBg,
         title: Text(
           _isBowlingMode ? 'Bowling Analyse' : 'Cricknova Analyse Yourself',
         ),
@@ -909,21 +928,7 @@ Do not give rating/score.
         children: [
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0B0E11), Color(0xFF060A12)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _GridPainter(
-                lineColor: Colors.white.withOpacity(0.05),
-                majorLineColor: Colors.white.withOpacity(0.07),
-              ),
+              color: CrickXColors.graphiteBg,
             ),
           ),
           SingleChildScrollView(
@@ -988,8 +993,11 @@ Do not give rating/score.
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isSynced
-                              ? const Color(0xFF22C55E)
-                              : const Color(0xFF1E293B),
+                              ? CrickXColors.limeSpark
+                              : CrickXColors.graphiteElevated,
+                          foregroundColor: isSynced
+                              ? CrickXColors.onLime
+                              : Colors.white70,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -997,8 +1005,10 @@ Do not give rating/score.
                         onPressed: toggleSync,
                         child: Text(
                           isSynced ? "SYNC ON" : "SYNC PLAY",
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: isSynced
+                                ? CrickXColors.onLime
+                                : Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1009,21 +1019,38 @@ Do not give rating/score.
                 if (comparing)
                   Container(
                     margin: const EdgeInsets.only(top: 20),
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
-                      color: Colors.white10,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white24),
+                      color: CrickXColors.graphite,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
-                        const LinearProgressIndicator(minHeight: 3),
-                        const SizedBox(height: 16),
-                        const Text(
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(999),
+                          child: const LinearProgressIndicator(
+                            minHeight: 4,
+                            backgroundColor: CrickXColors.graphiteElevated,
+                            valueColor: AlwaysStoppedAnimation<Color>(CrickXColors.limeSpark),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
                           "AI is matching frames to find technique differences...",
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
+                          style: GoogleFonts.poppins(
+                            color: const Color(0xFFA1A1AA),
+                            fontSize: 13.5,
                             fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
@@ -1034,10 +1061,11 @@ Do not give rating/score.
                           child: Text(
                             cricketFacts[_currentFactIndex],
                             key: ValueKey(_currentFactIndex),
-                            style: const TextStyle(
+                            style: GoogleFonts.poppins(
                               color: Colors.white,
-                              fontSize: 15,
-                              height: 1.4,
+                              fontSize: 14.5,
+                              height: 1.45,
+                              fontWeight: FontWeight.w600,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -1049,19 +1077,19 @@ Do not give rating/score.
                 if (diffResult != null)
                   Container(
                     margin: const EdgeInsets.only(top: 20),
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A).withOpacity(0.8),
-                      borderRadius: BorderRadius.circular(18),
+                      color: CrickXColors.graphite,
+                      borderRadius: BorderRadius.circular(22),
                       border: Border.all(
-                        color: const Color(0xFF38BDF8),
-                        width: 1,
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF38BDF8).withOpacity(0.3),
-                          blurRadius: 12,
-                          spreadRadius: 1,
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
@@ -1093,15 +1121,14 @@ Do not give rating/score.
           child: Container(
             height: 220,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
+              color: CrickXColors.graphite,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.14)),
+              border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF38BDF8).withOpacity(0.10),
-                  blurRadius: 22,
-                  spreadRadius: 1,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
@@ -1229,28 +1256,36 @@ Do not give rating/score.
                   bottom: 12,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 12,
+                      vertical: 7,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A).withOpacity(0.65),
+                      color: CrickXColors.graphiteElevated,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(
-                        color: const Color(0xFF38BDF8).withOpacity(0.35),
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.2,
                       ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.5),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.video_call_outlined,
-                          color: Color(0xFF38BDF8),
+                          color: CrickXColors.limeSpark,
                           size: 16,
                         ),
-                        SizedBox(width: 6),
+                        const SizedBox(width: 6),
                         Text(
                           isLeft ? "Select 1" : "Select 2",
-                          style: TextStyle(
+                          style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
@@ -1319,16 +1354,16 @@ class _CompareResultView extends StatelessWidget {
         children: [
           const Icon(
             Icons.smart_toy_outlined,
-            color: Color(0xFF38BDF8),
+            color: CrickXColors.limeSpark,
             size: 22,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               parsed.fallback ?? raw,
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontSize: 17, // +2 points
+                fontSize: 16,
                 height: 1.5,
               ),
             ),
@@ -1345,17 +1380,17 @@ class _CompareResultView extends StatelessWidget {
           children: [
             const Icon(
               Icons.smart_toy_outlined,
-              color: Color(0xFF38BDF8),
+              color: CrickXColors.limeSpark,
               size: 22,
             ),
             const SizedBox(width: 10),
-            const Expanded(
+            Expanded(
               child: Text(
                 "Comparison Summary",
-                style: TextStyle(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 16,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.2,
                 ),
               ),
@@ -1370,7 +1405,7 @@ class _CompareResultView extends StatelessWidget {
               child: _CompareColumnCard(
                 title: "VIDEO 1",
                 subtitle: "Clip 1",
-                accent: const Color(0xFF38BDF8),
+                accent: CrickXColors.limeSpark,
                 summary: parsed.video1,
               ),
             ),
@@ -1379,7 +1414,7 @@ class _CompareResultView extends StatelessWidget {
               child: _CompareColumnCard(
                 title: "VIDEO 2",
                 subtitle: "Clip 2",
-                accent: const Color(0xFF22D3EE),
+                accent: CrickXColors.limeSpark,
                 summary: parsed.video2,
               ),
             ),
@@ -1410,11 +1445,18 @@ class _CompareColumnCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withOpacity(0.30)),
+        color: CrickXColors.graphiteElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1440,9 +1482,9 @@ class _CompareColumnCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0.7,
                     fontSize: 12,
                   ),
@@ -1453,10 +1495,10 @@ class _CompareColumnCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.72),
+            style: GoogleFonts.poppins(
+              color: const Color(0xFFA1A1AA),
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 10),
@@ -1541,11 +1583,18 @@ class _MiniSectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.20),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accent.withOpacity(0.32)),
+        color: CrickXColors.graphiteBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1563,10 +1612,10 @@ class _MiniSectionCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: TextStyle(
-                  color: accent.withOpacity(0.92),
+                style: GoogleFonts.poppins(
+                  color: accent,
                   fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0.7,
                 ),
               ),
@@ -1578,11 +1627,11 @@ class _MiniSectionCard extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
                 "• $b",
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
-                  fontSize: 17,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -1600,21 +1649,28 @@ class _DrillsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF020617).withOpacity(0.35),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.30)),
+        color: CrickXColors.graphiteBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             "DRILLS",
-            style: TextStyle(
-              color: Color(0xFF86EFAC),
+            style: GoogleFonts.poppins(
+              color: CrickXColors.limeSpark,
               fontSize: 12,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0.7,
             ),
           ),
@@ -1624,11 +1680,11 @@ class _DrillsCard extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 6),
               child: Text(
                 "• $d",
-                style: const TextStyle(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
-                  fontSize: 16,
-                  height: 1.35,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -1796,20 +1852,20 @@ class _NeonVsBadge extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: const LinearGradient(
-          colors: [Color(0xFF22D3EE), Color(0xFF8B5CF6)],
+          colors: [CrickXColors.graphiteElevated, CrickXColors.graphite],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF22D3EE).withOpacity(0.35 * intensity),
-            blurRadius: 22,
+            color: Colors.black.withOpacity(0.40 * intensity),
+            blurRadius: 18,
             spreadRadius: 2,
           ),
           BoxShadow(
-            color: const Color(0xFF8B5CF6).withOpacity(0.30 * intensity),
-            blurRadius: 26,
-            spreadRadius: 2,
+            color: CrickXColors.limeSpark.withOpacity(0.35 * intensity),
+            blurRadius: 20,
+            spreadRadius: 1,
           ),
         ],
       ),
@@ -1819,14 +1875,14 @@ class _NeonVsBadge extends StatelessWidget {
           height: 72,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFF0B0E11).withOpacity(0.65),
-            border: Border.all(color: Colors.white.withOpacity(0.18)),
+            color: CrickXColors.graphite,
+            border: Border.all(color: CrickXColors.limeSpark.withOpacity(0.5)),
           ),
           alignment: Alignment.center,
           child: const Text(
             "VS",
             style: TextStyle(
-              color: Colors.white,
+              color: CrickXColors.limeSpark,
               fontWeight: FontWeight.w900,
               letterSpacing: 1.6,
               fontSize: 18,
@@ -1863,31 +1919,31 @@ class _ShimmerCompareButton extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: enabled
-                      ? const [Color(0xFF8B5CF6), Color(0xFF22D3EE)]
+                      ? const [CrickXColors.limeSpark, CrickXColors.limeSpark]
                       : [
-                          const Color(0xFF8B5CF6).withOpacity(0.35),
-                          const Color(0xFF22D3EE).withOpacity(0.25),
+                          CrickXColors.limeSpark.withOpacity(0.35),
+                          CrickXColors.limeSpark.withOpacity(0.20),
                         ],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF22D3EE).withOpacity(0.22),
+                    color: CrickXColors.limeSpark.withOpacity(0.35),
                     blurRadius: 24,
                     spreadRadius: 1,
                   ),
                   BoxShadow(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.22),
+                    color: Colors.black.withOpacity(0.35),
                     blurRadius: 28,
                     spreadRadius: 1,
                   ),
                 ],
               ),
               alignment: Alignment.center,
-              child: const Text(
+              child: Text(
                 "COMPARE ANALYSIS",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
+                style: GoogleFonts.poppins(
+                  color: enabled ? CrickXColors.onLime : CrickXColors.onLime.withOpacity(0.5),
+                  fontWeight: FontWeight.w800,
                   letterSpacing: 1.0,
                   fontSize: 16,
                 ),
@@ -1923,41 +1979,6 @@ class _ShimmerCompareButton extends StatelessWidget {
   }
 }
 
-class _GridPainter extends CustomPainter {
-  final Color lineColor;
-  final Color majorLineColor;
-
-  const _GridPainter({required this.lineColor, required this.majorLineColor});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const gap = 22.0;
-    const majorEvery = 4;
-
-    for (int i = 0; i <= (size.width / gap).ceil(); i++) {
-      final x = i * gap;
-      final paint = Paint()
-        ..color = (i % majorEvery == 0) ? majorLineColor : lineColor
-        ..strokeWidth = (i % majorEvery == 0) ? 1.0 : 0.6;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-
-    for (int i = 0; i <= (size.height / gap).ceil(); i++) {
-      final y = i * gap;
-      final paint = Paint()
-        ..color = (i % majorEvery == 0) ? majorLineColor : lineColor
-        ..strokeWidth = (i % majorEvery == 0) ? 1.0 : 0.6;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GridPainter oldDelegate) {
-    return oldDelegate.lineColor != lineColor ||
-        oldDelegate.majorLineColor != majorLineColor;
-  }
-}
-
 class _LaserPainter extends CustomPainter {
   final bool enabled;
   final double t;
@@ -1981,13 +2002,13 @@ class _LaserPainter extends CustomPainter {
     final paint = Paint()
       ..strokeWidth = baseWidth
       ..style = PaintingStyle.stroke
-      ..shader = const LinearGradient(
-        colors: [Color(0xFF22D3EE), Color(0xFF60A5FA), Color(0xFF8B5CF6)],
+      ..shader = LinearGradient(
+        colors: [CrickXColors.limeSpark, CrickXColors.limeSpark.withOpacity(0.7), CrickXColors.limeSpark],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     final pulsePaint = Paint()
       ..strokeWidth = baseWidth + 2.2
-      ..color = const Color(0xFF38BDF8).withOpacity(0.12 + (0.10 * glow))
+      ..color = CrickXColors.limeSpark.withOpacity(0.15 + (0.10 * glow))
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
     canvas.drawLine(center, leftTarget, pulsePaint);
@@ -2013,3 +2034,4 @@ class _LaserPainter extends CustomPainter {
         oldDelegate.glow != glow;
   }
 }
+

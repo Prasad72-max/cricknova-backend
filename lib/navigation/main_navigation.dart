@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:hive/hive.dart';
@@ -15,6 +17,8 @@ import '../insights/insights_screen.dart';
 import '../premium/premium_screen.dart';
 import '../live/live_nets_tab.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
+import '../reels/screens/reels_screen.dart';
+import '../theme/crickx_colors.dart';
 
 abstract class MainNavigationController {
   void setTab(int index);
@@ -51,8 +55,8 @@ class _CrickNovaEdgeIntroScreenState extends State<_CrickNovaEdgeIntroScreen>
 
   @override
   Widget build(BuildContext context) {
-    const spaceAccent = Color(0xFF7DD3FC);
-    const spaceAccentSoft = Color(0xFFBFE8FF);
+    const spaceAccent = CrickXColors.limeSpark;
+    const spaceAccentSoft = Color(0xFFE2FFA6);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: GestureDetector(
@@ -327,7 +331,7 @@ class _EdgeIntroBackdropPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const spaceAccent = Color(0xFF7DD3FC);
+    const spaceAccent = CrickXColors.limeSpark;
     final baseCenter = Offset(size.width / 2, size.height * 0.34);
     final pointerShift = pointer == null
         ? Offset.zero
@@ -496,21 +500,14 @@ class _MainNavigationState extends State<MainNavigation>
     return List<Widget?>.generate(tabCount, _buildScreenAt);
   }
 
-  int get _coachTabIndex => 2;
+  int get _reelsTabIndex => 1;
+  int get _analyticsTabIndex => 2;
+  int get _coachTabIndex => 3;
+  int get _profileTabIndex => 4;
 
-  /// Premium tab only shown to free users (index 3 when visible).
-  bool get _showPremiumTab =>
-      PremiumService.isLoaded &&
-      !PremiumService.isPremiumActive &&
-      !_showEdgeTab;
-
-  bool get _showEdgeTab =>
-      PremiumService.isLoaded && PremiumService.hasCrickNovaEdgeAccess;
-
-  int get _premiumTabIndex => 3; // only valid when _showPremiumTab
-  int get _edgeTabIndex => 3; // only valid when _showEdgeTab
-
-  int get _profileTabIndex => (_showPremiumTab || _showEdgeTab) ? 4 : 3;
+  /// Premium tab removed from bottom nav; accessed via Profile "Go Elite".
+  bool get _showPremiumTab => false;
+  bool get _showEdgeTab => false;
 
   void _handlePremiumStateChanged() {
     if (!mounted) return;
@@ -839,14 +836,14 @@ class _MainNavigationState extends State<MainNavigation>
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: const Color(0xFF0B1118),
+              color: CrickXColors.graphite,
               borderRadius: BorderRadius.circular(24),
               border: Border.all(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+                color: CrickXColors.limeSpark.withValues(alpha: 0.35),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                  color: CrickXColors.limeSpark.withValues(alpha: 0.12),
                   blurRadius: 24,
                   spreadRadius: 1,
                 ),
@@ -860,19 +857,19 @@ class _MainNavigationState extends State<MainNavigation>
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                    color: CrickXColors.limeSpark.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
                     Icons.notifications_active_outlined,
-                    color: Color(0xFF7DD3FC),
+                    color: CrickXColors.limeSpark,
                   ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   title,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: CrickXColors.textPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -881,7 +878,7 @@ class _MainNavigationState extends State<MainNavigation>
                 Text(
                   message,
                   style: const TextStyle(
-                    color: Colors.white70,
+                    color: CrickXColors.textSecondary,
                     fontSize: 13.5,
                     height: 1.45,
                   ),
@@ -894,7 +891,7 @@ class _MainNavigationState extends State<MainNavigation>
                     child: const Text(
                       'Understood',
                       style: TextStyle(
-                        color: Color(0xFF7DD3FC),
+                        color: CrickXColors.limeSpark,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -909,40 +906,31 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   int _tabCount() {
-    // Free without live time: Home + Analytics + Coach + Premium + Profile = 5
-    // Any user with live time: Home + Analytics + Coach + Edge + Profile = 5
-    // Paid without live time: Home + Analytics + Coach + Profile = 4
-    return (_showPremiumTab || _showEdgeTab) ? 5 : 4;
+    // 5 standard tabs: Home | Reels | Analytics | Coach | Profile
+    return 5;
   }
 
   Widget _buildScreenAt(int index) {
     if (index == 0) {
       return HomeScreen(key: const ValueKey('home'), userName: userName);
     }
-    if (index == 1) {
+    if (index == _reelsTabIndex) {
+      return const ReelsScreen(key: ValueKey('reels_feed'));
+    }
+    if (index == _analyticsTabIndex) {
       return const InsightsScreen(key: ValueKey('insights'));
     }
     if (index == _coachTabIndex) {
       return const AICoachScreen(key: ValueKey('CrickNovacoach'));
-    }
-    if (_showPremiumTab && index == _premiumTabIndex) {
-      return const PremiumScreen(
-        key: ValueKey('premium_tab'),
-        entrySource: 'features',
-      );
-    }
-    if (_showEdgeTab && index == _edgeTabIndex) {
-      return const LiveNetsTab(key: ValueKey('cricknova_edge_tab'));
     }
     return const ProfileScreen(key: ValueKey('profile'));
   }
 
   String _screenNameForIndex(int index) {
     if (index == 0) return 'Home';
-    if (index == 1) return 'Analytics';
-    if (index == _coachTabIndex) return 'CrickNova Coach';
-    if (_showPremiumTab && index == _premiumTabIndex) return 'Premium';
-    if (_showEdgeTab && index == _edgeTabIndex) return 'CrickNova Edge';
+    if (index == _reelsTabIndex) return 'Reels';
+    if (index == _analyticsTabIndex) return 'Analytics';
+    if (index == _coachTabIndex) return 'AI Coach';
     if (index == _profileTabIndex) return 'Profile';
     return 'Tab $index';
   }
@@ -954,35 +942,41 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   Widget build(BuildContext context) {
     final navItems = <_NavTabData>[
-      _NavTabData(label: 'Home', icon: Icons.home_outlined, index: 0),
-      _NavTabData(label: 'Analytics', icon: Icons.insights_outlined, index: 1),
+      const _NavTabData(
+        label: 'Home',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        index: 0,
+      ),
+      const _NavTabData(
+        label: 'Reels',
+        icon: Icons.play_circle_outline_rounded,
+        activeIcon: Icons.play_circle_rounded,
+        index: 1,
+      ),
+      const _NavTabData(
+        label: 'Analytics',
+        icon: Icons.insights_outlined,
+        activeIcon: Icons.insights_rounded,
+        index: 2,
+      ),
       _NavTabData(
-        label: 'CrickNova Coach',
-        icon: Icons.auto_awesome_outlined,
+        label: 'Coach',
+        icon: Icons.smart_toy_outlined,
+        activeIcon: Icons.smart_toy_rounded,
         index: _coachTabIndex,
       ),
-      if (_showPremiumTab)
-        _NavTabData(
-          label: 'Premium',
-          icon: Icons.workspace_premium_outlined,
-          index: _premiumTabIndex,
-          isPremium: true,
-        ),
-      if (_showEdgeTab)
-        _NavTabData(
-          label: 'CrickNova Edge',
-          icon: Icons.sports_cricket_rounded,
-          index: _edgeTabIndex,
-          isEdge: true,
-        ),
       _NavTabData(
         label: 'Profile',
         icon: Icons.person_outline,
+        activeIcon: Icons.person_rounded,
         index: _profileTabIndex,
+        isProfile: true,
       ),
     ];
 
     return Scaffold(
+      backgroundColor: CrickXColors.graphiteBg,
       body: IndexedStack(
         index: _index,
         children: List<Widget>.generate(
@@ -1000,8 +994,23 @@ class _MainNavigationState extends State<MainNavigation>
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          height: 64,
-          color: Colors.black,
+          height: 68,
+          decoration: BoxDecoration(
+            color: CrickXColors.graphite,
+            border: Border(
+              top: BorderSide(
+                color: CrickXColors.graphiteBorder,
+                width: 1.0,
+              ),
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black,
+                blurRadius: 20,
+                offset: Offset(0, -6),
+              ),
+            ],
+          ),
           child: Row(
             children: [
               for (final item in navItems) Expanded(child: _buildNavTab(item)),
@@ -1014,17 +1023,17 @@ class _MainNavigationState extends State<MainNavigation>
 
   Widget _buildNavTab(_NavTabData item) {
     final bool isActive = _index == item.index;
-    final Color activeColor = item.isEdge
-        ? const Color(0xFF00E5FF)
-        : item.isPremium
-        ? const Color(0xFFD4AF37)
-        : Colors.amber;
-    final Color idleColor = item.isEdge
-        ? const Color(0xFF00E5FF).withValues(alpha: 0.72)
-        : item.isPremium
-        ? const Color(0xFFD4AF37).withValues(alpha: 0.7)
-        : Colors.white60;
-    final Color color = isActive ? activeColor : idleColor;
+    final List<Color> indicatorGradient = const [
+      CrickXColors.limeSpark,
+      CrickXColors.limeSpark,
+    ];
+
+    final Color glowColor = CrickXColors.limeSpark;
+
+    const Color activeColor = CrickXColors.limeSpark;
+    const Color inactiveColor = CrickXColors.textMuted;
+
+    final Color textColor = isActive ? activeColor : inactiveColor;
 
     return Material(
       color: Colors.transparent,
@@ -1038,21 +1047,21 @@ class _MainNavigationState extends State<MainNavigation>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Active indicator dot
+              // Top active indicator line with glow
               SizedBox(
-                height: 7,
+                height: 5,
                 child: Center(
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
                     height: 3,
-                    width: isActive ? 24 : 0,
+                    width: isActive ? 22 : 0,
                     decoration: BoxDecoration(
-                      color: activeColor,
-                      borderRadius: BorderRadius.circular(4),
+                      gradient: LinearGradient(colors: indicatorGradient),
+                      borderRadius: BorderRadius.circular(999),
                       boxShadow: isActive
                           ? [
                               BoxShadow(
-                                color: activeColor.withValues(alpha: 0.55),
+                                color: glowColor.withValues(alpha: 0.6),
                                 blurRadius: 8,
                                 spreadRadius: 1,
                               ),
@@ -1062,35 +1071,24 @@ class _MainNavigationState extends State<MainNavigation>
                   ),
                 ),
               ),
+              const SizedBox(height: 3),
 
-              // Icon
-              if (item.isPremium)
-                _premiumNavIcon(color: color, isActive: isActive)
-              else if (item.isEdge && !isActive)
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: activeColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: activeColor.withValues(alpha: 0.45),
-                          width: 1,
-                        ),
-                      ),
-                      child: Icon(item.icon, color: activeColor, size: 16),
-                    ),
-                  ],
-                )
+              // Icon or special badge
+              if (item.isProfile)
+                _profileNavIcon(isActive: isActive)
+              else if (item.isEdge)
+                _edgeNavIcon(isActive: isActive)
               else
-                Icon(item.icon, color: color, size: isActive ? 22 : 20),
+                Icon(
+                  isActive ? item.activeIcon : item.icon,
+                  color: isActive ? activeColor : inactiveColor,
+                  size: isActive ? 23 : 21,
+                ),
 
+              // Tab text label
               AnimatedOpacity(
                 duration: const Duration(milliseconds: 160),
-                opacity: isActive ? 1.0 : 0.72,
+                opacity: isActive ? 1.0 : 0.85,
                 child: Container(
                   height: 17,
                   margin: const EdgeInsets.only(top: 3),
@@ -1102,12 +1100,12 @@ class _MainNavigationState extends State<MainNavigation>
                       item.label,
                       maxLines: 1,
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 11,
-                        fontWeight: item.isPremium || item.isEdge
-                            ? FontWeight.w800
-                            : FontWeight.w700,
+                      style: GoogleFonts.poppins(
+                        color: textColor,
+                        fontSize: 10.5,
+                        fontWeight: isActive
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                   ),
@@ -1120,31 +1118,99 @@ class _MainNavigationState extends State<MainNavigation>
     );
   }
 
-  Widget _premiumNavIcon({required Color color, required bool isActive}) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        if (isActive)
-          Container(
-            width: 26,
-            height: 26,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.28),
-                  blurRadius: 14,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-          ),
-        Icon(
-          Icons.workspace_premium_outlined,
-          color: color,
-          size: isActive ? 24 : 22,
+  Widget _profileNavIcon({required bool isActive}) {
+    final user = FirebaseAuth.instance.currentUser;
+    final photoUrl = user?.photoURL;
+    final uid = user?.uid;
+    String? localImgPath;
+    if (uid != null && Hive.isBoxOpen('profile_$uid')) {
+      localImgPath = Hive.box('profile_$uid').get('profileImagePath') as String?;
+    }
+
+    final initial = (userName.trim().isNotEmpty && userName.trim().toLowerCase() != 'player')
+        ? userName.trim()[0].toUpperCase()
+        : (user?.displayName?.trim().isNotEmpty == true
+            ? user!.displayName!.trim()[0].toUpperCase()
+            : null);
+
+    return Container(
+      width: 25,
+      height: 25,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isActive
+              ? CrickXColors.limeSpark
+              : const Color(0xFF52525B),
+          width: isActive ? 2.0 : 1.1,
         ),
-      ],
+        boxShadow: isActive
+            ? [
+                BoxShadow(
+                  color: CrickXColors.limeSpark.withValues(alpha: 0.5),
+                  blurRadius: 7,
+                  spreadRadius: 0.8,
+                ),
+              ]
+            : null,
+      ),
+      child: ClipOval(
+        child: localImgPath != null && File(localImgPath).existsSync()
+            ? Image.file(
+                File(localImgPath),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _avatarFallback(initial, isActive),
+              )
+            : (photoUrl != null && photoUrl.isNotEmpty)
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _avatarFallback(initial, isActive),
+                  )
+                : _avatarFallback(initial, isActive),
+      ),
+    );
+  }
+
+  Widget _avatarFallback(String? initial, bool isActive) {
+    if (initial != null && initial.isNotEmpty) {
+      return Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isActive
+                ? const [CrickXColors.limeSpark, Color(0xFF8CE600)]
+                : const [Color(0xFF2B2F3A), Color(0xFF1D2028)],
+          ),
+        ),
+        child: Text(
+          initial,
+          style: TextStyle(
+            color: isActive ? CrickXColors.onLime : Colors.white,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    }
+    return Container(
+      alignment: Alignment.center,
+      color: isActive ? CrickXColors.limeSpark.withValues(alpha: 0.2) : const Color(0xFF1D2028),
+      child: Icon(
+        Icons.person_rounded,
+        size: 15,
+        color: isActive ? CrickXColors.limeSpark : CrickXColors.textMuted,
+      ),
+    );
+  }
+
+  Widget _edgeNavIcon({required bool isActive}) {
+    return Icon(
+      Icons.sports_cricket_rounded,
+      color: isActive ? CrickXColors.limeSpark : CrickXColors.textMuted,
+      size: isActive ? 24 : 22,
     );
   }
 }
@@ -1152,16 +1218,20 @@ class _MainNavigationState extends State<MainNavigation>
 class _NavTabData {
   final String label;
   final IconData icon;
+  final IconData activeIcon;
   final int index;
   final bool isPremium;
   final bool isEdge;
+  final bool isProfile;
 
   const _NavTabData({
     required this.label,
     required this.icon,
+    required this.activeIcon,
     required this.index,
     this.isPremium = false,
     this.isEdge = false,
+    this.isProfile = false,
   });
 }
 

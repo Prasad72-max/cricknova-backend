@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/cricket_analyze_api.dart';
+import '../theme/crickx_colors.dart';
 
 class CricketAnalyzeScreen extends StatefulWidget {
   const CricketAnalyzeScreen({super.key});
@@ -34,13 +36,13 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050A12),
+      backgroundColor: CrickXColors.graphiteBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF050A12),
+        backgroundColor: CrickXColors.graphiteBg,
         foregroundColor: Colors.white,
-        title: const Text(
+        title: Text(
           "CrickNova Coach",
-          style: TextStyle(fontWeight: FontWeight.w800),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
         ),
       ),
       body: SafeArea(
@@ -55,29 +57,35 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
                       controller: _controller,
                       minLines: 1,
                       maxLines: 3,
-                      style: const TextStyle(color: Colors.white),
+                      style: GoogleFonts.poppins(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: "Ask about your batting, bowling, mindset...",
-                        hintStyle: TextStyle(color: _withA(Colors.white, 0.55)),
+                        hintStyle: GoogleFonts.poppins(color: Colors.white38),
                         filled: true,
-                        fillColor: _withA(Colors.white, 0.06),
+                        fillColor: CrickXColors.graphiteElevated,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: _withA(Colors.white, 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.2,
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(
-                            color: _withA(Colors.white, 0.10),
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: const BorderSide(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.2,
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(16),
                           borderSide: const BorderSide(
-                            color: Color(0xFF38BDF8),
-                            width: 1.3,
+                            color: CrickXColors.limeSpark,
+                            width: 1.2,
                           ),
                         ),
                       ),
@@ -89,19 +97,23 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
                   ElevatedButton(
                     onPressed: _submit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF38BDF8),
-                      foregroundColor: Colors.black,
+                      backgroundColor: CrickXColors.limeSpark,
+                      foregroundColor: CrickXColors.onLime,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
+                        horizontal: 18,
+                        vertical: 16,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                       ),
+                      elevation: 0,
                     ),
-                    child: const Text(
+                    child: Text(
                       "Ask",
-                      style: TextStyle(fontWeight: FontWeight.w900),
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        color: CrickXColors.onLime,
+                      ),
                     ),
                   ),
                 ],
@@ -112,8 +124,8 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
                   ? Center(
                       child: Text(
                         "Type a cricket question and tap Ask.",
-                        style: TextStyle(
-                          color: _withA(Colors.white, 0.65),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white54,
                           fontSize: 14,
                         ),
                       ),
@@ -124,7 +136,7 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
                         if (snap.connectionState == ConnectionState.waiting) {
                           return const Center(
                             child: CircularProgressIndicator(
-                              color: Color(0xFF38BDF8),
+                              color: CrickXColors.limeSpark,
                             ),
                           );
                         }
@@ -133,7 +145,7 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
                             padding: const EdgeInsets.all(16),
                             child: Text(
                               "Error: ${snap.error}",
-                              style: const TextStyle(
+                              style: GoogleFonts.poppins(
                                 color: Colors.white,
                                 height: 1.35,
                               ),
@@ -142,40 +154,48 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
                         }
                         final md = (snap.data ?? "").trim();
                         if (md.isEmpty) {
-                          return const Center(
+                          return Center(
                             child: Text(
                               "No reply.",
-                              style: TextStyle(color: Colors.white),
+                              style: GoogleFonts.poppins(color: Colors.white),
                             ),
                           );
                         }
 
                         return Container(
                           margin: const EdgeInsets.fromLTRB(16, 6, 16, 16),
-                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 18),
+                          padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
-                            color: _withA(Colors.white, 0.06),
-                            borderRadius: BorderRadius.circular(16),
+                            color: CrickXColors.graphite,
+                            borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                              color: _withA(Colors.white, 0.10),
+                              color: CrickXColors.graphiteBorder,
+                              width: 1.2,
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                blurRadius: 16,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
                           ),
                           child: MarkdownBody(
                             data: md,
                             styleSheet: MarkdownStyleSheet(
-                              p: const TextStyle(
+                              p: GoogleFonts.poppins(
                                 color: Colors.white,
+                                fontSize: 14.5,
+                                height: 1.5,
+                              ),
+                              h2: GoogleFonts.poppins(
+                                color: CrickXColors.limeSpark,
                                 fontSize: 15,
-                                height: 1.45,
+                                fontWeight: FontWeight.w700,
                               ),
-                              h2: const TextStyle(
-                                color: Color(0xFF38BDF8),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                              ),
-                              strong: const TextStyle(
+                              strong: GoogleFonts.poppins(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),

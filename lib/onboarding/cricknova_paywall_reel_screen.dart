@@ -6,9 +6,10 @@ import 'package:video_player/video_player.dart';
 
 import 'cricknova_paywall_screen.dart';
 import 'onboarding_ui_tokens.dart';
+import '../theme/crickx_colors.dart';
 
-const Color _paywallBg = Color(0xFF080808);
-const Color _paywallGold = Color(0xFFFFD700);
+const Color _paywallBg = CrickXColors.graphiteBg;
+const Color _paywallGold = CrickXColors.limeSpark;
 
 class CricknovaPaywallReelScreen extends StatefulWidget {
   final String userName;
@@ -206,7 +207,7 @@ class _CricknovaPaywallReelViewState extends State<CricknovaPaywallReelView> {
             onPressed: widget.onContinue,
             style: ElevatedButton.styleFrom(
               backgroundColor: _paywallGold,
-              foregroundColor: Colors.black,
+              foregroundColor: CrickXColors.onLime,
               elevation: 0,
               shadowColor: _paywallGold.withValues(alpha: 0.36),
               shape: RoundedRectangleBorder(

@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 
 import '../services/weekly_stats_service.dart';
+import '../theme/crickx_colors.dart';
 import 'improvement_plan_screen.dart';
 
 class EliteAnalyticsScreen extends StatefulWidget {
@@ -183,7 +184,7 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Report saved to ${file.path}"),
-          backgroundColor: const Color(0xFF0B1220),
+          backgroundColor: CrickXColors.graphite,
         ),
       );
     } catch (e) {
@@ -192,7 +193,7 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("PDF generation failed: $e"),
-          backgroundColor: const Color(0xFF0B1220),
+          backgroundColor: CrickXColors.graphite,
         ),
       );
     }
@@ -246,17 +247,17 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
     return DefaultTabController(
       length: 4,
       child: Scaffold(
-        backgroundColor: const Color(0xFF020617),
+        backgroundColor: CrickXColors.graphiteBg,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF020617),
+          backgroundColor: CrickXColors.graphiteBg,
           title: Text(
             "Elite Monthly Report",
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           ),
           bottom: TabBar(
             isScrollable: true,
-            indicatorColor: const Color(0xFFFFD86B),
-            labelColor: const Color(0xFFFFD86B),
+            indicatorColor: CrickXColors.limeSpark,
+            labelColor: CrickXColors.limeSpark,
             unselectedLabelColor: Colors.white60,
             labelStyle: GoogleFonts.poppins(
               fontSize: 12,
@@ -272,13 +273,13 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
         ),
         body: _loading
             ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFFFFD86B)),
+                child: CircularProgressIndicator(color: CrickXColors.limeSpark),
               )
             : TabBarView(
                 children: [
                   RefreshIndicator(
-                    color: const Color(0xFFFFD86B),
-                    backgroundColor: const Color(0xFF0F172A),
+                    color: CrickXColors.limeSpark,
+                    backgroundColor: CrickXColors.graphite,
                     onRefresh: _loadWeeklyUsage,
                     child: ListView(
                       padding: const EdgeInsets.all(20),
@@ -295,8 +296,8 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
                     ),
                   ),
                   RefreshIndicator(
-                    color: const Color(0xFFFFD86B),
-                    backgroundColor: const Color(0xFF0F172A),
+                    color: CrickXColors.limeSpark,
+                    backgroundColor: CrickXColors.graphite,
                     onRefresh: _loadWeeklyUsage,
                     child: ListView(
                       padding: const EdgeInsets.all(20),
@@ -338,16 +339,9 @@ class _EliteReportIntroCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFFFFD86B).withValues(alpha: 0.18),
-            Colors.white.withValues(alpha: 0.06),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: CrickXColors.graphite,
         border: Border.all(
-          color: const Color(0xFFFFD86B).withValues(alpha: 0.25),
+          color: CrickXColors.limeSpark.withValues(alpha: 0.35),
         ),
       ),
       child: Column(
@@ -478,8 +472,8 @@ class _DailyUsageCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white12),
+        color: CrickXColors.graphite,
+        border: Border.all(color: CrickXColors.graphiteBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,8 +518,8 @@ class _PdfActionCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.white.withValues(alpha: 0.06),
-        border: Border.all(color: Colors.white12),
+        color: CrickXColors.graphite,
+        border: Border.all(color: CrickXColors.graphiteBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -550,7 +544,7 @@ class _PdfActionCard extends StatelessWidget {
           if (generating) ...[
             const LinearProgressIndicator(
               minHeight: 3,
-              color: Color(0xFFFFD86B),
+              color: CrickXColors.limeSpark,
               backgroundColor: Colors.white12,
             ),
             const SizedBox(height: 8),
@@ -563,8 +557,8 @@ class _PdfActionCard extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFD86B),
-                  foregroundColor: Colors.black,
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: CrickXColors.onLime,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -582,8 +576,8 @@ class _PdfActionCard extends StatelessWidget {
                 width: double.infinity,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFFFD86B),
-                    side: const BorderSide(color: Color(0xFFFFD86B)),
+                    foregroundColor: CrickXColors.limeSpark,
+                    side: const BorderSide(color: CrickXColors.limeSpark),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -612,9 +606,9 @@ class _StatChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: CrickXColors.graphite,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white12),
+          border: Border.all(color: CrickXColors.graphiteBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

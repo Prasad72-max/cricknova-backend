@@ -40,7 +40,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final title = _scopeMaharashtra ? 'Maharashtra Top 200' : 'India Top 200';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF020617),
+      backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black.withValues(alpha: 0.30),
         elevation: 0,
@@ -170,19 +170,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
+        color: const Color(0xFF0D0D12),
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF0B1220),
-            const Color(0xFF020617).withValues(alpha: 0.92),
-          ],
-        ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(color: const Color(0xFF23232A), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF38BDF8).withValues(alpha: 0.10),
-            blurRadius: 26,
-            spreadRadius: 1,
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
           ),
         ],
       ),

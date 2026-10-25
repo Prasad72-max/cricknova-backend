@@ -8,8 +8,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../navigation/main_navigation.dart';
 import '../onboarding/cricknova_onboarding_store.dart';
-import '../onboarding/cricknova_onboarding_screen.dart';
-import '../onboarding/cricknova_paywall_screen.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
 import '../services/premium_service.dart';
 
@@ -178,13 +176,7 @@ class LoginScreen extends StatelessWidget {
         }
       }
 
-      // If the user has reached the end of onboarding (paywall/app target)
-      // but doesn't have a Firestore document yet (e.g. they just re-registered
-      // after account deletion), create a base document so they are recognized
-      // as a returning user on the next app launch.
-      if (!exists &&
-          (postLoginTarget == LoginPostLoginTarget.paywall ||
-              postLoginTarget == LoginPostLoginTarget.app)) {
+      if (!exists) {
         try {
           await FirebaseFirestore.instance
               .collection('users')
@@ -195,95 +187,18 @@ class LoginScreen extends StatelessWidget {
                 'name': userName,
                 'source': 'google_auth',
               }, SetOptions(merge: true));
-          exists = true; // They are now registered
+          exists = true;
         } catch (e) {
           debugPrint('Error creating base user doc: $e');
         }
       }
 
-      if (exists) {
-        try {
-          await PremiumService.ensureFreshState();
-        } catch (_) {}
-      }
+      try {
+        await PremiumService.ensureFreshState();
+      } catch (_) {}
 
-      Widget signedInDestination() {
-        final bool isPremium = PremiumService.isPremiumActive;
-        if (isPremium) {
-          return MainNavigation(userName: userName);
-        }
-        return CricknovaPaywallScreen(userName: userName);
-      }
-
-      final Widget destination = switch (postLoginTarget) {
-        LoginPostLoginTarget.paywall =>
-          PremiumService.isPremiumActive
-              ? MainNavigation(userName: userName)
-              : CricknovaPaywallScreen(userName: userName),
-        LoginPostLoginTarget.app => MainNavigation(userName: userName),
-        LoginPostLoginTarget.onboarding => await (() async {
-          if (exists) {
-            return signedInDestination();
-          }
-          await CricknovaOnboardingStore.clearCompleted(user.uid);
-          return CricknovaOnboardingScreen(
-            userName: userName,
-            skipGetStarted: skipOnboardingGetStarted,
-          );
-        })(),
-        LoginPostLoginTarget.getStarted => await (() async {
-          if (exists) {
-            return signedInDestination();
-          }
-          // New account not in Firestore — sign them out so the
-          // welcome pane's "Sign in" button can pick a different account.
-          await CricknovaOnboardingStore.clearCompleted(user.uid);
-          try {
-            await FirebaseAuth.instance.signOut();
-          } catch (_) {}
-          try {
-            await _googleSignIn.signOut();
-          } catch (_) {}
-          return CricknovaOnboardingScreen(
-            userName: userName,
-            skipGetStarted: false, // show welcome step WITH sign-in button
-          );
-        })(),
-        LoginPostLoginTarget.signInCheck => await (() async {
-          if (exists) {
-            return signedInDestination();
-          }
-          await CricknovaOnboardingStore.clearCompleted(user.uid);
-          try {
-            await FirebaseAuth.instance.signOut();
-          } catch (_) {}
-          try {
-            await _googleSignIn.signOut();
-          } catch (_) {}
-          return CricknovaOnboardingScreen(
-            userName: userName,
-            skipGetStarted: false, // show welcome step WITH sign-in button
-            entryNotice:
-                'Account not found. Complete the questions or sign in with a registered account.',
-          );
-        })(),
-        LoginPostLoginTarget.auto => await (() async {
-          if (exists) {
-            return signedInDestination();
-          }
-          await CricknovaOnboardingStore.clearCompleted(user.uid);
-          try {
-            await FirebaseAuth.instance.signOut();
-          } catch (_) {}
-          try {
-            await _googleSignIn.signOut();
-          } catch (_) {}
-          return CricknovaOnboardingScreen(
-            userName: userName,
-            skipGetStarted: false, // show welcome step WITH sign-in button
-          );
-        })(),
-      };
+      // 100% bypass onboarding and paywalls: all logins go straight to main app
+      final Widget destination = MainNavigation(userName: userName);
 
       if (!context.mounted) return;
       Navigator.pushAndRemoveUntil(

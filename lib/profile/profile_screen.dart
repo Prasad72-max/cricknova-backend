@@ -14,7 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:provider/provider.dart';
 import '../premium/premium_screen.dart';
-import '../onboarding/cricknova_onboarding_screen.dart';
+import '../auth/login_screen.dart';
 import '../navigation/main_navigation.dart';
 import '../services/pricing_location_service.dart';
 import '../services/premium_service.dart';
@@ -22,6 +22,9 @@ import '../services/subscription_provider.dart';
 import '../live/live_nets_tab.dart';
 import 'faq_screen.dart';
 import 'legal_info_screen.dart';
+import '../reels/screens/my_reels_screen.dart';
+import '../reels/screens/saved_reels_screen.dart';
+import '../theme/crickx_colors.dart';
 
 class _SubscriptionPlanSpec {
   const _SubscriptionPlanSpec({
@@ -80,21 +83,6 @@ class _SubscriptionHub extends StatelessWidget {
         '60 Cricknova Analyse Yourself (Batting/Bowling)',
         'Pro Coaching Insights',
       ],
-    ),
-    _SubscriptionPlanSpec(
-      planId: 'IN_1999',
-      title: 'Domestic Ultra',
-      price: 'INR 1999',
-      region: 'Domestic',
-      icon: Icons.emoji_events_outlined,
-      features: [
-        'AI Ball Tracking',
-        'RPM Analysis',
-        'CrickNova Bowling Analysis',
-        '150 Cricknova Analyse Yourself (Batting/Bowling)',
-        'Pro Coaching Insights',
-        'Elite DRS Tools',
-      ],
       recommended: true,
     ),
   ];
@@ -135,19 +123,6 @@ class _SubscriptionHub extends StatelessWidget {
         'Advanced AI Reports',
         'Speed Certificates',
       ],
-    ),
-    _SubscriptionPlanSpec(
-      planId: 'INTL_ULTRA',
-      title: 'CrickNova Elite 👑',
-      price: '\$109.99/year',
-      region: 'Global',
-      icon: Icons.emoji_events_outlined,
-      features: [
-        'Unlimited Cricknova Chat Coach',
-        '150 Cricknova Analyse Yourself (Batting/Bowling)',
-        'Elite AI Engine',
-        'Elite DRS Tools',
-      ],
       recommended: true,
     ),
   ];
@@ -186,7 +161,7 @@ class _SubscriptionHub extends StatelessWidget {
                 const SizedBox(height: 16),
                 Text(
                   'Ready for the pitch? Your AI is awake and calibrated.',
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: const Color(0xFFA0A0A0),
                     fontSize: 12.5,
                     fontStyle: FontStyle.italic,
@@ -243,89 +218,87 @@ class _ActiveSubscriptionCard extends StatelessWidget {
         : '${remaining.inDays}d ${remaining.inHours % 24}h left';
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0x80D4A84F), width: 1.1),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0x33D4A84F),
-                blurRadius: 22,
-                spreadRadius: 0.5,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0x1AD4A84F),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      isPremium ? 'PRO' : 'FREE',
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFFF2D08B),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: CrickXColors.graphite,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 20,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: CrickXColors.limeSpark.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    isPremium ? 'PRO' : 'FREE',
+                    style: GoogleFonts.poppins(
+                      color: CrickXColors.limeSpark,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
                     ),
                   ),
-                  const Spacer(),
-                  Icon(plan.icon, color: const Color(0xFFF2D08B), size: 20),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Current Plan',
-                style: GoogleFonts.inter(
-                  color: Colors.white70,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
                 ),
+                const Spacer(),
+                Icon(plan.icon, color: CrickXColors.limeSpark, size: 20),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Current Plan',
+              style: GoogleFonts.poppins(
+                color: const Color(0xFFA1A1AA),
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(height: 4),
-              Text(
-                isPremium ? '${plan.title} ${plan.price}' : 'Free Access',
-                style: GoogleFonts.inter(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isPremium ? '${plan.title} ${plan.price}' : 'Free Access',
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatusChip(
+                    label: 'Next renewal',
+                    value: renewalLabel,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatusChip(
-                      label: 'Next renewal',
-                      value: renewalLabel,
-                    ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatusChip(
+                    label: 'Plan code',
+                    value: PremiumService.plan,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _StatusChip(
-                      label: 'Plan code',
-                      value: PremiumService.plan,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -361,26 +334,23 @@ class _PlanRail extends StatelessWidget {
               width: 170,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: plan.recommended
-                    ? const Color(0xFF17120A)
-                    : const Color(0xFF14181E),
+                color: CrickXColors.graphite,
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color: selected
-                      ? const Color(0xFF3B82F6)
+                      ? CrickXColors.limeSpark
                       : plan.recommended
-                      ? const Color(0x66D4A84F)
-                      : const Color(0x22FFFFFF),
+                      ? CrickXColors.limeSpark
+                      : CrickXColors.graphiteBorder,
+                  width: selected || plan.recommended ? 1.5 : 1.2,
                 ),
-                boxShadow: plan.recommended
-                    ? [
-                        BoxShadow(
-                          color: const Color(0x22D4A84F),
-                          blurRadius: 20,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null,
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 16,
+                    offset: Offset(0, 6),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,7 +361,7 @@ class _PlanRail extends StatelessWidget {
                         plan.icon,
                         size: 20,
                         color: plan.recommended
-                            ? const Color(0xFFF2D08B)
+                            ? CrickXColors.limeSpark
                             : const Color(0xFFD0D6DD),
                       ),
                       const Spacer(),
@@ -402,13 +372,14 @@ class _PlanRail extends StatelessWidget {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0x1AD4A84F),
+                            color: CrickXColors.limeSpark.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: CrickXColors.limeSpark.withValues(alpha: 0.4)),
                           ),
                           child: Text(
                             'Recommended',
-                            style: GoogleFonts.inter(
-                              color: const Color(0xFFF2D08B),
+                            style: GoogleFonts.poppins(
+                              color: CrickXColors.limeSpark,
                               fontSize: 9.5,
                               fontWeight: FontWeight.w700,
                             ),
@@ -419,7 +390,7 @@ class _PlanRail extends StatelessWidget {
                   const Spacer(),
                   Text(
                     plan.title,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 15.5,
                       fontWeight: FontWeight.w700,
@@ -428,9 +399,9 @@ class _PlanRail extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     plan.price,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: plan.recommended
-                          ? const Color(0xFFF2D08B)
+                          ? CrickXColors.limeSpark
                           : const Color(0xFFD0D6DD),
                       fontSize: 21,
                       fontWeight: FontWeight.w700,
@@ -441,7 +412,7 @@ class _PlanRail extends StatelessWidget {
                     plan.features.join(' • '),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: const Color(0xFFA0A0A0),
                       fontSize: 11.5,
                       height: 1.35,
@@ -496,9 +467,16 @@ class _PlanComparisonSheet extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(14, 0, 14, 14),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF0B0E13),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white12),
+          color: CrickXColors.graphite,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -509,14 +487,14 @@ class _PlanComparisonSheet extends StatelessWidget {
                 Icon(
                   plan.icon,
                   color: plan.recommended
-                      ? const Color(0xFFF2D08B)
+                      ? CrickXColors.limeSpark
                       : Colors.white70,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     '${plan.title} ${plan.price}',
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -528,9 +506,9 @@ class _PlanComparisonSheet extends StatelessWidget {
             const SizedBox(height: 16),
             Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
+                color: CrickXColors.graphiteElevated,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white10),
+                border: Border.all(color: CrickXColors.graphiteBorder),
               ),
               child: Column(
                 children: rows
@@ -538,15 +516,15 @@ class _PlanComparisonSheet extends StatelessWidget {
                       (row) => ListTile(
                         dense: true,
                         leading: Icon(
-                          row.$2 ? Icons.check_rounded : Icons.close_rounded,
+                          row.$2 ? Icons.check_circle_rounded : Icons.cancel_outlined,
                           color: row.$2
-                              ? const Color(0xFF3B82F6)
+                              ? CrickXColors.limeSpark
                               : Colors.white24,
                           size: 18,
                         ),
                         title: Text(
                           row.$1,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
@@ -569,22 +547,27 @@ class _PlanComparisonSheet extends StatelessWidget {
                       },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: plan.recommended
-                      ? const Color(0xFFD4A84F)
-                      : const Color(0xFF2563EB),
+                      ? CrickXColors.limeSpark
+                      : CrickXColors.graphiteElevated,
                   foregroundColor: plan.recommended
-                      ? Colors.black
+                      ? CrickXColors.onLime
                       : Colors.white,
                   disabledBackgroundColor: Colors.white10,
                   padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: plan.recommended
+                          ? Colors.transparent
+                          : CrickXColors.graphiteBorder,
+                    ),
                   ),
                 ),
                 child: Text(
                   currentPlanId == plan.planId
                       ? 'Current plan'
                       : 'View Checkout',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -608,7 +591,7 @@ class _SectionLabel extends StatelessWidget {
       children: [
         Text(
           title,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.poppins(
             color: Colors.white,
             fontSize: 15.5,
             fontWeight: FontWeight.w700,
@@ -617,7 +600,7 @@ class _SectionLabel extends StatelessWidget {
         const SizedBox(height: 3),
         Text(
           subtitle,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.poppins(
             color: const Color(0xFFA0A0A0),
             fontSize: 12,
           ),
@@ -638,16 +621,16 @@ class _StatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
+        color: CrickXColors.graphiteElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CrickXColors.graphiteBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.poppins(
               color: Colors.white54,
               fontSize: 11,
               fontWeight: FontWeight.w500,
@@ -658,7 +641,7 @@ class _StatusChip extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -1016,9 +999,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
-        builder: (_) => CricknovaOnboardingScreen(
-          userName: _savedName ?? 'Player',
-          skipGetStarted: false,
+        builder: (_) => const LoginScreen(
+          postLoginTarget: LoginPostLoginTarget.app,
         ),
       ),
       (route) => false,
@@ -1067,9 +1049,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                 ),
                 const SizedBox(height: 18),
-                const Text(
+                Text(
                   "Are you sure?",
-                  style: TextStyle(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
@@ -1134,9 +1116,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           "Cancel",
-                          style: TextStyle(color: Colors.white70),
+                          style: GoogleFonts.poppins(color: Colors.white70, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ),
@@ -1152,9 +1134,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           "Delete",
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -1205,9 +1187,8 @@ class _ProfileScreenState extends State<ProfileScreen>
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
-          builder: (_) => const CricknovaOnboardingScreen(
-            userName: 'Player',
-            skipGetStarted: false,
+          builder: (_) => const LoginScreen(
+            postLoginTarget: LoginPostLoginTarget.app,
           ),
         ),
         (route) => false,
@@ -1331,10 +1312,10 @@ class _ProfileScreenState extends State<ProfileScreen>
     final statsBox = _statsBox;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF07090D),
+      backgroundColor: CrickXColors.graphiteBg,
       body: RefreshIndicator(
-        color: const Color(0xFF3B82F6),
-        backgroundColor: const Color(0xFF0E131B),
+        color: CrickXColors.limeSpark,
+        backgroundColor: CrickXColors.graphiteBg,
         notificationPredicate: (_) => false,
         onRefresh: () async {},
         child: SingleChildScrollView(
@@ -1342,335 +1323,225 @@ class _ProfileScreenState extends State<ProfileScreen>
             children: [
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 70, 20, 40),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0B0F15), Color(0xFF11161F)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.08),
-                    ),
-                  ),
+                margin: EdgeInsets.fromLTRB(
+                  20,
+                  MediaQuery.of(context).padding.top + 14,
+                  20,
+                  0,
                 ),
-                child: Stack(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+                decoration: BoxDecoration(
+                  color: CrickXColors.graphite,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: CrickXColors.graphiteBorder,
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
                   children: [
-                    Column(
-                      children: [
-                        GestureDetector(
-                          onTap: showImageOptions,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                height: 154,
-                                width: 154,
+                    GestureDetector(
+                      onTap: showImageOptions,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            height: 140,
+                            width: 140,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: CrickXColors.graphiteElevated,
+                              border: Border.all(
+                                color: CrickXColors.limeSpark,
+                                width: 2.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.25),
+                                  blurRadius: 20,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: profileImage != null
+                                  ? Image.file(
+                                      profileImage!,
+                                      width: 140,
+                                      height: 140,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                            return const Icon(
+                                              Icons.person,
+                                              size: 76,
+                                              color: Colors.white,
+                                            );
+                                          },
+                                    )
+                                  : const Icon(
+                                      Icons.person,
+                                      size: 76,
+                                      color: Colors.white,
+                                    ),
+                            ),
+                          ),
+                          if (PremiumService.isPremium)
+                            Positioned(
+                              bottom: 4,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: RadialGradient(
-                                    colors: [
-                                      _levelGlowColor(
-                                        totalXP,
-                                      ).withValues(alpha: 0.28),
-                                      const Color(0xFF020617),
-                                    ],
-                                  ),
-                                  border: Border.all(
-                                    color: _levelGlowColor(totalXP),
-                                    width: 2.4,
-                                  ),
+                                  color: CrickXColors.limeSpark,
+                                  borderRadius: BorderRadius.circular(14),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: _levelGlowColor(
-                                        totalXP,
-                                      ).withValues(alpha: 0.45),
-                                      blurRadius: 28,
-                                      spreadRadius: 2,
+                                      color: CrickXColors.limeSpark.withValues(alpha: 0.45),
+                                      blurRadius: 16,
+                                      spreadRadius: 0.5,
                                     ),
                                   ],
                                 ),
-                                child: ClipOval(
-                                  child: profileImage != null
-                                      ? Image.file(
-                                          profileImage!,
-                                          width: 154,
-                                          height: 154,
-                                          fit: BoxFit.cover,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                                return const Icon(
-                                                  Icons.person,
-                                                  size: 86,
-                                                  color: Colors.white,
-                                                );
-                                              },
-                                        )
-                                      : const Icon(
-                                          Icons.person,
-                                          size: 86,
-                                          color: Colors.white,
-                                        ),
-                                ),
-                              ),
-                              if (PremiumService.isPremium)
-                                Positioned(
-                                  bottom: 4,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 5,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.star,
+                                      color: CrickXColors.onLime,
+                                      size: 13,
                                     ),
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFFFFF1BF),
-                                          Color(0xFFFFD15C),
-                                          Color(0xFFB8862B),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(14),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFFFFD15C,
-                                          ).withValues(alpha: 0.45),
-                                          blurRadius: 16,
-                                          spreadRadius: 0.5,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.star,
-                                          color: Color(0xFF2C2208),
-                                          size: 14,
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          "ELITE",
-                                          style: GoogleFonts.orbitron(
-                                            color: const Color(0xFF2C2208),
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 10.5,
-                                            letterSpacing: 0.9,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 15),
-                        Text(
-                          _savedName.isNotEmpty ? _savedName : "Player",
-                          style: GoogleFonts.orbitron(
-                            color: Colors.white,
-                            fontSize: 23,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        if (userEmail != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Text(
-                              userEmail!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.poppins(
-                                fontSize: 13,
-                                color: Colors.white.withValues(alpha: 0.58),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 20),
-
-                        if (!_profileDataLoaded || statsBox == null)
-                          Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0F141C),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                  ),
-                                ),
-                                child: Text(
-                                  "Loading...",
-                                  style: GoogleFonts.orbitron(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              _metallicShimmerProgressBar(
-                                progress: 0,
-                                color: Colors.white70,
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "Loading XP...",
-                                style: GoogleFonts.orbitron(
-                                  color: Colors.white.withValues(alpha: 0.82),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.4,
-                                ),
-                              ),
-                            ],
-                          )
-                        else
-                          ValueListenableBuilder<Box>(
-                            valueListenable: statsBox.listenable(
-                              keys: const ['xp'],
-                            ),
-                            builder: (context, box, _) {
-                              final int xp =
-                                  (box.get('xp', defaultValue: 0) as num)
-                                      .toInt();
-                              final double progress = xp >= nextMilestone
-                                  ? 1.0
-                                  : xp / nextMilestone;
-                              final Color levelColor = _levelGlowColor(xp);
-                              final int localRemaining = max(
-                                nextMilestone - xp,
-                                0,
-                              );
-
-                              return Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F141C),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: levelColor.withValues(
-                                          alpha: 0.42,
-                                        ),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      _getLevelTitle(xp),
-                                      style: GoogleFonts.orbitron(
-                                        color: levelColor,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "ELITE",
+                                      style: GoogleFonts.poppins(
+                                        color: CrickXColors.onLime,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 10.5,
                                         letterSpacing: 0.5,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 14),
-                                  _metallicShimmerProgressBar(
-                                    progress: progress,
-                                    color: levelColor,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    "$xp / $nextMilestone XP",
-                                    style: GoogleFonts.orbitron(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.82,
-                                      ),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.4,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    progress >= 1
-                                        ? "Milestone achieved"
-                                        : "$localRemaining XP remaining to reach next milestone",
-                                    style: GoogleFonts.poppins(
-                                      color: const Color(0xFFFFB454),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            },
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _savedName.isNotEmpty ? _savedName : "Player",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const PremiumScreen(
+                                  entrySource: 'profile_name_go_elite',
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: CrickXColors.limeSpark,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.25),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.workspace_premium_rounded,
+                                  color: CrickXColors.onLime,
+                                  size: 13,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  PremiumService.isPremium ? "ELITE" : "GO ELITE",
+                                  style: GoogleFonts.poppins(
+                                    color: CrickXColors.onLime,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 10.5,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
+                    if (userEmail != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: Text(
+                          userEmail!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12.5,
+                            color: Colors.white.withValues(alpha: 0.58),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E90FF),
-                      elevation: 8,
-                      shadowColor: const Color(0xFF1E90FF).withOpacity(0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const RewardsScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "🎁 View My Rewards & Milestones",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // 👤 PERSONAL INFORMATION (Premium Style)
+              // 👤 PERSONAL INFORMATION (Dark Premium Style)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(22),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0B1220), Color(0xFF131B2B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                    color: CrickXColors.graphite,
+                    border: Border.all(
+                      color: CrickXColors.graphiteBorder,
+                      width: 1.2,
                     ),
-                    border: Border.all(color: const Color(0xFF2A3A54)),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF38BDF8).withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.7),
                         blurRadius: 18,
                         spreadRadius: 1,
                         offset: const Offset(0, 8),
@@ -1687,18 +1558,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                             height: 40,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF38BDF8), Color(0xFF1D4ED8)],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF38BDF8,
-                                  ).withOpacity(0.35),
-                                  blurRadius: 14,
-                                  spreadRadius: 1,
-                                ),
-                              ],
+                              color: CrickXColors.graphiteElevated,
+                              border: Border.all(color: CrickXColors.graphiteBorder),
                             ),
                             child: const Icon(
                               Icons.verified_user_outlined,
@@ -1715,7 +1576,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   "Personal Information",
                                   style: GoogleFonts.poppins(
                                     color: Colors.white,
-                                    fontSize: 16.5,
+                                    fontSize: 17,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
@@ -1739,11 +1600,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               color: PremiumService.isPremium
-                                  ? const Color(0xFFFFD700).withOpacity(0.16)
+                                  ? CrickXColors.limeSpark.withValues(alpha: 0.16)
                                   : Colors.white10,
                               border: Border.all(
                                 color: PremiumService.isPremium
-                                    ? const Color(0xFFFFD700)
+                                    ? CrickXColors.limeSpark
                                     : Colors.white24,
                               ),
                             ),
@@ -1751,7 +1612,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               PremiumService.isPremium ? "PREMIUM" : "FREE",
                               style: GoogleFonts.poppins(
                                 color: PremiumService.isPremium
-                                    ? const Color(0xFFFFD700)
+                                    ? CrickXColors.limeSpark
                                     : Colors.white70,
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
@@ -1765,13 +1626,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                       Container(
                         height: 1,
                         width: double.infinity,
-                        color: Colors.white10,
+                        color: CrickXColors.graphiteBorder,
                       ),
                       const SizedBox(height: 16),
                       if (_isEditingProfile)
                         TextField(
                           controller: nameController,
-                          style: const TextStyle(color: Colors.white),
+                          style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
                           decoration: inputStyle("Full Name").copyWith(
                             prefixIcon: const Icon(
                               Icons.person_outline,
@@ -1792,28 +1653,32 @@ class _ProfileScreenState extends State<ProfileScreen>
                       else
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
+                            horizontal: 16,
+                            vertical: 13,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0F131A),
+                            color: CrickXColors.graphiteElevated,
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white12),
+                            border: Border.all(
+                              color: CrickXColors.graphiteBorder,
+                              width: 1.1,
+                            ),
                           ),
                           child: Row(
                             children: [
                               const Icon(
-                                Icons.person_outline,
-                                color: Colors.white54,
-                                size: 18,
+                                Icons.person_outline_rounded,
+                                color: Color(0xFF94A3B8),
+                                size: 19,
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   _savedName.isNotEmpty ? _savedName : "Player",
                                   style: GoogleFonts.poppins(
-                                    color: Colors.white70,
-                                    fontSize: 12.5,
+                                    color: Colors.white,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -1824,28 +1689,32 @@ class _ProfileScreenState extends State<ProfileScreen>
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
+                          horizontal: 16,
+                          vertical: 13,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F131A),
+                          color: CrickXColors.graphiteElevated,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: Colors.white12),
+                          border: Border.all(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.1,
+                          ),
                         ),
                         child: Row(
                           children: [
                             const Icon(
-                              Icons.mail_outline,
-                              color: Colors.white54,
-                              size: 18,
+                              Icons.mail_outline_rounded,
+                              color: Color(0xFF94A3B8),
+                              size: 19,
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 userEmail ?? "Email not linked",
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white70,
-                                  fontSize: 12.5,
+                                  color: Colors.white,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -1857,34 +1726,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                       if (_isEditingProfile && _nameDirty)
                         InkWell(
                           onTap: saveName,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           child: Ink(
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1D4ED8), Color(0xFF38BDF8)],
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF38BDF8,
-                                  ).withOpacity(0.35),
-                                  blurRadius: 18,
-                                  spreadRadius: 1,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
+                              borderRadius: BorderRadius.circular(14),
+                              color: CrickXColors.limeSpark,
                             ),
                             child: Container(
                               alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 13),
                               child: Text(
                                 "Save Profile",
                                 style: GoogleFonts.poppins(
-                                  color: Colors.white,
+                                  color: CrickXColors.onLime,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                  letterSpacing: 0.4,
+                                  fontSize: 13.5,
+                                  letterSpacing: 0.2,
                                 ),
                               ),
                             ),
@@ -1900,22 +1757,27 @@ class _ProfileScreenState extends State<ProfileScreen>
                             });
                           },
                           icon: const Icon(
-                            Icons.edit,
-                            color: Colors.white70,
-                            size: 18,
+                            Icons.edit_outlined,
+                            color: Colors.white,
+                            size: 16,
                           ),
                           label: Text(
                             "Edit Profile",
                             style: GoogleFonts.poppins(
-                              color: Colors.white70,
+                              color: Colors.white,
                               fontWeight: FontWeight.w600,
+                              fontSize: 13,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Colors.white24),
+                            backgroundColor: CrickXColors.graphiteElevated,
+                            side: const BorderSide(
+                              color: CrickXColors.graphiteBorder,
+                              width: 1.1,
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
                         ),
@@ -1924,42 +1786,64 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
               // PREMIUM
               cardContainer(
                 title: "Explore Premium",
                 child: ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(
-                    Icons.workspace_premium,
-                    color: Color(0xFFFFD700),
+                  leading: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: CrickXColors.graphiteElevated,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: CrickXColors.graphiteBorder,
+                        width: 1.1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.workspace_premium_rounded,
+                      color: CrickXColors.limeSpark,
+                      size: 20,
+                    ),
                   ),
-                  title: const Text(
+                  title: Text(
                     "Open Subscription Hub",
-                    style: TextStyle(color: Colors.white),
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14.5,
+                    ),
                   ),
                   subtitle: Text(
                     PremiumService.isPremiumActive
                         ? "Manage your current premium plan"
                         : "Compare all plans and feature tiers",
-                    style: GoogleFonts.inter(
-                      color: Colors.white54,
-                      fontSize: 12.5,
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFF94A3B8),
+                      fontSize: 12,
                     ),
                   ),
                   trailing: const Icon(
-                    Icons.arrow_forward_ios,
-                    size: 18,
-                    color: Color(0xFF3B82F6),
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: Color(0xFF71717A),
                   ),
                   onTap: _openSubscriptionHub,
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              const LiveNetsAccessCard(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: const LiveNetsAccessCard(),
+              ),
+
+              const SizedBox(height: 16),
 
               // SUPPORT & RATING
               cardContainer(
@@ -1972,9 +1856,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                         scale: _supportPulse,
                         child: _supportStarIcon(),
                       ),
-                      title: const Text(
+                      title: Text(
                         "Support CrickNova AI (Rate Us)",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14.5,
+                        ),
                       ),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1983,8 +1871,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                           Text(
                             "If CrickNova AI is improving your game, give us 5 stars on the Play Store.",
                             style: GoogleFonts.poppins(
-                              color: Colors.white70,
-                              fontSize: 12.5,
+                              color: const Color(0xFF94A3B8),
+                              fontSize: 12,
                               height: 1.4,
                             ),
                           ),
@@ -1993,7 +1881,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             "Tap the stars to rate now.",
                             style: GoogleFonts.poppins(
                               color: Colors.white54,
-                              fontSize: 12,
+                              fontSize: 11.5,
                               height: 1.4,
                             ),
                           ),
@@ -2025,8 +1913,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 Text(
                                   "Write a quick review (optional):",
                                   style: GoogleFonts.poppins(
-                                    color: Colors.white60,
+                                    color: Colors.white70,
                                     fontSize: 12,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -2034,19 +1923,29 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   controller: _reviewController,
                                   minLines: 2,
                                   maxLines: 3,
-                                  style: const TextStyle(color: Colors.white),
+                                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
                                   decoration: InputDecoration(
                                     filled: true,
-                                    fillColor: const Color(0xFF0F131A),
+                                    fillColor: const Color(0xFF141418),
                                     hintText:
                                         "CrickNova AI is very good... (edit if you want)",
-                                    hintStyle: const TextStyle(
+                                    hintStyle: GoogleFonts.poppins(
                                       color: Colors.white38,
                                       fontSize: 12,
                                     ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none,
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF23232A),
+                                        width: 1.1,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      borderSide: const BorderSide(
+                                        color: Color(0xFF23232A),
+                                        width: 1.1,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -2055,14 +1954,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   width: double.infinity,
                                   child: ElevatedButton(
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFFD86B),
-                                      foregroundColor: Colors.black,
+                                      backgroundColor: CrickXColors.limeSpark,
+                                      foregroundColor: CrickXColors.onLime,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
                                     onPressed: _openRating,
-                                    child: const Text("Open Play Store"),
+                                    child: Text(
+                                      "Open Play Store",
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13.5,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2080,9 +1985,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                           _supportBadge(),
                           const SizedBox(width: 8),
                           const Icon(
-                            Icons.arrow_forward_ios,
-                            size: 16,
-                            color: Color(0xFF3B82F6),
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: Color(0xFF71717A),
                           ),
                         ],
                       ),
@@ -2098,14 +2003,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(
                         color: Colors.white54,
-                        fontSize: 12,
+                        fontSize: 11.5,
                         height: 1.4,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
               // 📜 LEGAL & APP INFO
               cardContainer(
@@ -2114,18 +2019,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                   children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.privacy_tip,
-                        color: Color(0xFF3B82F6),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16161A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF27272E),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.privacy_tip_outlined,
+                          color: Color(0xFFE2E8F0),
+                          size: 19,
+                        ),
                       ),
-                      title: const Text(
+                      title: Text(
                         "Privacy Policy",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
-                        color: Color(0xFF3B82F6),
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
                       ),
                       onTap: () {
                         _openDarkProfilePage(
@@ -2134,22 +2056,39 @@ class _ProfileScreenState extends State<ProfileScreen>
                         );
                       },
                     ),
-                    const Divider(color: Colors.white12),
+                    const Divider(color: Color(0xFF23232A), height: 16),
 
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.description,
-                        color: Color(0xFF3B82F6),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16161A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF27272E),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.description_outlined,
+                          color: Color(0xFFE2E8F0),
+                          size: 19,
+                        ),
                       ),
-                      title: const Text(
+                      title: Text(
                         "Terms & Conditions",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
-                        color: Color(0xFF3B82F6),
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
                       ),
                       onTap: () {
                         _openDarkProfilePage(
@@ -2158,43 +2097,77 @@ class _ProfileScreenState extends State<ProfileScreen>
                         );
                       },
                     ),
-                    const Divider(color: Colors.white12),
+                    const Divider(color: Color(0xFF23232A), height: 16),
 
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.help_outline,
-                        color: Color(0xFF3B82F6),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16161A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF27272E),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.help_outline_rounded,
+                          color: Color(0xFFE2E8F0),
+                          size: 19,
+                        ),
                       ),
-                      title: const Text(
+                      title: Text(
                         "FAQs",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
-                        color: Color(0xFF3B82F6),
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
                       ),
                       onTap: () {
                         _openDarkProfilePage(context, const FaqScreen());
                       },
                     ),
-                    const Divider(color: Colors.white12),
+                    const Divider(color: Color(0xFF23232A), height: 16),
 
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.info_outline,
-                        color: Color(0xFF3B82F6),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16161A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF27272E),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.info_outline_rounded,
+                          color: Color(0xFFE2E8F0),
+                          size: 19,
+                        ),
                       ),
-                      title: const Text(
+                      title: Text(
                         "About CrickNova AI",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
-                        color: Color(0xFF3B82F6),
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
                       ),
                       onTap: () {
                         _openDarkProfilePage(
@@ -2207,6 +2180,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
 
+              const SizedBox(height: 16),
+
               // LOG OUT
               cardContainer(
                 title: "Account",
@@ -2214,48 +2189,79 @@ class _ProfileScreenState extends State<ProfileScreen>
                   children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.logout,
-                        color: Color(0xFFEF4444),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16161A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF27272E),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.logout_rounded,
+                          color: Color(0xFFEF4444),
+                          size: 19,
+                        ),
                       ),
-                      title: const Text(
+                      title: Text(
                         "Log Out",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
-                        color: Color(0xFF3B82F6),
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
                       ),
                       onTap: () {
                         showDialog(
                           context: context,
                           builder: (_) => AlertDialog(
-                            backgroundColor: const Color(0xFF11151C),
+                            backgroundColor: const Color(0xFF0D0D12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(22),
+                              side: const BorderSide(
+                                color: Color(0xFF23232A),
+                                width: 1.2,
+                              ),
                             ),
-                            title: const Text(
+                            title: Text(
                               "Log Out",
-                              style: TextStyle(color: Colors.white),
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 18,
+                              ),
                             ),
-                            content: const Text(
+                            content: Text(
                               "Are you sure you want to log out?",
-                              style: TextStyle(color: Colors.white70),
+                              style: GoogleFonts.poppins(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: 13.5,
+                              ),
                             ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context),
-                                child: const Text(
+                                child: Text(
                                   "Go Back",
-                                  style: TextStyle(color: Color(0xFF3B82F6)),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFEF4444),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                 ),
                                 onPressed: () async {
@@ -2272,17 +2278,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   Navigator.of(this.context).pushAndRemoveUntil(
                                     MaterialPageRoute(
                                       builder: (_) =>
-                                          const CricknovaOnboardingScreen(
-                                            userName: 'Player',
-                                            skipGetStarted: false,
+                                          const LoginScreen(
+                                            postLoginTarget: LoginPostLoginTarget.app,
                                           ),
                                     ),
                                     (route) => false,
                                   );
                                 },
-                                child: const Text(
+                                child: Text(
                                   "Yes, Log Out",
-                                  style: TextStyle(color: Colors.white),
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ],
@@ -2290,27 +2298,44 @@ class _ProfileScreenState extends State<ProfileScreen>
                         );
                       },
                     ),
-                    const Divider(color: Colors.white12),
+                    const Divider(color: Color(0xFF23232A), height: 16),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: Colors.redAccent,
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16161A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF27272E),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 19,
+                        ),
                       ),
-                      title: const Text(
+                      title: Text(
                         "Remove My Account",
-                        style: TextStyle(color: Colors.white),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
                       ),
                       subtitle: Text(
                         "Permanently delete your account and user data",
-                        style: GoogleFonts.inter(
-                          color: Colors.white54,
-                          fontSize: 12.5,
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF94A3B8),
+                          fontSize: 12,
                         ),
                       ),
                       trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        size: 18,
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
                         color: Colors.redAccent,
                       ),
                       onTap: _confirmRemoveAccount,
@@ -2319,9 +2344,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
 
-              const SizedBox(height: 20),
-
-              const SizedBox(height: 30),
+              const SizedBox(height: 24),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Text(
@@ -2366,53 +2389,86 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Widget cardContainer({required String title, required Widget child}) {
+    IconData headerIcon = Icons.dashboard_customize_outlined;
+    Color headerAccent = CrickXColors.limeSpark;
+
+    if (title == "Cricket Reels & History") {
+      headerIcon = Icons.play_circle_outline_rounded;
+      headerAccent = CrickXColors.limeSpark;
+    } else if (title == "Explore Premium") {
+      headerIcon = Icons.workspace_premium_rounded;
+      headerAccent = CrickXColors.limeSpark;
+    } else if (title == "Support & Rating") {
+      headerIcon = Icons.star_outline_rounded;
+      headerAccent = CrickXColors.limeSpark;
+    } else if (title == "Legal & App Information") {
+      headerIcon = Icons.shield_outlined;
+      headerAccent = CrickXColors.limeSpark;
+    } else if (title == "Account") {
+      headerIcon = Icons.manage_accounts_outlined;
+      headerAccent = const Color(0xFFEF4444);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF11151C),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white12),
+          color: CrickXColors.graphite,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: CrickXColors.graphiteBorder,
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.7),
+              blurRadius: 18,
+              spreadRadius: 1,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                if (title == "Explore Premium")
-                  const Icon(
-                    Icons.workspace_premium,
-                    size: 18,
-                    color: Color(0xFFFFD700),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: CrickXColors.graphiteElevated,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: CrickXColors.graphiteBorder,
+                      width: 1.1,
+                    ),
                   ),
-                if (title == "Legal & App Information")
-                  const Icon(
-                    Icons.verified_user_outlined,
-                    size: 18,
-                    color: Color(0xFF3B82F6),
+                  child: Icon(
+                    headerIcon,
+                    size: 19,
+                    color: headerAccent,
                   ),
-                if (title == "Account")
-                  const Icon(
-                    Icons.manage_accounts_outlined,
-                    size: 18,
-                    color: Color(0xFFEF4444),
-                  ),
-                if (title == "Explore Premium" ||
-                    title == "Legal & App Information" ||
-                    title == "Account")
-                  const SizedBox(width: 8),
+                ),
+                const SizedBox(width: 12),
                 Text(
                   title,
                   style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 14),
+            Container(
+              height: 1,
+              width: double.infinity,
+              color: CrickXColors.graphiteBorder,
+            ),
+            const SizedBox(height: 6),
             child,
           ],
         ),
@@ -2426,13 +2482,21 @@ class _ProfileScreenState extends State<ProfileScreen>
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       filled: true,
-      fillColor: const Color(0xFF0F131A),
-      labelStyle: const TextStyle(color: Colors.white70),
-      floatingLabelStyle: const TextStyle(color: Colors.white),
-      hintStyle: const TextStyle(color: Colors.white54),
+      fillColor: CrickXColors.graphiteElevated,
+      labelStyle: GoogleFonts.poppins(color: CrickXColors.textMuted, fontSize: 13),
+      floatingLabelStyle: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
+      hintStyle: GoogleFonts.poppins(color: Colors.white54, fontSize: 13),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: CrickXColors.limeSpark, width: 1.2),
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide.none,
+        borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
       ),
     );
   }
@@ -2443,19 +2507,19 @@ class _ProfileScreenState extends State<ProfileScreen>
       height: 50,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: color ?? const Color(0xFF1E90FF),
-          elevation: 6,
-          shadowColor: const Color(0xFF1E90FF).withOpacity(0.4),
+          backgroundColor: color ?? CrickXColors.limeSpark,
+          foregroundColor: color != null ? Colors.white : CrickXColors.onLime,
+          elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
         onPressed: () => onTap(),
         child: Text(
           text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
           ),
         ),
       ),
@@ -2468,14 +2532,14 @@ class _ProfileScreenState extends State<ProfileScreen>
       height: 46,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: const Color(0xFF0F131A),
+        color: CrickXColors.graphiteElevated,
         border: Border.all(
-          color: const Color(0xFFFFD86B).withValues(alpha: 0.55),
+          color: CrickXColors.limeSpark.withValues(alpha: 0.55),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD86B).withValues(alpha: 0.35),
+            color: CrickXColors.limeSpark.withValues(alpha: 0.35),
             blurRadius: 12,
             spreadRadius: 1,
           ),
@@ -2484,7 +2548,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       child: ShaderMask(
         shaderCallback: (bounds) {
           return const LinearGradient(
-            colors: [Color(0xFFFFD86B), Color(0xFFF59E0B)],
+            colors: [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ).createShader(bounds);
@@ -2496,24 +2560,20 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Widget _supportBadge() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF3B82F6), Color(0xFF60A5FA)],
+        color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+        border: Border.all(
+          color: CrickXColors.limeSpark.withValues(alpha: 0.4),
+          width: 1.0,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
-            blurRadius: 8,
-          ),
-        ],
       ),
       child: Text(
         "Help us grow",
         style: GoogleFonts.poppins(
-          color: Colors.white,
-          fontSize: 9.5,
+          color: CrickXColors.limeSpark,
+          fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -2536,8 +2596,8 @@ class _ProfileScreenState extends State<ProfileScreen>
             padding: const EdgeInsets.only(right: 2),
             child: Icon(
               isFilled ? Icons.star_rounded : Icons.star_border_rounded,
-              color: const Color(0xFFFFD86B),
-              size: 20,
+              color: isFilled ? CrickXColors.limeSpark : CrickXColors.textMuted,
+              size: 22,
             ),
           ),
         );
@@ -2548,12 +2608,15 @@ class _ProfileScreenState extends State<ProfileScreen>
   Widget socialButton(IconData icon, String text, Function onTap) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, size: 28, color: const Color(0xFF3B82F6)),
-      title: Text(text, style: const TextStyle(fontSize: 14)),
+      leading: Icon(icon, size: 24, color: Colors.white70),
+      title: Text(
+        text,
+        style: GoogleFonts.poppins(fontSize: 14, color: Colors.white),
+      ),
       trailing: const Icon(
-        Icons.chevron_right,
-        size: 18,
-        color: Color(0xFF3B82F6),
+        Icons.arrow_forward_ios_rounded,
+        size: 14,
+        color: Color(0xFF71717A),
       ),
       onTap: () => onTap(),
     );
@@ -2562,72 +2625,161 @@ class _ProfileScreenState extends State<ProfileScreen>
   void showImageOptions() {
     showModalBottomSheet(
       context: context,
+      backgroundColor: const Color(0xFF0D0D12),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        side: BorderSide(color: Color(0xFF23232A), width: 1.2),
       ),
       builder: (_) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(
-                  Icons.photo_library,
-                  color: Color(0xFF3B82F6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272E),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
                 ),
-                title: const Text("Upload from Gallery"),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final XFile? picked = await _picker.pickImage(
-                    source: ImageSource.gallery,
-                  );
-                  if (picked != null) {
-                    final uid =
-                        FirebaseAuth.instance.currentUser?.uid ?? "guest";
-                    final box = await _getStatsBox(uid);
-                    await box.put("profileImagePath", picked.path);
-                    setState(() {
-                      profileImage = File(picked.path);
-                    });
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt, color: Color(0xFF3B82F6)),
-                title: const Text("Open Camera"),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final XFile? picked = await _picker.pickImage(
-                    source: ImageSource.camera,
-                  );
-                  if (picked != null) {
-                    final uid =
-                        FirebaseAuth.instance.currentUser?.uid ?? "guest";
-                    final box = await _getStatsBox(uid);
-                    await box.put("profileImagePath", picked.path);
-                    setState(() {
-                      profileImage = File(picked.path);
-                    });
-                  }
-                },
-              ),
-              if (profileImage != null)
                 ListTile(
-                  leading: const Icon(Icons.delete, color: Color(0xFFEF4444)),
-                  title: const Text("Remove Profile Photo"),
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16161A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF27272E)),
+                    ),
+                    child: const Icon(
+                      Icons.photo_library_outlined,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  title: Text(
+                    "Upload from Gallery",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: Color(0xFF71717A),
+                  ),
                   onTap: () async {
                     Navigator.pop(context);
-                    final uid =
-                        FirebaseAuth.instance.currentUser?.uid ?? "guest";
-                    final box = await _getStatsBox(uid);
-                    await box.delete("profileImagePath");
-                    setState(() {
-                      profileImage = null;
-                    });
+                    final XFile? picked = await _picker.pickImage(
+                      source: ImageSource.gallery,
+                    );
+                    if (picked != null) {
+                      final uid =
+                          FirebaseAuth.instance.currentUser?.uid ?? "guest";
+                      final box = await _getStatsBox(uid);
+                      await box.put("profileImagePath", picked.path);
+                      setState(() {
+                        profileImage = File(picked.path);
+                      });
+                    }
                   },
                 ),
-              const SizedBox(height: 10),
-            ],
+                const Divider(color: Color(0xFF23232A), height: 12),
+                ListTile(
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16161A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF27272E)),
+                    ),
+                    child: const Icon(
+                      Icons.camera_alt_outlined,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  title: Text(
+                    "Open Camera",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 14,
+                    color: Color(0xFF71717A),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final XFile? picked = await _picker.pickImage(
+                      source: ImageSource.camera,
+                    );
+                    if (picked != null) {
+                      final uid =
+                          FirebaseAuth.instance.currentUser?.uid ?? "guest";
+                      final box = await _getStatsBox(uid);
+                      await box.put("profileImagePath", picked.path);
+                      setState(() {
+                        profileImage = File(picked.path);
+                      });
+                    }
+                  },
+                ),
+                if (profileImage != null) ...[
+                  const Divider(color: Color(0xFF23232A), height: 12),
+                  ListTile(
+                    leading: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF16161A),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF27272E)),
+                      ),
+                      child: const Icon(
+                        Icons.delete_outline_rounded,
+                        color: Color(0xFFEF4444),
+                        size: 18,
+                      ),
+                    ),
+                    title: Text(
+                      "Remove Profile Photo",
+                      style: GoogleFonts.poppins(
+                        color: const Color(0xFFEF4444),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: 14,
+                      color: Color(0xFFEF4444),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final uid =
+                          FirebaseAuth.instance.currentUser?.uid ?? "guest";
+                      final box = await _getStatsBox(uid);
+                      await box.delete("profileImagePath");
+                      setState(() {
+                        profileImage = null;
+                      });
+                    },
+                  ),
+                ],
+                const SizedBox(height: 10),
+              ],
+            ),
           ),
         );
       },
@@ -2639,15 +2791,15 @@ class _ProfileScreenState extends State<ProfileScreen>
     required Color color,
   }) {
     return Container(
-      height: 18,
+      height: 10,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF0C1017),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: const Color(0xFF16161A),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF27272E), width: 1.0),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(999),
         child: Stack(
           children: [
             FractionallySizedBox(
@@ -2656,9 +2808,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF656C78),
-                      color.withValues(alpha: 0.75),
-                      const Color(0xFFE1E4EA),
+                      CrickXColors.limeSpark,
+                      color,
+                      CrickXColors.limeSparkDim,
                     ],
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
@@ -2683,7 +2835,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         end: Alignment.centerRight,
                         colors: const [
                           Color(0x00FFFFFF),
-                          Color(0x88FFFFFF),
+                          Color(0x55FFFFFF),
                           Color(0x00FFFFFF),
                         ],
                         stops: [start, mid, end],
@@ -2702,9 +2854,9 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Color _levelGlowColor(int xp) {
     if (xp >= 25000) {
-      return const Color(0xFFFFD15C); // Elite Gold
+      return CrickXColors.limeSpark; // Elite Spark
     }
-    return const Color(0xFF36A7FF); // Beginner Neon Blue
+    return const Color(0xFFE2E8F0); // Sleek Platinum
   }
 
   String _getLevelTitle(int xp) {
@@ -2831,9 +2983,9 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
         children: [
           Container(
             decoration: const BoxDecoration(
-              color: Color(0xFF0A0E14),
+              color: CrickXColors.graphiteBg,
               gradient: RadialGradient(
-                colors: [Color(0xFF1E3A8A), Color(0xFF0A0E14)],
+                colors: [CrickXColors.graphiteElevated, CrickXColors.graphiteBg],
                 radius: 1.3,
                 center: Alignment(0.0, -0.2),
               ),
@@ -2861,16 +3013,16 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
                     children: [
                       Text(
                         "Premium Benefits",
-                        style: GoogleFonts.playfairDisplay(
+                        style: GoogleFonts.poppins(
                           color: Colors.white,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         "Unlock the full CrickNova Elite experience",
-                        style: GoogleFonts.montserrat(
+                        style: GoogleFonts.poppins(
                           color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 12.5,
                         ),
@@ -2909,7 +3061,7 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
                     onPressed: () => Navigator.pop(context),
                     child: Text(
                       "Close",
-                      style: GoogleFonts.montserrat(
+                      style: GoogleFonts.poppins(
                         color: Colors.white70,
                         fontWeight: FontWeight.w600,
                       ),
@@ -2929,7 +3081,7 @@ class _PremiumMeshPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFFFD86B).withValues(alpha: 0.06)
+      ..color = CrickXColors.limeSpark.withValues(alpha: 0.06)
       ..strokeWidth = 1;
 
     const spacing = 36.0;
@@ -2942,7 +3094,7 @@ class _PremiumMeshPainter extends CustomPainter {
     }
 
     final overlay = Paint()
-      ..color = const Color(0xFF3B82F6).withValues(alpha: 0.08)
+      ..color = CrickXColors.limeSpark.withValues(alpha: 0.05)
       ..strokeWidth = 1;
     for (double x = 0; x < size.width + size.height; x += spacing * 1.3) {
       canvas.drawLine(
@@ -2963,23 +3115,9 @@ class _GlowDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 2,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.transparent,
-            const Color(0xFFFFD86B).withValues(alpha: 0.5),
-            const Color(0xFF3B82F6).withValues(alpha: 0.4),
-            Colors.transparent,
-          ],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFFD86B).withValues(alpha: 0.25),
-            blurRadius: 12,
-            spreadRadius: 1,
-          ),
-        ],
+      height: 1,
+      decoration: const BoxDecoration(
+        color: CrickXColors.graphiteBorder,
       ),
     );
   }
@@ -2993,34 +3131,24 @@ class _PremiumFeatureTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 280 + (index * 60)),
-      curve: Curves.easeOutCubic,
-      builder: (context, value, child) {
-        return Opacity(
-          opacity: value,
-          child: Transform.translate(
-            offset: Offset(0, (1 - value) * 8),
-            child: child,
-          ),
-        );
-      },
-      child: RepaintBoundary(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
+            color: CrickXColors.graphite,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: const Color(0xFFFFD86B).withValues(alpha: 0.35),
-              width: 0.8,
+              color: CrickXColors.graphiteBorder,
+              width: 1.2,
             ),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                color: Color(0x40000000),
                 blurRadius: 16,
-                spreadRadius: 1,
+                offset: Offset(0, 4),
               ),
             ],
           ),
@@ -3033,7 +3161,7 @@ class _PremiumFeatureTile extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     feature.title,
-                    style: GoogleFonts.montserrat(
+                    style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 13.5,
                       fontWeight: FontWeight.w700,
@@ -3042,8 +3170,8 @@ class _PremiumFeatureTile extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     feature.description,
-                    style: GoogleFonts.montserrat(
-                      color: Colors.white60,
+                    style: GoogleFonts.poppins(
+                      color: const Color(0xFFA1A1AA),
                       fontSize: 12,
                       height: 1.4,
                     ),
@@ -3061,12 +3189,10 @@ class _PremiumFeatureTile extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFFD86B), Color(0xFF3B82F6)],
-                      ),
+                      color: CrickXColors.limeSpark,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFFD86B).withValues(alpha: 0.4),
+                          color: CrickXColors.limeSpark.withValues(alpha: 0.3),
                           blurRadius: 10,
                           spreadRadius: 1,
                         ),
@@ -3074,10 +3200,10 @@ class _PremiumFeatureTile extends StatelessWidget {
                     ),
                     child: Text(
                       feature.badge!,
-                      style: GoogleFonts.montserrat(
-                        color: Colors.black,
+                      style: GoogleFonts.poppins(
+                        color: CrickXColors.onLime,
                         fontSize: 9,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 0.6,
                       ),
                     ),
@@ -3103,16 +3229,16 @@ class _GradientIcon extends StatelessWidget {
       height: 42,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.06),
+        color: CrickXColors.graphiteElevated,
         border: Border.all(
-          color: const Color(0xFFFFD86B).withValues(alpha: 0.4),
-          width: 0.8,
+          color: CrickXColors.graphiteBorder,
+          width: 1,
         ),
       ),
       child: ShaderMask(
         shaderCallback: (bounds) {
           return const LinearGradient(
-            colors: [Color(0xFFFFD86B), Color(0xFF3B82F6)],
+            colors: [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ).createShader(bounds);
@@ -3140,12 +3266,13 @@ class _ShimmerCtaButton extends StatelessWidget {
             Container(
               height: 54,
               decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFFFD86B), Color(0xFFB8860B)],
+                  colors: [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFFFD86B).withValues(alpha: 0.45),
+                    color: CrickXColors.limeSpark.withValues(alpha: 0.45),
                     blurRadius: 18,
                     spreadRadius: 1,
                   ),
@@ -3154,8 +3281,8 @@ class _ShimmerCtaButton extends StatelessWidget {
               alignment: Alignment.center,
               child: Text(
                 "Unlock Elite Perks",
-                style: GoogleFonts.montserrat(
-                  color: Colors.black,
+                style: GoogleFonts.poppins(
+                  color: CrickXColors.onLime,
                   fontWeight: FontWeight.w700,
                   fontSize: 14.5,
                 ),
@@ -3253,12 +3380,16 @@ class _RewardsScreenState extends State<RewardsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0E11),
+      backgroundColor: CrickXColors.graphiteBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F131A),
-        title: const Text(
+        backgroundColor: CrickXColors.graphiteBg,
+        title: Text(
           "Rewards & Milestones",
-          style: TextStyle(color: Colors.white),
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+          ),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -3273,7 +3404,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
               threshold: 50000,
               eligible: isEligible(50000),
               extraXP: extraXPFor(50000),
-              gradientColors: const [Color(0xFFFFD700), Color(0xFFFFA000)],
+              gradientColors: const [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
               icon: Icons.workspace_premium,
             ),
             const SizedBox(height: 16),
@@ -3283,7 +3414,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
               threshold: 500000,
               eligible: isEligible(500000),
               extraXP: extraXPFor(500000),
-              gradientColors: const [Color(0xFF60A5FA), Color(0xFF2563EB)],
+              gradientColors: const [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
               icon: Icons.sports_cricket,
             ),
             const SizedBox(height: 16),
@@ -3293,7 +3424,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
               threshold: 1000000,
               eligible: isEligible(1000000),
               extraXP: extraXPFor(1000000),
-              gradientColors: const [Color(0xFF34D399), Color(0xFF059669)],
+              gradientColors: const [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
               icon: Icons.inventory,
             ),
             const SizedBox(height: 16),
@@ -3304,7 +3435,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
               threshold: 2000000,
               eligible: isEligible(2000000),
               extraXP: extraXPFor(2000000),
-              gradientColors: const [Color(0xFFF472B6), Color(0xFFDB2777)],
+              gradientColors: const [CrickXColors.limeSpark, CrickXColors.limeSparkDim],
               icon: Icons.emoji_events,
             ),
           ],
@@ -3326,18 +3457,27 @@ class _RewardsScreenState extends State<RewardsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
+        color: eligible ? null : CrickXColors.graphite,
         borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          colors: eligible
-              ? gradientColors
-              : [const Color(0xFF1E293B), const Color(0xFF11151C)],
+        border: Border.all(
+          color: eligible ? Colors.transparent : CrickXColors.graphiteBorder,
+          width: 1.2,
         ),
+        gradient: eligible
+            ? LinearGradient(colors: gradientColors)
+            : null,
         boxShadow: [
           if (eligible)
             BoxShadow(
               color: gradientColors.first.withOpacity(0.4),
               blurRadius: 18,
               offset: const Offset(0, 6),
+            )
+          else
+            const BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 16,
+              offset: Offset(0, 4),
             ),
         ],
       ),
@@ -3346,34 +3486,50 @@ class _RewardsScreenState extends State<RewardsScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                icon,
-                color: eligible ? Colors.black : Colors.white54,
-                size: 26,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: eligible
+                      ? Colors.black.withOpacity(0.12)
+                      : CrickXColors.graphiteElevated,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: eligible
+                        ? Colors.black.withOpacity(0.15)
+                        : CrickXColors.graphiteBorder,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: eligible ? CrickXColors.onLime : CrickXColors.limeSpark,
+                  size: 20,
+                ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(
-                    color: eligible ? Colors.black : Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                  style: GoogleFonts.poppins(
+                    color: eligible ? CrickXColors.onLime : Colors.white,
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             eligible
                 ? (extraXP > 0
                       ? "Unlocked! You have $extraXP XP above $threshold."
                       : "Congratulations! You unlocked this reward.")
                 : description,
-            style: TextStyle(
-              color: eligible ? Colors.black87 : Colors.white54,
+            style: GoogleFonts.poppins(
+              color: eligible ? CrickXColors.onLime : const Color(0xFFA1A1AA),
               fontSize: 13,
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 16),
@@ -3393,9 +3549,9 @@ class _RewardsScreenState extends State<RewardsScreen> {
                     safeRemaining > 0
                         ? "📦 Order received. Delivering in $safeRemaining days"
                         : "🎉 Delivered Successfully",
-                    style: const TextStyle(
-                      color: Color(0xFFFFD700),
-                      fontWeight: FontWeight.bold,
+                    style: GoogleFonts.poppins(
+                      color: CrickXColors.limeSpark,
+                      fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
                   );
@@ -3412,17 +3568,20 @@ class _RewardsScreenState extends State<RewardsScreen> {
                   : null,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+                  horizontal: 18,
+                  vertical: 9,
                 ),
                 decoration: BoxDecoration(
-                  color: eligible ? Colors.black : const Color(0xFF0F172A),
+                  color: eligible ? CrickXColors.onLime : CrickXColors.graphiteElevated,
                   borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: eligible ? Colors.transparent : CrickXColors.graphiteBorder,
+                  ),
                 ),
                 child: Text(
                   eligible ? "Claim Now" : "Locked",
-                  style: TextStyle(
-                    color: eligible ? Colors.white : Colors.white70,
+                  style: GoogleFonts.poppins(
+                    color: eligible ? CrickXColors.limeSpark : CrickXColors.textMuted,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -3470,8 +3629,11 @@ class _RewardsScreenState extends State<RewardsScreen> {
                 bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
               decoration: const BoxDecoration(
-                color: Color(0xFF0F131A),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+                color: CrickXColors.graphite,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border(
+                  top: BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
@@ -3481,21 +3643,30 @@ class _RewardsScreenState extends State<RewardsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Center(
+                        Center(
                           child: Column(
                             children: [
-                              Icon(
-                                Icons.workspace_premium,
-                                color: Color(0xFFFFD700),
-                                size: 40,
+                              Container(
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: CrickXColors.limeSpark.withValues(alpha: 0.3)),
+                                ),
+                                child: const Icon(
+                                  Icons.workspace_premium,
+                                  color: CrickXColors.limeSpark,
+                                  size: 28,
+                                ),
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 12),
                               Text(
                                 "Claim Your Official Jersey",
-                                style: TextStyle(
+                                style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],
@@ -3524,9 +3695,9 @@ class _RewardsScreenState extends State<RewardsScreen> {
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<String>(
-                                    dropdownColor: const Color(0xFF1E293B),
+                                    dropdownColor: const Color(0xFF141418),
                                     value: selectedCountryCode,
-                                    style: const TextStyle(color: Colors.white),
+                                    style: GoogleFonts.poppins(color: Colors.white),
                                     items:
                                         const [
                                           "+1",
@@ -3749,30 +3920,40 @@ class _RewardsScreenState extends State<RewardsScreen> {
                               ),
                             ),
                             const SizedBox.shrink(),
-                            Expanded(
+                             Expanded(
                               child: TextFormField(
                                 controller: phoneController,
                                 keyboardType: TextInputType.phone,
-                                style: const TextStyle(color: Colors.white),
+                                style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
                                 decoration: InputDecoration(
                                   prefixIcon: const Icon(
                                     Icons.phone,
-                                    color: Color(0xFF3B82F6),
+                                    color: CrickXColors.limeSpark,
                                   ),
                                   labelText:
                                       "Mobile Number (with country code)",
-                                  labelStyle: const TextStyle(
-                                    color: Colors.white70,
+                                  labelStyle: GoogleFonts.poppins(
+                                    color: const Color(0xFFA1A1AA),
+                                    fontSize: 13,
                                   ),
                                   helperText: "Example: +91XXXXXXXXXX",
-                                  helperStyle: const TextStyle(
+                                  helperStyle: GoogleFonts.poppins(
                                     color: Colors.white54,
+                                    fontSize: 11,
                                   ),
                                   filled: true,
-                                  fillColor: const Color(0xFF1E293B),
+                                  fillColor: CrickXColors.graphiteBg,
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(color: CrickXColors.limeSpark, width: 1.2),
+                                  ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(16),
-                                    borderSide: BorderSide.none,
+                                    borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
                                   ),
                                 ),
                                 validator: (value) {
@@ -3834,10 +4015,10 @@ class _RewardsScreenState extends State<RewardsScreen> {
                         // Jersey Size ONLY for 50K
                         if (threshold == 50000) ...[
                           const SizedBox(height: 20),
-                          const Text(
+                          Text(
                             "Select Jersey Size",
-                            style: TextStyle(
-                              color: Colors.white70,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFFA1A1AA),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3859,13 +4040,18 @@ class _RewardsScreenState extends State<RewardsScreen> {
                                   return ChoiceChip(
                                     label: Text(size),
                                     selected: isSelected,
-                                    selectedColor: const Color(0xFF1E90FF),
-                                    backgroundColor: const Color(0xFF1E293B),
-                                    labelStyle: TextStyle(
+                                    selectedColor: CrickXColors.limeSpark,
+                                    backgroundColor: const Color(0xFF141418),
+                                    side: BorderSide(
                                       color: isSelected
-                                          ? Colors.white
+                                          ? CrickXColors.limeSpark
+                                          : const Color(0xFF23232A),
+                                    ),
+                                    labelStyle: GoogleFonts.poppins(
+                                      color: isSelected
+                                          ? CrickXColors.onLime
                                           : Colors.white70,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                     onSelected: (_) {
                                       setState(() {
@@ -3880,10 +4066,10 @@ class _RewardsScreenState extends State<RewardsScreen> {
                         // Gloves Size for 5 Lakh
                         if (threshold == 500000) ...[
                           const SizedBox(height: 20),
-                          const Text(
+                          Text(
                             "Select Gloves Size",
-                            style: TextStyle(
-                              color: Colors.white70,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFFA1A1AA),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3896,13 +4082,18 @@ class _RewardsScreenState extends State<RewardsScreen> {
                               return ChoiceChip(
                                 label: Text(size),
                                 selected: isSelected,
-                                selectedColor: const Color(0xFF1E90FF),
-                                backgroundColor: const Color(0xFF1E293B),
-                                labelStyle: TextStyle(
+                                selectedColor: CrickXColors.limeSpark,
+                                backgroundColor: const Color(0xFF141418),
+                                side: BorderSide(
                                   color: isSelected
-                                      ? Colors.white
+                                      ? CrickXColors.limeSpark
+                                      : const Color(0xFF23232A),
+                                ),
+                                labelStyle: GoogleFonts.poppins(
+                                  color: isSelected
+                                      ? CrickXColors.onLime
                                       : Colors.white70,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w600,
                                 ),
                                 onSelected: (_) {
                                   setState(() {
@@ -3917,10 +4108,10 @@ class _RewardsScreenState extends State<RewardsScreen> {
                         // Kit Equipment Sizes for 10 Lakh
                         if (threshold == 1000000) ...[
                           const SizedBox(height: 20),
-                          const Text(
+                          Text(
                             "Cricket Kit Sizes",
-                            style: TextStyle(
-                              color: Colors.white70,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFFA1A1AA),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -3953,17 +4144,17 @@ class _RewardsScreenState extends State<RewardsScreen> {
                         // Bat Options for 20 Lakh
                         if (threshold == 2000000) ...[
                           const SizedBox(height: 20),
-                          const Text(
+                          Text(
                             "Bat Preferences",
-                            style: TextStyle(
-                              color: Colors.white70,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFFA1A1AA),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(height: 6),
-                          const Text(
+                          Text(
                             "Delivered in 30–45 days",
-                            style: TextStyle(
+                            style: GoogleFonts.poppins(
                               color: Colors.white54,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w500,
@@ -4003,14 +4194,15 @@ class _RewardsScreenState extends State<RewardsScreen> {
 
                         SizedBox(
                           width: double.infinity,
-                          height: 55,
+                          height: 54,
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E90FF),
+                              backgroundColor: CrickXColors.limeSpark,
+                              foregroundColor: CrickXColors.onLime,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                              elevation: 8,
+                              elevation: 0,
                             ),
                             onPressed: () async {
                               if (formKey.currentState!.validate()) {
@@ -4089,28 +4281,31 @@ Total XP: $totalXP
                                   context: rewardsContext,
                                   barrierDismissible: false,
                                   builder: (_) => AlertDialog(
-                                    backgroundColor: const Color(0xFF11151C),
+                                    backgroundColor: CrickXColors.graphiteBg,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
+                                      borderRadius: BorderRadius.circular(22),
+                                      side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
                                     ),
-                                    title: const Text(
+                                    title: Text(
                                       "🎉 Milestone Unlocked!",
-                                      style: TextStyle(color: Colors.white),
+                                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700),
                                     ),
                                     content: Column(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(
+                                      children: [
+                                        const Icon(
                                           Icons.celebration,
-                                          color: Color(0xFFFFD700),
-                                          size: 60,
+                                          color: CrickXColors.limeSpark,
+                                          size: 56,
                                         ),
-                                        SizedBox(height: 12),
+                                        const SizedBox(height: 12),
                                         Text(
                                           "Reward claimed successfully!\nKeep climbing to the next milestone 🚀",
                                           textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Colors.white70,
+                                          style: GoogleFonts.poppins(
+                                            color: const Color(0xFFA1A1AA),
+                                            fontSize: 13,
+                                            height: 1.4,
                                           ),
                                         ),
                                       ],
@@ -4119,10 +4314,10 @@ Total XP: $totalXP
                                       TextButton(
                                         onPressed: () =>
                                             Navigator.pop(rewardsContext),
-                                        child: const Text(
+                                        child: Text(
                                           "OK",
-                                          style: TextStyle(
-                                            color: Color(0xFF38BDF8),
+                                          style: GoogleFonts.poppins(
+                                            color: CrickXColors.limeSpark,
                                             fontWeight: FontWeight.w700,
                                           ),
                                         ),
@@ -4135,11 +4330,12 @@ Total XP: $totalXP
                                 Navigator.of(rewardsContext).pop();
                               }
                             },
-                            child: const Text(
+                            child: Text(
                               "Submit",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w700,
                                 fontSize: 16,
+                                color: CrickXColors.onLime,
                               ),
                             ),
                           ),
@@ -4167,16 +4363,24 @@ Total XP: $totalXP
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
-      style: const TextStyle(color: Colors.white),
+      style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: const Color(0xFF3B82F6)),
+        prefixIcon: Icon(icon, color: CrickXColors.limeSpark),
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
+        labelStyle: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), fontSize: 13),
         filled: true,
-        fillColor: const Color(0xFF1E293B),
+        fillColor: CrickXColors.graphiteElevated,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: CrickXColors.limeSpark, width: 1.2),
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
         ),
       ),
       validator: (value) {
@@ -4198,19 +4402,23 @@ Widget _kitDropdown({
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: const TextStyle(color: Colors.white70)),
+      Text(
+        label,
+        style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), fontSize: 13),
+      ),
       const SizedBox(height: 6),
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: CrickXColors.graphiteElevated,
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
         ),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
             value: value,
-            dropdownColor: const Color(0xFF1E293B),
-            style: const TextStyle(color: Colors.white),
+            dropdownColor: CrickXColors.graphiteElevated,
+            style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
             isExpanded: true,
             items: options
                 .map((e) => DropdownMenuItem(value: e, child: Text(e)))
