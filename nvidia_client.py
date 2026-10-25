@@ -173,11 +173,11 @@ def extract_video_keyframes(video_path: str, max_frames: int = 4) -> list[bytes]
                 ret, fr = cap.read()
                 if ret and fr is not None:
                     h, w = fr.shape[:2]
-                    if w > 640:
-                        new_w = 640
-                        new_h = int(h * (640 / w))
+                    if w > 480:
+                        new_w = 480
+                        new_h = int(h * (480 / w))
                         fr = cv2.resize(fr, (new_w, new_h))
-                    _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                    _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
                     frames.append(buf.tobytes())
         cap.release()
     except Exception as e:

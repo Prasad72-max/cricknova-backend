@@ -388,51 +388,73 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Expanded(
-                          child: SingleChildScrollView(
-                            child: Column(
-                              children: const [
-                                _EdgeInstructionCard(
-                                  icon: Icons.savings_outlined,
-                                  title: 'Your Money Matters',
-                                  body:
-                                      'We respect every minute you purchase. Your training time and money are valuable, and CrickNova is designed to protect both.',
-                                ),
-                                _EdgeInstructionCard(
-                                  icon: Icons.play_circle_outline_rounded,
-                                  title:
-                                      'Minutes Start Only When You Press Start',
-                                  body:
-                                      'Live Analysis never begins automatically. Your session starts only when you choose to begin.',
-                                ),
-                                _EdgeInstructionCard(
-                                  icon: Icons.pause_circle_outline_rounded,
-                                  title: 'Pause Or Stop Anytime',
-                                  body:
-                                      'Need a break? Adjusting your setup? Taking a rest between drills? Pause or stop your session whenever you want.',
-                                ),
-                                _EdgeInstructionCard(
-                                  icon: Icons.tune_rounded,
-                                  title: "You're Always In Control",
-                                  body:
-                                      'No hidden timers. No wasted minutes. No unexpected usage. Every minute remains under your control.',
-                                ),
-                                _EdgeInstructionCard(
-                                  icon: Icons.sports_cricket_rounded,
-                                  title: 'Train With Confidence',
-                                  body:
-                                      'Focus on your cricket while CrickNova Coach focuses on the analysis.',
-                                ),
-                              ],
-                            ),
-                          ),
+                        _CoachControlsRow(
+                          language: _selectedLanguage,
+                          discipline: _selectedDiscipline,
+                          onLanguageChanged: (val) {
+                            setState(() => _selectedLanguage = val);
+                            _saveEdgePrefs();
+                          },
+                          onDisciplineChanged: (val) {
+                            setState(() => _selectedDiscipline = val);
+                            _saveEdgePrefs();
+                          },
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
+                        const _EdgeInstructionCard(
+                          icon: Icons.savings_outlined,
+                          title: 'Your Money Matters',
+                          body:
+                              'We respect every minute you purchase. Your training time and money are valuable, and CrickNova is designed to protect both.',
+                        ),
+                        const _EdgeInstructionCard(
+                          icon: Icons.play_circle_outline_rounded,
+                          title:
+                              'Minutes Start Only When You Press Start',
+                          body:
+                              'Live Analysis never begins automatically. Your session starts only when you choose to begin.',
+                        ),
+                        const _EdgeInstructionCard(
+                          icon: Icons.pause_circle_outline_rounded,
+                          title: 'Pause Or Stop Anytime',
+                          body:
+                              'Need a break? Adjusting your setup? Taking a rest between drills? Pause or stop your session whenever you want.',
+                        ),
+                        const _EdgeInstructionCard(
+                          icon: Icons.tune_rounded,
+                          title: "You're Always In Control",
+                          body:
+                              'No hidden timers. No wasted minutes. No unexpected usage. Every minute remains under your control.',
+                        ),
+                        const _EdgeInstructionCard(
+                          icon: Icons.sports_cricket_rounded,
+                          title: 'Train With Confidence',
+                          body:
+                              'Focus on your cricket while CrickNova Coach focuses on the analysis.',
+                        ),
+                        const SizedBox(height: 18),
                         ElevatedButton.icon(
-                          onPressed: balanceMs > 0 ? _openCareSheet : null,
-                          icon: const Icon(Icons.videocam_rounded),
+                          onPressed: balanceMs > 0
+                              ? _openCareSheet
+                              : () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const PremiumScreen(
+                                        entrySource: 'edge_recharge',
+                                        initialAccessTab: 1,
+                                      ),
+                                    ),
+                                  );
+                                },
+                          icon: Icon(
+                            balanceMs > 0
+                                ? Icons.videocam_rounded
+                                : Icons.bolt_rounded,
+                          ),
                           label: Text(
-                            'Start CrickNova Edge',
+                            balanceMs > 0
+                                ? 'Start CrickNova Edge'
+                                : 'Recharge Edge Minutes',
                             style: GoogleFonts.poppins(
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -449,6 +471,34 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                             ),
                           ),
                         ),
+                        if (balanceMs > 0) ...[
+                          const SizedBox(height: 10),
+                          TextButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const PremiumScreen(
+                                    entrySource: 'edge_topup',
+                                    initialAccessTab: 1,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 16,
+                              color: CrickXColors.limeSpark,
+                            ),
+                            label: Text(
+                              'Top-up More Minutes',
+                              style: GoogleFonts.poppins(
+                                color: CrickXColors.limeSpark,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   );

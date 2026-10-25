@@ -497,7 +497,12 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   List<Widget?> _buildScreenCache(int tabCount) {
-    return List<Widget?>.generate(tabCount, _buildScreenAt);
+    // Lazy-load tabs: only initialize current tab to prevent background video/audio playback
+    final cache = List<Widget?>.filled(tabCount, null);
+    if (_index >= 0 && _index < tabCount) {
+      cache[_index] = _buildScreenAt(_index);
+    }
+    return cache;
   }
 
   int get _reelsTabIndex => 1;
@@ -915,7 +920,15 @@ class _MainNavigationState extends State<MainNavigation>
       return HomeScreen(key: const ValueKey('home'), userName: userName);
     }
     if (index == _reelsTabIndex) {
-      return const ReelsScreen(key: ValueKey('reels_feed'));
+      return ValueListenableBuilder<int>(
+        valueListenable: MainNavigation.activeTabNotifier,
+        builder: (context, activeTab, _) {
+          return ReelsScreen(
+            key: const ValueKey('reels_feed'),
+            isTabActive: activeTab == _reelsTabIndex,
+          );
+        },
+      );
     }
     if (index == _analyticsTabIndex) {
       return const InsightsScreen(key: ValueKey('insights'));
@@ -936,6 +949,17 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   Widget _buildTabScreen(int index) {
+    if (index == _reelsTabIndex) {
+      return ValueListenableBuilder<int>(
+        valueListenable: MainNavigation.activeTabNotifier,
+        builder: (context, activeTab, _) {
+          return ReelsScreen(
+            key: const ValueKey('reels_feed'),
+            isTabActive: activeTab == _reelsTabIndex,
+          );
+        },
+      );
+    }
     return _screenCache[index] ?? const _DeferredTabLoader();
   }
 
@@ -981,7 +1005,7 @@ class _MainNavigationState extends State<MainNavigation>
         index: _index,
         children: List<Widget>.generate(
           _tabCount(),
-          (i) => i == _index || _screenCache[i] != null
+          (i) => _screenCache[i] != null
               ? RepaintBoundary(
                   child: TickerMode(
                     enabled: i == _index,

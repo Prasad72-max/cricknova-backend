@@ -80,8 +80,9 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer>
     return null;
   }
 
-  String _buildYouTubeHtml(String videoId, bool isMuted) {
+  String _buildYouTubeHtml(String videoId, bool isMuted, bool isActive) {
     final muteVal = isMuted ? 1 : 0;
+    final autoPlayVal = isActive ? 1 : 0;
     return '''
 <!DOCTYPE html>
 <html>
@@ -127,7 +128,7 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer>
   <div class="video-wrapper">
     <iframe
       id="cricket-player"
-      src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&mute=$muteVal&controls=0&loop=1&playlist=$videoId&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&fs=0&disablekb=1&iv_load_policy=3&origin=https://www.youtube-nocookie.com"
+      src="https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayVal&mute=$muteVal&controls=0&loop=1&playlist=$videoId&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&fs=0&disablekb=1&iv_load_policy=3&origin=https://www.youtube-nocookie.com"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
       allowfullscreen>
     </iframe>
@@ -176,7 +177,7 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer>
               .setMediaPlaybackRequiresUserGesture(false);
         }
 
-        final html = _buildYouTubeHtml(ytId, widget.isMuted);
+        final html = _buildYouTubeHtml(ytId, widget.isMuted, widget.isActive);
         await controller.loadHtmlString(
           html,
           baseUrl: 'https://www.youtube-nocookie.com',
@@ -191,6 +192,10 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer>
 
         if (widget.isActive) {
           _startViewThresholdTimer();
+        } else {
+          _webViewController?.runJavaScript(
+            'document.getElementById("cricket-player")?.contentWindow?.postMessage(JSON.stringify({event: "command", func: "pauseVideo", args: ""}), "*");',
+          );
         }
         return;
       } catch (e) {
@@ -241,6 +246,8 @@ class _ReelVideoPlayerState extends State<ReelVideoPlayer>
       if (widget.isActive) {
         await _controller!.play();
         _startViewThresholdTimer();
+      } else {
+        await _controller!.pause();
       }
     } catch (e) {
       debugPrint("REEL_VIDEO_INIT_ERROR: $e");

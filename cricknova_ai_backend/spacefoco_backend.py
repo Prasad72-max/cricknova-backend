@@ -1767,46 +1767,6 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
-        from nvidia_client import extract_video_keyframes, generate_nvidia_vision
-
-        # ⚡ 1. NVIDIA Nemotron First-Glance Cricket Action Verification
-        frames = extract_video_keyframes(video_path, max_frames=3)
-        cricket_detected = True
-        verification_summary = "Cricketing action detected"
-
-        if frames:
-            try:
-                verify_prompt = (
-                    "Inspect these video frames at first glance.\n"
-                    "Question: Does this video contain real cricket playing action (such as batting, bowling, nets practice, throwdowns, or cricket match play)?\n"
-                    "Respond with a brief 1-2 sentence confirmation.\n"
-                    "If this is NOT cricket (e.g. random room, animal, non-sports, blank screen, driving, talking head), begin your response with 'NON_CRICKET:' and explain what is visible.\n"
-                    "If this IS cricket, start with 'CRICKET_VERIFIED:' and mention whether a batsman, bowler, or cricket nets/pitch are seen."
-                )
-                verif_text = generate_nvidia_vision(
-                    prompt=verify_prompt,
-                    frames=frames,
-                    system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                    max_output_tokens=150,
-                    temperature=0.2,
-                ).strip()
-
-                if verif_text.upper().startswith("NON_CRICKET") or "NO CRICKET" in verif_text.upper():
-                    return {
-                        "status": "non_cricket",
-                        "cricket_detected": False,
-                        "reason": "NO_CRICKET_ACTION",
-                        "message": verif_text.replace("NON_CRICKET:", "").strip() or "No cricketing action detected in this video. Please upload a clear cricket video showing batting or bowling.",
-                        "speed_kmph": None,
-                        "swing": "unknown",
-                        "spin": "unknown",
-                        "trajectory": [],
-                    }
-                else:
-                    verification_summary = verif_text.replace("CRICKET_VERIFIED:", "").strip()
-            except Exception as e:
-                print("⚠️ Cricket action check notice:", e)
-
         ball_positions = track_ball_positions(video_path)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -1975,39 +1935,26 @@ async def ai_coach_analyze(
         # ⚡ Extract actual keyframes for multimodal vision inspection
         frames = extract_video_keyframes(video_path, max_frames=4)
 
+        disc_label = (discipline or "").strip().lower()
+        if disc_label not in ("batting", "bowling"):
+            disc_label = "cricket"
+
         coaching_prompt = (prompt or "").strip()
         if not coaching_prompt:
-            disc_label = (discipline or "").strip().lower()
-            if disc_label == "bowling":
-                discipline_focus = "bowling mechanics (run-up, gather, front foot landing, arm slot, release, seam presentation, follow-through)"
-            else:
-                discipline_focus = "batting mechanics (stance, balance, head position, backlift, footwork, bat path, contact control, follow-through)"
-
             coaching_prompt = f"""
-You are CricX Universal Cricket Coach analyzing this {disc_label} video.
-Inspect the real visual frames provided carefully.
-Everything must come 100% from what you see in the video frames. Do NOT use hardcoded or pre-assumed results.
+You are an expert cricket coach analyzing this {disc_label} video.
+Look at the player in the video frames and provide an honest technical analysis in valid JSON format:
 
-First, check visual evidence:
-- If NO cricket action or cricket player is present, or if user selected batting but there is no batsman, or if selected bowling but there is no bowler:
-Return valid minified JSON:
-{{"mistakes": ["No player or action detected matching {disc_label} in this clip.", "Please upload a clear video clip showing a player {disc_label}."], "impact": "Technique analysis cannot be performed without visible {disc_label} movement.", "drill": "Record your practice session with a clear, steady side-on or front-on camera angle."}}
-
-- If cricket {disc_label} action is present, analyze the player's real motion and return ONLY valid minified JSON with exactly these 4 parts:
 {{
   "mistakes": [
-    "first real technical mistake observed in {disc_label} from the video",
-    "second real technical mistake or balance/timing flaw observed in {disc_label}"
+    "Mistake 1: [Primary technical mistake seen in the video frames]",
+    "Mistake 2: [Secondary technical mistake or flaw seen in the video frames]"
   ],
-  "impact": "specific performance impact and risk caused by these technical flaws (e.g. edge risk, loss of control, pace leakage)",
-  "drill": "practical, actionable drill and correction step to fix these mistakes"
+  "impact": "Impact: [Specific performance consequence and impact of these mistakes]",
+  "drill": "How to Fix: [Practical correction drill to fix these mistakes]"
 }}
 
-Rules:
-- Strictly return valid JSON only. Do not add markdown backticks.
-- Exactly 2 mistakes in the "mistakes" array, exactly 1 impact in "impact", exactly 1 drill in "drill".
-- Total 4 points will be shown to the user: Mistake 1, Mistake 2, Impact, How to Fix.
-- No hardcoded or pre-assumed results. Base every word purely on the actual visual frames.
+Return ONLY valid JSON.
 """
 
         if frames:
@@ -2016,14 +1963,14 @@ Rules:
                 frames=frames,
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
                 max_output_tokens=8192,
-                temperature=0.55,
+                temperature=0.35,
             )
         else:
             feedback = generate_nvidia_text(
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
                 user_prompt=coaching_prompt,
                 max_output_tokens=8192,
-                temperature=0.55,
+                temperature=0.35,
             )
 
         return {

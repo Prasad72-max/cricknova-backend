@@ -125,13 +125,13 @@ class ReelService {
       }
 
       if (reels.isEmpty) {
-        return CuratedCricketReels.getInitialCricketReels();
+        return CuratedCricketReels.getInitialCricketReels(shuffle: true);
       }
 
       // If feed has few reels, append curated cricket reels so feed is rich
       if (reels.length < 8) {
         final existingIds = reels.map((r) => r.reelId).toSet();
-        for (final curated in CuratedCricketReels.getInitialCricketReels()) {
+        for (final curated in CuratedCricketReels.getInitialCricketReels(shuffle: true)) {
           if (!existingIds.contains(curated.reelId)) {
             reels.add(curated);
             existingIds.add(curated.reelId);
@@ -142,7 +142,7 @@ class ReelService {
       return reels;
     } catch (e) {
       debugPrint("FIRESTORE_REELS_ERROR: $e");
-      return CuratedCricketReels.getInitialCricketReels();
+      return CuratedCricketReels.getInitialCricketReels(shuffle: true);
     }
   }
 

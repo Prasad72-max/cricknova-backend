@@ -10,6 +10,7 @@ import '../widgets/reel_comments_sheet.dart';
 import '../widgets/reel_more_sheet.dart';
 import '../widgets/ai_result_reel_sheet.dart';
 import '../../theme/crickx_colors.dart';
+import '../../navigation/main_navigation.dart';
 
 enum CricketCategory {
   all,
@@ -21,12 +22,14 @@ class ReelsScreen extends StatefulWidget {
   final List<ReelModel>? customReels;
   final int initialIndex;
   final String? screenTitle;
+  final bool isTabActive;
 
   const ReelsScreen({
     super.key,
     this.customReels,
     this.initialIndex = 0,
     this.screenTitle,
+    this.isTabActive = true,
   });
 
   @override
@@ -36,7 +39,7 @@ class ReelsScreen extends StatefulWidget {
 class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
   late PageController _pageController;
   int _currentIndex = 0;
-  bool _isMuted = false;
+  bool _isMuted = true;
   CricketCategory _selectedCategory = CricketCategory.all;
 
   List<ReelModel> _reels = [];
@@ -49,6 +52,7 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    MainNavigation.activeTabNotifier.addListener(_handleActiveTabChanged);
     _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
 
@@ -61,8 +65,15 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _handleActiveTabChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    MainNavigation.activeTabNotifier.removeListener(_handleActiveTabChanged);
     WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
@@ -122,10 +133,12 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
 
     try {
       final fetched = await ReelService.getOtherUsersVideoResults(limit: 10);
+      final List<ReelModel> list = List.from(fetched);
+      list.shuffle(); // Rotate feed on load so user does not see the exact same fixed reel every time!
 
       if (mounted) {
         setState(() {
-          _reels = fetched;
+          _reels = list;
           _isLoading = false;
           _hasMore = fetched.length >= 10;
         });
@@ -188,7 +201,8 @@ class _ReelsScreenState extends State<ReelsScreen> with WidgetsBindingObserver {
               },
               itemBuilder: (context, index) {
                 final reel = displayList[index];
-                final isActive = index == _currentIndex;
+                final isTabVisible = widget.isTabActive && (MainNavigation.activeTabNotifier.value == 1);
+                final isActive = isTabVisible && (index == _currentIndex);
 
                 return Stack(
                   fit: StackFit.expand,

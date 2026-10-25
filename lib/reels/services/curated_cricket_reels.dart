@@ -7,15 +7,15 @@ import '../models/reel_model.dart';
 /// 2. Cricket Coaching Drills & Masterclasses (Skill improvement).
 /// All video URLs are verified real YouTube cricket videos.
 class CuratedCricketReels {
-  static List<ReelModel> getInitialCricketReels() {
+  static List<ReelModel> getInitialCricketReels({bool shuffle = false}) {
     final now = DateTime.now();
 
-    return [
+    final reels = [
       // =======================================================================
       // CATEGORY 1: INTERNATIONAL CRICKETER HIGHLIGHTS
       // =======================================================================
 
-      // 1. Virat Kohli - Cover Drive Compilation (CutShotCricket) — VERIFIED
+      // 1. Virat Kohli - Signature Cover Drive Compilation
       ReelModel(
         reelId: 'crick_intl_kohli_01',
         userId: 'international_cricket',
@@ -35,7 +35,7 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 2. Virat Kohli - Best Cover Drives Compilation — VERIFIED
+      // 2. Virat Kohli - Best Boundary Cover Drives
       ReelModel(
         reelId: 'crick_intl_kohli_02',
         userId: 'kohli_fan_zone',
@@ -55,7 +55,7 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 3. Yuvraj Singh - 6 Sixes vs Stuart Broad (ICC Official) — VERIFIED
+      // 3. Yuvraj Singh - 6 Sixes vs Stuart Broad (T20 World Cup)
       ReelModel(
         reelId: 'crick_intl_yuvraj_03',
         userId: 'icc_official',
@@ -75,16 +75,16 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 4. Rohit Sharma - Pull Shot Masterclass (CricketTV) — VERIFIED title
+      // 4. AB de Villiers - 360 Degree Boundary Carnage
       ReelModel(
-        reelId: 'crick_intl_rohit_04',
-        userId: 'hitman_zone',
-        username: 'power_cricket',
+        reelId: 'crick_intl_abd_04',
+        userId: 'mr_360_zone',
+        username: 'ab_devilliers_hub',
         userPhotoUrl: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=150&auto=format&fit=crop&q=80',
-        videoUrl: 'https://www.youtube.com/watch?v=pbpK1Zvegq0',
+        videoUrl: 'https://www.youtube.com/watch?v=AOeY-nDp7hI',
         thumbnailUrl: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&auto=format&fit=crop&q=80',
-        caption: 'TOP 10 Rohit Sharma Pull Shots! The Hitman destroys short balls with effortless power and timing! 🚀💥',
-        hashtags: ['cricket', 'highlights', 'rohitsharma', 'pullshot', 'six'],
+        caption: 'Mr. 360 AB de Villiers destroying bowling attacks! Unbelievable scoops, reverse hits, and massive sixes. 🚀💥',
+        hashtags: ['cricket', 'highlights', 'abdevilliers', 'mr360', 'six'],
         createdAt: now.subtract(const Duration(hours: 2)),
         updatedAt: now.subtract(const Duration(hours: 2)),
         likesCount: 0,
@@ -95,16 +95,16 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 5. Yuvraj 6 Sixes — different angle / ICC Flashback — VERIFIED
+      // 5. Brett Lee - 155 km/h Lethal Pace & Wickets
       ReelModel(
-        reelId: 'crick_intl_yuvraj_05',
-        userId: 'icc_flashback',
-        username: 'icc_flashback',
+        reelId: 'crick_intl_brettlee_05',
+        userId: 'fast_bowling_lab',
+        username: 'pace_bowling_archive',
         userPhotoUrl: 'https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?w=150&auto=format&fit=crop&q=80',
-        videoUrl: 'https://www.youtube.com/watch?v=8b0ubLO2MUE',
+        videoUrl: 'https://www.youtube.com/watch?v=ggq2R_NB3KU',
         thumbnailUrl: 'https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?w=600&auto=format&fit=crop&q=80',
-        caption: 'ICC Flashback: Yuvraj blasts 6 sixes from a Stuart Broad over! The fastest fifty in T20I history — 12 balls! ⚡🏏',
-        hashtags: ['cricket', 'highlights', 'yuvrajsingh', 'worldrecord', 'international'],
+        caption: 'Brett Lee bowling at 155+ km/h! Pure aggression, fiery bouncers, and cartwheeling stumps. Fast bowling at its peak! ⚡🎯',
+        hashtags: ['cricket', 'highlights', 'brettlee', 'fastbowling', 'pace'],
         createdAt: now.subtract(const Duration(hours: 4)),
         updatedAt: now.subtract(const Duration(hours: 4)),
         likesCount: 0,
@@ -119,15 +119,15 @@ class CuratedCricketReels {
       // CATEGORY 2: CRICKET COACHING & SKILL DRILLS
       // =======================================================================
 
-      // 6. Batting Stance & Head Position — Kohli Cover Drive Tutorial
+      // 6. Batting Stance & Head Stillness Masterclass
       ReelModel(
         reelId: 'crick_coach_stance_01',
         userId: 'head_coach_pro',
         username: 'cricket_coach',
         userPhotoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-        videoUrl: 'https://www.youtube.com/watch?v=nPBgrDjRCcg',
+        videoUrl: 'https://www.youtube.com/watch?v=pbpK1Zvegq0',
         thumbnailUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
-        caption: 'Coach Tip: Watch how Kohli keeps his head perfectly still at delivery. Stance, balance, and eye-level are the foundation of great batting! 🏏📐',
+        caption: 'Coach Tip: Batting Stance & Eye Level. Keep your head rock-still at bowler release. Balance controls your footwork and timing! 🏏📐',
         hashtags: ['cricket', 'coaching', 'batting', 'technique', 'drills'],
         createdAt: now.subtract(const Duration(hours: 5)),
         updatedAt: now.subtract(const Duration(hours: 5)),
@@ -139,16 +139,16 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 7. Power Hitting & Six-Hitting Masterclass — Yuvraj analysis
+      // 7. Fast Bowling Seam & Wrist Position Drill
       ReelModel(
-        reelId: 'crick_coach_power_02',
+        reelId: 'crick_coach_pace_02',
         userId: 'pace_coach_ian',
-        username: 'batting_masterclass',
+        username: 'fast_bowling_academy',
         userPhotoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-        videoUrl: 'https://www.youtube.com/watch?v=8b0ubLO2MUE',
+        videoUrl: 'https://www.youtube.com/watch?v=ggq2R_NB3KU',
         thumbnailUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80',
-        caption: 'Power Hitting Masterclass: Yuvraj 6 Sixes — hip rotation, backlift, and full follow-through. Learn how to clear any boundary! 💪🏏',
-        hashtags: ['cricket', 'coaching', 'powerhitting', 'six', 'drills'],
+        caption: 'Fast Bowling Drill: Upright seam alignment and wrist snap at release point. Lock the wrist to generate late swing! 🎯⚡',
+        hashtags: ['cricket', 'coaching', 'bowling', 'fastbowlingdrills', 'seam'],
         createdAt: now.subtract(const Duration(hours: 7)),
         updatedAt: now.subtract(const Duration(hours: 7)),
         likesCount: 0,
@@ -159,16 +159,16 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 8. Cover Drive Technique Breakdown — Kohli analysis
+      // 8. Power Hitting Bat Speed & 360 Extension
       ReelModel(
-        reelId: 'crick_coach_coverdrive_03',
-        userId: 'spin_master_coach',
-        username: 'elite_cricket_academy',
+        reelId: 'crick_coach_power_03',
+        userId: 'batting_specialist',
+        username: 'powerplay_batting',
         userPhotoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-        videoUrl: 'https://www.youtube.com/watch?v=pbpK1Zvegq0',
+        videoUrl: 'https://www.youtube.com/watch?v=AOeY-nDp7hI',
         thumbnailUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=600&auto=format&fit=crop&q=80',
-        caption: 'Cover Drive Coaching: Front foot placement, weight transfer, and bat angle. Study the master Virat Kohli to perfect your drives! 🏏🎯',
-        hashtags: ['cricket', 'coaching', 'coverdrive', 'technique', 'masterclass'],
+        caption: 'Power Hitting Masterclass: Generating maximum bat speed and hip rotation through the ball to clear the rope with ease! 🚀💪',
+        hashtags: ['cricket', 'coaching', 'powerhitting', 'six', 'drills'],
         createdAt: now.subtract(const Duration(hours: 10)),
         updatedAt: now.subtract(const Duration(hours: 10)),
         likesCount: 0,
@@ -179,16 +179,16 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 9. Pull Shot Technique — Rohit Sharma analysis
+      // 9. Front Foot Weight Transfer & Drive Mechanics
       ReelModel(
-        reelId: 'crick_coach_pullshot_04',
-        userId: 'batting_specialist',
-        username: 'fast_bowling_academy',
+        reelId: 'crick_coach_coverdrive_04',
+        userId: 'elite_coach',
+        username: 'elite_cricket_academy',
         userPhotoUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
         videoUrl: 'https://www.youtube.com/watch?v=nPBgrDjRCcg',
         thumbnailUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=600&auto=format&fit=crop&q=80',
-        caption: 'Pull Shot Coaching: Step back and across, get inside the line, roll the wrists. Dominate short balls like the pros! 🏏⚡',
-        hashtags: ['cricket', 'coaching', 'battingdrills', 'pullshot', 'technique'],
+        caption: 'Cover Drive Coaching: Leading with the front shoulder and maintaining a high elbow finish. Master clean timing! 🏏🎯',
+        hashtags: ['cricket', 'coaching', 'battingdrills', 'technique', 'coverdrive'],
         createdAt: now.subtract(const Duration(hours: 14)),
         updatedAt: now.subtract(const Duration(hours: 14)),
         likesCount: 0,
@@ -199,15 +199,15 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
 
-      // 10. T20 Power Hitting — Yuvraj 6 Sixes coaching angle
+      // 10. Reading Length & Back-and-Across Footwork
       ReelModel(
-        reelId: 'crick_coach_t20power_05',
+        reelId: 'crick_coach_pullshot_05',
         userId: 'wicketkeeping_academy',
         username: 'glovework_coach',
         userPhotoUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
         videoUrl: 'https://www.youtube.com/watch?v=8b0ubLO2MUE',
         thumbnailUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&auto=format&fit=crop&q=80',
-        caption: 'T20 Cricket Coaching: How to read length early and commit fully to the shot. Yuvraj shows the mental approach to power batting! 🧠💥',
+        caption: 'T20 Batting Coaching: Step back and across, pick the length early, and commit 100% to your attacking strokes! 🧠⚡',
         hashtags: ['cricket', 'coaching', 't20', 'powerhitting', 'training'],
         createdAt: now.subtract(const Duration(hours: 18)),
         updatedAt: now.subtract(const Duration(hours: 18)),
@@ -219,23 +219,26 @@ class CuratedCricketReels {
         status: ReelStatus.ready,
       ),
     ];
+
+    if (shuffle) {
+      reels.shuffle();
+    }
+    return reels;
   }
 
   /// Sync curated cricket reels to Firestore — always ensure latest curated
   /// reels are present. Uses merge:true so user engagement data is preserved.
   static Future<void> seedIfEmpty(FirebaseFirestore firestore) async {
     try {
-      // Always write curated reels so old broken URLs get replaced
       final reels = getInitialCricketReels();
       final batch = firestore.batch();
       for (final r in reels) {
         final docRef = firestore.collection('reels').doc(r.reelId);
-        // Force-set videoUrl and caption but preserve user engagement data
         final data = r.toFirestore();
         batch.set(docRef, data, SetOptions(merge: true));
       }
 
-      // Also clean up old broken reel docs if they exist
+      // Clean up any old obsolete test IDs
       final oldIds = ['crick_reel_101', 'crick_reel_102', 'crick_reel_103'];
       for (final oldId in oldIds) {
         batch.delete(firestore.collection('reels').doc(oldId));
