@@ -1179,24 +1179,26 @@ async def ai_coach_diff(
             raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
 
         base_prompt = (prompt or "").strip()
-        if not base_prompt:
-            base_prompt = """
-Compare the player's two video clips honestly in natural coaching language.
-Do not force Video 2 to be better than Video 1.
-Explain what improved, what is still weak, and what to do next.
-Give exactly 2 practical drills.
-- Do not mention speed, swing, or spin.
-- Keep it specific to what changed between the two clips.
-Do not give rating/score.
-"""
-
         discipline_text = (discipline or "").strip().lower()
         if discipline_text not in ("batting", "bowling"):
             prompt_lower = base_prompt.lower()
             discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
 
+        if not base_prompt:
+            base_prompt = f"""
+Compare the same player's {discipline_text} technique across both video clips.
+Ignore clothing, appearance, grass, nets, venue, and background. Do not write a scene caption.
+Return exactly these sections:
+[VIDEO 1: Technique and mistakes in Clip 1]
+Identify visible technique mistakes with movement evidence. Do not invent mistakes.
+[VIDEO 2: Technique differences and improvement]
+Compare the same technique points directly across both clips, identify what improved, stayed the same, or worsened, and give a specific correction. Do not assume Clip 2 is better.
+If either clip does not show {discipline_text}, say technique cannot be compared.
+"""
+
         diff_text = generate_nvidia_comparison_vision(
             prompt=base_prompt,
+            discipline=discipline_text,
             left_video_bytes=left_video_bytes,
             right_video_bytes=right_video_bytes,
             left_video_mime_type=(left.content_type if left.content_type and left.content_type.startswith("video/") else mimetypes.guess_type(left.filename or "")[0] or "video/mp4"),

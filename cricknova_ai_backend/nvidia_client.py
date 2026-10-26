@@ -262,6 +262,7 @@ def generate_nvidia_vision(
 def generate_nvidia_comparison_vision(
     *,
     prompt: str,
+    discipline: str = "cricket",
     left_video_bytes: bytes | None = None,
     right_video_bytes: bytes | None = None,
     left_frames: list[bytes] | None = None,
@@ -306,14 +307,30 @@ def generate_nvidia_comparison_vision(
     else:
         raise ValueError("Provide both videos or both frame lists for comparison")
 
+    normalized_discipline = discipline.strip().lower()
+    if normalized_discipline == "batting":
+        technique_focus = (
+            "Evaluate batting technique only: set-up and stance, head position, balance, footwork, weight transfer, "
+            "bat swing/path, contact and timing, shot control, and follow-through."
+        )
+    elif normalized_discipline == "bowling":
+        technique_focus = (
+            "Evaluate bowling technique only: run-up rhythm, gather, front-foot landing, alignment, balance, "
+            "bowling-arm path, release position, follow-through, and visible line/length outcome."
+        )
+    else:
+        technique_focus = "Identify the requested cricket skill and compare its visible technique only."
+
     content_parts.append({
         "type": "text",
         "text": (
-            "First inspect both frame groups and confirm whether each contains a visible cricket clip and the requested cricket action. "
-            "Respond with exactly these two sections for both valid and invalid cricket clips:\n"
-            "[VIDEO 1: What happened]\nDescribe the visible action and execution in Video 1.\n"
-            "[VIDEO 2: Differences vs Video 1]\nFor cricket clips, describe visible differences, what improved, what remains weak, and what to do next. If either clip is not cricket or the requested action is not visible, describe what is actually visible in the clips and explain why a cricket comparison cannot be made. Never provide batting or bowling mistakes for a non-cricket clip. Do not assume Video 2 is better.\n"
-            "Base every claim only on the supplied frames. Do not infer unseen body positions, equipment, or action. If details cannot be established from the frames, say so instead of inventing them."
+            f"{technique_focus}\n"
+            "This is a TECHNIQUE COMPARISON, not a scene caption. Ignore clothing, clothing color, player appearance, grass, nets, venue, camera angle, and background unless they prevent technique from being seen. Do not spend either section describing those details.\n"
+            "Confirm that the requested cricket skill is visible in both clips. If either clip is not cricket or does not show the requested skill, use the two sections to say technique cannot be compared and briefly identify only the relevant visibility problem. Do not invent mistakes for a non-cricket clip.\n"
+            "For valid clips, return exactly these two sections:\n"
+            "[VIDEO 1: Technique and mistakes in Clip 1]\nUse labelled lines: What needs work: a visible technique mistake and its movement evidence. What worked: only a strength supported by the clip. Key note: relevant technique evidence. If no clear mistake is visible, state that instead of inventing one.\n"
+            "[VIDEO 2: Technique differences and improvement]\nUse labelled lines: Difference: compare the same technique point in Clip 1 and Clip 2 with evidence from both. What worked: a visible improvement. What needs work: a mistake that remains or worsens and one specific correction. Do not assume Clip 2 is better.\n"
+            "Base every claim only on the supplied video evidence. Do not infer unseen body positions or actions. If details cannot be established from the frames, state that briefly."
         )
     })
 
