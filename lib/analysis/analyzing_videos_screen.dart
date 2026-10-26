@@ -320,7 +320,7 @@ class _AnalyzingVideosScreenState extends State<AnalyzingVideosScreen>
                   ),
                   SizedBox(height: 8),
                   Text(
-                    "Slow analyses land here while CrickNova keeps working in the background.",
+                    "Slow analyses land here while CrickX keeps working in the background.",
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 13,
@@ -730,7 +730,7 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      "Uploaded on CrickNova AI",
+                                      "Uploaded on CrickX AI",
                                       style: GoogleFonts.outfit(
                                         color: Colors.white,
                                         fontSize: 14,
@@ -904,7 +904,7 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Your CrickNova result is ready",
+                        "Your CrickX result is ready",
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontSize: 21,
@@ -1046,7 +1046,7 @@ class _InlineVideoCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              "Uploaded on CrickNova AI",
+                              "Uploaded on CrickX AI",
                               style: GoogleFonts.outfit(
                                 color: Colors.white,
                                 fontSize: 14,

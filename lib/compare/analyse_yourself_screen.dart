@@ -586,16 +586,20 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       request.fields["discipline"] = _analysisDiscipline;
       request.fields["prompt"] =
           """
-You are a cricket technique comparison coach. Compare the $_analysisDiscipline technique across both clips; do not assume the people shown are the same person.
+You are an expert cricket technique comparison coach. Look closely at the player in Video 1 and Video 2 frames.
+Compare the $_analysisDiscipline technique honestly across both clips:
 $_disciplineGuard
 Ignore clothing, clothing color, player appearance, grass, nets, venue and background. Do not give a scene description.
-If either clip does not visibly show $_analysisDiscipline action, say technique cannot be compared and do not invent mistakes.
 Return exactly these two sections for the two result boxes:
 [VIDEO 1: Technique and mistakes in Clip 1]
-Use labelled lines: "What needs work: ..." for a visible technique mistake, "What worked: ..." only for an evidenced strength, and "Key note: ..." for relevant technique evidence. Never list clothing, background, grass, or nets. If no clear mistake is visible, say so.
+What needs work: primary technical mistake observed in Video 1
+What worked: positive aspect of technique seen in Video 1
+Key note: stance, balance, and movement observation in Video 1
+
 [VIDEO 2: Technique differences and improvement]
-Use labelled lines: "Difference: ..." for a direct Clip 1 → Clip 2 technique contrast, "What worked: ..." for a visible improvement, and "What needs work: ..." for a mistake that remains or worsens plus its correction. Compare the same technique points and cite evidence from both clips. Do not assume Clip 2 is better.
-Base every statement only on visible technique evidence. Never infer unseen movement.
+Difference: direct comparison of how technique changed from Video 1 to Video 2
+What worked: visible technique improvement seen in Video 2
+What needs work: technical flaw that still needs correction and practical drill to fix it
 Do not discuss ball speed, ball swing or spin.
 Do not give rating/score.
 """;
@@ -631,7 +635,7 @@ Do not give rating/score.
           setState(() {
             diffResult =
                 data["message"]?.toString() ??
-                "This does not look like a cricket training clip. Please upload clear cricket practice videos for accurate CrickNova analysis.";
+                "This does not look like a cricket training clip. Please upload clear cricket practice videos for accurate CrickX analysis.";
           });
           return;
         }
@@ -682,7 +686,7 @@ Do not give rating/score.
                   style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 content: Text(
-                  "Your Cricknova Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
+                  "Your CrickX Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
                   style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4),
                 ),
                 actions: [
@@ -841,7 +845,7 @@ Do not give rating/score.
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "Uploaded on CrickNova AI",
+                            "Uploaded on CrickX AI",
                             style: GoogleFonts.outfit(
                               color: Colors.white,
                               fontSize: 12,
@@ -1176,7 +1180,7 @@ Do not give rating/score.
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      "Uploaded on CrickNova AI",
+                                      "Uploaded on CrickX AI",
                                       style: GoogleFonts.outfit(
                                         color: Colors.white,
                                         fontSize: 11,

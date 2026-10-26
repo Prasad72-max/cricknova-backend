@@ -250,7 +250,7 @@ class LoginScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 28),
                   Text(
-                    'CrickNova',
+                    'CrickX',
                     textAlign: TextAlign.center,
                     style: OnboardingTextStyles.uiSans(
                       color: OnboardingColors.textPrimary,

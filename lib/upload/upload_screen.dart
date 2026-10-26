@@ -2839,7 +2839,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              "Lock your verdict before CrickNova reveals the ball tracking.",
+                              "Lock your verdict before CrickX reveals the ball tracking.",
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.74),
                                 fontSize: 13,
@@ -3002,8 +3002,8 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                     children: [
                       Text(
                         _userCallMatchedAi
-                            ? "Brilliant! Your Call matches the CrickNova Call."
-                            : "Sharp try! But the CrickNova Call spotted something different.",
+                            ? "Brilliant! Your Call matches the CrickX Call."
+                            : "Sharp try! But the CrickX Call spotted something different.",
                         style: const TextStyle(
                           color: Colors.white,
                           fontFamily: "Montserrat",
@@ -3030,7 +3030,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                               children: [
                                 TextSpan(text: "Your call: $_userCallLabel | "),
                                 TextSpan(
-                                  text: "CrickNova Call",
+                                  text: "CrickX Call",
                                   style: TextStyle(
                                     color: const Color(0xFFFFD54F),
                                     fontWeight: FontWeight.w900,
@@ -3758,6 +3758,8 @@ class _CoachReplyViewState extends State<_CoachReplyView> {
               },
             ),
           ),
+        const SizedBox(height: 18),
+        _CoachVideoDrillCard(isBowling: widget.isBowling),
       ],
     );
   }
@@ -7298,7 +7300,7 @@ class _UploadScreenState extends State<UploadScreen>
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
-                                            "CrickNova works best when the clip clearly shows one cricket action and the ball is visible.",
+                                            "CrickX works best when the clip clearly shows one cricket action and the ball is visible.",
                                             style: GoogleFonts.poppins(
                                               color: const Color(0xFFA1A1AA),
                                               fontSize: 13,
@@ -7564,7 +7566,7 @@ class _UploadScreenState extends State<UploadScreen>
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    "Pick the closest video type so CrickNova can track the ball correctly.",
+                                    "Pick the closest video type so CrickX can track the ball correctly.",
                                     textAlign: TextAlign.center,
                                     style: GoogleFonts.poppins(
                                       color: Colors.white54,
@@ -7923,7 +7925,7 @@ class _UploadScreenState extends State<UploadScreen>
 
   Future<void> _handleNonCricketUploadWarning(String? message) async {
     final text = (message == null || message.trim().isEmpty)
-        ? "This does not look like a cricket training clip. Please upload a clear batting, bowling, fielding, wicketkeeping, or cricket practice video for accurate CrickNova analysis."
+        ? "This does not look like a cricket training clip. Please upload a clear batting, bowling, fielding, wicketkeeping, or cricket practice video for accurate CrickX analysis."
         : message.trim();
     if (!mounted) return;
     setState(() {
@@ -8692,7 +8694,7 @@ class _UploadScreenState extends State<UploadScreen>
             );
             await PremiumService.consumeMistake();
             await _maybeShowUsageLimitReached(
-              featureName: "Cricknova Mistake Detection",
+              featureName: "CrickX Mistake Detection",
               current: PremiumService.mistakeUsed,
               limit: PremiumService.mistakeLimit,
               entrySource: "mistake_usage_limit",
@@ -9246,7 +9248,7 @@ Do not add intro or conclusion.
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Uploaded on CrickNova AI",
+                                "Uploaded on CrickX AI",
                                 style: GoogleFonts.outfit(
                                   color: Colors.white,
                                   fontSize: 18,

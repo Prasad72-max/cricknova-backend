@@ -2179,21 +2179,26 @@ async def ai_coach_diff(
         right_frames = extract_video_keyframes(right_path, max_frames=3)
 
         base_prompt = (prompt or "").strip()
-        if not base_prompt:
-            base_prompt = """
-Compare the player's two video clips honestly in natural coaching language.
-Do not force Video 2 to be better than Video 1.
-Explain what improved, what is still weak, and what to do next.
-Give exactly 2 practical drills.
-- Do not mention speed, swing, or spin.
-- Keep it specific to what changed between the two clips.
-Do not give rating/score.
-"""
-
         discipline_text = (discipline or "").strip().lower()
         if discipline_text not in ("batting", "bowling"):
             prompt_lower = base_prompt.lower()
             discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
+
+        if not base_prompt:
+            base_prompt = f"""
+You are an expert cricket technique comparison coach. Compare the player's {discipline_text} technique across both clips.
+Ignore clothing, appearance, grass, nets, venue, and background.
+Return exactly these sections:
+[VIDEO 1: Technique and mistakes in Clip 1]
+What needs work: primary technical mistake observed in Video 1
+What worked: positive aspect of technique seen in Video 1
+Key note: movement, balance, and stance observation in Video 1
+
+[VIDEO 2: Technique differences and improvement]
+Difference: direct comparison of how technique changed from Video 1 to Video 2
+What worked: visible technique improvement seen in Video 2
+What needs work: technical flaw that still needs correction and practical drill to fix it
+"""
 
         if left_frames and right_frames:
             diff_text = generate_nvidia_comparison_vision(

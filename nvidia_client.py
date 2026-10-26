@@ -158,7 +158,7 @@ def generate_nvidia_text(
     )
 
 def extract_video_keyframes(video_path: str, max_frames: int = 4) -> list[bytes]:
-    """⚡ High-speed keyframe extractor using OpenCV with FFmpeg fallback."""
+    """⚡ High-speed keyframe extractor using OpenCV with sequential read fallback and FFmpeg."""
     frames: list[bytes] = []
     if not os.path.exists(video_path):
         return frames
@@ -167,22 +167,44 @@ def extract_video_keyframes(video_path: str, max_frames: int = 4) -> list[bytes]
     try:
         import cv2
         cap = cv2.VideoCapture(video_path)
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        if total > 0:
-            count = min(max_frames, total)
-            positions = [int(total * (i + 1) / (count + 1)) for i in range(count)]
-            for pos in positions:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
-                ret, fr = cap.read()
-                if ret and fr is not None:
-                    h, w = fr.shape[:2]
-                    if w > 480:
-                        new_w = 480
-                        new_h = int(h * (480 / w))
-                        fr = cv2.resize(fr, (new_w, new_h))
-                    _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 60])
-                    frames.append(buf.tobytes())
-        cap.release()
+        if cap.isOpened():
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if total > 0:
+                count = min(max_frames, total)
+                positions = [int(total * (i + 1) / (count + 1)) for i in range(count)]
+                for pos in positions:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
+                    ret, fr = cap.read()
+                    if ret and fr is not None:
+                        h, w = fr.shape[:2]
+                        if w > 480:
+                            new_w = 480
+                            new_h = int(h * (480 / w))
+                            fr = cv2.resize(fr, (new_w, new_h))
+                        _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                        frames.append(buf.tobytes())
+
+            # Fallback: sequential read if seek gave 0 frames or total was <= 0
+            if not frames:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                step = 12
+                idx = 0
+                while True:
+                    ret, fr = cap.read()
+                    if not ret or fr is None:
+                        break
+                    if idx % step == 0:
+                        h, w = fr.shape[:2]
+                        if w > 480:
+                            new_w = 480
+                            new_h = int(h * (480 / w))
+                            fr = cv2.resize(fr, (new_w, new_h))
+                        _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                        frames.append(buf.tobytes())
+                        if len(frames) >= max_frames:
+                            break
+                    idx += 1
+            cap.release()
     except Exception as e:
         print("⚠️ OpenCV extraction notice:", e)
 
@@ -329,13 +351,8 @@ def generate_nvidia_comparison_vision(
     content_parts.append({
         "type": "text",
         "text": (
-            "Compare the player's technique between Video 1 and Video 2 based on the actual visual frames.\n"
-            "Explain:\n"
-            "- What improved between the two clips\n"
-            "- What is still weak or needs correction\n"
-            "- What to do next\n"
-            "- Exactly 2 practical correction drills\n"
-            "Give direct, honest coaching based strictly on what is visible in the video frames."
+            "Carefully analyze the cricket technique across both videos.\n"
+            "Strictly follow the requested format with [VIDEO 1: Technique and mistakes in Clip 1] and [VIDEO 2: Technique differences and improvement] sections."
         )
     })
 

@@ -1180,13 +1180,16 @@ async def ai_coach_diff(
         )
 
     try:
-        from nvidia_client import generate_nvidia_comparison_vision
+        from nvidia_client import extract_video_keyframes, generate_nvidia_comparison_vision
         with open(left_path, "rb") as left_file:
             left_video_bytes = left_file.read()
         with open(right_path, "rb") as right_file:
             right_video_bytes = right_file.read()
         if not left_video_bytes or not right_video_bytes:
             raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
+
+        left_frames = extract_video_keyframes(left_path, max_frames=3)
+        right_frames = extract_video_keyframes(right_path, max_frames=3)
 
         base_prompt = (prompt or "").strip()
         discipline_text = (discipline or "").strip().lower()
@@ -1196,26 +1199,30 @@ async def ai_coach_diff(
 
         if not base_prompt:
             base_prompt = f"""
-Compare the same player's {discipline_text} technique across both video clips.
-Ignore clothing, appearance, grass, nets, venue, and background. Do not write a scene caption.
+You are an expert cricket technique comparison coach. Compare the player's {discipline_text} technique across both clips.
+Ignore clothing, appearance, grass, nets, venue, and background.
 Return exactly these sections:
 [VIDEO 1: Technique and mistakes in Clip 1]
-Identify visible technique mistakes with movement evidence. Do not invent mistakes.
+What needs work: primary technical mistake observed in Video 1
+What worked: positive aspect of technique seen in Video 1
+Key note: movement, balance, and stance observation in Video 1
+
 [VIDEO 2: Technique differences and improvement]
-Compare the same technique points directly across both clips, identify what improved, stayed the same, or worsened, and give a specific correction. Do not assume Clip 2 is better.
-If either clip does not show {discipline_text}, say technique cannot be compared.
+Difference: direct comparison of how technique changed from Video 1 to Video 2
+What worked: visible technique improvement seen in Video 2
+What needs work: technical flaw that still needs correction and practical drill to fix it
 """
 
         diff_text = generate_nvidia_comparison_vision(
             prompt=base_prompt,
             discipline=discipline_text,
+            left_frames=left_frames,
+            right_frames=right_frames,
             left_video_bytes=left_video_bytes,
             right_video_bytes=right_video_bytes,
-            left_video_mime_type=(left.content_type if left.content_type and left.content_type.startswith("video/") else mimetypes.guess_type(left.filename or "")[0] or "video/mp4"),
-            right_video_mime_type=(right.content_type if right.content_type and right.content_type.startswith("video/") else mimetypes.guess_type(right.filename or "")[0] or "video/mp4"),
-            system_instruction="Inspect both attached videos. Report only visible cricket evidence and never invent actions or technique.",
+            system_instruction="You are a master cricket coach. Analyze both videos and give honest, encouraging technique comparison.",
             max_output_tokens=1800,
-            temperature=0.2,
+            temperature=0.25,
         )
         if not diff_text.strip():
             raise HTTPException(status_code=502, detail="AI_EMPTY_RESPONSE")

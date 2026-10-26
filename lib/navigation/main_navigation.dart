@@ -199,7 +199,7 @@ class _CrickNovaEdgeIntroScreenState extends State<_CrickNovaEdgeIntroScreen>
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Meet CrickNova Edge',
+                          'Meet CrickX Edge',
                           textAlign: TextAlign.center,
                           style: OnboardingTextStyles.serif(
                             color: OnboardingColors.textPrimary,
