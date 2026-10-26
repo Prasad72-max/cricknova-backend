@@ -3,6 +3,7 @@ import re
 import json
 import base64
 import http.client
+import socket
 import ssl
 import threading
 from typing import Any
@@ -79,7 +80,7 @@ def call_nvidia_chat(
     model: str = NVIDIA_MODEL,
     max_tokens: int = 8192,
     temperature: float = 0.55,
-    timeout: int = 60,
+    timeout: int = 50,
 ) -> str:
     """⚡ NVIDIA Nemotron API caller with 8K+ token capacity & Keep-Alive connection pooling."""
     keys = get_nvidia_api_keys()
@@ -91,7 +92,14 @@ def call_nvidia_chat(
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "chat_template_kwargs": {"enable_thinking": False},
     }
+    if any(
+        isinstance(message.get("content"), list)
+        and any(part.get("type") == "video_url" for part in message["content"] if isinstance(part, dict))
+        for message in messages
+    ):
+        payload["media_io_kwargs"] = {"video": {"num_frames": 16, "fps": -1}}
     body = json.dumps(payload).encode("utf-8")
     last_err: Exception | None = None
 
@@ -130,6 +138,8 @@ def call_nvidia_chat(
             except Exception as e:
                 _reset_connection()
                 last_err = e
+                if isinstance(e, (TimeoutError, socket.timeout)):
+                    raise RuntimeError("NVIDIA API request timed out") from e
                 if attempt == 0:
                     continue
                 break
@@ -246,14 +256,16 @@ def generate_nvidia_vision(
         messages,
         max_tokens=max_output_tokens,
         temperature=temperature,
-        timeout=120,
+        timeout=50,
     )
 
 def generate_nvidia_comparison_vision(
     *,
     prompt: str,
-    left_video_bytes: bytes,
-    right_video_bytes: bytes,
+    left_video_bytes: bytes | None = None,
+    right_video_bytes: bytes | None = None,
+    left_frames: list[bytes] | None = None,
+    right_frames: list[bytes] | None = None,
     left_video_mime_type: str = "video/mp4",
     right_video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
@@ -271,16 +283,28 @@ def generate_nvidia_comparison_vision(
         }
     ]
 
-    for video_bytes, mime_type in (
-        (left_video_bytes, left_video_mime_type),
-        (right_video_bytes, right_video_mime_type),
-    ):
-        content_parts.append({
-            "type": "video_url",
-            "video_url": {
-                "url": f"data:{mime_type};base64,{base64.b64encode(video_bytes).decode('ascii')}"
-            },
-        })
+    if left_video_bytes and right_video_bytes:
+        for video_bytes, mime_type in (
+            (left_video_bytes, left_video_mime_type),
+            (right_video_bytes, right_video_mime_type),
+        ):
+            content_parts.append({
+                "type": "video_url",
+                "video_url": {
+                    "url": f"data:{mime_type};base64,{base64.b64encode(video_bytes).decode('ascii')}"
+                },
+            })
+    elif left_frames and right_frames:
+        for title, frames in (("VIDEO 1", left_frames), ("VIDEO 2", right_frames)):
+            content_parts.append({"type": "text", "text": f"{title} frames"})
+            for frame in frames[:4]:
+                encoded = base64.b64encode(frame).decode("ascii")
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+                })
+    else:
+        raise ValueError("Provide both videos or both frame lists for comparison")
 
     content_parts.append({
         "type": "text",
@@ -302,5 +326,5 @@ def generate_nvidia_comparison_vision(
         messages,
         max_tokens=max_output_tokens,
         temperature=temperature,
-        timeout=120,
+        timeout=50,
     )

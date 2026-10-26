@@ -980,7 +980,7 @@ Required JSON shape otherwise: {{"cricket_detected":false,"observation":"..."}}.
             video_bytes=video_bytes,
             video_mime_type=(file.content_type if file.content_type and file.content_type.startswith("video/") else mimetypes.guess_type(file.filename or "")[0] or "video/mp4"),
             system_instruction="Inspect the provided video. Give cricket coaching only when the requested cricket action is visibly present. Never invent visual evidence.",
-            max_output_tokens=8192,
+            max_output_tokens=1200,
             temperature=0.2,
         )
         if not feedback.strip():
@@ -1064,7 +1064,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             reply_text = generate_text(
                 system_instruction=f"You are a universal cricket coach specializing in {discipline_label} analysis. Analyze the clip context and return the requested json format.",
                 user_prompt=message,
-                max_output_tokens=8192,
+                max_output_tokens=1600,
                 temperature=0.45,
             )
             return {"status": "success", "reply": reply_text}
@@ -1089,7 +1089,7 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
         from nvidia_client import call_nvidia_chat
         reply_text = call_nvidia_chat(
             messages_payload,
-            max_tokens=8192,
+            max_tokens=1600,
             temperature=0.6,
         )
 
@@ -1202,7 +1202,7 @@ Do not give rating/score.
             left_video_mime_type=(left.content_type if left.content_type and left.content_type.startswith("video/") else mimetypes.guess_type(left.filename or "")[0] or "video/mp4"),
             right_video_mime_type=(right.content_type if right.content_type and right.content_type.startswith("video/") else mimetypes.guess_type(right.filename or "")[0] or "video/mp4"),
             system_instruction="Inspect both attached videos. Report only visible cricket evidence and never invent actions or technique.",
-            max_output_tokens=8192,
+            max_output_tokens=1800,
             temperature=0.2,
         )
         if not diff_text.strip():
