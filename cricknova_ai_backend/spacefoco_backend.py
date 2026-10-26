@@ -1880,7 +1880,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "cricket_detected": True,
-            "cricket_summary": verification_summary,
+            "cricket_summary": "Cricket action analyzed",
             "speed_kmph": speed_kmph,
             "speed_type": "pre-pitch",
             "speed_note": "Pre-pitch release speed, broadcast-calibrated for realistic international comparison",

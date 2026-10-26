@@ -906,7 +906,7 @@ async def analyze_training_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "cricket_detected": True,
-            "cricket_summary": verification_summary,
+            "cricket_summary": "Cricket action analyzed",
             "speed_kmph": speed_kmph,
             "speed_type": speed_type,
             "speed_note": speed_note,
@@ -1324,7 +1324,7 @@ async def analyze_live_match_video(file: UploadFile = File(...)):
         return {
             "status": "success",
             "cricket_detected": True,
-            "cricket_summary": verification_summary,
+            "cricket_summary": "Cricket action analyzed",
             "speed_kmph": speed_kmph,
             "speed_type": speed_type,
             "speed_note": speed_note,
