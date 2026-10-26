@@ -1375,19 +1375,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(height: 14),
           _usageRow(
-            label: "CrickNova Coach Chats",
+            label: "CrickX Coach Chats",
             used: PremiumService.chatUsed,
             total: PremiumService.chatLimit,
           ),
           const SizedBox(height: 10),
           _usageRow(
-            label: "Cricknova Mistake Detection",
+            label: "CrickX Mistake Detection",
             used: PremiumService.mistakeUsed,
             total: PremiumService.mistakeLimit,
           ),
           const SizedBox(height: 10),
           _usageRow(
-            label: "Cricknova Analyse Yourself",
+            label: "CrickX Analyse Yourself",
             used: PremiumService.compareUsed,
             total: PremiumService.compareLimit,
           ),

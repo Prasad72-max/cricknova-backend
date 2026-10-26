@@ -2202,7 +2202,7 @@ Do not give rating/score.
                 right_frames=right_frames,
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
                 max_output_tokens=8192,
-                temperature=0.55,
+                temperature=0.35,
             )
         else:
             final_prompt = (
@@ -2210,16 +2210,14 @@ Do not give rating/score.
                 + f"\n\nINTERNAL_CONTEXT (do not mention): "
                   f"discipline={discipline_text} "
                   f"v1_name={(left.filename or 'left.mp4')} "
-                  f"v2_name={(right.filename or 'right.mp4')} "
-                  f"v1_sig={trajectory_signature(left_positions)} "
-                  f"v2_sig={trajectory_signature(right_positions)}\n"
+                  f"v2_name={(right.filename or 'right.mp4')}\n"
             )
 
             diff_text = generate_nvidia_text(
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
                 user_prompt=final_prompt,
                 max_output_tokens=8192,
-                temperature=0.55,
+                temperature=0.35,
             )
 
         return {

@@ -3,6 +3,7 @@ import re
 import json
 import base64
 import http.client
+import socket
 import ssl
 import threading
 from typing import Any
@@ -79,7 +80,7 @@ def call_nvidia_chat(
     model: str = NVIDIA_MODEL,
     max_tokens: int = 8192,
     temperature: float = 0.55,
-    timeout: int = 60,
+    timeout: int = 50,
 ) -> str:
     """⚡ NVIDIA Nemotron API caller with 8K+ token capacity & Keep-Alive connection pooling."""
     keys = get_nvidia_api_keys()
@@ -119,9 +120,9 @@ def call_nvidia_chat(
                         content = choices[0].get("message", {}).get("content", "")
                         return content.strip()
                     return ""
-                elif resp.status in (401, 403, 429):
+                elif resp.status in (401, 403, 429, 500):
                     _reset_connection()
-                    print(f"⚠️ NVIDIA Key {resp.status}, trying next key")
+                    print(f"⚠️ NVIDIA Key returned {resp.status}, trying next key")
                     last_err = RuntimeError(f"NVIDIA API {resp.status}: {raw_bytes.decode('utf-8', 'ignore')}")
                     break
                 else:
@@ -130,6 +131,8 @@ def call_nvidia_chat(
             except Exception as e:
                 _reset_connection()
                 last_err = e
+                if isinstance(e, (TimeoutError, socket.timeout)):
+                    raise RuntimeError("NVIDIA API request timed out") from e
                 if attempt == 0:
                     continue
                 break
@@ -211,16 +214,31 @@ def generate_nvidia_vision(
     prompt: str,
     frames: list[bytes] | None = None,
     video_bytes: bytes | None = None,
+    video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
     max_output_tokens: int = 8192,
-    temperature: float = 0.55,
+    temperature: float = 0.35,
 ) -> str:
     """⚡ Rapid multimodal analysis using NVIDIA Nemotron 3.5 Super VL."""
     content_parts: list[dict[str, Any]] = [
         {"type": "text", "text": prompt}
     ]
 
-    # Fast frame sampling: 4 key frames is optimal for speed & vision accuracy
+    # If frames not provided directly, extract clean 480p keyframes from video_bytes
+    if (not frames or len(frames) == 0) and video_bytes:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+        try:
+            frames = extract_video_keyframes(tmp_path, max_frames=4)
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
     if frames and len(frames) > 0:
         step = max(1, len(frames) // 4)
         sampled = frames[::step][:4]
@@ -230,85 +248,94 @@ def generate_nvidia_vision(
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
             })
-    elif video_bytes and len(video_bytes) > 0:
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-            tmp.write(video_bytes)
-            tmp_path = tmp.name
-
-        extracted = extract_video_keyframes(tmp_path, max_frames=4)
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-
-        for ef in extracted:
-            b64_img = base64.b64encode(ef).decode("utf-8")
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-            })
-
     messages = [
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": content_parts},
     ]
 
-    return call_nvidia_chat(
-        messages,
-        max_tokens=max_output_tokens,
-        temperature=temperature,
-        timeout=45,
-    )
+    try:
+        return call_nvidia_chat(
+            messages,
+            max_tokens=max_output_tokens,
+            temperature=temperature,
+            timeout=50,
+        )
+    except Exception as e:
+        print(f"⚠️ NVIDIA Vision failed: {e}. Falling back to fast text completion...")
+        return generate_nvidia_text(
+            system_instruction=system_instruction,
+            user_prompt=prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+        )
 
 def generate_nvidia_comparison_vision(
     *,
     prompt: str,
-    left_frames: list[bytes],
-    right_frames: list[bytes],
+    discipline: str = "cricket",
+    left_video_bytes: bytes | None = None,
+    right_video_bytes: bytes | None = None,
+    left_frames: list[bytes] | None = None,
+    right_frames: list[bytes] | None = None,
+    left_video_mime_type: str = "video/mp4",
+    right_video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
     max_output_tokens: int = 8192,
-    temperature: float = 0.55,
+    temperature: float = 0.35,
 ) -> str:
     """⚡ Two-video comparison using NVIDIA Nemotron 3.5 Super VL multimodal vision."""
     content_parts: list[dict[str, Any]] = [
         {
             "type": "text",
             "text": (
-                "You are evaluating two cricket video clips side-by-side.\n\n"
+                "You are evaluating two cricket video clips. The first attached frames are Video 1 and the second attached frames are Video 2.\n\n"
                 f"{prompt}\n\n"
-                "=== VIDEO 1 (First Video) KEY FRAMES ==="
             )
         }
     ]
 
-    # Add Left video frames
-    for f in left_frames[:4]:
-        b64_img = base64.b64encode(f).decode("utf-8")
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-        })
+    if not left_frames and left_video_bytes:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(left_video_bytes)
+            tmp_path = tmp.name
+        try:
+            left_frames = extract_video_keyframes(tmp_path, max_frames=3)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
-    # Add Right video frames
-    content_parts.append({
-        "type": "text",
-        "text": "=== VIDEO 2 (Second Video) KEY FRAMES ==="
-    })
-    for f in right_frames[:4]:
-        b64_img = base64.b64encode(f).decode("utf-8")
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-        })
+    if not right_frames and right_video_bytes:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(right_video_bytes)
+            tmp_path = tmp.name
+        try:
+            right_frames = extract_video_keyframes(tmp_path, max_frames=3)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    if left_frames and right_frames:
+        for title, f_list in (("VIDEO 1", left_frames), ("VIDEO 2", right_frames)):
+            content_parts.append({"type": "text", "text": f"{title} frames:"})
+            for frame in f_list[:3]:
+                encoded = base64.b64encode(frame).decode("ascii")
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+                })
 
     content_parts.append({
         "type": "text",
         "text": (
-            "Vision Inspection Guidance:\n"
-            "1. Inspect the visual content of both Video 1 and Video 2 frames carefully.\n"
-            "2. If either clip does NOT contain cricket batting or bowling (e.g. empty net, non-cricket video, blank screen), "
-            "clearly state what is actually observed in the video and clarify that cricket analysis cannot be performed on it.\n"
-            "3. If cricket batting/bowling is present, honestly compare the player's technique, body balance, footwork, bat path/arm action, "
-            "and execution between Video 1 and Video 2. Explain what improved, what remains weak, what to do next, and provide 2 practical drills."
+            "Compare the player's technique between Video 1 and Video 2 based on the actual visual frames.\n"
+            "Explain:\n"
+            "- What improved between the two clips\n"
+            "- What is still weak or needs correction\n"
+            "- What to do next\n"
+            "- Exactly 2 practical correction drills\n"
+            "Give direct, honest coaching based strictly on what is visible in the video frames."
         )
     })
 
@@ -317,9 +344,18 @@ def generate_nvidia_comparison_vision(
         {"role": "user", "content": content_parts},
     ]
 
-    return call_nvidia_chat(
-        messages,
-        max_tokens=max_output_tokens,
-        temperature=temperature,
-        timeout=60,
-    )
+    try:
+        return call_nvidia_chat(
+            messages,
+            max_tokens=max_output_tokens,
+            temperature=temperature,
+            timeout=50,
+        )
+    except Exception as e:
+        print(f"⚠️ Comparison vision failed: {e}. Falling back to text.")
+        return generate_nvidia_text(
+            system_instruction=system_instruction,
+            user_prompt=prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+        )

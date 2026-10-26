@@ -964,24 +964,34 @@ async def ai_coach_analyze(
         if disc_label not in ("batting", "bowling"):
             disc_label = "cricket"
 
-        if not video_bytes:
-            raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
+        coaching_prompt = (prompt or "").strip()
+        if not coaching_prompt:
+            coaching_prompt = f"""
+You are an expert cricket coach analyzing this {disc_label} video.
+Look at the player in the video frames and provide an honest technical analysis in valid JSON format:
 
-        coaching_prompt = (prompt or "").strip() or f"""
-Inspect the attached video before coaching. First decide from visible evidence whether this is a cricket clip and whether a {disc_label} action is clearly visible.
-If it is not cricket, or the requested {disc_label} action is not visible, do not give cricket technique advice. Return only JSON with cricket_detected=false and observation describing what is actually visible and why cricket coaching cannot be given.
-If the requested cricket action is visible, return only JSON with cricket_detected=true, exactly two video-grounded mistakes, one specific impact explaining their likely performance consequence, and one practical drill that addresses them. Do not infer a player's body position, bat, ball, or action unless visible in the frames. If evidence is unclear, say so in observation and do not invent mistakes.
-Required JSON shape for a clear cricket action: {{"cricket_detected":true,"mistakes":["...","..."],"impact":"...","drill":"..."}}.
-Required JSON shape otherwise: {{"cricket_detected":false,"observation":"..."}}.
+{{
+  "cricket_detected": true,
+  "mistakes": [
+    "Mistake 1: [Primary technical mistake seen in the video frames]",
+    "Mistake 2: [Secondary technical mistake or flaw seen in the video frames]"
+  ],
+  "impact": "Impact: [Specific performance consequence and impact of these mistakes]",
+  "drill": "How to Fix: [Practical correction drill to fix these mistakes]"
+}}
+
+Return ONLY valid JSON.
 """
+
+        from nvidia_client import extract_video_keyframes
+        frames = extract_video_keyframes(video_path, max_frames=4)
 
         feedback = generate_nvidia_vision(
             prompt=coaching_prompt,
-            video_bytes=video_bytes,
-            video_mime_type=(file.content_type if file.content_type and file.content_type.startswith("video/") else mimetypes.guess_type(file.filename or "")[0] or "video/mp4"),
-            system_instruction="Inspect the provided video. Give cricket coaching only when the requested cricket action is visibly present. Never invent visual evidence.",
+            frames=frames,
+            system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
             max_output_tokens=1200,
-            temperature=0.2,
+            temperature=0.35,
         )
         if not feedback.strip():
             raise HTTPException(status_code=502, detail="AI_EMPTY_RESPONSE")

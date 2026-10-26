@@ -92,14 +92,7 @@ def call_nvidia_chat(
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "chat_template_kwargs": {"enable_thinking": False},
     }
-    if any(
-        isinstance(message.get("content"), list)
-        and any(part.get("type") == "video_url" for part in message["content"] if isinstance(part, dict))
-        for message in messages
-    ):
-        payload["media_io_kwargs"] = {"video": {"num_frames": 16, "fps": -1}}
     body = json.dumps(payload).encode("utf-8")
     last_err: Exception | None = None
 
@@ -127,9 +120,9 @@ def call_nvidia_chat(
                         content = choices[0].get("message", {}).get("content", "")
                         return content.strip()
                     return ""
-                elif resp.status in (401, 403, 429):
+                elif resp.status in (401, 403, 429, 500):
                     _reset_connection()
-                    print(f"⚠️ NVIDIA Key {resp.status}, trying next key")
+                    print(f"⚠️ NVIDIA Key returned {resp.status}, trying next key")
                     last_err = RuntimeError(f"NVIDIA API {resp.status}: {raw_bytes.decode('utf-8', 'ignore')}")
                     break
                 else:
@@ -224,20 +217,28 @@ def generate_nvidia_vision(
     video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
     max_output_tokens: int = 8192,
-    temperature: float = 0.55,
+    temperature: float = 0.35,
 ) -> str:
     """⚡ Rapid multimodal analysis using NVIDIA Nemotron 3.5 Super VL."""
     content_parts: list[dict[str, Any]] = [
         {"type": "text", "text": prompt}
     ]
 
-    if video_bytes:
-        content_parts.append({
-            "type": "video_url",
-            "video_url": {
-                "url": f"data:{video_mime_type};base64,{base64.b64encode(video_bytes).decode('ascii')}"
-            },
-        })
+    # If frames not provided directly, extract clean 480p keyframes from video_bytes
+    if (not frames or len(frames) == 0) and video_bytes:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+        try:
+            frames = extract_video_keyframes(tmp_path, max_frames=4)
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
     if frames and len(frames) > 0:
         step = max(1, len(frames) // 4)
         sampled = frames[::step][:4]
@@ -252,12 +253,21 @@ def generate_nvidia_vision(
         {"role": "user", "content": content_parts},
     ]
 
-    return call_nvidia_chat(
-        messages,
-        max_tokens=max_output_tokens,
-        temperature=temperature,
-        timeout=50,
-    )
+    try:
+        return call_nvidia_chat(
+            messages,
+            max_tokens=max_output_tokens,
+            temperature=temperature,
+            timeout=50,
+        )
+    except Exception as e:
+        print(f"⚠️ NVIDIA Vision failed: {e}. Falling back to fast text completion...")
+        return generate_nvidia_text(
+            system_instruction=system_instruction,
+            user_prompt=prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+        )
 
 def generate_nvidia_comparison_vision(
     *,
@@ -271,66 +281,61 @@ def generate_nvidia_comparison_vision(
     right_video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
     max_output_tokens: int = 8192,
-    temperature: float = 0.55,
+    temperature: float = 0.35,
 ) -> str:
     """⚡ Two-video comparison using NVIDIA Nemotron 3.5 Super VL multimodal vision."""
     content_parts: list[dict[str, Any]] = [
         {
             "type": "text",
             "text": (
-                "You are evaluating two cricket video clips. The first attached video is Video 1 and the second attached video is Video 2.\n\n"
+                "You are evaluating two cricket video clips. The first attached frames are Video 1 and the second attached frames are Video 2.\n\n"
                 f"{prompt}\n\n"
             )
         }
     ]
 
-    if left_video_bytes and right_video_bytes:
-        for video_bytes, mime_type in (
-            (left_video_bytes, left_video_mime_type),
-            (right_video_bytes, right_video_mime_type),
-        ):
-            content_parts.append({
-                "type": "video_url",
-                "video_url": {
-                    "url": f"data:{mime_type};base64,{base64.b64encode(video_bytes).decode('ascii')}"
-                },
-            })
-    elif left_frames and right_frames:
-        for title, frames in (("VIDEO 1", left_frames), ("VIDEO 2", right_frames)):
-            content_parts.append({"type": "text", "text": f"{title} frames"})
-            for frame in frames[:4]:
+    if not left_frames and left_video_bytes:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(left_video_bytes)
+            tmp_path = tmp.name
+        try:
+            left_frames = extract_video_keyframes(tmp_path, max_frames=3)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    if not right_frames and right_video_bytes:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(right_video_bytes)
+            tmp_path = tmp.name
+        try:
+            right_frames = extract_video_keyframes(tmp_path, max_frames=3)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    if left_frames and right_frames:
+        for title, f_list in (("VIDEO 1", left_frames), ("VIDEO 2", right_frames)):
+            content_parts.append({"type": "text", "text": f"{title} frames:"})
+            for frame in f_list[:3]:
                 encoded = base64.b64encode(frame).decode("ascii")
                 content_parts.append({
                     "type": "image_url",
                     "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
                 })
-    else:
-        raise ValueError("Provide both videos or both frame lists for comparison")
-
-    normalized_discipline = discipline.strip().lower()
-    if normalized_discipline == "batting":
-        technique_focus = (
-            "Evaluate batting technique only: set-up and stance, head position, balance, footwork, weight transfer, "
-            "bat swing/path, contact and timing, shot control, and follow-through."
-        )
-    elif normalized_discipline == "bowling":
-        technique_focus = (
-            "Evaluate bowling technique only: run-up rhythm, gather, front-foot landing, alignment, balance, "
-            "bowling-arm path, release position, follow-through, and visible line/length outcome."
-        )
-    else:
-        technique_focus = "Identify the requested cricket skill and compare its visible technique only."
 
     content_parts.append({
         "type": "text",
         "text": (
-            f"{technique_focus}\n"
-            "This is a TECHNIQUE COMPARISON, not a scene caption. Ignore clothing, clothing color, player appearance, grass, nets, venue, camera angle, and background unless they prevent technique from being seen. Do not spend either section describing those details.\n"
-            "Confirm that the requested cricket skill is visible in both clips. If either clip is not cricket or does not show the requested skill, use the two sections to say technique cannot be compared and briefly identify only the relevant visibility problem. Do not invent mistakes for a non-cricket clip.\n"
-            "For valid clips, return exactly these two sections:\n"
-            "[VIDEO 1: Technique and mistakes in Clip 1]\nUse labelled lines: What needs work: a visible technique mistake and its movement evidence. What worked: only a strength supported by the clip. Key note: relevant technique evidence. If no clear mistake is visible, state that instead of inventing one.\n"
-            "[VIDEO 2: Technique differences and improvement]\nUse labelled lines: Difference: compare the same technique point in Clip 1 and Clip 2 with evidence from both. What worked: a visible improvement. What needs work: a mistake that remains or worsens and one specific correction. Do not assume Clip 2 is better.\n"
-            "Base every claim only on the supplied video evidence. Do not infer unseen body positions or actions. If details cannot be established from the frames, state that briefly."
+            "Compare the player's technique between Video 1 and Video 2 based on the actual visual frames.\n"
+            "Explain:\n"
+            "- What improved between the two clips\n"
+            "- What is still weak or needs correction\n"
+            "- What to do next\n"
+            "- Exactly 2 practical correction drills\n"
+            "Give direct, honest coaching based strictly on what is visible in the video frames."
         )
     })
 
@@ -339,9 +344,18 @@ def generate_nvidia_comparison_vision(
         {"role": "user", "content": content_parts},
     ]
 
-    return call_nvidia_chat(
-        messages,
-        max_tokens=max_output_tokens,
-        temperature=temperature,
-        timeout=50,
-    )
+    try:
+        return call_nvidia_chat(
+            messages,
+            max_tokens=max_output_tokens,
+            temperature=temperature,
+            timeout=50,
+        )
+    except Exception as e:
+        print(f"⚠️ Comparison vision failed: {e}. Falling back to text.")
+        return generate_nvidia_text(
+            system_instruction=system_instruction,
+            user_prompt=prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+        )

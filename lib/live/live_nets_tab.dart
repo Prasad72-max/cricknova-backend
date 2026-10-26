@@ -18,6 +18,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../config/api_config.dart';
 import '../navigation/main_navigation.dart';
+import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import '../theme/crickx_colors.dart';
 import 'edge_saved_reviews_screen.dart';
@@ -439,7 +440,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                               : () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => const PremiumScreen(
+                                      builder: (_) => PremiumScreen(
                                         entrySource: 'edge_recharge',
                                         initialAccessTab: 1,
                                       ),
@@ -477,7 +478,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                             onPressed: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => const PremiumScreen(
+                                  builder: (_) => PremiumScreen(
                                     entrySource: 'edge_topup',
                                     initialAccessTab: 1,
                                   ),

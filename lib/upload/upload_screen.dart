@@ -35,6 +35,7 @@ import '../services/cricknova_notification_service.dart';
 import '../services/xp_service.dart';
 import '../services/analysis_credit_service.dart';
 import '../services/admob_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum _DrsCinematicPhase { idle, snicko, tracking, decision }
 
@@ -3602,11 +3603,24 @@ String? _extractCoachRatingNoteFromJson(Map<String, dynamic> json) {
   return null;
 }
 
-class _CoachReplyView extends StatelessWidget {
+class _CoachReplyView extends StatefulWidget {
   final String raw;
   final _ParsedCoachReply parsed;
+  final bool isBowling;
 
-  const _CoachReplyView({required this.raw, required this.parsed});
+  const _CoachReplyView({
+    super.key,
+    required this.raw,
+    required this.parsed,
+    this.isBowling = false,
+  });
+
+  @override
+  State<_CoachReplyView> createState() => _CoachReplyViewState();
+}
+
+class _CoachReplyViewState extends State<_CoachReplyView> {
+  int? _selectedIndex;
 
   List<String> _jsonToPoints(Map<String, dynamic> j) {
     final mistakes = _coachStringList(j["mistakes"], limit: 2);
@@ -3657,6 +3671,9 @@ class _CoachReplyView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final raw = widget.raw;
+    final parsed = widget.parsed;
+
     if (raw.trim().isEmpty) {
       return const Text(
         "No feedback yet.",
@@ -3730,9 +3747,259 @@ class _CoachReplyView extends StatelessWidget {
         for (int i = 0; i < points.length; i++)
           Padding(
             padding: EdgeInsets.only(bottom: i == points.length - 1 ? 0 : 10),
-            child: _CoachPointTile(index: i + 1, text: points[i]),
+            child: _CoachPointTile(
+              index: i + 1,
+              text: points[i],
+              isSelected: _selectedIndex == i,
+              onTap: () {
+                setState(() {
+                  _selectedIndex = (_selectedIndex == i) ? null : i;
+                });
+              },
+            ),
           ),
       ],
+    );
+  }
+}
+
+class _CoachVideoDrillCard extends StatelessWidget {
+  final bool isBowling;
+
+  const _CoachVideoDrillCard({required this.isBowling});
+
+  String get _videoId => isBowling ? "ggq2R_NB3KU" : "pbpK1Zvegq0";
+  String get _title => isBowling
+      ? "Fast Bowling Seam & Wrist Position Masterclass"
+      : "Batting Stance, Balance & Head Position Masterclass";
+  String get _subtitle => isBowling
+      ? "Watch Brett Lee masterclass on upright seam presentation, wrist snap at release, and smooth follow-through."
+      : "Watch Virat Kohli masterclass on keeping head still, eye level steady, and high elbow through contact.";
+  String get _duration => isBowling ? "4:12" : "3:48";
+
+  Future<void> _openVideo() async {
+    HapticFeedback.mediumImpact();
+    final url = "https://www.youtube.com/watch?v=$_videoId";
+    final uri = Uri.parse(url);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint("Could not launch YouTube: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbUrl = "https://img.youtube.com/vi/$_videoId/hqdefault.jpg";
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: CrickXColors.graphite,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: CrickXColors.graphiteBorder,
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF0000).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFFF0000).withValues(alpha: 0.4),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.smart_display_rounded,
+                        color: Color(0xFFFF0000),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        "YOUTUBE COACHING",
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFFFF4D4D),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  isBowling ? "Bowling Drill" : "Batting Drill",
+                  style: GoogleFonts.poppins(
+                    color: CrickXColors.limeSpark,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: _openVideo,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 14),
+              height: 160,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: Colors.black,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.network(
+                      thumbUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: CrickXColors.graphiteElevated,
+                        child: const Center(
+                          child: Icon(
+                            Icons.sports_cricket_rounded,
+                            color: CrickXColors.limeSpark,
+                            size: 42,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.black.withValues(alpha: 0.2),
+                            Colors.black.withValues(alpha: 0.7),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF0000),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFF0000).withValues(alpha: 0.5),
+                              blurRadius: 18,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 34,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _duration,
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Text(
+              _title,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Text(
+              _subtitle,
+              style: GoogleFonts.poppins(
+                color: const Color(0xFFA1A1AA),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: SizedBox(
+              width: double.infinity,
+              height: 42,
+              child: ElevatedButton.icon(
+                onPressed: _openVideo,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF0000),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                label: Text(
+                  "Watch Video to Fix Mistakes",
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3740,62 +4007,108 @@ class _CoachReplyView extends StatelessWidget {
 class _CoachPointTile extends StatelessWidget {
   final int index;
   final String text;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  const _CoachPointTile({required this.index, required this.text});
+  const _CoachPointTile({
+    required this.index,
+    required this.text,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: CrickXColors.graphite,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, isSelected ? -7.0 : 0.0, 0),
+        margin: EdgeInsets.only(
+          top: isSelected ? 2 : 0,
+          bottom: isSelected ? 4 : 0,
+        ),
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: isSelected ? 15 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1E241E) : CrickXColors.graphite,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? CrickXColors.limeSpark : CrickXColors.graphiteBorder,
+            width: isSelected ? 1.6 : 1.2,
           ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: CrickXColors.graphiteBg,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: CrickXColors.limeSpark.withValues(alpha: 0.4),
+          boxShadow: [
+            if (isSelected) ...[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.8),
+                blurRadius: 22,
+                spreadRadius: 2,
+                offset: const Offset(0, 12),
+              ),
+              BoxShadow(
+                color: CrickXColors.limeSpark.withValues(alpha: 0.35),
+                blurRadius: 18,
+                spreadRadius: 1,
+                offset: const Offset(0, 4),
+              ),
+            ] else ...[
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.6),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              width: isSelected ? 30 : 28,
+              height: isSelected ? 30 : 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isSelected ? CrickXColors.limeSpark : CrickXColors.graphiteBg,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: isSelected
+                      ? CrickXColors.limeSpark
+                      : CrickXColors.limeSpark.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                "$index",
+                style: GoogleFonts.poppins(
+                  color: isSelected ? CrickXColors.onLime : CrickXColors.limeSpark,
+                  fontWeight: FontWeight.w800,
+                  fontSize: isSelected ? 13 : 12,
+                ),
               ),
             ),
-            child: Text(
-              "$index",
-              style: GoogleFonts.poppins(
-                color: CrickXColors.limeSpark,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: GoogleFonts.poppins(
+                  color: isSelected ? Colors.white : const Color(0xFFF1F5F9),
+                  fontSize: isSelected ? 14.5 : 14,
+                  height: 1.45,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: SelectableText(
-              text,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 14,
-                height: 1.45,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -4581,7 +4894,7 @@ class _UploadScreenState extends State<UploadScreen>
       if (!mounted || !analysisLoading) return;
       setState(() {
         _showLongWaitHandoff = true;
-        _analysisStatusText = "CrickNova is analyzing your video...";
+        _analysisStatusText = "CrickX is analyzing your video...";
       });
 
       final popupShownKey = 'analysis_handoff_popup_shown_${pending.id}';
@@ -4699,9 +5012,9 @@ class _UploadScreenState extends State<UploadScreen>
                       width: 1.2,
                     ),
                   ),
-                  child: Center(
+                  child: const Center(
                     child: Icon(
-                      Icons.auto_awesome_rounded,
+                      Icons.sports_cricket_rounded,
                       color: CrickXColors.limeSpark,
                       size: 38,
                     ),
@@ -4709,7 +5022,7 @@ class _UploadScreenState extends State<UploadScreen>
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  "CrickNova is analyzing your video",
+                  "CrickX is analyzing your video",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 20,
@@ -5221,6 +5534,12 @@ class _UploadScreenState extends State<UploadScreen>
 
     final parsedJson = _tryParseCoachJson(cleaned);
     if (parsedJson != null) {
+      if (parsedJson["cricket_detected"] == false) {
+        final observation = _coachString(parsedJson["observation"]);
+        if (observation != null) {
+          return _ParsedCoachReply.fallback(observation);
+        }
+      }
       final mistakes = _coachStringList(parsedJson["mistakes"], limit: 2);
       final fixes = _coachStringList(parsedJson["fixes"], limit: 2);
       final impact = _coachString(parsedJson["impact"]);
@@ -8332,7 +8651,7 @@ class _UploadScreenState extends State<UploadScreen>
             request.fields["discipline"] = _analysisDiscipline;
             request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
-            final streamedResp = await request.send().timeout(const Duration(seconds: 90));
+            final streamedResp = await request.send().timeout(const Duration(seconds: 180));
             final respStr = await streamedResp.stream.bytesToString();
             debugPrint("COACH ANALYZE STATUS => ${streamedResp.statusCode}");
             debugPrint("COACH ANALYZE RAW => $respStr");
@@ -8354,42 +8673,6 @@ class _UploadScreenState extends State<UploadScreen>
             debugPrint("COACH ANALYZE ATTEMPT $attempt ERROR => $e");
             if (attempt == 0) await Future.delayed(const Duration(milliseconds: 650));
           }
-        }
-      }
-
-      // ⚡ 2. Secondary fallback: /coach/chat text endpoint if upload was skipped/failed
-      if (replyText == null || replyText.isEmpty) {
-        final chatUri = Uri.parse("https://cricknova-backend.onrender.com/coach/chat");
-        try {
-          final chatResp = await http.post(
-            chatUri,
-            headers: {
-              "Accept": "application/json",
-              "Authorization": "Bearer $token",
-              "Content-Type": "application/json",
-              "X-USER-ID": user.uid,
-            },
-            body: jsonEncode({
-              "user_id": user.uid,
-              "message": _buildMistakeCoachContextForPrompt(
-                nowUtc: DateTime.now().toUtc(),
-              ),
-            }),
-          ).timeout(const Duration(seconds: 40));
-
-          if (chatResp.statusCode == 200) {
-            final data = jsonDecode(chatResp.body);
-            if (data is Map) {
-              final feedback = data["reply"] ?? data["coach_feedback"] ?? data["message"];
-              if (feedback != null && feedback.toString().trim().isNotEmpty) {
-                replyText = feedback.toString().trim();
-              }
-            } else if (data is String && data.trim().isNotEmpty) {
-              replyText = data.trim();
-            }
-          }
-        } catch (e) {
-          debugPrint("COACH CHAT FALLBACK ERROR => $e");
         }
       }
 
@@ -9034,8 +9317,8 @@ Do not add intro or conclusion.
                             ),
                             child: Text(
                               _isBowlingMode
-                                  ? "CrickNova noticed a few bowling mistakes in this clip. Tap Coach to fix them."
-                                  : "CrickNova noticed a few batting mistakes in this clip. Tap Coach to fix them.",
+                                  ? "CrickX noticed a few bowling mistakes in this clip. Tap Coach to fix them."
+                                  : "CrickX noticed a few batting mistakes in this clip. Tap Coach to fix them.",
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 color: Colors.white.withOpacity(0.86),
@@ -9277,7 +9560,7 @@ Do not add intro or conclusion.
                                     setState(() {
                                       showCoach = true;
                                       coachReply =
-                                          "Analyzing your $_analysisDiscipline with AI vision... 🏏";
+                                          "Analyzing your $_analysisDiscipline with AI vision...";
                                     });
 
                                     await runCoach();
@@ -9527,9 +9810,9 @@ Do not add intro or conclusion.
                                       children: [
                                         CircleAvatar(
                                           radius: 16,
-                                          backgroundColor: CrickXColors.graphiteBg,
-                                          child: Icon(
-                                            Icons.auto_awesome,
+                                          backgroundColor: CrickXColors.graphiteElevated,
+                                          child: const Icon(
+                                            Icons.sports_cricket_rounded,
                                             color: CrickXColors.limeSpark,
                                             size: 18,
                                           ),
@@ -9541,7 +9824,7 @@ Do not add intro or conclusion.
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                "CrickNova Coach",
+                                                "CrickX Coach",
                                                 style: GoogleFonts.poppins(
                                                   color: Colors.white,
                                                   fontSize: 16,
@@ -9551,8 +9834,8 @@ Do not add intro or conclusion.
                                               const SizedBox(height: 2),
                                               Text(
                                                 _isBowlingMode
-                                                    ? "Cricknova Mistake Detection Report"
-                                                    : "Cricknova Mistake Detection Report",
+                                                    ? "CrickX Mistake Detection Report"
+                                                    : "CrickX Mistake Detection Report",
                                                 style: GoogleFonts.poppins(
                                                   color: const Color(0xFFA1A1AA),
                                                   fontSize: 12,
@@ -9589,6 +9872,7 @@ Do not add intro or conclusion.
                                       parsed: _parseCoachReply(
                                         coachReply ?? "",
                                       ),
+                                      isBowling: _isBowlingMode,
                                     ),
                                   ),
                                   const SizedBox(height: 18),

@@ -242,10 +242,11 @@ class _AICoachScreenState extends State<AICoachScreen> {
               "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
               "messages": messages,
               "temperature": 0.6,
-              "max_tokens": 8192,
+              "max_tokens": 1600,
+              "chat_template_kwargs": {"enable_thinking": false},
             }),
           )
-          .timeout(const Duration(seconds: 45));
+          .timeout(const Duration(seconds: 40));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -561,7 +562,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                "CricX",
+                "CrickX",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 14,
@@ -702,7 +703,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                     border: Border.all(color: CrickXColors.graphiteBorder),
                   ),
                   child: const Icon(
-                    Icons.auto_awesome_rounded,
+                    Icons.sports_cricket_rounded,
                     color: CrickXColors.limeSpark,
                     size: 20,
                   ),
@@ -907,7 +908,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                 ),
               ),
               title: Text(
-                "CricX Coach",
+                "CrickX Coach",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 17,
@@ -944,7 +945,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                     ],
                                   ),
                                   child: Text(
-                                    "CricX Coach: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
+                                    "CrickX Coach: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
                                     maxLines: 2,
                                     overflow: TextOverflow.fade,
                                     style: GoogleFonts.poppins(
@@ -966,10 +967,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                 ),
                                 child: PremiumBlurLock(
                                   locked: true,
-                                  ctaText: "TALK TO CRICX COACH",
-                                  title: "CricX Coach Locked",
+                                  ctaText: "TALK TO CRICKX COACH",
+                                  title: "CrickX Coach Locked",
                                   subtitle:
-                                      "See full CricX coaching, personalised mistakes and drills with Premium.",
+                                      "See full CrickX coaching, personalised mistakes and drills with Premium.",
                                   onUnlock: unlock,
                                   child: ListView(
                                     controller: _scrollController,
@@ -1046,7 +1047,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                                   ),
                                                 ),
                                                 child: const Icon(
-                                                  Icons.smart_toy_rounded,
+                                                  Icons.sports_cricket_rounded,
                                                   color: CrickXColors.limeSpark,
                                                   size: 26,
                                                 ),
@@ -1059,7 +1060,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                                     Row(
                                                       children: [
                                                         Text(
-                                                          "CRICKNOVA AI",
+                                                          "CRICKX COACH",
                                                           style: GoogleFonts.poppins(
                                                             color: const Color(0xFFE2E8F0),
                                                             fontSize: 11.5,

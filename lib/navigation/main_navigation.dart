@@ -210,7 +210,7 @@ class _CrickNovaEdgeIntroScreenState extends State<_CrickNovaEdgeIntroScreen>
                         ),
                         const SizedBox(height: 11),
                         Text(
-                          'Train while CrickNova watches. Get live coaching feedback without stopping your net session.',
+                          'Train while CrickX watches. Get live coaching feedback without stopping your net session.',
                           textAlign: TextAlign.center,
                           style: OnboardingTextStyles.uiSans(
                             color: OnboardingColors.textSecondary,
@@ -986,8 +986,8 @@ class _MainNavigationState extends State<MainNavigation>
       ),
       _NavTabData(
         label: 'Coach',
-        icon: Icons.smart_toy_outlined,
-        activeIcon: Icons.smart_toy_rounded,
+        icon: Icons.sports_cricket_outlined,
+        activeIcon: Icons.sports_cricket_rounded,
         index: _coachTabIndex,
       ),
       _NavTabData(

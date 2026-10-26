@@ -487,7 +487,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: const Text(
-            "You've used all your Cricknova Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
+            "You've used all your CrickX Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
             style: TextStyle(color: Colors.white70, height: 1.5),
           ),
           actions: [
@@ -586,18 +586,17 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       request.fields["discipline"] = _analysisDiscipline;
       request.fields["prompt"] =
           """
-You are CrickNova $_analysisDiscipline coach.
-
-Compare these two $_analysisDiscipline clips honestly in natural coaching language.
+You are a cricket technique comparison coach. Compare the $_analysisDiscipline technique across both clips; do not assume the people shown are the same person.
 $_disciplineGuard
-Do not force Video 2 to look better than Video 1.
-Keep it clip-specific and direct (no fixed headings/template).
-Tell:
-- what improved
-- what is still weak
-- what to do next
-- exactly 2 practical drills
-Do not mention speed, swing, or spin.
+Ignore clothing, clothing color, player appearance, grass, nets, venue and background. Do not give a scene description.
+If either clip does not visibly show $_analysisDiscipline action, say technique cannot be compared and do not invent mistakes.
+Return exactly these two sections for the two result boxes:
+[VIDEO 1: Technique and mistakes in Clip 1]
+Use labelled lines: "What needs work: ..." for a visible technique mistake, "What worked: ..." only for an evidenced strength, and "Key note: ..." for relevant technique evidence. Never list clothing, background, grass, or nets. If no clear mistake is visible, say so.
+[VIDEO 2: Technique differences and improvement]
+Use labelled lines: "Difference: ..." for a direct Clip 1 → Clip 2 technique contrast, "What worked: ..." for a visible improvement, and "What needs work: ..." for a mistake that remains or worsens plus its correction. Compare the same technique points and cite evidence from both clips. Do not assume Clip 2 is better.
+Base every statement only on visible technique evidence. Never infer unseen movement.
+Do not discuss ball speed, ball swing or spin.
 Do not give rating/score.
 """;
       return request;
@@ -610,7 +609,7 @@ Do not give rating/score.
       for (int attempt = 0; attempt < 2; attempt++) {
         try {
           final req = await _buildRequest();
-          response = await req.send().timeout(const Duration(seconds: 150));
+          response = await req.send().timeout(const Duration(seconds: 180));
           body = await response.stream.bytesToString();
           break;
         } catch (e) {
@@ -767,7 +766,7 @@ Do not give rating/score.
           style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          "You've reached your monthly Cricknova Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
+          "You've reached your monthly CrickX Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
           style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.5),
         ),
         actions: [
@@ -920,7 +919,7 @@ Do not give rating/score.
       appBar: AppBar(
         backgroundColor: CrickXColors.graphiteBg,
         title: Text(
-          _isBowlingMode ? 'Bowling Analyse' : 'Cricknova Analyse Yourself',
+          _isBowlingMode ? 'Bowling Analyse' : 'CrickX Analyse Yourself',
         ),
         foregroundColor: Colors.white,
       ),
@@ -1353,7 +1352,7 @@ class _CompareResultView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(
-            Icons.smart_toy_outlined,
+            Icons.sports_cricket_rounded,
             color: CrickXColors.limeSpark,
             size: 22,
           ),
@@ -1379,7 +1378,7 @@ class _CompareResultView extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(
-              Icons.smart_toy_outlined,
+              Icons.sports_cricket_rounded,
               color: CrickXColors.limeSpark,
               size: 22,
             ),
