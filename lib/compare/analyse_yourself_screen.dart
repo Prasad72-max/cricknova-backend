@@ -487,7 +487,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: const Text(
-            "You've used all your CrickX Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
+            "You've used all your CrickX Cricknova Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
             style: TextStyle(color: Colors.white70, height: 1.5),
           ),
           actions: [
@@ -686,7 +686,7 @@ Do not give rating/score.
                   style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 content: Text(
-                  "Your CrickX Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
+                  "Your CrickX Cricknova Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
                   style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4),
                 ),
                 actions: [
@@ -770,7 +770,7 @@ Do not give rating/score.
           style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          "You've reached your monthly CrickX Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
+          "You've reached your monthly CrickX Cricknova Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
           style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.5),
         ),
         actions: [
@@ -923,7 +923,7 @@ Do not give rating/score.
       appBar: AppBar(
         backgroundColor: CrickXColors.graphiteBg,
         title: Text(
-          _isBowlingMode ? 'Bowling Analyse' : 'CrickX Analyse Yourself',
+          _isBowlingMode ? 'Bowling Compare' : 'CrickX Analyse Yourself',
         ),
         foregroundColor: Colors.white,
       ),

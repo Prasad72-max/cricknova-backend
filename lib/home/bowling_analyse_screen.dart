@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../compare/analyse_yourself_screen.dart';
+import '../premium/premium_screen.dart';
 import '../services/premium_service.dart';
 import '../services/analysis_credit_service.dart';
 import '../theme/crickx_colors.dart';
@@ -8,6 +10,14 @@ import '../upload/upload_screen.dart';
 
 class BowlingAnalyseScreen extends StatelessWidget {
   const BowlingAnalyseScreen({super.key});
+
+  void _goPremium(BuildContext context, String entrySource) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PremiumScreen(entrySource: entrySource),
+      ),
+    );
+  }
 
   Future<void> _showWatchAdDialog(
     BuildContext context, {
@@ -29,67 +39,150 @@ class BowlingAnalyseScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final mistakeUnlocked =
         PremiumService.isLoaded && PremiumService.isPremiumActive;
+    final compareUnlocked = PremiumService.hasCompareAccess;
 
-    return Scaffold(
-      backgroundColor: CrickXColors.graphiteBg,
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
         backgroundColor: CrickXColors.graphiteBg,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: Text(
-          'Bowling Analysis',
-          style: GoogleFonts.poppins(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+        appBar: AppBar(
+          backgroundColor: CrickXColors.graphiteBg,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          title: Text(
+            'Bowling Analysis',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
-      ),
-      body: Container(
-        color: CrickXColors.graphiteBg,
-        child: SafeArea(
-          top: false,
-          child: ValueListenableBuilder<int>(
-            valueListenable: AnalysisCreditService.instance.creditsNotifier,
-            builder: (context, credits, _) {
-              final hasDetectAccess = mistakeUnlocked || credits > 0;
+        body: Container(
+          color: CrickXColors.graphiteBg,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    height: 48,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: CrickXColors.graphite,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: CrickXColors.graphiteBorder),
+                    ),
+                    child: TabBar(
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      labelColor: CrickXColors.onLime,
+                      unselectedLabelColor: Colors.white60,
+                      labelStyle: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      unselectedLabelStyle: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      indicator: BoxDecoration(
+                        color: CrickXColors.limeSpark,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      tabs: const [
+                        Tab(text: 'Analysis'),
+                        Tab(text: 'Bowling Compare'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      // TAB 1: Bowling Analysis (Mistake Detection / Speed & Swing)
+                      ValueListenableBuilder<int>(
+                        valueListenable:
+                            AnalysisCreditService.instance.creditsNotifier,
+                        builder: (context, credits, _) {
+                          final hasDetectAccess =
+                              mistakeUnlocked || credits > 0;
 
-              return Center(
-                child: _MinimalBowlingAction(
-                  icon: Icons.track_changes_rounded,
-                  title: 'Bowling Analysis',
-                  subtitle:
-                      'Upload a bowling clip to check speed, swing, spin and get AI coach analysis.',
-                  buttonText: hasDetectAccess
-                      ? (credits > 0 && !mistakeUnlocked
-                          ? 'Start AI Analysis ($credits Left)'
-                          : 'Start AI Analysis')
-                      : 'Watch Ad to Unlock 4 Bowling Analyses',
-                  locked: false,
-                  onTap: () {
-                    if (hasDetectAccess) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const UploadScreen(bowlingMode: true),
-                        ),
-                      );
-                    } else {
-                      _showWatchAdDialog(
-                        context,
-                        onUnlocked: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const UploadScreen(bowlingMode: true),
+                          return Center(
+                            child: _MinimalBowlingAction(
+                              icon: Icons.track_changes_rounded,
+                              title: 'Bowling Analysis',
+                              subtitle:
+                                  'Upload a bowling clip to check speed, swing, spin and get AI coach analysis.',
+                              buttonText: hasDetectAccess
+                                  ? (credits > 0 && !mistakeUnlocked
+                                      ? 'Start AI Analysis ($credits Left)'
+                                      : 'Start AI Analysis')
+                                  : 'Watch Ad to Unlock 4 Bowling Analyses',
+                              locked: false,
+                              onTap: () {
+                                if (hasDetectAccess) {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const UploadScreen(
+                                        bowlingMode: true,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  _showWatchAdDialog(
+                                    context,
+                                    onUnlocked: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => const UploadScreen(
+                                            bowlingMode: true,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                }
+                              },
                             ),
                           );
                         },
-                      );
-                    }
-                  },
+                      ),
+
+                      // TAB 2: Bowling Compare (Two Video Comparison)
+                      Center(
+                        child: _MinimalBowlingAction(
+                          icon: Icons.compare_arrows_rounded,
+                          title: 'Bowling Compare',
+                          subtitle:
+                              'Choose two bowling clips to compare run-up, gather, release point, wrist seam, and follow-through.',
+                          buttonText: compareUnlocked
+                              ? 'Compare Bowling Clips'
+                              : 'Unlock Bowling Compare',
+                          locked: !compareUnlocked,
+                          onTap: () {
+                            if (!compareUnlocked) {
+                              _goPremium(context, 'bowling_compare');
+                              return;
+                            }
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const AnalyseYourselfScreen(
+                                  bowlingMode: true,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              );
-            },
+              ],
+            ),
           ),
         ),
       ),

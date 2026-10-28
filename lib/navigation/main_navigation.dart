@@ -17,7 +17,6 @@ import '../insights/insights_screen.dart';
 import '../premium/premium_screen.dart';
 import '../live/live_nets_tab.dart';
 import '../onboarding/onboarding_ui_tokens.dart';
-import '../reels/screens/reels_screen.dart';
 import '../theme/crickx_colors.dart';
 
 abstract class MainNavigationController {
@@ -505,10 +504,9 @@ class _MainNavigationState extends State<MainNavigation>
     return cache;
   }
 
-  int get _reelsTabIndex => 1;
-  int get _analyticsTabIndex => 2;
-  int get _coachTabIndex => 3;
-  int get _profileTabIndex => 4;
+  int get _analyticsTabIndex => 1;
+  int get _coachTabIndex => 2;
+  int get _profileTabIndex => 3;
 
   /// Premium tab removed from bottom nav; accessed via Profile "Go Elite".
   bool get _showPremiumTab => false;
@@ -536,12 +534,6 @@ class _MainNavigationState extends State<MainNavigation>
     _lastKnownTabCount = nextTabCount;
     final maxIndex = nextTabCount - 1;
     setState(() {
-      if (previousTabCount == 4 &&
-          nextTabCount == 5 &&
-          _index == 3 &&
-          widget.initialIndex >= 4) {
-        _index = 4;
-      }
       if (_index > maxIndex) {
         _index = maxIndex;
       }
@@ -911,24 +903,13 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   int _tabCount() {
-    // 5 standard tabs: Home | Reels | Analytics | Coach | Profile
-    return 5;
+    // 4 standard tabs: Home | Analytics | Coach | Profile
+    return 4;
   }
 
   Widget _buildScreenAt(int index) {
     if (index == 0) {
       return HomeScreen(key: const ValueKey('home'), userName: userName);
-    }
-    if (index == _reelsTabIndex) {
-      return ValueListenableBuilder<int>(
-        valueListenable: MainNavigation.activeTabNotifier,
-        builder: (context, activeTab, _) {
-          return ReelsScreen(
-            key: const ValueKey('reels_feed'),
-            isTabActive: activeTab == _reelsTabIndex,
-          );
-        },
-      );
     }
     if (index == _analyticsTabIndex) {
       return const InsightsScreen(key: ValueKey('insights'));
@@ -941,25 +922,13 @@ class _MainNavigationState extends State<MainNavigation>
 
   String _screenNameForIndex(int index) {
     if (index == 0) return 'Home';
-    if (index == _reelsTabIndex) return 'Reels';
     if (index == _analyticsTabIndex) return 'Analytics';
-    if (index == _coachTabIndex) return 'AI Coach';
+    if (index == _coachTabIndex) return 'CrickX Chat Coach';
     if (index == _profileTabIndex) return 'Profile';
     return 'Tab $index';
   }
 
   Widget _buildTabScreen(int index) {
-    if (index == _reelsTabIndex) {
-      return ValueListenableBuilder<int>(
-        valueListenable: MainNavigation.activeTabNotifier,
-        builder: (context, activeTab, _) {
-          return ReelsScreen(
-            key: const ValueKey('reels_feed'),
-            isTabActive: activeTab == _reelsTabIndex,
-          );
-        },
-      );
-    }
     return _screenCache[index] ?? const _DeferredTabLoader();
   }
 
@@ -973,16 +942,10 @@ class _MainNavigationState extends State<MainNavigation>
         index: 0,
       ),
       const _NavTabData(
-        label: 'Reels',
-        icon: Icons.play_circle_outline_rounded,
-        activeIcon: Icons.play_circle_rounded,
-        index: 1,
-      ),
-      const _NavTabData(
         label: 'Analytics',
         icon: Icons.insights_outlined,
         activeIcon: Icons.insights_rounded,
-        index: 2,
+        index: 1,
       ),
       _NavTabData(
         label: 'Coach',
