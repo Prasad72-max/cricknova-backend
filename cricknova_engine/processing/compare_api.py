@@ -2,7 +2,10 @@ from fastapi import APIRouter, UploadFile, File
 import tempfile
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+try:
+    from nvidia_client import generate_nvidia_text, NVIDIA_MODEL
+except ImportError:
+    from cricknova_ai_backend.nvidia_client import generate_nvidia_text, NVIDIA_MODEL
 
 from processing.ball_tracker_motion import track_ball_positions
 from cricknova_engine.processing.routes.spacefoco_backend import detect_swing_x, calculate_spin_real
@@ -69,23 +72,13 @@ Focus on balance, head position, bat swing, timing, and decision making.
 Keep it concise and professional.
 """
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a professional cricket batting coach."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            max_tokens=220,
-            temperature=0.6
+        diff_text = generate_nvidia_text(
+            system_instruction="You are a professional cricket batting coach.",
+            user_prompt=prompt,
+            model=NVIDIA_MODEL,
+            max_output_tokens=4096,
+            temperature=0.6,
         )
-
-        diff_text = response.choices[0].message.content.strip()
 
         return {
             "status": "success",

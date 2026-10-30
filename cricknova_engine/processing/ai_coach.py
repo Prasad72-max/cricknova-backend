@@ -341,7 +341,7 @@ Situation / Question:
         reply_content = generate_nvidia_text(
             system_instruction="You are an elite professional cricket coach.",
             user_prompt=prompt,
-            max_output_tokens=220,
+            max_output_tokens=4096,
             temperature=0.4,
         )
 

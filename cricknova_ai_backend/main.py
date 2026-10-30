@@ -983,14 +983,15 @@ Look at the player in the video frames and provide an honest technical analysis 
 Return ONLY valid JSON.
 """
 
-        from nvidia_client import extract_video_keyframes
+        from nvidia_client import extract_video_keyframes, NVIDIA_MODEL
         frames = extract_video_keyframes(video_path, max_frames=4)
 
         feedback = generate_nvidia_vision(
             prompt=coaching_prompt,
             frames=frames,
             system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-            max_output_tokens=1200,
+            model=NVIDIA_MODEL,
+            max_output_tokens=4096,
             temperature=0.35,
         )
         if not feedback.strip():
@@ -1068,13 +1069,15 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             or "[drill]" in msg_lower
         )
 
+        from nvidia_client import call_nvidia_chat, generate_nvidia_text, NVIDIA_MODEL
         if looks_like_raw_prompt:
             is_bowling_prompt = "bowling" in msg_lower and "batting-only" not in msg_lower
             discipline_label = "bowling" if is_bowling_prompt else "batting"
-            reply_text = generate_text(
+            reply_text = generate_nvidia_text(
                 system_instruction=f"You are a universal cricket coach specializing in {discipline_label} analysis. Analyze the clip context and return the requested json format.",
                 user_prompt=message,
-                max_output_tokens=1600,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
                 temperature=0.45,
             )
             return {"status": "success", "reply": reply_text}
@@ -1096,10 +1099,10 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
         messages_payload.append({"role": "user", "content": message})
 
-        from nvidia_client import call_nvidia_chat
         reply_text = call_nvidia_chat(
             messages_payload,
-            max_tokens=1600,
+            model=NVIDIA_MODEL,
+            max_tokens=4096,
             temperature=0.6,
         )
 
@@ -1221,7 +1224,8 @@ What needs work: technical flaw that still needs correction and practical drill 
             left_video_bytes=left_video_bytes,
             right_video_bytes=right_video_bytes,
             system_instruction="You are a master cricket coach. Analyze both videos and give honest, encouraging technique comparison.",
-            max_output_tokens=1800,
+            model=NVIDIA_MODEL,
+            max_output_tokens=4096,
             temperature=0.25,
         )
         if not diff_text.strip():

@@ -3,7 +3,10 @@ from pydantic import BaseModel
 from datetime import datetime
 import os
 from google.cloud import firestore
-from gemini_text import generate_text
+try:
+    from nvidia_client import generate_nvidia_text, NVIDIA_MODEL
+except ImportError:
+    from cricknova_ai_backend.nvidia_client import generate_nvidia_text, NVIDIA_MODEL
 
 router = APIRouter()
 
@@ -225,11 +228,12 @@ Situation / Question:
 {req.message}
 """
 
-        reply = generate_text(
+        reply = generate_nvidia_text(
             system_instruction="You are an elite professional cricket coach.",
             user_prompt=prompt,
+            model=NVIDIA_MODEL,
             temperature=0.72,
-            max_output_tokens=220,
+            max_output_tokens=4096,
         )
 
         return {

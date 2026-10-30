@@ -7,10 +7,51 @@ import socket
 import ssl
 import threading
 from typing import Any
+# ⚡ Load environment variables (with fallback manual parser if dotenv not installed)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    _backend_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(_backend_env):
+        load_dotenv(_backend_env)
+    _cricknova_backend_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cricknova_ai_backend", ".env")
+    if os.path.exists(_cricknova_backend_env):
+        load_dotenv(_cricknova_backend_env)
+except ImportError:
+    pass
 
-NVIDIA_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
-NVIDIA_HOST = "integrate.api.nvidia.com"
-NVIDIA_PATH = "/v1/chat/completions"
+def _load_env_file_fallback(path: str):
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception:
+        pass
+
+_load_env_file_fallback(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+_load_env_file_fallback(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cricknova_ai_backend", ".env"))
+
+# ⚡ Dynamically import NVIDIA AI Model from environment variables
+NVIDIA_MODEL = (
+    os.getenv("NVIDIA_MODEL")
+    or os.getenv("NVIDIA_AI_MODEL")
+    or os.getenv("NV_MODEL")
+    or os.getenv("MISTAKE_MODEL")
+    or os.getenv("MISTAKE_DETECTION_MODEL")
+    or os.getenv("AI_MODEL")
+    or "nvidia/nemotron-3.5-super-vl-120b-a12b"
+)
+NVIDIA_HOST = os.getenv("NVIDIA_HOST", "integrate.api.nvidia.com")
+NVIDIA_PATH = os.getenv("NVIDIA_PATH", "/v1/chat/completions")
 
 # ⚡ High-speed connection reuse (Keep-Alive pool)
 _conn_lock = threading.Lock()
@@ -77,18 +118,19 @@ def is_nvidia_available() -> bool:
 def call_nvidia_chat(
     messages: list[dict[str, Any]],
     *,
-    model: str = NVIDIA_MODEL,
-    max_tokens: int = 8192,
+    model: str | None = None,
+    max_tokens: int = 4096,
     temperature: float = 0.55,
     timeout: int = 50,
 ) -> str:
-    """⚡ NVIDIA Nemotron API caller with 8K+ token capacity & Keep-Alive connection pooling."""
+    """⚡ NVIDIA AI API caller with 4,096 token limit & fast Keep-Alive connection pooling."""
     keys = get_nvidia_api_keys()
     if not keys:
         raise RuntimeError("NVIDIA_API_KEY is not set in environment variables")
 
+    target_model = (model or NVIDIA_MODEL).strip()
     payload = {
-        "model": model,
+        "model": target_model,
         "messages": messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
@@ -143,7 +185,8 @@ def generate_nvidia_text(
     *,
     system_instruction: str = "You are CrickNova Coach.",
     user_prompt: str,
-    max_output_tokens: int = 8192,
+    model: str | None = None,
+    max_output_tokens: int = 4096,
     temperature: float = 0.55,
 ) -> str:
     """⚡ Complete & accurate text generation using NVIDIA Nemotron 3.5 Super VL."""
@@ -153,6 +196,7 @@ def generate_nvidia_text(
     ]
     return call_nvidia_chat(
         messages,
+        model=model or NVIDIA_MODEL,
         max_tokens=max_output_tokens,
         temperature=temperature,
     )
@@ -238,7 +282,8 @@ def generate_nvidia_vision(
     video_bytes: bytes | None = None,
     video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
-    max_output_tokens: int = 8192,
+    model: str | None = None,
+    max_output_tokens: int = 4096,
     temperature: float = 0.35,
 ) -> str:
     """⚡ Rapid multimodal analysis using NVIDIA Nemotron 3.5 Super VL."""
@@ -278,6 +323,7 @@ def generate_nvidia_vision(
     try:
         return call_nvidia_chat(
             messages,
+            model=model or NVIDIA_MODEL,
             max_tokens=max_output_tokens,
             temperature=temperature,
             timeout=50,
@@ -287,6 +333,7 @@ def generate_nvidia_vision(
         return generate_nvidia_text(
             system_instruction=system_instruction,
             user_prompt=prompt,
+            model=model or NVIDIA_MODEL,
             max_output_tokens=max_output_tokens,
             temperature=temperature,
         )
@@ -302,7 +349,8 @@ def generate_nvidia_comparison_vision(
     left_video_mime_type: str = "video/mp4",
     right_video_mime_type: str = "video/mp4",
     system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
-    max_output_tokens: int = 8192,
+    model: str | None = None,
+    max_output_tokens: int = 4096,
     temperature: float = 0.35,
 ) -> str:
     """⚡ Two-video comparison using NVIDIA Nemotron 3.5 Super VL multimodal vision."""
@@ -364,6 +412,7 @@ def generate_nvidia_comparison_vision(
     try:
         return call_nvidia_chat(
             messages,
+            model=model or NVIDIA_MODEL,
             max_tokens=max_output_tokens,
             temperature=temperature,
             timeout=50,
@@ -373,6 +422,7 @@ def generate_nvidia_comparison_vision(
         return generate_nvidia_text(
             system_instruction=system_instruction,
             user_prompt=prompt,
+            model=model or NVIDIA_MODEL,
             max_output_tokens=max_output_tokens,
             temperature=temperature,
         )

@@ -1906,7 +1906,7 @@ async def ai_coach_analyze(
     discipline: str | None = Form(None),
     prompt: str | None = Form(None),
 ):
-    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text, extract_video_keyframes, generate_nvidia_vision, generate_nvidia_text
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_vision, generate_nvidia_text, NVIDIA_MODEL
     if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
@@ -1962,14 +1962,16 @@ Return ONLY valid JSON.
                 prompt=coaching_prompt,
                 frames=frames,
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                max_output_tokens=8192,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
                 temperature=0.35,
             )
         else:
             feedback = generate_nvidia_text(
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
                 user_prompt=coaching_prompt,
-                max_output_tokens=8192,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
                 temperature=0.35,
             )
 
@@ -2048,13 +2050,15 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             or "[how to fix]" in msg_lower
             or "[drill]" in msg_lower
         )
+        from nvidia_client import call_nvidia_chat, generate_nvidia_text, NVIDIA_MODEL
         if looks_like_raw_prompt:
             is_bowling_prompt = "bowling" in msg_lower and "batting-only" not in msg_lower
             discipline_label = "bowling" if is_bowling_prompt else "batting"
-            reply_text = generate_text(
+            reply_text = generate_nvidia_text(
                 system_instruction=f"You are a universal cricket coach specializing in {discipline_label} analysis. Analyze the clip context and return the requested json format.",
                 user_prompt=message,
-                max_output_tokens=8192,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
                 temperature=0.45,
             )
             return {"status": "success", "reply": reply_text}
@@ -2076,10 +2080,10 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
         messages_payload.append({"role": "user", "content": message})
 
-        from nvidia_client import call_nvidia_chat
         reply_text = call_nvidia_chat(
             messages_payload,
-            max_tokens=8192,
+            model=NVIDIA_MODEL,
+            max_tokens=4096,
             temperature=0.6,
         )
 
@@ -2203,10 +2207,12 @@ What needs work: technical flaw that still needs correction and practical drill 
         if left_frames and right_frames:
             diff_text = generate_nvidia_comparison_vision(
                 prompt=base_prompt,
+                discipline=discipline_text,
                 left_frames=left_frames,
                 right_frames=right_frames,
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
-                max_output_tokens=8192,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
                 temperature=0.35,
             )
         else:
@@ -2221,7 +2227,8 @@ What needs work: technical flaw that still needs correction and practical drill 
             diff_text = generate_nvidia_text(
                 system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
                 user_prompt=final_prompt,
-                max_output_tokens=8192,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
                 temperature=0.35,
             )
 
@@ -2464,7 +2471,10 @@ async def drs_review(file: UploadFile = File(...)):
                 "ball_tracking": hits_stumps,
                 "stump_confidence": stump_confidence,
                 "decision": decision,
-                "reason": reason
+                "reason": reason,
+                "ai_model": NVIDIA_MODEL,
+                "model_name": "NVIDIA Nemotron 3.5 Super VL",
+                "max_tokens": 4096
             }
         }
 
