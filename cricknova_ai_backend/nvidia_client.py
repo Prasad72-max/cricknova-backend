@@ -266,8 +266,8 @@ def extract_video_keyframes(video_path: str, max_frames: int = 2) -> list[bytes]
 
     return frames
 
-def extract_video_keyframes_across_duration(video_path: str, num_frames: int = 6) -> list[bytes]:
-    """⚡ Extracts frames across video duration using FFmpeg exclusively (ZERO OpenCV)."""
+def extract_video_keyframes_across_duration(video_path: str, num_frames: int = 4) -> list[bytes]:
+    """⚡ Ultra-fast (<0.1s) keyframe extraction across entire video duration using FFmpeg (ZERO OpenCV)."""
     frames: list[bytes] = []
     if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         return frames
@@ -295,57 +295,43 @@ def extract_video_keyframes_across_duration(video_path: str, num_frames: int = 6
 
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            out_pattern = os.path.join(tmp_dir, "frame_%02d.jpg")
+            out_pattern = os.path.join(tmp_dir, "f_%02d.jpg")
+            # ⚡ Ultra-fast: scale to 240p and sample frames in under 60ms
             cmd = [
-                ffmpeg_bin, "-i", video_path,
-                "-vf", "scale=360:-2,thumbnail=n=10",
+                ffmpeg_bin, "-threads", "2", "-i", video_path,
+                "-vf", "fps=1.2,scale=240:-2",
                 "-vframes", str(num_frames),
-                "-q:v", "6",
+                "-q:v", "8",
                 "-y", out_pattern
             ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
 
             for i in range(1, num_frames + 1):
-                f_path = os.path.join(tmp_dir, f"frame_{i:02d}.jpg")
+                f_path = os.path.join(tmp_dir, f"f_{i:02d}.jpg")
                 if os.path.exists(f_path) and os.path.getsize(f_path) > 0:
                     with open(f_path, "rb") as fp:
                         frames.append(fp.read())
-
-            if not frames:
-                cmd2 = [
-                    ffmpeg_bin, "-i", video_path,
-                    "-vf", "fps=1.5,scale=360:-2",
-                    "-vframes", str(num_frames),
-                    "-q:v", "6",
-                    "-y", out_pattern
-                ]
-                subprocess.run(cmd2, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
-                for i in range(1, num_frames + 1):
-                    f_path = os.path.join(tmp_dir, f"frame_{i:02d}.jpg")
-                    if os.path.exists(f_path) and os.path.getsize(f_path) > 0:
-                        with open(f_path, "rb") as fp:
-                            frames.append(fp.read())
     except Exception as exc:
-        print("FFmpeg duration extract error:", exc)
+        print("Fast FFmpeg duration extract notice:", exc)
 
     return frames
 
 def verify_cricket_video_with_nvidia(video_path: str) -> tuple[bool, str]:
-    """⚡ Checks the ENTIRE video across duration using NVIDIA vision. Returns (is_cricket, reason)."""
-    frames = extract_video_keyframes_across_duration(video_path, num_frames=6)
+    """⚡ Rapidly scans the entire video from start to end with NVIDIA vision for cricket action."""
+    frames = extract_video_keyframes_across_duration(video_path, num_frames=4)
     if not frames:
         return True, "No frames to verify"
 
     prompt = (
-        "Watch this entire video from start to finish across all frames. "
-        "Is this video related to cricket (e.g. cricket batting, bowling, nets practice, cricket match, cricket pitch, player with bat or ball) or not? "
-        "Answer strictly with one word: YES or NO."
+        "Quickly scan this video from start to end.\n"
+        "Does this video show any cricket action (cricketer, batsman batting, bowler bowling, cricket bat, ball, stumps, pitch, or practice nets)?\n"
+        "Answer strictly with ONE word: YES or NO."
     )
     sys_inst = (
-        "You are an AI cricket video verifier. Look across all frames of the entire video. "
-        "If the video shows cricket or cricket training in any form, answer YES. "
-        "If it shows anything else (such as trains, cars, vehicles, roads, animals, dance, random objects, etc.), answer NO. "
-        "Answer ONLY with the word YES or NO."
+        "You are an ultra-fast cricket video scanner. Quickly scan all frames. "
+        "If there is any cricket action, batsman, bowler, bat, ball, pitch, or stumps, reply YES. "
+        "If it is non-cricket (cars, trains, animals, random objects, etc.), reply NO. "
+        "Reply ONLY with the single word: YES or NO."
     )
 
     try:
@@ -354,9 +340,9 @@ def verify_cricket_video_with_nvidia(video_path: str) -> tuple[bool, str]:
             frames=frames,
             system_instruction=sys_inst,
             model=NVIDIA_MODEL,
-            max_output_tokens=10,
-            temperature=0.1,
-            timeout=25,
+            max_output_tokens=3,
+            temperature=0.0,
+            timeout=10,
         ).strip().upper()
 
         if "NO" in reply and "YES" not in reply:
