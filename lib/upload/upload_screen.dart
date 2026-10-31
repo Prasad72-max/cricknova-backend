@@ -1839,12 +1839,16 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
       _ready = true;
       _showWicketFlash = false;
       _showOutcomePanel = false;
-      _awaitingUmpireCall = true;
-      _stageText = "DECISION PENDING";
+      _awaitingUmpireCall = false;
+      _finalOut = widget.isOut;
+      _decisionCall = widget.decisionCall;
+      _stageText = widget.mode == _DrsReplayMode.lbw
+          ? "ANALYZING BALL"
+          : "SCANNING ULTRAEDGE";
     });
 
-    await _videoController.pause();
-    await _startDecisionHeartbeat();
+    await _videoController.play();
+    unawaited(_startTimedRevealSequence());
   }
 
   @override
@@ -2044,36 +2048,26 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   Future<void> _presentPredictionFeedback(int token) async {
     if (!mounted ||
         token != _sequenceToken ||
-        _mode != _DrsReplayMode.lbw ||
-        !_hasUserCall) {
+        _mode != _DrsReplayMode.lbw) {
       return;
     }
 
-    final matched = _userCallMatchesAi;
     if (_whyPageController.hasClients) {
       _whyPageController.jumpToPage(0);
     }
     setState(() {
-      _userCallMatchedAi = matched;
       _showOutcomePanel = true;
       _whyPageIndex = 0;
     });
     await _triggerCrickNovaCallFlash();
 
-    if (matched) {
+    if (_finalOut) {
       _confettiController.play();
       HapticFeedback.heavyImpact();
       return;
     }
 
     HapticFeedback.mediumImpact();
-    final played = await _playFirstAvailable(_fxPlayer, const [
-      _buzzerAsset,
-      _crowdSighAsset,
-    ], volume: 0.88);
-    if (!played) {
-      await SystemSound.play(SystemSoundType.alert);
-    }
   }
 
   Future<void> _triggerCrickNovaCallFlash() async {
@@ -2093,7 +2087,6 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
 
   Future<void> _startTimedRevealSequence() async {
     final token = ++_sequenceToken;
-    if (_mode == _DrsReplayMode.lbw && !_hasUserCall) return;
     if (!await _waitStage(const Duration(milliseconds: 350), token)) return;
 
     if (mounted) {
@@ -2652,6 +2645,10 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   }
 
   Widget _decisionOverlay() {
+    return const SizedBox.shrink();
+  }
+
+  Widget _oldDecisionOverlayUnused() {
     if (!_awaitingUmpireCall) {
       return const SizedBox.shrink();
     }
@@ -2948,13 +2945,14 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
   }
 
   Widget _lbwOutcomePanel() {
-    if (_mode != _DrsReplayMode.lbw || !_showOutcomePanel || !_hasUserCall) {
+    if (_mode != _DrsReplayMode.lbw || !_showOutcomePanel) {
       return const SizedBox.shrink();
     }
 
-    final accent = _userCallMatchedAi
-        ? CrickXColors.limeSpark
-        : const Color(0xFFFF8A65);
+    final isOut = _finalOut;
+    final accent = isOut
+        ? const Color(0xFFD93D47)
+        : CrickXColors.limeSpark;
     final reasonCards = _lbwReasonCards();
 
     return Column(
@@ -2975,14 +2973,14 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: _userCallMatchedAi
+                      colors: isOut
                           ? [
-                              const Color(0xFF3F2A05).withValues(alpha: 0.96),
-                              const Color(0xFF9A6E11).withValues(alpha: 0.78),
+                              const Color(0xFF3F1010).withValues(alpha: 0.96),
+                              const Color(0xFF7A1F18).withValues(alpha: 0.84),
                             ]
                           : [
-                              const Color(0xFF2B1010).withValues(alpha: 0.96),
-                              const Color(0xFF5A1F18).withValues(alpha: 0.84),
+                              const Color(0xFF10331A).withValues(alpha: 0.96),
+                              const Color(0xFF195E32).withValues(alpha: 0.84),
                             ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -3001,9 +2999,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _userCallMatchedAi
-                            ? "Brilliant! Your Call matches the CrickX Call."
-                            : "Sharp try! But the CrickX Call spotted something different.",
+                        "THIRD UMPIRE VERDICT: ${_finalOut ? 'OUT' : 'NOT OUT'}",
                         style: const TextStyle(
                           color: Colors.white,
                           fontFamily: "Poppins",
@@ -3019,35 +3015,17 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 260),
                           opacity: _flashCrickNovaCall ? 1.0 : 0.85,
-                          child: RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.82),
-                                fontFamily: "Poppins",
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              children: [
-                                TextSpan(text: "Your call: $_userCallLabel | "),
-                                TextSpan(
-                                  text: "CrickX Call",
-                                  style: TextStyle(
-                                    color: const Color(0xFFFFD54F),
-                                    fontWeight: FontWeight.w900,
-                                    shadows: [
-                                      BoxShadow(
-                                        color: const Color(
-                                          0xFFFFD54F,
-                                        ).withValues(alpha: 0.65),
-                                        blurRadius: _flashCrickNovaCall
-                                            ? 12
-                                            : 6,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                TextSpan(text: ": $_aiCallLabel"),
-                              ],
+                          child: Text(
+                            widget.decisionDetail.isNotEmpty
+                                ? widget.decisionDetail
+                                : (_finalOut
+                                    ? "Pitching In Line • Impact In Line • Wickets Hitting"
+                                    : "Delivery projected missing or outside line"),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.88),
+                              fontFamily: "Poppins",
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -3059,9 +3037,8 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
             ),
           ),
         ),
-        if (!_userCallMatchedAi) ...[
-          const SizedBox(height: 12),
-          SizedBox(
+        const SizedBox(height: 12),
+        SizedBox(
             height: 172,
             child: PageView.builder(
               controller: _whyPageController,
@@ -3162,9 +3139,8 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
             }),
           ),
         ],
-      ],
-    );
-  }
+      );
+    }
 
   void _resetOrbitView() {
     return;
@@ -6881,10 +6857,31 @@ class _UploadScreenState extends State<UploadScreen>
       }
     }
 
-    // Fix: Prioritize Frontend Physics over Backend strings for 100% dynamic results
-    _drsPitching = _drsGeometry.pitchingText;
-    _drsImpact = _drsGeometry.impactText;
-    _drsWickets = _drsGeometry.wicketsText;
+    // Model Driven Third Umpire Hawk-Eye Fields (Zero Hardcoding)
+    final modelPitching = drs["pitching"]?.toString().trim();
+    final modelImpact = drs["impact"]?.toString().trim();
+    final modelWickets = drs["wickets"]?.toString().trim();
+    final modelDecision = drs["decision"]?.toString().trim().toUpperCase();
+    final modelReason = drs["reason"]?.toString().trim();
+
+    if (modelPitching != null && modelPitching.isNotEmpty) {
+      _drsPitching = modelPitching;
+    } else {
+      _drsPitching = _drsGeometry.pitchingText;
+    }
+
+    if (modelImpact != null && modelImpact.isNotEmpty) {
+      _drsImpact = modelImpact;
+    } else {
+      _drsImpact = _drsGeometry.impactText;
+    }
+
+    if (modelWickets != null && modelWickets.isNotEmpty) {
+      _drsWickets = modelWickets;
+    } else {
+      _drsWickets = _drsGeometry.wicketsText;
+    }
+
     _drsWicketTarget = _drsGeometry.wicketTarget;
 
     final frontendTrackingConfidence = _drsGeometry.pathPoints.length >= 6
@@ -6895,16 +6892,30 @@ class _UploadScreenState extends State<UploadScreen>
       frontendTrackingConfidence,
     );
 
-    // AI Decision - 100% Physics Based
-    _drsOut = _isLbwOutFromGeometry(
-      _drsGeometry,
-      confidence: effectiveConfidence,
-      backendBallTracking: backendBallTracking,
-      onFieldOut: _userCall == _DrsUmpireCall.out,
-    );
-
-    _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
-    _drsOriginalDecision = decisionText == "OUT" ? "OUT" : "NOT OUT";
+    if (modelDecision != null && modelDecision.isNotEmpty) {
+      _drsOut = modelDecision.contains("OUT") && !modelDecision.contains("NOT OUT");
+      _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
+      _drsOriginalDecision = _drsDecisionCall;
+      _drsDecisionDetail = (modelReason != null && modelReason.isNotEmpty)
+          ? modelReason
+          : (_drsOut ? "BALL HITTING STUMPS" : "BALL MISSING STUMPS");
+      drsResult = "$_drsDecisionCall ($_drsDecisionDetail)";
+      _drsGeometry = _resolvedDrsGeometry(
+        _drsGeometry,
+        wicketsText: _drsWickets,
+        wicketsHitting: _drsOut,
+      );
+    } else {
+      // Local fallback only if backend DRS model was unreachable
+      _drsOut = _isLbwOutFromGeometry(
+        _drsGeometry,
+        confidence: effectiveConfidence,
+        backendBallTracking: backendBallTracking,
+        onFieldOut: _userCall == _DrsUmpireCall.out,
+      );
+      _drsDecisionCall = _drsOut ? "OUT" : "NOT OUT";
+      _drsOriginalDecision = decisionText == "OUT" ? "OUT" : "NOT OUT";
+    }
 
     final trajectoryPoints = _extractTrajectoryPoints(trajectory);
     final visualEdgeRaw = drs["visual_edge"];
@@ -6921,7 +6932,7 @@ class _UploadScreenState extends State<UploadScreen>
     final lbwInsideEdgeDetected =
         _drsHasSpike || (visualEdgeDetected && _drsEdgeConfidence >= 0.85);
 
-    if (_drsReplayMode == _DrsReplayMode.lbw) {
+    if (modelDecision == null && _drsReplayMode == _DrsReplayMode.lbw) {
       _drsOut = _isLbwOutFromGeometry(
         _drsGeometry,
         confidence: effectiveConfidence,
@@ -6972,7 +6983,7 @@ class _UploadScreenState extends State<UploadScreen>
             .toStringAsFixed(0);
         drsResult = "$_drsDecisionCall ($probPct%)";
       }
-    } else {
+    } else if (_drsReplayMode != _DrsReplayMode.lbw && modelDecision == null) {
       final ultraEdgeDecision = _resolveUltraEdgeFromTracking(
         points: trajectoryPoints,
         audioSpike: _drsHasSpike,
@@ -7058,7 +7069,7 @@ class _UploadScreenState extends State<UploadScreen>
     request.files.add(await http.MultipartFile.fromPath("file", video!.path));
 
     try {
-      final response = await request.send().timeout(const Duration(seconds: 3));
+      final response = await request.send().timeout(const Duration(seconds: 35));
       final respStr = await response.stream.bytesToString();
       if (response.statusCode != 200) {
         return null;
@@ -7938,6 +7949,15 @@ class _UploadScreenState extends State<UploadScreen>
         return false;
       }
 
+      if (decoded is Map &&
+          decoded["status"]?.toString().toLowerCase() == "failed") {
+        final reason = decoded["reason"]?.toString() ?? "Ball not detected clearly in the video";
+        await _handleNonCricketUploadWarning(
+          "Delivery tracking could not detect a cricket ball clearly ($reason). Please upload a clearer cricket video with good lighting."
+        );
+        return false;
+      }
+
       await _incrementTotalVideos();
       unawaited(
         AppAnalytics.log(
@@ -7966,20 +7986,20 @@ class _UploadScreenState extends State<UploadScreen>
       await _applyAnalysisResult(analysis);
       return true;
     } catch (e) {
-      debugPrint("UPLOAD ERROR: $e => fallback to analysis");
+      debugPrint("UPLOAD ERROR: $e");
       _analysisLongWaitTimer?.cancel();
       _showLongWaitHandoff = false;
-      final fallbackAnalysis = {
-        "status": "success",
-        "speed_kmph": null,
-        "speed_type": "unavailable",
-        "speed_note": "LOCAL_FALLBACK",
-        "swing": "unknown",
-        "spin": "unknown",
-        "trajectory": [],
-      };
-      await _applyAnalysisResult(fallbackAnalysis);
-      return true;
+      if (mounted) {
+        setState(() {
+          analysisLoading = false;
+          uploading = false;
+          _stopAnalysisExperience();
+        });
+        await _handleNonCricketUploadWarning(
+          "Could not analyze video right now. Please check your connection and ensure the video shows a clear cricket action."
+        );
+      }
+      return false;
     }
   }
 
@@ -8051,6 +8071,11 @@ class _UploadScreenState extends State<UploadScreen>
   }
 
   Future<void> _applyAnalysisResult(Map<String, dynamic> analysis) async {
+    final status = analysis["status"]?.toString().toLowerCase();
+    if (status == "non_cricket" || status == "failed") {
+      debugPrint("Rejecting non_cricket/failed analysis in _applyAnalysisResult");
+      return;
+    }
     _lastAnalysisMap = analysis;
     try {
       final dynamic speedVal = analysis["speed_kmph"];
@@ -8467,6 +8492,69 @@ class _UploadScreenState extends State<UploadScreen>
       await PremiumService.restoreOnLaunch();
     }
     if (video == null) return;
+
+    if (!PremiumService.isPremiumActive) {
+      final hasCredit = await AnalysisCreditService.instance.consumeDrsCredit();
+      if (!hasCredit) {
+        if (!mounted) return;
+        final watch = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0D0D12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+              side: const BorderSide(color: Color(0xFF23232A), width: 1.2),
+            ),
+            title: Text(
+              "DRS Credits Needed",
+              style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w700),
+            ),
+            content: Text(
+              "You have 0 free DRS credits remaining. Watch 1 short video ad to unlock 2 free DRS reviews!",
+              style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(
+                  "Cancel",
+                  style: GoogleFonts.poppins(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                icon: const Icon(Icons.play_circle_fill_rounded, size: 18),
+                label: Text(
+                  "Watch Ad (Get 2 DRS)",
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (watch == true) {
+          final res = await AnalysisCreditService.instance.watchAdForDrs(amount: 2);
+          if (res == AdWatchResult.rewardEarned) {
+            await AnalysisCreditService.instance.consumeDrsCredit();
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Ad not completed. 2 DRS credits not granted.")),
+              );
+            }
+            return;
+          }
+        } else {
+          return;
+        }
+      }
+    }
 
     final selectedMode = await _showDrsModeSelector();
     if (selectedMode == null) return;

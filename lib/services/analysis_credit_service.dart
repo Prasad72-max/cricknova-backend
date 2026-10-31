@@ -19,23 +19,27 @@ class AnalysisCreditService {
   static const String _chatCreditKeyPrefix = 'cricx_chat_credit_';
   static const String _battingCompareKeyPrefix = 'cricx_batting_compare_credit_';
   static const String _bowlingCompareKeyPrefix = 'cricx_bowling_compare_credit_';
+  static const String _drsCreditKeyPrefix = 'cricx_drs_credit_';
 
   /// ValueNotifiers so UI widgets can reactively update.
   final ValueNotifier<int> creditsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<int> chatCreditsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<int> battingCompareCreditsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<int> bowlingCompareCreditsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> drsCreditsNotifier = ValueNotifier<int>(0);
 
   int get credits => creditsNotifier.value;
   int get chatCredits => chatCreditsNotifier.value;
   int get battingCompareCredits => battingCompareCreditsNotifier.value;
   int get bowlingCompareCredits => bowlingCompareCreditsNotifier.value;
+  int get drsCredits => drsCreditsNotifier.value;
 
   String _uid() => FirebaseAuth.instance.currentUser?.uid ?? 'anon';
   String _creditKey() => '$_creditKeyPrefix${_uid()}';
   String _chatCreditKey() => '$_chatCreditKeyPrefix${_uid()}';
   String _battingCompareKey() => '$_battingCompareKeyPrefix${_uid()}';
   String _bowlingCompareKey() => '$_bowlingCompareKeyPrefix${_uid()}';
+  String _drsCreditKey() => '$_drsCreditKeyPrefix${_uid()}';
 
   // ─── LOAD ────────────────────────────────────────────────────────────────
 
@@ -46,7 +50,8 @@ class AnalysisCreditService {
       chatCreditsNotifier.value = (prefs.getInt(_chatCreditKey()) ?? 0).clamp(0, 99);
       battingCompareCreditsNotifier.value = (prefs.getInt(_battingCompareKey()) ?? 0).clamp(0, 99);
       bowlingCompareCreditsNotifier.value = (prefs.getInt(_bowlingCompareKey()) ?? 0).clamp(0, 99);
-      debugPrint('[Credits] Loaded: analysis=${creditsNotifier.value}, chat=${chatCreditsNotifier.value}, battingComp=${battingCompareCreditsNotifier.value}, bowlingComp=${bowlingCompareCreditsNotifier.value}');
+      drsCreditsNotifier.value = (prefs.getInt(_drsCreditKey()) ?? 2).clamp(0, 99);
+      debugPrint('[Credits] Loaded: analysis=${creditsNotifier.value}, chat=${chatCreditsNotifier.value}, battingComp=${battingCompareCreditsNotifier.value}, bowlingComp=${bowlingCompareCreditsNotifier.value}, drs=${drsCreditsNotifier.value}');
     } catch (e) {
       debugPrint('[Credits] Failed to load credits: $e');
     }
@@ -99,6 +104,18 @@ class AnalysisCreditService {
       debugPrint('[Credits] Bowling compare credits +$amount → $newTotal');
     }).catchError((e) {
       debugPrint('[Credits] Failed to grant bowling compare credits: $e');
+    });
+  }
+
+  void grantDrsCredits({int amount = 2}) {
+    SharedPreferences.getInstance().then((prefs) {
+      final current = prefs.getInt(_drsCreditKey()) ?? 2;
+      final newTotal = (current + amount).clamp(0, 99);
+      prefs.setInt(_drsCreditKey(), newTotal);
+      drsCreditsNotifier.value = newTotal;
+      debugPrint('[Credits] DRS credits +$amount → $newTotal');
+    }).catchError((e) {
+      debugPrint('[Credits] Failed to grant DRS credits: $e');
     });
   }
 
@@ -184,6 +201,26 @@ class AnalysisCreditService {
     }
   }
 
+  Future<bool> consumeDrsCredit() async {
+    if (PremiumService.isPremiumActive) return true;
+    await loadCredits();
+    if (drsCreditsNotifier.value <= 0) return false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final current = prefs.getInt(_drsCreditKey()) ?? 0;
+      if (current <= 0) {
+        drsCreditsNotifier.value = 0;
+        return false;
+      }
+      final newTotal = current - 1;
+      await prefs.setInt(_drsCreditKey(), newTotal);
+      drsCreditsNotifier.value = newTotal;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ─── WATCH AD FLOWS ──────────────────────────────────────────────────────
 
   Future<AdWatchResult> _watchGenericAd({required VoidCallback onReward}) async {
@@ -234,6 +271,11 @@ class AnalysisCreditService {
   /// Watch Ad for 2 Bowling Compare Credits
   Future<AdWatchResult> watchAdForBowlingCompare({int amount = 2}) async {
     return _watchGenericAd(onReward: () => grantBowlingCompareCredits(amount: amount));
+  }
+
+  /// Watch Ad for 2 DRS Replay Credits
+  Future<AdWatchResult> watchAdForDrs({int amount = 2}) async {
+    return _watchGenericAd(onReward: () => grantDrsCredits(amount: amount));
   }
 
   // ─── USER SWITCH ─────────────────────────────────────────────────────────
