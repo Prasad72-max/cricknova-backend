@@ -984,7 +984,7 @@ Format your output strictly as:
 Do not add any other sentence, explanation, or heading."""
 
         from nvidia_client import extract_video_keyframes, NVIDIA_MODEL
-        frames = extract_video_keyframes(video_path, max_frames=3)
+        frames = extract_video_keyframes(video_path, max_frames=2)
 
         feedback = generate_nvidia_vision(
             prompt=coaching_prompt,

@@ -187,17 +187,6 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       fallback: null,
     );
   }
-    }
-
-    // Keep it short and scannable.
-    return _ParsedCompareReply(
-      video1: v1.build(),
-      video2: v2.build(),
-      drills: drills.take(2).toList(),
-      finalVerdict: finalVerdict,
-      fallback: null,
-    );
-  }
 
   Future<void> _pickCompareVideo({required bool isLeft}) async {
     if (_hasShownUploadGuidanceThisSession) {
@@ -782,26 +771,9 @@ Do not add any other sentence, explanation, or heading.""";
     }
 
     try {
-      http.StreamedResponse? response;
-      String body = "";
-      Object? lastErr;
-      for (int attempt = 0; attempt < 2; attempt++) {
-        try {
-          final req = await _buildRequest();
-          response = await req.send().timeout(const Duration(seconds: 45));
-          body = await response.stream.bytesToString();
-          break;
-        } catch (e) {
-          lastErr = e;
-          if (attempt == 0) {
-            await Future.delayed(const Duration(milliseconds: 850));
-            continue;
-          }
-        }
-      }
-      if (response == null) {
-        throw Exception(lastErr?.toString() ?? "REQUEST_FAILED");
-      }
+      final req = await _buildRequest();
+      final response = await req.send().timeout(const Duration(seconds: 90));
+      final body = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
         final data = jsonDecode(body);

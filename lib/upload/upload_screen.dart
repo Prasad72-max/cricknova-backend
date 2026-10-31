@@ -7899,27 +7899,6 @@ class _UploadScreenState extends State<UploadScreen>
       return true;
     }
 
-    if (!_isBowlingMode) {
-      // 🏏 BATTING MISTAKE DETECTION: Zero OpenCV! Run AI Coach directly via NVIDIA model!
-      if (mounted) {
-        setState(() {
-          uploading = false;
-          analysisLoading = false;
-          showCoach = true;
-          _stopAnalysisExperience();
-        });
-      }
-      await _incrementTotalVideos();
-      unawaited(
-        AppAnalytics.log(
-          'upload_completed',
-          parameters: {'discipline': _analysisDiscipline},
-        ),
-      );
-      unawaited(runCoach());
-      return true;
-    }
-
     final uri = Uri.parse(
       "https://cricknova-backend.onrender.com/training/analyze",
     );

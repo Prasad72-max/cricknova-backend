@@ -1934,7 +1934,7 @@ async def ai_coach_analyze(
             print("⚠️ Mistake usage bypassed for active subscriber:", e)
 
         # ⚡ Extract actual keyframes for multimodal vision inspection
-        frames = extract_video_keyframes(video_path, max_frames=4)
+        frames = extract_video_keyframes(video_path, max_frames=2)
 
         disc_label = (discipline or "").strip().lower()
         if disc_label not in ("batting", "bowling"):

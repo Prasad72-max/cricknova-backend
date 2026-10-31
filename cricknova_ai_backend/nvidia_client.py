@@ -53,31 +53,17 @@ NVIDIA_MODEL = (
 NVIDIA_HOST = os.getenv("NVIDIA_HOST", "integrate.api.nvidia.com")
 NVIDIA_PATH = os.getenv("NVIDIA_PATH", "/v1/chat/completions")
 
-# ⚡ High-speed connection reuse (Keep-Alive pool)
-_conn_lock = threading.Lock()
-_cached_conn: http.client.HTTPSConnection | None = None
+# ⚡ Fast and reliable HTTPS connection
 _ssl_ctx = ssl.create_default_context()
 
-def _get_connection(timeout: int = 25) -> http.client.HTTPSConnection:
-    global _cached_conn
-    with _conn_lock:
-        if _cached_conn is None:
-            _cached_conn = http.client.HTTPSConnection(
-                NVIDIA_HOST,
-                context=_ssl_ctx,
-                timeout=timeout,
-            )
-        return _cached_conn
-
-def _reset_connection():
-    global _cached_conn
-    with _conn_lock:
-        if _cached_conn is not None:
-            try:
-                _cached_conn.close()
-            except Exception:
-                pass
-            _cached_conn = None
+def _get_fresh_connection(timeout: int = 35) -> http.client.HTTPSConnection:
+    """Always return a fresh SSL connection to avoid idle keep-alive socket hangs."""
+    return http.client.HTTPSConnection(
+        NVIDIA_HOST,
+        443,
+        context=_ssl_ctx,
+        timeout=timeout,
+    )
 
 def get_nvidia_api_keys() -> list[str]:
     keys: list[str] = []
@@ -120,10 +106,10 @@ def call_nvidia_chat(
     *,
     model: str | None = None,
     max_tokens: int = 4096,
-    temperature: float = 0.55,
-    timeout: int = 50,
+    temperature: float = 0.35,
+    timeout: int = 35,
 ) -> str:
-    """⚡ NVIDIA AI API caller with 4,096 token limit & fast Keep-Alive connection pooling."""
+    """⚡ Fast NVIDIA AI API caller with fresh connection per request (zero stale socket hangs)."""
     keys = get_nvidia_api_keys()
     if not keys:
         raise RuntimeError("NVIDIA_API_KEY is not set in environment variables")
@@ -143,41 +129,35 @@ def call_nvidia_chat(
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Connection": "keep-alive",
             "User-Agent": "CrickNova-Fast/1.0",
         }
 
-        # Attempt 1: Fast Keep-Alive connection
-        for attempt in range(2):
-            try:
-                conn = _get_connection(timeout=timeout)
-                conn.request("POST", NVIDIA_PATH, body=body, headers=headers)
-                resp = conn.getresponse()
-                raw_bytes = resp.read()
+        try:
+            conn = _get_fresh_connection(timeout=timeout)
+            conn.request("POST", NVIDIA_PATH, body=body, headers=headers)
+            resp = conn.getresponse()
+            raw_bytes = resp.read()
+            conn.close()
 
-                if resp.status == 200:
-                    resp_data = json.loads(raw_bytes.decode("utf-8"))
-                    choices = resp_data.get("choices") or []
-                    if choices:
-                        content = choices[0].get("message", {}).get("content", "")
-                        return content.strip()
-                    return ""
-                elif resp.status in (401, 403, 429, 500):
-                    _reset_connection()
-                    print(f"⚠️ NVIDIA Key returned {resp.status}, trying next key")
-                    last_err = RuntimeError(f"NVIDIA API {resp.status}: {raw_bytes.decode('utf-8', 'ignore')}")
-                    break
-                else:
-                    _reset_connection()
-                    last_err = RuntimeError(f"NVIDIA API Error {resp.status}: {raw_bytes.decode('utf-8', 'ignore')}")
-            except Exception as e:
-                _reset_connection()
-                last_err = e
-                if isinstance(e, (TimeoutError, socket.timeout)):
-                    raise RuntimeError("NVIDIA API request timed out") from e
-                if attempt == 0:
-                    continue
+            if resp.status == 200:
+                resp_data = json.loads(raw_bytes.decode("utf-8"))
+                choices = resp_data.get("choices") or []
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+                    return content.strip()
+                return ""
+            elif resp.status in (401, 403, 429):
+                print(f"⚠️ NVIDIA Key returned {resp.status}, trying next key")
+                last_err = RuntimeError(f"NVIDIA API {resp.status}: {raw_bytes.decode('utf-8', 'ignore')}")
+                continue
+            else:
+                last_err = RuntimeError(f"NVIDIA API Error {resp.status}: {raw_bytes.decode('utf-8', 'ignore')}")
                 break
+        except Exception as e:
+            last_err = e
+            if isinstance(e, (TimeoutError, socket.timeout)):
+                raise RuntimeError("NVIDIA API request timed out") from e
+            continue
 
     raise RuntimeError(f"All NVIDIA API attempts failed: {last_err}")
 
@@ -187,7 +167,8 @@ def generate_nvidia_text(
     user_prompt: str,
     model: str | None = None,
     max_output_tokens: int = 4096,
-    temperature: float = 0.55,
+    temperature: float = 0.35,
+    timeout: int = 25,
 ) -> str:
     """⚡ Complete & accurate text generation using NVIDIA Nemotron 3.5 Super VL."""
     messages = [
@@ -199,10 +180,11 @@ def generate_nvidia_text(
         model=model or NVIDIA_MODEL,
         max_tokens=max_output_tokens,
         temperature=temperature,
+        timeout=timeout,
     )
 
 def extract_video_keyframes(video_path: str, max_frames: int = 2) -> list[bytes]:
-    """⚡ Ultra-fast (<0.1s) keyframe extraction for NVIDIA vision using FFmpeg input-seeking & cv2."""
+    """⚡ Ultra-fast (<0.1s) parallel keyframe extraction for NVIDIA vision using FFmpeg & cv2."""
     frames: list[bytes] = []
     if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         return frames
@@ -223,26 +205,35 @@ def extract_video_keyframes(video_path: str, max_frames: int = 2) -> list[bytes]
             or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else None)
         )
 
-    # Strategy 1: Ultra-fast input-seeking FFmpeg (-ss before -i takes <0.05s)
+    # Strategy 1: Ultra-fast parallel input-seeking FFmpeg (-ss before -i takes <0.04s per frame)
     if ffmpeg_bin:
         import subprocess
         import tempfile
-        timestamps = ["0.5", "1.5"] if max_frames == 2 else ["0.3", "1.0", "1.8"]
+        from concurrent.futures import ThreadPoolExecutor
+        timestamps = ["0.5", "1.5"] if max_frames <= 2 else ["0.4", "1.2", "2.0"][:max_frames]
         try:
             with tempfile.TemporaryDirectory() as tmp_dir:
-                for i, ts in enumerate(timestamps[:max_frames]):
+                def _extract_one(idx_ts):
+                    i, ts = idx_ts
                     out_path = os.path.join(tmp_dir, f"f_{i}.jpg")
                     cmd = [
                         ffmpeg_bin, "-ss", ts, "-i", video_path,
-                        "-vf", "scale=360:-2",
+                        "-vf", "scale=320:-2",
                         "-vframes", "1",
-                        "-q:v", "6",
+                        "-q:v", "7",
                         "-y", out_path
                     ]
-                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
                     if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
                         with open(out_path, "rb") as fp:
-                            frames.append(fp.read())
+                            return fp.read()
+                    return None
+
+                with ThreadPoolExecutor(max_workers=min(4, len(timestamps))) as pool:
+                    results = list(pool.map(_extract_one, enumerate(timestamps)))
+                for b in results:
+                    if b:
+                        frames.append(b)
             if frames:
                 return frames
         except Exception as exc:
@@ -260,10 +251,10 @@ def extract_video_keyframes(video_path: str, max_frames: int = 2) -> list[bytes]
                     break
                 if count in (5, 25, 45) or (count == 0 and len(frames) == 0):
                     h, w = frame.shape[:2]
-                    target_w = 360
-                    target_h = max(180, int(h * (360.0 / max(1, w))))
+                    target_w = 320
+                    target_h = max(160, int(h * (320.0 / max(1, w))))
                     resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
-                    success, buf = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                    success, buf = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 55])
                     if success and buf is not None:
                         frames.append(buf.tobytes())
                 count += 1
@@ -307,8 +298,7 @@ def generate_nvidia_vision(
                     pass
 
     if frames and len(frames) > 0:
-        step = max(1, len(frames) // 4)
-        sampled = frames[::step][:4]
+        sampled = frames[:2]
         for f in sampled:
             b64_img = base64.b64encode(f).decode("utf-8")
             content_parts.append({
@@ -326,7 +316,7 @@ def generate_nvidia_vision(
             model=model or NVIDIA_MODEL,
             max_tokens=max_output_tokens,
             temperature=temperature,
-            timeout=50,
+            timeout=35,
         )
     except Exception as e:
         print(f"⚠️ NVIDIA Vision failed: {e}. Falling back to fast text completion...")
@@ -336,6 +326,7 @@ def generate_nvidia_vision(
             model=model or NVIDIA_MODEL,
             max_output_tokens=max_output_tokens,
             temperature=temperature,
+            timeout=25,
         )
 
 def generate_nvidia_comparison_vision(
@@ -422,7 +413,7 @@ def generate_nvidia_comparison_vision(
             model=model or NVIDIA_MODEL,
             max_tokens=max_output_tokens,
             temperature=temperature,
-            timeout=25,
+            timeout=35,
         )
     except Exception as e:
         print(f"⚠️ Comparison vision call failed: {e}. Falling back to text.")
