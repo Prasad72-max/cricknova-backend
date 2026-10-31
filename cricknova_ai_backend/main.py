@@ -1146,21 +1146,19 @@ async def ai_coach_diff(
             increment_compare(user_id)
         except Exception:
             pass
-    def save_temp(file):
+    async def save_temp(file: UploadFile) -> tuple[str, bytes]:
+        await file.seek(0)
+        content = await file.read()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        tmp.write(file.file.read())
+        tmp.write(content)
         tmp.close()
-        return tmp.name
+        return tmp.name, content
 
-    left_path = save_temp(left)
-    right_path = save_temp(right)
+    left_path, left_video_bytes = await save_temp(left)
+    right_path, right_video_bytes = await save_temp(right)
 
     try:
         from nvidia_client import extract_video_keyframes, generate_nvidia_comparison_vision, NVIDIA_MODEL
-        with open(left_path, "rb") as left_file:
-            left_video_bytes = left_file.read()
-        with open(right_path, "rb") as right_file:
-            right_video_bytes = right_file.read()
         if not left_video_bytes or not right_video_bytes:
             raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
 
@@ -1170,8 +1168,8 @@ async def ai_coach_diff(
             with ThreadPoolExecutor(max_workers=2) as executor:
                 f1 = executor.submit(extract_video_keyframes, left_path, 2)
                 f2 = executor.submit(extract_video_keyframes, right_path, 2)
-                left_frames = f1.result(timeout=4.0) or []
-                right_frames = f2.result(timeout=4.0) or []
+                left_frames = f1.result(timeout=15.0) or []
+                right_frames = f2.result(timeout=15.0) or []
         except Exception:
             left_frames = extract_video_keyframes(left_path, max_frames=2)
             right_frames = extract_video_keyframes(right_path, max_frames=2)

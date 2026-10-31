@@ -2125,14 +2125,16 @@ async def ai_coach_diff(
     if banned is not None:
         raise HTTPException(status_code=403, detail=banned["text"])
 
-    def save_temp(file):
+    async def save_temp(file: UploadFile) -> tuple[str, bytes]:
+        await file.seek(0)
+        content = await file.read()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        tmp.write(file.file.read())
+        tmp.write(content)
         tmp.close()
-        return tmp.name
+        return tmp.name, content
 
-    left_path = save_temp(left)
-    right_path = save_temp(right)
+    left_path, left_bytes = await save_temp(left)
+    right_path, right_bytes = await save_temp(right)
 
     try:
         from subscriptions_store import get_subscription, increment_compare
@@ -2148,8 +2150,8 @@ async def ai_coach_diff(
             with ThreadPoolExecutor(max_workers=2) as executor:
                 f1 = executor.submit(extract_video_keyframes, left_path, 2)
                 f2 = executor.submit(extract_video_keyframes, right_path, 2)
-                left_frames = f1.result(timeout=4.0) or []
-                right_frames = f2.result(timeout=4.0) or []
+                left_frames = f1.result(timeout=15.0) or []
+                right_frames = f2.result(timeout=15.0) or []
         except Exception:
             left_frames = extract_video_keyframes(left_path, max_frames=2)
             right_frames = extract_video_keyframes(right_path, max_frames=2)
@@ -2176,33 +2178,18 @@ Final Verdict: [Clear coaching summary and verdict comparing both videos]
 
 Do not add any other sentence, explanation, or heading."""
 
-        if left_frames and right_frames:
-            diff_text = generate_nvidia_comparison_vision(
-                prompt=base_prompt,
-                discipline=discipline_text,
-                left_frames=left_frames,
-                right_frames=right_frames,
-                system_instruction=f"You are a professional, India-level cricket {discipline_text} coach. Compare both videos strictly using the 4 points and Final Verdict.",
-                model=NVIDIA_MODEL,
-                max_output_tokens=4096,
-                temperature=0.30,
-            )
-        else:
-            final_prompt = (
-                base_prompt
-                + f"\n\nINTERNAL_CONTEXT (do not mention): "
-                  f"discipline={discipline_text} "
-                  f"v1_name={(left.filename or 'left.mp4')} "
-                  f"v2_name={(right.filename or 'right.mp4')}\n"
-            )
-
-            diff_text = generate_nvidia_text(
-                system_instruction=f"You are a professional, India-level cricket {discipline_text} coach. Compare both videos strictly using the 4 points and Final Verdict.",
-                user_prompt=final_prompt,
-                model=NVIDIA_MODEL,
-                max_output_tokens=4096,
-                temperature=0.35,
-            )
+        diff_text = generate_nvidia_comparison_vision(
+            prompt=base_prompt,
+            discipline=discipline_text,
+            left_frames=left_frames,
+            right_frames=right_frames,
+            left_video_bytes=left_bytes,
+            right_video_bytes=right_bytes,
+            system_instruction=f"You are a professional, India-level cricket {discipline_text} coach. Compare both videos strictly using the 4 points and Final Verdict.",
+            model=NVIDIA_MODEL,
+            max_output_tokens=4096,
+            temperature=0.30,
+        )
 
         return {
             "status": "success",

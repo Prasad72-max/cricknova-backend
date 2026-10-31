@@ -5214,7 +5214,7 @@ class _UploadScreenState extends State<UploadScreen>
 
   String get _speedPanelValue {
     if (analysisLoading) {
-      return _autoZoomRetryInProgress ? "Auto zooming..." : "Analyzing...";
+      return "Analyzing...";
     }
     if (speedKmph == null) return "";
     return "${speedKmph!.toStringAsFixed(1)} km/h";
@@ -5272,8 +5272,7 @@ class _UploadScreenState extends State<UploadScreen>
     setState(() {
       _autoZoomRetryInProgress = true;
       _autoZoomPreviewScale = zoomFactor;
-      _analysisStatusText =
-          "Speed unavailable. Auto-zooming ${zoomFactor.toStringAsFixed(2)}x...";
+      _analysisStatusText = "Analyzing video...";
     });
     await Future.delayed(const Duration(milliseconds: 900));
 
@@ -5335,8 +5334,7 @@ class _UploadScreenState extends State<UploadScreen>
       setState(() {
         _autoZoomRetryInProgress = false;
         _autoZoomPreviewScale = 1.0;
-        _analysisStatusText =
-            "Auto-zoom completed. Using best fallback speed...";
+        _analysisStatusText = "Analyzing video...";
       });
     }
     return null;
@@ -9459,19 +9457,6 @@ Do not add intro or conclusion.
                                     speed: speedKmph,
                                   ),
                                 ),
-                                if (!analysisLoading && speedKmph == null)
-                                  const Padding(
-                                    padding: EdgeInsets.only(bottom: 10),
-                                    child: Text(
-                                      "Try uploading the same video with zoom for speed detection.",
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.3,
-                                      ),
-                                    ),
-                                  ),
                                 const SizedBox(height: 10),
                                 AnimatedSwitcher(
                                   duration: const Duration(milliseconds: 500),

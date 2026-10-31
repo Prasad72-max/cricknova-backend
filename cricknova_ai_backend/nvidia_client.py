@@ -202,38 +202,71 @@ def generate_nvidia_text(
     )
 
 def extract_video_keyframes(video_path: str, max_frames: int = 3) -> list[bytes]:
-    """⚡ Pure FFmpeg video keyframe extractor — 100% OpenCV-free (Only NVIDIA vision model used)."""
+    """⚡ Fast & robust keyframe extractor for NVIDIA multimodal vision model.
+    Pure frame decoder (cv2/ffmpeg) — extracts raw JPEG bytes for AI model input."""
     frames: list[bytes] = []
-    if not os.path.exists(video_path):
+    if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         return frames
 
-    import subprocess
-    import tempfile
-    import shutil
-
-    ffmpeg_bin = (
-        shutil.which("ffmpeg")
-        or ("/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else None)
-        or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else "ffmpeg")
-    )
+    # Strategy 1: cv2 (standard on server in requirements.txt via opencv-python-headless)
     try:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            cmd = [
-                ffmpeg_bin, "-v", "error", "-y", "-i", video_path,
-                "-vf", "fps=1.5,scale=360:-2",
-                "-q:v", "4",
-                "-vframes", str(max_frames),
-                os.path.join(tmp_dir, "frame_%02d.jpg")
-            ]
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
-            for f in sorted(os.listdir(tmp_dir)):
-                if f.endswith(".jpg"):
-                    with open(os.path.join(tmp_dir, f), "rb") as fp:
-                        b = fp.read()
-                        if b:
-                            frames.append(b)
-    except Exception as e:
-        print("⚠️ Pure FFmpeg extraction notice:", e)
+        import cv2
+        cap = cv2.VideoCapture(video_path)
+        if cap.isOpened():
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+            if total_frames > 0:
+                indices = [int(total_frames * (i + 1) / (max_frames + 1)) for i in range(max_frames)]
+            else:
+                indices = [0, 10, 20][:max_frames]
+
+            for idx in indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    h, w = frame.shape[:2]
+                    target_w = 360
+                    target_h = max(180, int(h * (360.0 / max(1, w))))
+                    resized = cv2.resize(frame, (target_w, target_h), interpolation=cv2.INTER_AREA)
+                    success, buf = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                    if success and buf is not None:
+                        frames.append(buf.tobytes())
+            cap.release()
+            if frames:
+                return frames
+    except Exception as exc:
+        print(f"cv2 keyframe decode notice: {exc}")
+
+    # Strategy 2: FFmpeg CLI (if installed in system)
+    try:
+        import subprocess
+        import tempfile
+        import shutil
+
+        ffmpeg_bin = (
+            shutil.which("ffmpeg")
+            or ("/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else None)
+            or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else None)
+        )
+        if ffmpeg_bin:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                cmd = [
+                    ffmpeg_bin, "-v", "error", "-y", "-i", video_path,
+                    "-vf", "fps=1.5,scale=360:-2",
+                    "-q:v", "5",
+                    "-vframes", str(max_frames),
+                    os.path.join(tmp_dir, "frame_%02d.jpg")
+                ]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+                for f in sorted(os.listdir(tmp_dir)):
+                    if f.endswith(".jpg"):
+                        with open(os.path.join(tmp_dir, f), "rb") as fp:
+                            b = fp.read()
+                            if b:
+                                frames.append(b)
+            if frames:
+                return frames
+    except Exception as exc:
+        print(f"ffmpeg keyframe decode notice: {exc}")
 
     return frames
 
@@ -310,32 +343,25 @@ def generate_nvidia_comparison_vision(
     right_frames: list[bytes] | None = None,
     left_video_mime_type: str = "video/mp4",
     right_video_mime_type: str = "video/mp4",
-    system_instruction: str = "You are a universal cricket coach. Keep your responses focused on cricket.",
+    system_instruction: str = "You are a professional cricket coach. Keep your responses focused on cricket.",
     model: str | None = None,
     max_output_tokens: int = 4096,
     temperature: float = 0.35,
 ) -> str:
     """⚡ Two-video comparison using NVIDIA Nemotron 3.5 Super VL multimodal vision."""
-    content_parts: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": (
-                "You are evaluating two cricket video clips. The first attached frames are Video 1 and the second attached frames are Video 2.\n\n"
-                f"{prompt}\n\n"
-            )
-        }
-    ]
-
     if not left_frames and left_video_bytes:
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
             tmp.write(left_video_bytes)
             tmp_path = tmp.name
         try:
-            left_frames = extract_video_keyframes(tmp_path, max_frames=3)
+            left_frames = extract_video_keyframes(tmp_path, max_frames=2)
         finally:
             if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
     if not right_frames and right_video_bytes:
         import tempfile
@@ -343,28 +369,42 @@ def generate_nvidia_comparison_vision(
             tmp.write(right_video_bytes)
             tmp_path = tmp.name
         try:
-            right_frames = extract_video_keyframes(tmp_path, max_frames=3)
+            right_frames = extract_video_keyframes(tmp_path, max_frames=2)
         finally:
             if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
-    if left_frames and right_frames:
-        for title, f_list in (("VIDEO 1", left_frames), ("VIDEO 2", right_frames)):
-            content_parts.append({"type": "text", "text": f"{title} frames:"})
-            for frame in f_list[:3]:
-                encoded = base64.b64encode(frame).decode("ascii")
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
-                })
+    content_parts: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": (
+                f"You are a professional, India-level cricket {discipline} coach evaluating two cricket action clips.\n"
+                f"Below are the visual frames extracted from Video 1 and Video 2.\n\n"
+                f"{prompt}"
+            )
+        }
+    ]
 
-    content_parts.append({
-        "type": "text",
-        "text": (
-            "Carefully analyze the cricket technique across both videos.\n"
-            "Strictly follow the requested format with [VIDEO 1: Technique and mistakes in Clip 1] and [VIDEO 2: Technique differences and improvement] sections."
-        )
-    })
+    if left_frames:
+        content_parts.append({"type": "text", "text": "=== VIDEO 1 FRAMES ==="})
+        for frame in left_frames[:2]:
+            encoded = base64.b64encode(frame).decode("ascii")
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+            })
+
+    if right_frames:
+        content_parts.append({"type": "text", "text": "=== VIDEO 2 FRAMES ==="})
+        for frame in right_frames[:2]:
+            encoded = base64.b64encode(frame).decode("ascii")
+            content_parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+            })
 
     messages = [
         {"role": "system", "content": system_instruction},
@@ -380,10 +420,15 @@ def generate_nvidia_comparison_vision(
             timeout=50,
         )
     except Exception as e:
-        print(f"⚠️ Comparison vision failed: {e}. Falling back to text.")
+        print(f"⚠️ Comparison vision call failed: {e}. Falling back to text.")
+        fallback_prompt = (
+            f"You are a professional, India-level cricket {discipline} coach.\n"
+            f"Analyze the player's technique between Video 1 and Video 2 and return strictly the 4 points and Final Verdict:\n\n"
+            f"{prompt}"
+        )
         return generate_nvidia_text(
             system_instruction=system_instruction,
-            user_prompt=prompt,
+            user_prompt=fallback_prompt,
             model=model or NVIDIA_MODEL,
             max_output_tokens=max_output_tokens,
             temperature=temperature,

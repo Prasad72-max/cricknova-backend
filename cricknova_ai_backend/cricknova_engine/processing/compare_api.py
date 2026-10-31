@@ -38,29 +38,30 @@ async def compare_videos(
             "difference": "AI Coach is temporarily unavailable. Please try again."
         }
 
-    def save_temp(upload: UploadFile):
+    async def save_temp(upload: UploadFile) -> tuple[str, bytes]:
+        await upload.seek(0)
+        content = await upload.read()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-        tmp.write(upload.file.read())
+        tmp.write(content)
         tmp.close()
-        return tmp.name
+        return tmp.name, content
 
-    left_path = save_temp(left)
-    right_path = save_temp(right)
+    left_path, left_bytes = await save_temp(left)
+    right_path, right_bytes = await save_temp(right)
 
     try:
         disc_label = (discipline or "").strip().lower()
         if disc_label not in ("batting", "bowling"):
             disc_label = "cricket technique"
 
-        # ⚡ Pure FFmpeg keyframe extraction in parallel — 100% OpenCV free
         left_frames = []
         right_frames = []
         try:
             with ThreadPoolExecutor(max_workers=2) as executor:
                 f1 = executor.submit(extract_video_keyframes, left_path, 2)
                 f2 = executor.submit(extract_video_keyframes, right_path, 2)
-                left_frames = f1.result(timeout=4.0) or []
-                right_frames = f2.result(timeout=4.0) or []
+                left_frames = f1.result(timeout=15.0) or []
+                right_frames = f2.result(timeout=15.0) or []
         except Exception:
             left_frames = extract_video_keyframes(left_path, max_frames=2)
             right_frames = extract_video_keyframes(right_path, max_frames=2)
@@ -80,25 +81,18 @@ Final Verdict: [Clear coaching summary and verdict comparing both videos]
 
 Do not add any other sentence, explanation, or heading."""
 
-        if left_frames and right_frames:
-            diff_text = generate_nvidia_comparison_vision(
-                prompt=base_prompt,
-                discipline=disc_label,
-                left_frames=left_frames,
-                right_frames=right_frames,
-                system_instruction=f"You are a professional, India-level cricket {disc_label} coach. Compare both videos strictly using the 4 points and Final Verdict.",
-                model=NVIDIA_MODEL,
-                max_output_tokens=4096,
-                temperature=0.30,
-            )
-        else:
-            diff_text = generate_nvidia_text(
-                system_instruction=f"You are a professional, India-level cricket {disc_label} coach. Compare both videos strictly using the 4 points and Final Verdict.",
-                user_prompt=base_prompt,
-                model=NVIDIA_MODEL,
-                max_output_tokens=4096,
-                temperature=0.35,
-            )
+        diff_text = generate_nvidia_comparison_vision(
+            prompt=base_prompt,
+            discipline=disc_label,
+            left_frames=left_frames,
+            right_frames=right_frames,
+            left_video_bytes=left_bytes,
+            right_video_bytes=right_bytes,
+            system_instruction=f"You are a professional, India-level cricket {disc_label} coach. Compare both videos strictly using the 4 points and Final Verdict.",
+            model=NVIDIA_MODEL,
+            max_output_tokens=4096,
+            temperature=0.30,
+        )
 
         return {
             "status": "success",
