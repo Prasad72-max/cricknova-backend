@@ -460,7 +460,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(24),
           ),
           title: Text(
-            'Allow CrickNova Notifications?',
+            'Allow CricX Notifications?',
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -502,7 +502,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         SnackBar(
           content: Text(
             granted
-                ? 'CrickNova notifications are on. The banter begins now.'
+                ? 'CricX notifications are on. The banter begins now.'
                 : 'Notifications are still blocked on this device. You can enable them later in settings.',
           ),
           behavior: SnackBarBehavior.floating,
@@ -932,7 +932,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 14),
                       _actionCard(
-                        title: "Cricknova Analyse Yourself",
+                        title: "CricX Analyse Yourself",
                         subtitle:
                             "Compare batting clips and find technique gaps",
                         icon: Icons.analytics_rounded,
@@ -941,26 +941,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           Color(0xFF6EDC00),
                         ],
                         onTap: () {
-                          if (!PremiumService.isLoaded) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Checking premium status..."),
-                                duration: Duration(milliseconds: 1700),
-                              ),
-                            );
-                            return;
-                          }
-
-                          if (!PremiumService.hasCompareAccess) {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const PremiumScreen(entrySource: "analyse"),
-                              ),
-                            );
-                            return;
-                          }
-
                           Navigator.of(context)
                               .push(
                                 PageRouteBuilder(
@@ -1068,10 +1048,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
-                const SizedBox(height: 24),
-                _exclusiveTrainingVidSection(),
-
-                const SizedBox(height: 50),
+                const SizedBox(height: 32),
 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1726,7 +1703,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         opacity: welcomeOpacity,
                         child: Text(
                           shortGreeting,
-                          style: GoogleFonts.playfairDisplay(
+                          style: GoogleFonts.poppins(
                             fontSize: 27,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
@@ -2173,7 +2150,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "CrickNova is currently tracking trajectory, swing, and spin for ${video.localFilePath.split(RegExp(r'[\\/]')).last}.",
+                        "CricX is currently tracking trajectory, swing, and spin for ${video.localFilePath.split(RegExp(r'[\\/]')).last}.",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.poppins(
                           color: Colors.white60,

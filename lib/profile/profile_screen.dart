@@ -20,6 +20,7 @@ import '../services/pricing_location_service.dart';
 import '../services/premium_service.dart';
 import '../services/subscription_provider.dart';
 import '../live/live_nets_tab.dart';
+import '../premium/elite_support_chat_screen.dart';
 import 'faq_screen.dart';
 import 'legal_info_screen.dart';
 import '../reels/screens/my_reels_screen.dart';
@@ -60,7 +61,12 @@ class _SubscriptionHub extends StatelessWidget {
       price: 'INR 99',
       region: 'Domestic',
       icon: Icons.star_border_rounded,
-      features: ['AI Ball Tracking', 'Speed Summary'],
+      features: [
+        '100% Ad-Free Experience',
+        '1,000 CricX Chat Coach',
+        '90 CricX Mistake Detection',
+        '60 CricX Analyse Yourself',
+      ],
     ),
     _SubscriptionPlanSpec(
       planId: 'IN_299',
@@ -68,7 +74,12 @@ class _SubscriptionHub extends StatelessWidget {
       price: 'INR 299',
       region: 'Domestic',
       icon: Icons.auto_awesome_outlined,
-      features: ['AI Ball Tracking', 'RPM Analysis', 'Priority Queue'],
+      features: [
+        '100% Ad-Free Experience',
+        '3,000 CricX Chat Coach',
+        '400 CricX Mistake Detection',
+        '300 CricX Analyse Yourself',
+      ],
     ),
     _SubscriptionPlanSpec(
       planId: 'IN_499',
@@ -77,10 +88,10 @@ class _SubscriptionHub extends StatelessWidget {
       region: 'Domestic',
       icon: Icons.workspace_premium_outlined,
       features: [
-        'AI Ball Tracking',
-        'RPM Analysis',
-        'CrickNova Bowling Analysis',
-        '60 Cricknova Analyse Yourself (Batting/Bowling)',
+        '100% Ad-Free Experience',
+        '7,000 CricX Chat Coach',
+        '800 CricX Mistake Detection',
+        '700 CricX Analyse Yourself',
         'Pro Coaching Insights',
       ],
       recommended: true,
@@ -95,8 +106,10 @@ class _SubscriptionHub extends StatelessWidget {
       region: 'Global',
       icon: Icons.star_border_rounded,
       features: [
-        '250 Cricknova Chat Coach',
-        '15 Cricknova Analyse Yourself (Batting/Bowling)',
+        '100% Ad-Free Experience',
+        '1,000 CricX Chat Coach',
+        '90 CricX Mistake Detection',
+        '60 CricX Analyse Yourself',
       ],
     ),
     _SubscriptionPlanSpec(
@@ -106,9 +119,10 @@ class _SubscriptionHub extends StatelessWidget {
       region: 'Global',
       icon: Icons.auto_awesome_outlined,
       features: [
-        '1500 Cricknova Chat Coach',
-        '30 Cricknova Analyse Yourself (Batting/Bowling)',
-        'Progress Tracking',
+        '100% Ad-Free Experience',
+        '3,000 CricX Chat Coach',
+        '400 CricX Mistake Detection',
+        '300 CricX Analyse Yourself',
       ],
     ),
     _SubscriptionPlanSpec(
@@ -118,10 +132,11 @@ class _SubscriptionHub extends StatelessWidget {
       region: 'Global',
       icon: Icons.workspace_premium_outlined,
       features: [
-        '5000 Cricknova Chat Coach',
-        '60 Cricknova Analyse Yourself (Batting/Bowling)',
+        '100% Ad-Free Experience',
+        '7,000 CricX Chat Coach',
+        '800 CricX Mistake Detection',
+        '700 CricX Analyse Yourself',
         'Advanced AI Reports',
-        'Speed Certificates',
       ],
       recommended: true,
     ),
@@ -445,14 +460,14 @@ class _PlanComparisonSheet extends StatelessWidget {
       ('AI Ball Tracking', true),
       ('RPM Analysis', plan.features.contains('RPM Analysis')),
       (
-        'CrickNova Bowling Analysis',
-        plan.features.contains('CrickNova Bowling Analysis'),
+        'CricX Bowling Analysis',
+        plan.features.contains('CricX Bowling Analysis'),
       ),
       (
-        'Cricknova Analyse Yourself (Batting/Bowling)',
+        'CricX Analyse Yourself (Batting/Bowling)',
         plan.features.any(
           (feature) =>
-              feature.contains('Cricknova Analyse Yourself (Batting/Bowling)'),
+              feature.contains('CricX Analyse Yourself (Batting/Bowling)'),
         ),
       ),
       (
@@ -667,6 +682,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   String? userEmail;
+  String? userPhotoUrl;
 
   File? profileImage;
   final ImagePicker _picker = ImagePicker();
@@ -721,7 +737,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     )..repeat();
     _reviewController = TextEditingController(
       text:
-          "CrickNova AI is very good and accurate. It helped me improve my bowling speed and swing.",
+          "CricX AI is very good and accurate. It helped me improve my bowling speed and swing.",
     );
     MainNavigation.activeTabNotifier.addListener(_handleTabVisibilityChange);
     if (_isProfileTabVisible) {
@@ -774,9 +790,17 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<void> loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
-    userEmail = user?.email;
-
     final uid = user?.uid ?? "guest";
+    userEmail = user?.email;
+    userPhotoUrl = user?.photoURL;
+    if (userPhotoUrl == null || userPhotoUrl!.isEmpty) {
+      for (final profile in user?.providerData ?? []) {
+        if (profile.photoURL != null && profile.photoURL!.isNotEmpty) {
+          userPhotoUrl = profile.photoURL;
+          break;
+        }
+      }
+    }
 
     // 🔥 Load XP & stats from Hive (local storage)
     final box = await _getStatsBox(uid);
@@ -973,7 +997,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     } catch (_) {}
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Thanks for supporting CrickNova AI!")),
+      const SnackBar(content: Text("Thanks for supporting CricX AI!")),
     );
   }
 
@@ -1059,7 +1083,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "This will permanently delete your CrickNova AI account and all associated user data. This action cannot be undone.",
+                  "This will permanently delete your CricX AI account and all associated user data. This action cannot be undone.",
                   style: GoogleFonts.poppins(
                     color: Colors.white70,
                     fontSize: 13,
@@ -1378,19 +1402,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       height: 140,
                                       fit: BoxFit.cover,
                                       errorBuilder:
-                                          (context, error, stackTrace) {
-                                            return const Icon(
-                                              Icons.person,
-                                              size: 76,
-                                              color: Colors.white,
-                                            );
-                                          },
+                                          (context, error, stackTrace) =>
+                                              _buildAvatarFallback(),
                                     )
-                                  : const Icon(
-                                      Icons.person,
-                                      size: 76,
-                                      color: Colors.white,
-                                    ),
+                                  : ((userPhotoUrl ?? FirebaseAuth.instance.currentUser?.photoURL) != null &&
+                                          (userPhotoUrl ?? FirebaseAuth.instance.currentUser?.photoURL)!.trim().isNotEmpty)
+                                      ? Image.network(
+                                          (userPhotoUrl ?? FirebaseAuth.instance.currentUser?.photoURL)!,
+                                          width: 140,
+                                          height: 140,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) =>
+                                                  _buildAvatarFallback(),
+                                        )
+                                      : _buildAvatarFallback(),
                             ),
                           ),
                           if (PremiumService.isPremium)
@@ -1852,137 +1878,73 @@ class _ProfileScreenState extends State<ProfileScreen>
                   children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: ScaleTransition(
-                        scale: _supportPulse,
-                        child: _supportStarIcon(),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: CrickXColors.graphiteElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.star_rounded,
+                          color: CrickXColors.limeSpark,
+                          size: 22,
+                        ),
                       ),
                       title: Text(
-                        "Support CrickNova AI (Rate Us)",
+                        "Rate CricX AI",
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
-                          fontSize: 14.5,
+                          fontSize: 14,
                         ),
                       ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 6),
-                          Text(
-                            "If CrickNova AI is improving your game, give us 5 stars on the Play Store.",
-                            style: GoogleFonts.poppins(
-                              color: const Color(0xFF94A3B8),
-                              fontSize: 12,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            "Tap the stars to rate now.",
-                            style: GoogleFonts.poppins(
-                              color: Colors.white54,
-                              fontSize: 11.5,
-                              height: 1.4,
-                            ),
-                          ),
-                          AnimatedCrossFade(
-                            firstChild: const SizedBox.shrink(),
-                            secondChild: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const SizedBox(height: 10),
-                                _ratingStarsRow(
-                                  rating: _selectedRating,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _selectedRating = value;
-                                    });
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _selectedRating == 0
-                                      ? "Select your rating (1 to 5 stars)."
-                                      : "You selected $_selectedRating/5. Tap “Open Play Store” to submit.",
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white54,
-                                    fontSize: 11.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  "Write a quick review (optional):",
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                TextField(
-                                  controller: _reviewController,
-                                  minLines: 2,
-                                  maxLines: 3,
-                                  style: GoogleFonts.poppins(color: Colors.white, fontSize: 13),
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: const Color(0xFF141418),
-                                    hintText:
-                                        "CrickNova AI is very good... (edit if you want)",
-                                    hintStyle: GoogleFonts.poppins(
-                                      color: Colors.white38,
-                                      fontSize: 12,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF23232A),
-                                        width: 1.1,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF23232A),
-                                        width: 1.1,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: CrickXColors.limeSpark,
-                                      foregroundColor: CrickXColors.onLime,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    onPressed: _openRating,
-                                    child: Text(
-                                      "Open Play Store",
-                                      style: GoogleFonts.poppins(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            crossFadeState: _showRatingDetails
-                                ? CrossFadeState.showSecond
-                                : CrossFadeState.showFirst,
-                            duration: const Duration(milliseconds: 200),
-                          ),
-                        ],
+                      subtitle: Text(
+                        "Love using CricX? Give us 5 stars on Google Play",
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _supportBadge(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                              border: Border.all(
+                                color: CrickXColors.limeSpark.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.star_rounded,
+                                  size: 13,
+                                  color: CrickXColors.limeSpark,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  "5.0",
+                                  style: GoogleFonts.poppins(
+                                    color: CrickXColors.limeSpark,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                           const SizedBox(width: 8),
                           const Icon(
                             Icons.arrow_forward_ios_rounded,
@@ -1991,21 +1953,98 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ],
                       ),
+                      onTap: _openRating,
+                    ),
+                    const Divider(color: Color(0xFF23232A), height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: CrickXColors.graphiteElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.support_agent_rounded,
+                          color: CrickXColors.limeSpark,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        "Help & Customer Support",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        "Direct support chat with our dedicated team",
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
+                      ),
                       onTap: () {
-                        setState(() {
-                          _showRatingDetails = !_showRatingDetails;
-                        });
+                        _openDarkProfilePage(
+                          context,
+                          const EliteSupportChatScreen(),
+                        );
                       },
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Your single review can help CrickNova AI reach players globally. Thank you!",
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        color: Colors.white54,
-                        fontSize: 11.5,
-                        height: 1.4,
+                    const Divider(color: Color(0xFF23232A), height: 16),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: CrickXColors.graphiteElevated,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: CrickXColors.graphiteBorder,
+                            width: 1.1,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.help_outline_rounded,
+                          color: Color(0xFFE2E8F0),
+                          size: 19,
+                        ),
                       ),
+                      title: Text(
+                        "FAQs & Help Guide",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        "Quick answers to common questions",
+                        style: GoogleFonts.poppins(
+                          color: const Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Color(0xFF71717A),
+                      ),
+                      onTap: () {
+                        _openDarkProfilePage(context, const FaqScreen());
+                      },
                     ),
                   ],
                 ),
@@ -2157,7 +2196,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ),
                       title: Text(
-                        "About CrickNova AI",
+                        "About CricX AI",
                         style: GoogleFonts.poppins(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -2348,7 +2387,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Text(
-                  "⚠️ AI Disclaimer:\nAll AI-generated insights, speed estimates, DRS decisions, and coaching feedback are provided for training and educational purposes only. Results may vary based on video quality, camera angle, lighting, and frame rate. CrickNova AI does not claim official match accuracy or replacement of professional umpires or coaches.",
+                  "⚠️ AI Disclaimer:\nAll AI-generated insights, speed estimates, DRS decisions, and coaching feedback are provided for training and educational purposes only. Results may vary based on video quality, camera angle, lighting, and frame rate. CricX AI does not claim official match accuracy or replacement of professional umpires or coaches.",
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 11,
@@ -2522,6 +2561,42 @@ class _ProfileScreenState extends State<ProfileScreen>
             fontSize: 15,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback() {
+    final displayChar = (_savedName.trim().isNotEmpty &&
+            _savedName.trim().toLowerCase() != 'player')
+        ? _savedName.trim()[0].toUpperCase()
+        : (userEmail != null && userEmail!.trim().isNotEmpty)
+            ? userEmail!.trim()[0].toUpperCase()
+            : null;
+
+    if (displayChar != null) {
+      return Container(
+        width: 140,
+        height: 140,
+        color: const Color(0xFF1B1D25),
+        alignment: Alignment.center,
+        child: Text(
+          displayChar,
+          style: GoogleFonts.poppins(
+            color: CrickXColors.limeSpark,
+            fontWeight: FontWeight.w700,
+            fontSize: 48,
+          ),
+        ),
+      );
+    }
+    return Container(
+      width: 140,
+      height: 140,
+      color: const Color(0xFF1B1D25),
+      child: const Icon(
+        Icons.person,
+        size: 76,
+        color: Colors.white54,
       ),
     );
   }
@@ -2904,6 +2979,12 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
 
   final List<_PremiumFeature> _features = const [
     _PremiumFeature(
+      icon: Icons.block_rounded,
+      title: "100% Ad-Free Experience",
+      description: "Zero ads across all premium tiers.",
+      badge: "ALL PLANS",
+    ),
+    _PremiumFeature(
       icon: Icons.flash_on_rounded,
       title: "Power Speed",
       description: "Physics-based KMPH tracking.",
@@ -2915,7 +2996,7 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
     ),
     _PremiumFeature(
       icon: Icons.auto_awesome_rounded,
-      title: "CrickNova Coach",
+      title: "CricX Coach",
       description: "Your personal cricket consultant.",
       badge: "ELITE",
     ),
@@ -2937,7 +3018,7 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
     ),
     _PremiumFeature(
       icon: Icons.psychology_alt_rounded,
-      title: "Cricknova Mistake Detection (Batting/Bowling)",
+      title: "CricX Mistake Detection (Batting/Bowling)",
       description: "Instant batting & bowling flaw checks.",
     ),
     _PremiumFeature(
@@ -3021,7 +3102,7 @@ class _PremiumBrochureSheetState extends State<_PremiumBrochureSheet>
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        "Unlock the full CrickNova Elite experience",
+                        "Unlock the full CricX Elite experience",
                         style: GoogleFonts.poppins(
                           color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 12.5,
@@ -3398,7 +3479,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
         child: Column(
           children: [
             _rewardCard(
-              title: "Official CrickNova Jersey",
+              title: "Official CricX Jersey",
               description:
                   "Unlock at 50,000 XP milestone. Includes Official Jersey + Special Gift.",
               threshold: 50000,
@@ -4227,7 +4308,7 @@ City/State: ${cityStateController.text}
 Total XP: $totalXP
 ''';
 
-                                final subject = "CrickNova Jersey Order";
+                                final subject = "CricX Jersey Order";
 
                                 final Uri emailUri = Uri.parse(
                                   'mailto:urmiladukare0@gmail.com'

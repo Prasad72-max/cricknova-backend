@@ -144,7 +144,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
         if (mounted) {
           setState(() {
             _uploadProgress = 0.75;
-            _uploadStatusMessage = "CrickNova AI is analyzing cricket technique...";
+            _uploadStatusMessage = "CricX AI is analyzing cricket technique...";
           });
         }
         aiResult = await ReelAiService.analyzeReelVideo(_videoFile!);
@@ -400,7 +400,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
                       children: [
                         _buildVisibilityTile(
                           title: "Public",
-                          subtitle: "Anyone on CrickNova can watch and discover",
+                          subtitle: "Anyone on CricX can watch and discover",
                           value: ReelVisibility.public,
                           icon: Icons.public_rounded,
                         ),
@@ -510,7 +510,7 @@ class _ReelUploadScreenState extends State<ReelUploadScreen> {
             const SizedBox(height: 10),
             Text(
               "${(_uploadProgress * 100).toInt()}%",
-              style: GoogleFonts.orbitron(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+              style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ],
         ),

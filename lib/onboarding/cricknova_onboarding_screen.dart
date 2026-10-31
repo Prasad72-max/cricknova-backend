@@ -126,15 +126,15 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
     final steps = <_FlowStep>[
       _FlowStep.trialUpload(
         id: 'see_action',
-        kicker: 'See CrickNova In Action',
-        title: 'See CrickNova In Action',
+        kicker: 'See CricX In Action',
+        title: 'See CricX In Action',
         body: 'Upload a cricket video. Get instant insights.',
         ctaLabel: 'Continue',
       ),
       _FlowStep.message(
         id: 'welcome',
         kicker: 'The Welcome',
-        title: 'Welcome to CrickNova AI.',
+        title: 'Welcome to CricX AI.',
         body: _welcomeBody,
         ctaLabel: 'Continue',
         showSignIn: true,
@@ -142,7 +142,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
       _FlowStep.input(
         id: 'display_name',
         kicker: 'Your Name',
-        title: 'What does CrickNova call you?',
+        title: 'What does CricX call you?',
         body: 'Add the name you want us to use throughout your roadmap.',
         storageKey: 'display_name',
         ctaLabel: 'Continue',
@@ -152,7 +152,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
         kicker: 'Identity',
         category: 'Identity',
         question: 'What is your primary identity on the field?',
-        body: 'This decides how CrickNova judges your game.',
+        body: 'This decides how CricX judges your game.',
         storageKey: 'identity',
         options: _abcd('Batsman', 'Bowler', 'All-Rounder', 'Wicket-Keeper'),
       ),
@@ -538,7 +538,7 @@ class _CricknovaOnboardingScreenState extends State<CricknovaOnboardingScreen>
                 children: <Widget>[
                   RepaintBoundary(
                     child: _CinematicTopBar(
-                      title: 'CrickNova AI',
+                      title: 'CricX AI',
                       progressLabel: progressLabel,
                       progress: displayedProgress,
                       onBack: _stepIndex == 0 ? null : _goBack,
@@ -1993,7 +1993,7 @@ class _LuxuryTypography {
     double height = 1.15,
     double letterSpacing = 0,
   }) {
-    return GoogleFonts.cormorantGaramond(
+    return GoogleFonts.poppins(
       color: color,
       fontSize: fontSize,
       fontWeight: fontWeight,
@@ -2010,7 +2010,7 @@ class _LuxuryTypography {
     double height = 1.55,
     double letterSpacing = 0,
   }) {
-    return GoogleFonts.inter(
+    return GoogleFonts.poppins(
       color: color,
       fontSize: fontSize,
       fontWeight: fontWeight,
@@ -2025,7 +2025,7 @@ class _LuxuryTypography {
     FontWeight fontWeight = FontWeight.w600,
     double letterSpacing = 1.4,
   }) {
-    return GoogleFonts.inter(
+    return GoogleFonts.poppins(
       color: color,
       fontSize: fontSize,
       fontWeight: fontWeight,
@@ -2063,7 +2063,7 @@ class _CinematicTopBar extends StatelessWidget {
                 ],
                 Text(
                   title,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: const Color(0xFF444444),
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
@@ -2084,7 +2084,7 @@ class _CinematicTopBar extends StatelessWidget {
                   ),
                   child: Text(
                     progressLabel,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: const Color(0xFF555555),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
@@ -2434,7 +2434,7 @@ class _MessagePane extends StatelessWidget {
           padding: EdgeInsets.only(top: 56),
           child: _MessageInfoText(
             text:
-                'CrickNova AI onboarding built to pressure-test commitment before the roadmap begins.',
+                'CricX AI onboarding built to pressure-test commitment before the roadmap begins.',
           ),
         ),
       ),
@@ -2555,7 +2555,7 @@ class HardTruthScreen extends StatelessWidget {
                                         ),
                                         child: Text(
                                           '4 / 37',
-                                          style: GoogleFonts.inter(
+                                          style: GoogleFonts.poppins(
                                             color: const Color(0xFF9C9C9C),
                                             fontSize: 11,
                                             fontWeight: FontWeight.w600,
@@ -2565,8 +2565,8 @@ class HardTruthScreen extends StatelessWidget {
                                     ],
                                   ),
                                   Text(
-                                    'CrickNova AI',
-                                    style: GoogleFonts.inter(
+                                    'CricX AI',
+                                    style: GoogleFonts.poppins(
                                       color: const Color(0xFF8A8A8A),
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
@@ -2591,7 +2591,7 @@ class HardTruthScreen extends StatelessWidget {
                               const SizedBox(height: 44),
                               Text(
                                 'THE HARD TRUTH',
-                                style: GoogleFonts.inter(
+                                style: GoogleFonts.poppins(
                                   color: const Color(0xFFD4AF37),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
@@ -2601,7 +2601,7 @@ class HardTruthScreen extends StatelessWidget {
                               const SizedBox(height: 34),
                               Text(
                                 '$playerName, be honest...',
-                                style: GoogleFonts.playfairDisplay(
+                                style: GoogleFonts.poppins(
                                   color: const Color(0xFFF4F1EA),
                                   fontSize: 50,
                                   fontWeight: FontWeight.w700,
@@ -2612,7 +2612,7 @@ class HardTruthScreen extends StatelessWidget {
                               const SizedBox(height: 34),
                               Text.rich(
                                 TextSpan(
-                                  style: GoogleFonts.inter(
+                                  style: GoogleFonts.poppins(
                                     color: const Color(0xFFE7E1D5),
                                     fontSize: 21,
                                     fontWeight: FontWeight.w400,
@@ -2625,7 +2625,7 @@ class HardTruthScreen extends StatelessWidget {
                                     ),
                                     TextSpan(
                                       text: 'pressure',
-                                      style: GoogleFonts.inter(
+                                      style: GoogleFonts.poppins(
                                         color: const Color(0xFFD4AF37),
                                         fontSize: 21,
                                         fontWeight: FontWeight.w700,
@@ -2664,7 +2664,7 @@ class HardTruthScreen extends StatelessWidget {
                                       height: 150,
                                       child: _HardTruthStatCard(
                                         value: '2 weeks',
-                                        label: 'avg. with CrickNova',
+                                        label: 'avg. with CricX',
                                       ),
                                     ),
                                   ),
@@ -2702,7 +2702,7 @@ class HardTruthScreen extends StatelessWidget {
                                     Expanded(
                                       child: Text.rich(
                                         TextSpan(
-                                          style: GoogleFonts.inter(
+                                          style: GoogleFonts.poppins(
                                             color: const Color(0xFFE8E1D4),
                                             fontSize: 17.5,
                                             fontWeight: FontWeight.w400,
@@ -2710,11 +2710,11 @@ class HardTruthScreen extends StatelessWidget {
                                           ),
                                           children: <InlineSpan>[
                                             const TextSpan(
-                                              text: 'CrickNova AI ',
+                                              text: 'CricX AI ',
                                             ),
                                             TextSpan(
                                               text: 'pressure-tests',
-                                              style: GoogleFonts.inter(
+                                              style: GoogleFonts.poppins(
                                                 color: const Color(0xFFD4AF37),
                                                 fontSize: 16.5,
                                                 fontWeight: FontWeight.w700,
@@ -2727,7 +2727,7 @@ class HardTruthScreen extends StatelessWidget {
                                             ),
                                             TextSpan(
                                               text: 'roadmap',
-                                              style: GoogleFonts.inter(
+                                              style: GoogleFonts.poppins(
                                                 color: const Color(0xFFD4AF37),
                                                 fontSize: 16.5,
                                                 fontWeight: FontWeight.w700,
@@ -2766,7 +2766,7 @@ class HardTruthScreen extends StatelessWidget {
                                   ),
                                   child: Text(
                                     'I need the answer',
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.poppins(
                                       fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.black,
@@ -2779,7 +2779,7 @@ class HardTruthScreen extends StatelessWidget {
                                 child: Text(
                                   'Want to know the solution? Continue to see it.',
                                   textAlign: TextAlign.center,
-                                  style: GoogleFonts.inter(
+                                  style: GoogleFonts.poppins(
                                     color: const Color(0xFF8A8A8A),
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.w400,
@@ -2825,7 +2825,7 @@ class _HardTruthStatCard extends StatelessWidget {
           Text(
             value,
             textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.poppins(
               color: const Color(0xFFD4AF37),
               fontSize: 32,
               fontWeight: FontWeight.w800,
@@ -2839,7 +2839,7 @@ class _HardTruthStatCard extends StatelessWidget {
             maxLines: 2,
             softWrap: true,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.poppins(
               color: const Color(0xFF8C8A80),
               fontSize: 12,
               fontWeight: FontWeight.w400,
@@ -2883,7 +2883,7 @@ class _WelcomePane extends StatelessWidget {
                         const SizedBox(height: 10),
                         Text(
                           'THE WELCOME',
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.poppins(
                             color: const Color(0xBFD4AF37),
                             fontSize: 10,
                             fontWeight: FontWeight.w500,
@@ -2997,7 +2997,7 @@ class _WelcomePane extends StatelessWidget {
                         TextSpan(
                           style: const TextStyle(
                             color: Color(0xFFE8E8E8),
-                            fontFamily: 'Georgia',
+                            fontFamily: GoogleFonts.poppins().fontFamily,
                             fontSize: 19,
                             fontStyle: FontStyle.italic,
                             fontWeight: FontWeight.w400,
@@ -3036,7 +3036,7 @@ class _WelcomePane extends StatelessWidget {
                             ),
                             child: Text(
                               'BEGIN YOUR JOURNEY',
-                              style: GoogleFonts.inter(
+                              style: GoogleFonts.poppins(
                                 color: const Color(0xFF0C0C0C),
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
@@ -3049,7 +3049,7 @@ class _WelcomePane extends StatelessWidget {
                         Text(
                           'Every answer personalizes your cricket roadmap',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.poppins(
                             color: const Color(0xFFE8E8E8),
                             fontSize: 10,
                             fontWeight: FontWeight.w400,
@@ -3067,7 +3067,7 @@ class _WelcomePane extends StatelessWidget {
                           ),
                           child: Text.rich(
                             TextSpan(
-                              style: GoogleFonts.inter(
+                              style: GoogleFonts.poppins(
                                 color: const Color(0xFFE8E8E8),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w400,
@@ -3121,7 +3121,7 @@ class _WelcomeStatCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0xFFD4AF37),
-              fontFamily: 'Georgia',
+              fontFamily: GoogleFonts.poppins().fontFamily,
               fontSize: 37,
               fontWeight: FontWeight.w700,
               height: 1.0,
@@ -3133,7 +3133,7 @@ class _WelcomeStatCard extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.poppins(
               color: const Color(0xFFF0F0F0),
               fontSize: 13,
               fontWeight: FontWeight.w400,
@@ -3888,7 +3888,7 @@ class _SummaryPane extends StatelessWidget {
             ),
             child: _HighlightedCopy(
               text:
-                  'This is your reality mirror. What CrickNova reveals next becomes your roadmap.',
+                  'This is your reality mirror. What CricX reveals next becomes your roadmap.',
               style: _LuxuryTypography.body(
                 color: Colors.white,
                 fontSize: 20,
@@ -4072,7 +4072,7 @@ class _RatingStepPaneState extends State<_RatingStepPane>
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  'Players build CrickNova with us.',
+                  'Players build CricX with us.',
                   textAlign: TextAlign.center,
                   style: _LuxuryTypography.body(
                     color: Colors.white,
@@ -4277,7 +4277,7 @@ class _RealityMirrorInsightCard extends StatelessWidget {
                 letterSpacing: 0,
               ),
               children: <TextSpan>[
-                const TextSpan(text: 'CrickNova now builds your '),
+                const TextSpan(text: 'CricX now builds your '),
                 TextSpan(
                   text: 'personal roadmap',
                   style: _LuxuryTypography.body(
@@ -4375,7 +4375,7 @@ class _RealityMirrorScreen extends StatelessWidget {
                           delay: const Duration(milliseconds: 160),
                           child: Text(
                             'Stagnation',
-                            style: GoogleFonts.playfairDisplay(
+                            style: GoogleFonts.poppins(
                               color: const Color(0xFFEFEFEF),
                               fontSize: 56,
                               fontWeight: FontWeight.w700,
@@ -4388,7 +4388,7 @@ class _RealityMirrorScreen extends StatelessWidget {
                           delay: const Duration(milliseconds: 240),
                           child: Text(
                             'Detected.',
-                            style: GoogleFonts.playfairDisplay(
+                            style: GoogleFonts.poppins(
                               color: _CricknovaOnboardingScreenState._gold,
                               fontSize: 56,
                               fontWeight: FontWeight.w700,
@@ -4471,7 +4471,7 @@ class _RealityMirrorScreen extends StatelessWidget {
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Color(0xFFF4F1EA),
-                              fontFamily: 'Georgia',
+                              fontFamily: GoogleFonts.poppins().fontFamily,
                               fontSize: 15,
                               fontStyle: FontStyle.italic,
                               fontWeight: FontWeight.w400,
@@ -4503,7 +4503,7 @@ class _RealityMirrorScreen extends StatelessWidget {
                       ),
                       child: Text(
                         'SHOW ME MY ROADMAP',
-                        style: GoogleFonts.dmSans(
+                        style: GoogleFonts.poppins(
                           color: const Color(0xFF0C0C0C),
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
@@ -4546,7 +4546,7 @@ class _RealityMirrorStatCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Color(0xFFD4AF37),
-              fontFamily: 'Georgia',
+              fontFamily: GoogleFonts.poppins().fontFamily,
               fontSize: 26,
               fontWeight: FontWeight.w700,
               height: 1.0,
@@ -4558,7 +4558,7 @@ class _RealityMirrorStatCard extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.poppins(
               color: const Color(0xFFF4F1EA),
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -4600,8 +4600,8 @@ class _RealityMirrorNav extends StatelessWidget {
           ),
         ),
         Text(
-          'CrickNova AI',
-          style: GoogleFonts.dmSans(
+          'CricX AI',
+          style: GoogleFonts.poppins(
             color: const Color(0xFFF4F1EA),
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -4616,7 +4616,7 @@ class _RealityMirrorNav extends StatelessWidget {
           ),
           child: Text(
             '5 / 37',
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.poppins(
               color: const Color(0xFFF4F1EA),
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -4741,7 +4741,7 @@ class _RealityMirrorInsightRow extends StatelessWidget {
         Expanded(
           child: Text.rich(
             TextSpan(
-              style: GoogleFonts.dmSans(
+              style: GoogleFonts.poppins(
                 color: const Color(0xFFF4F1EA),
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
@@ -4751,7 +4751,7 @@ class _RealityMirrorInsightRow extends StatelessWidget {
                 TextSpan(text: leading),
                 TextSpan(
                   text: highlight,
-                  style: GoogleFonts.dmSans(
+                  style: GoogleFonts.poppins(
                     color: const Color(0xFFD4AF37),
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
@@ -4787,17 +4787,17 @@ class _RealityMirrorInfoCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(30, 28, 30, 28),
         child: Text.rich(
           TextSpan(
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.poppins(
               color: const Color(0xFFF4F1EA),
               fontSize: 17,
               fontWeight: FontWeight.w400,
               height: 1.7,
             ),
             children: <InlineSpan>[
-              const TextSpan(text: 'CrickNova builds your personal '),
+              const TextSpan(text: 'CricX builds your personal '),
               TextSpan(
                 text: 'roadmap',
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.poppins(
                   color: const Color(0xFFD4AF37),
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -4810,7 +4810,7 @@ class _RealityMirrorInfoCard extends StatelessWidget {
               ),
               TextSpan(
                 text: 'precision',
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.poppins(
                   color: const Color(0xFFD4AF37),
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -4870,7 +4870,7 @@ class _TechnicalBlindnessPane extends StatelessWidget {
                     delay: const Duration(milliseconds: 70),
                     child: Text(
                       title,
-                      style: GoogleFonts.playfairDisplay(
+                      style: GoogleFonts.poppins(
                         color: const Color(0xFFF5F0E0),
                         fontSize: 31,
                         fontWeight: FontWeight.w700,
@@ -4911,7 +4911,7 @@ class _TechnicalBlindnessPane extends StatelessWidget {
                     delay: const Duration(milliseconds: 1600),
                     child: const _TechnicalBlindnessFeatureCard(
                       icon: _TechnicalBlindnessIcon.target,
-                      title: 'Cricknova Mistake Detection',
+                      title: 'CricX Mistake Detection',
                       desc:
                           'AI watches your game and pinpoints every technical error - grip, stance, follow-through',
                     ),
@@ -4931,7 +4931,7 @@ class _TechnicalBlindnessPane extends StatelessWidget {
                     delay: const Duration(milliseconds: 1840),
                     child: const _TechnicalBlindnessFeatureCard(
                       icon: _TechnicalBlindnessIcon.chat,
-                      title: 'Cricknova Chat Coach',
+                      title: 'CricX Chat Coach',
                       desc:
                           'Ask anything - your personal cricket coach available 24/7, always in your corner',
                     ),
@@ -4946,7 +4946,7 @@ class _TechnicalBlindnessPane extends StatelessWidget {
                     child: Text(
                       'Your reality check is ready',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.poppins(
                         color: const Color(0xFFF4F1EA),
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -4985,7 +4985,7 @@ class _TechnicalBlindnessQuote extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: GoogleFonts.inter(
+      style: GoogleFonts.poppins(
         color: const Color(0xFFD4AF37),
         fontSize: 16.5,
         fontWeight: FontWeight.w600,
@@ -5027,7 +5027,7 @@ class _TechnicalBlindnessFeatureCard extends StatelessWidget {
               children: <Widget>[
                 Text(
                   title,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: const Color(0xFFD4AF37),
                     fontSize: 14.5,
                     fontWeight: FontWeight.w600,
@@ -5037,7 +5037,7 @@ class _TechnicalBlindnessFeatureCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   desc,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: const Color(0xFFF4F1EA),
                     fontSize: 12.5,
                     fontWeight: FontWeight.w500,
@@ -5119,7 +5119,7 @@ class _TechnicalBlindnessInfoCard extends StatelessWidget {
       ),
       child: Text.rich(
         TextSpan(
-          style: GoogleFonts.inter(
+          style: GoogleFonts.poppins(
             color: const Color(0xFFF4F1EA),
             fontSize: 14.5,
             fontWeight: FontWeight.w500,
@@ -5129,17 +5129,17 @@ class _TechnicalBlindnessInfoCard extends StatelessWidget {
             const TextSpan(text: 'This is your '),
             TextSpan(
               text: 'reality mirror',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.poppins(
                 color: const Color(0xFFD4AF37),
                 fontSize: 14.5,
                 fontWeight: FontWeight.w500,
                 height: 1.6,
               ),
             ),
-            const TextSpan(text: '. What CrickNova reveals next becomes your '),
+            const TextSpan(text: '. What CricX reveals next becomes your '),
             TextSpan(
               text: 'roadmap',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.poppins(
                 color: const Color(0xFFD4AF37),
                 fontSize: 14.5,
                 fontWeight: FontWeight.w500,
@@ -5975,7 +5975,7 @@ class _RoadmapScreenState extends State<_RoadmapScreen> {
               children: <Widget>[
                 const RepaintBoundary(
                   child: _CinematicTopBar(
-                    title: 'CrickNova AI',
+                    title: 'CricX AI',
                     progressLabel: '37 / 37',
                     progress: 1,
                     onBack: null,
@@ -6047,7 +6047,7 @@ class _RoadmapLoadingPanel extends StatelessWidget {
             const SizedBox(height: 18),
             Text(
               '$loadingPercent%',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 54,
                 fontWeight: FontWeight.w800,
@@ -6154,7 +6154,7 @@ class _RoadmapContent extends StatelessWidget {
                         'We\'ve analyzed your 35 data points. Your dedication is clear, but your trajectory needs correction. At ',
                   ),
                   TextSpan(
-                    text: 'CrickNova',
+                    text: 'CricX',
                     style: _LuxuryTypography.body(
                       color: const Color(0xFFD4AF37),
                       fontSize: 18,
@@ -6197,7 +6197,7 @@ class _RoadmapContent extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'How CrickNova Helps You',
+              'How CricX Helps You',
               style: _LuxuryTypography.body(
                 color: Colors.white,
                 fontSize: 24,
@@ -6384,7 +6384,7 @@ class _RoadmapContent extends StatelessWidget {
   }
 
   String get _upgradePlanLabel {
-    return _isIndiaPricing ? 'Ultra Pro • ₹1999' : 'CrickNova Elite • \$109.99';
+    return _isIndiaPricing ? 'Ultra Pro • ₹1999' : 'CricX Elite • \$109.99';
   }
 
   bool get _isIndiaPricing =>
@@ -6400,13 +6400,13 @@ class _RoadmapContent extends StatelessWidget {
 
     return <_RoadmapInfoCard>[
       const _RoadmapInfoCard(
-        title: 'Cricknova Mistake Detection',
+        title: 'CricX Mistake Detection',
         body:
             'Shows where your technique leaks so you stop repeating the same error.',
         accent: Color(0xFFD4AF37),
       ),
       _RoadmapInfoCard(
-        title: 'Cricknova Chat Coach',
+        title: 'CricX Chat Coach',
         body:
             'Gives you real-time correction instead of generic training advice.',
         accent: const Color(0xFFD4AF37),
@@ -6739,7 +6739,7 @@ class _UglyTruthLoadingPaneState extends State<_UglyTruthLoadingPane> {
     return _PaneShell(
       kicker: 'PREPARING YOUR REVEAL',
       title: 'Building the ugly truth...',
-      body: 'A few signals are being lined up before you enter CrickNova.',
+      body: 'A few signals are being lined up before you enter CricX.',
       footer: Text(
         _items[_statusIndex],
         textAlign: TextAlign.center,
@@ -6837,7 +6837,7 @@ class _UglyTruthFinalPane extends StatelessWidget {
       'Feedback creates improvement.',
       'The players who improve fastest are usually not the ones who train the most.',
       'They are the ones who understand what needs fixing.',
-      'CrickNova was built to help you see what your eyes cannot.',
+      'CricX was built to help you see what your eyes cannot.',
       'Every video contains information.',
       'Your next improvement may already be hidden inside your training footage.',
     ];
@@ -7084,8 +7084,8 @@ class _FeatureProofPaneState extends State<_FeatureProofPane> {
           ? 'HOW TO FIX'
           : 'UPLOADED CLIP DETECTION',
       title: _showFixStep
-          ? 'Now see how CrickNova fixes the clip.'
-          : 'Your uploaded clip is being read by CrickNova.',
+          ? 'Now see how CricX fixes the clip.'
+          : 'Your uploaded clip is being read by CricX.',
       body: '',
       footer: _PulseButton(
         label: footerLabel,
@@ -7177,7 +7177,7 @@ class _UploadedClipDetectionCard extends StatelessWidget {
             icon: Icons.video_camera_back_rounded,
             color: _FeatureProofPaneState._gold,
             label: 'UPLOADED CLIP DETECTION',
-            title: 'CrickNova reads the clip and spots what is happening.',
+            title: 'CricX reads the clip and spots what is happening.',
           ),
           const SizedBox(height: 12),
           _FeatureGroup(
@@ -7204,7 +7204,7 @@ class _UploadedClipDetectionCard extends StatelessWidget {
             title: 'Live Preview',
             items: const [
               _FeatureLine(
-                title: 'CrickNova Edge',
+                title: 'CricX Edge',
                 text:
                     'Live mistake detection with fast premium coaching feedback.',
               ),
@@ -7255,7 +7255,7 @@ class _FixFlowCard extends StatelessWidget {
             icon: Icons.auto_fix_high_rounded,
             color: _FeatureProofPaneState._teal,
             label: 'HOW TO FIX',
-            title: 'CrickNova shows the correction path in the next step.',
+            title: 'CricX shows the correction path in the next step.',
           ),
           const SizedBox(height: 12),
           const _FeatureLine(
@@ -7274,12 +7274,12 @@ class _FixFlowCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const _FeatureLine(
-            title: 'CrickNova Chat Coach',
+            title: 'CricX Chat Coach',
             text: 'Get a clear chat-based explanation of what to try next.',
           ),
           const SizedBox(height: 8),
           const _FeatureLine(
-            title: 'CrickNova Edge',
+            title: 'CricX Edge',
             text: 'Live mistake detection for fast premium coaching feedback.',
           ),
           const SizedBox(height: 12),
@@ -7358,7 +7358,7 @@ class _FeatureLine extends StatelessWidget {
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: GoogleFonts.inter(
+              style: GoogleFonts.poppins(
                 color: Colors.white70,
                 fontSize: 12.3,
                 height: 1.28,
@@ -7819,9 +7819,9 @@ class _RatingScreen extends StatelessWidget {
               const SizedBox(height: 24),
 
               Text(
-                "Enjoying CrickNova AI?",
+                "Enjoying CricX AI?",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cormorantGaramond(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 36,
                   fontWeight: FontWeight.w700,
@@ -7833,7 +7833,7 @@ class _RatingScreen extends StatelessWidget {
               Text(
                 "Your feedback helps us improve and reach more athletes like you.",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(color: Colors.white70, fontSize: 16),
+                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 16),
               ),
 
               const SizedBox(height: 32),

@@ -97,7 +97,7 @@ class _CertificatePreviewScreenState extends State<CertificatePreviewScreen> {
       await Share.shareXFiles(
         [XFile(file.path)],
         text:
-            '🏏 My CrickNova Certificate\nTop: ${widget.topSpeed.toStringAsFixed(1)} km/h\nAvg: ${widget.avgSpeed.toStringAsFixed(1)} km/h\nAccuracy: ${widget.accuracyPercent.toStringAsFixed(0)}%\nXP: ${widget.sessionXp}\n${widget.appLink}',
+            '🏏 My CricX Certificate\nTop: ${widget.topSpeed.toStringAsFixed(1)} km/h\nAvg: ${widget.avgSpeed.toStringAsFixed(1)} km/h\nAccuracy: ${widget.accuracyPercent.toStringAsFixed(0)}%\nXP: ${widget.sessionXp}\n${widget.appLink}',
       );
     } catch (_) {
       if (!mounted) return;

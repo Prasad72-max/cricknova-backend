@@ -103,7 +103,7 @@ class _MagicMetrics extends StatelessWidget {
                   ),
                   curve: NovaTokens.ease,
                   child: Text(
-                    'Your answers shape these. CrickNova adapts in real time.',
+                    'Your answers shape these. CricX adapts in real time.',
                     textAlign: TextAlign.center,
                     style: NovaTypography.body(
                       size: 12,

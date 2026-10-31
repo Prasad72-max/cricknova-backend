@@ -16,39 +16,27 @@ router = APIRouter()
 # -----------------------------
 PLAN_LIMITS = {
     "IN_99": {
-        "mistake_limit": 15,
+        "mistake_limit": 90,
         "duration_days": 30,
     },
     "IN_299": {
-        "mistake_limit": 30,
+        "mistake_limit": 400,
         "duration_days": 180,
     },
     "IN_499": {
-        "mistake_limit": 60,
-        "duration_days": 365,
-    },
-    "IN_1999": {
-        "mistake_limit": 150,
+        "mistake_limit": 800,
         "duration_days": 365,
     },
     "INTL_MONTHLY": {
-        "mistake_limit": 15,
+        "mistake_limit": 90,
         "duration_days": 30,
     },
     "INTL_6M": {
-        "mistake_limit": 30,
+        "mistake_limit": 400,
         "duration_days": 180,
     },
     "INTL_YEARLY": {
-        "mistake_limit": 60,
-        "duration_days": 365,
-    },
-    "INT_ULTRA": {
-        "mistake_limit": 150,
-        "duration_days": 365,
-    },
-    "INTL_ULTRA": {
-        "mistake_limit": 150,
+        "mistake_limit": 800,
         "duration_days": 365,
     },
 }

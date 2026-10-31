@@ -411,7 +411,7 @@ class VisaLogoBadge extends StatelessWidget {
       ),
       child: Text(
         'VISA',
-        style: GoogleFonts.roboto(
+        style: GoogleFonts.poppins(
           color: Colors.white,
           fontWeight: FontWeight.w900,
           fontStyle: FontStyle.italic,

@@ -33,7 +33,7 @@ List<NovaStep> _placeholderSteps() {
   return <NovaStep>[
     const NovaWelcomeStep(
       id: 'welcome',
-      brandTitle: 'CrickNova AI',
+      brandTitle: 'CricX AI',
       heroTitle: 'Your AI coach,\nbuilt for cricket.',
       heroSubtitle:
           'A fast profile build that unlocks a personalized training journey.',
@@ -69,7 +69,7 @@ List<NovaStep> _placeholderSteps() {
     const NovaMagicMomentStep(
       id: 'magic',
       categoryLabel: 'AI Preview',
-      title: 'Watch CrickNova adapt.',
+      title: 'Watch CricX adapt.',
       subtitle: 'A quick glimpse of what your profile unlocks.',
       metrics: [
         NovaMetric(label: 'Swing', value: '—'),
@@ -89,13 +89,13 @@ List<NovaStep> _placeholderSteps() {
     const NovaSummaryStep(
       id: 'summary',
       title: 'Your profile is ready.',
-      subtitle: 'CrickNova will tune coaching around this.',
+      subtitle: 'CricX will tune coaching around this.',
       items: [
         NovaSummaryItem(label: 'Role', value: '—'),
         NovaSummaryItem(label: 'Focus', value: '—'),
         NovaSummaryItem(label: 'Intensity', value: '—'),
       ],
-      ctaLabel: 'Enter CrickNova',
+      ctaLabel: 'Enter CricX',
     ),
   ];
 }

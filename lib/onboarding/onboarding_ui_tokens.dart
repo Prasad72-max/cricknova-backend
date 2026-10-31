@@ -46,9 +46,9 @@ class OnboardingTextStyles {
   static const double _fontScale = 1.06;
 
   static String get _geistSansFallback =>
-      GoogleFonts.dmSans().fontFamily ?? 'DM Sans';
+      GoogleFonts.poppins().fontFamily ?? 'Poppins';
   static String get _geistMonoFallback =>
-      GoogleFonts.jetBrainsMono().fontFamily ?? 'JetBrains Mono';
+      GoogleFonts.poppins().fontFamily ?? 'Poppins';
 
   static double? _scaled(double? fontSize) =>
       fontSize == null ? null : fontSize * _fontScale;
@@ -61,7 +61,7 @@ class OnboardingTextStyles {
     double? letterSpacing,
     FontStyle? fontStyle,
   }) {
-    return GoogleFonts.instrumentSerif(
+    return GoogleFonts.poppins(
       color: color,
       fontSize: _scaled(fontSize),
       fontWeight: fontWeight,

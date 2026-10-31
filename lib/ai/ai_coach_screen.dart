@@ -17,6 +17,7 @@ import '../widgets/premium_blur_lock.dart';
 import '../navigation/main_navigation.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/crickx_colors.dart';
+import '../services/analysis_credit_service.dart';
 
 class AICoachScreen extends StatefulWidget {
   final Map<String, dynamic>? payloadContext;
@@ -62,6 +63,8 @@ class _AICoachScreenState extends State<AICoachScreen> {
       }
       if (mounted) setState(() {});
     });
+    AnalysisCreditService.instance.loadCredits();
+    AnalysisCreditService.instance.chatCreditsNotifier.addListener(_onChatCreditsChanged);
     PremiumService.premiumNotifier.addListener(_onPremiumChanged);
 
     controller.addListener(() {
@@ -87,12 +90,18 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   @override
   void dispose() {
+    AnalysisCreditService.instance.chatCreditsNotifier.removeListener(_onChatCreditsChanged);
     PremiumService.premiumNotifier.removeListener(_onPremiumChanged);
     MainNavigation.userNameNotifier.removeListener(_onUserNameChanged);
     _chatProvider.dispose();
     controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _onChatCreditsChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   void _onUserNameChanged() {
@@ -242,7 +251,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
               "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
               "messages": messages,
               "temperature": 0.6,
-              "max_tokens": 1600,
+              "max_tokens": 4096,
               "chat_template_kwargs": {"enable_thinking": false},
             }),
           )
@@ -264,6 +273,111 @@ class _AICoachScreenState extends State<AICoachScreen> {
     return null;
   }
 
+  Future<bool> _showWatchAdForChatDialog() async {
+    bool unlocked = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: CrickXColors.graphiteBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+        ),
+        title: Text(
+          '🎬 Watch Ad to Unlock CricX Chat',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Watch a short video ad to unlock 5 free CricX Coach messages, or upgrade to Premium for unlimited chats.',
+              style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.play_circle_fill_rounded, size: 20),
+                label: const Text(
+                  'Watch Ad (5 Free Chats)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: CrickXColors.onLime,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () async {
+                  Navigator.of(dialogCtx).pop();
+                  final result =
+                      await AnalysisCreditService.instance.watchAdForChatCredit();
+                  if (result == AdWatchResult.rewardEarned ||
+                      result == AdWatchResult.premiumUser) {
+                    unlocked = true;
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🎉 5 CricX Chat messages added!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      setState(() {});
+                    }
+                  } else if (result == AdWatchResult.adNotAvailable) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              "Ad isn't available right now. Please try again."),
+                        ),
+                      );
+                    }
+                  } else if (result == AdWatchResult.adClosedEarly) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text("Watch the complete ad to get your 5 chats."),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const PremiumScreen(entrySource: "ai_coach"),
+                  ),
+                );
+              },
+              child: const Text(
+                'Get Premium (Unlimited Chats)',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return unlocked;
+  }
+
   /* ---------------- SEND MESSAGE ---------------- */
 
   Future<void> sendMessage() async {
@@ -271,18 +385,24 @@ class _AICoachScreenState extends State<AICoachScreen> {
     String userMessage = raw.trim();
     if (userMessage.isEmpty) return;
 
-    // 🔒 Real-time premium gate (single source of truth)
+    // Check premium or ad credits
     if (!PremiumService.isLoaded) {
       await PremiumService.restoreOnLaunch();
     }
-    if (!PremiumService.isPremiumActive) {
-      await PremiumService.ensureFreshState();
-    }
-    if (!PremiumService.isPremiumActive) {
-      if (mounted) {
-        await _redirectToPremiumWithReason();
+    final isPremium = PremiumService.isPremiumActive;
+    if (!isPremium) {
+      final currentCredits = AnalysisCreditService.instance.chatCredits;
+      if (currentCredits <= 0) {
+        final earned = await _showWatchAdForChatDialog();
+        if (!earned && AnalysisCreditService.instance.chatCredits <= 0) {
+          return;
+        }
       }
-      return;
+      final consumed = await AnalysisCreditService.instance.consumeChatCredit();
+      if (!consumed && !PremiumService.isPremiumActive) {
+        await _showWatchAdForChatDialog();
+        return;
+      }
     }
 
     controller.clear();
@@ -874,14 +994,13 @@ class _AICoachScreenState extends State<AICoachScreen> {
       value: _chatProvider,
       child: Consumer<ChatSessionsProvider>(
         builder: (context, provider, _) {
-          final locked =
-              !PremiumService.isLoaded || !PremiumService.isPremiumActive;
+          final isPremium =
+              PremiumService.isLoaded && PremiumService.isPremiumActive;
+          final chatCredits = AnalysisCreditService.instance.chatCredits;
+          final locked = !isPremium && chatCredits <= 0;
+
           void unlock() {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => const PremiumScreen(entrySource: "ai_coach"),
-              ),
-            );
+            _showWatchAdForChatDialog();
           }
 
           final hasMessages = provider.messages.isNotEmpty;
@@ -908,13 +1027,88 @@ class _AICoachScreenState extends State<AICoachScreen> {
                 ),
               ),
               title: Text(
-                "CrickX Coach",
+                "CricX Coach",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              actions: [
+                ValueListenableBuilder<int>(
+                  valueListenable:
+                      AnalysisCreditService.instance.chatCreditsNotifier,
+                  builder: (context, credits, _) {
+                    final premium =
+                        PremiumService.isLoaded && PremiumService.isPremiumActive;
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 14),
+                        child: InkWell(
+                          onTap: premium ? null : () => _showWatchAdForChatDialog(),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: premium
+                                  ? CrickXColors.limeSpark.withValues(alpha: 0.2)
+                                  : (credits > 0
+                                      ? CrickXColors.limeSpark
+                                          .withValues(alpha: 0.15)
+                                      : Colors.orange.withValues(alpha: 0.2)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: premium
+                                    ? CrickXColors.limeSpark
+                                    : (credits > 0
+                                        ? CrickXColors.limeSpark
+                                        : Colors.orangeAccent),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  premium
+                                      ? Icons.star_rounded
+                                      : Icons.chat_bubble_outline_rounded,
+                                  size: 14,
+                                  color: premium
+                                      ? CrickXColors.limeSpark
+                                      : (credits > 0
+                                          ? CrickXColors.limeSpark
+                                          : Colors.orangeAccent),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  premium ? "PRO" : "$credits left",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                if (!premium) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.add_circle,
+                                    size: 14,
+                                    color: Colors.white70,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
             body: Column(
               children: [
@@ -945,7 +1139,7 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                     ],
                                   ),
                                   child: Text(
-                                    "CrickX Coach: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
+                                    "CricX Coach: Your action plan is simple—fix your head position, shorten your run-up, and focus on one seam drill daily for 10 minutes...",
                                     maxLines: 2,
                                     overflow: TextOverflow.fade,
                                     style: GoogleFonts.poppins(
@@ -967,10 +1161,10 @@ class _AICoachScreenState extends State<AICoachScreen> {
                                 ),
                                 child: PremiumBlurLock(
                                   locked: true,
-                                  ctaText: "TALK TO CRICKX COACH",
-                                  title: "CrickX Coach Locked",
+                                  ctaText: "WATCH AD (5 CHATS) OR GO PRO",
+                                  title: "CricX Coach Locked",
                                   subtitle:
-                                      "See full CrickX coaching, personalised mistakes and drills with Premium.",
+                                      "Watch an ad to get 5 free CricX Coach messages, or upgrade to Premium.",
                                   onUnlock: unlock,
                                   child: ListView(
                                     controller: _scrollController,

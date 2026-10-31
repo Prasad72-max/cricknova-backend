@@ -660,7 +660,7 @@ class _EliteOnboardingWelcomeDialogState
                                     padding: EdgeInsets.symmetric(vertical: 14),
                                     child: Center(
                                       child: Text(
-                                        'Enter CrickNova',
+                                        'Enter CricX',
                                         style: TextStyle(
                                           color: Colors.black,
                                           fontSize: 15,

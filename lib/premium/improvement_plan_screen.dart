@@ -357,7 +357,7 @@ class _ImprovementTopBar extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            'CrickNova Elite',
+            'CricX Elite',
             style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: 18,
@@ -1036,7 +1036,7 @@ class _MaxFixSummary extends StatelessWidget {
             ),
             child: Text(
               '${entry.maxDays}',
-              style: GoogleFonts.orbitron(
+              style: GoogleFonts.poppins(
                 color: CrickXColors.limeSpark,
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
@@ -1221,7 +1221,7 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             label,
-            style: GoogleFonts.orbitron(
+            style: GoogleFonts.poppins(
               color: color,
               fontSize: 9.5,
               fontWeight: FontWeight.w800,
@@ -1473,7 +1473,7 @@ class _DayTile extends StatelessWidget {
                   ),
                   child: Text(
                     '$day',
-                    style: GoogleFonts.orbitron(
+                    style: GoogleFonts.poppins(
                       color: accent,
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
@@ -1589,7 +1589,7 @@ class _DrillTile extends StatelessWidget {
             ),
             child: Text(
               '$index',
-              style: GoogleFonts.orbitron(
+              style: GoogleFonts.poppins(
                 color: accent,
                 fontSize: 11,
                 fontWeight: FontWeight.w900,

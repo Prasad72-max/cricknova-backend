@@ -2365,7 +2365,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                   title,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontFamily: "RobotoCondensed",
+                    fontFamily: "Poppins",
                     fontSize: 10.5,
                     fontWeight: FontWeight.w600,
                   ),
@@ -2374,7 +2374,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                   value,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontFamily: "RobotoCondensed",
+                    fontFamily: "Poppins",
                     fontWeight: FontWeight.w900,
                     fontSize: 14,
                   ),
@@ -2398,7 +2398,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
         text,
         style: const TextStyle(
           color: Colors.white,
-          fontFamily: "RobotoCondensed",
+          fontFamily: "Poppins",
           fontWeight: FontWeight.w700,
           fontSize: 11.5,
         ),
@@ -2456,7 +2456,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                 "ULTRA-EDGE: $statusText",
                 style: TextStyle(
                   color: statusColor,
-                  fontFamily: "RobotoCondensed",
+                  fontFamily: "Poppins",
                   fontWeight: FontWeight.w800,
                   fontSize: 12,
                   letterSpacing: 0.4,
@@ -2527,7 +2527,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                   _decisionCall.toUpperCase(),
                   style: TextStyle(
                     color: accent,
-                    fontFamily: "Montserrat",
+                    fontFamily: "Poppins",
                     fontWeight: FontWeight.w900,
                     fontSize: 32,
                     letterSpacing: 1.2,
@@ -2539,7 +2539,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                     reason.toUpperCase(),
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.85),
-                      fontFamily: "RobotoCondensed",
+                      fontFamily: "Poppins",
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                       letterSpacing: 1.0,
@@ -2629,7 +2629,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
               title,
               style: const TextStyle(
                 color: Colors.white,
-                fontFamily: "Montserrat",
+                fontFamily: "Poppins",
                 fontWeight: FontWeight.w900,
                 fontSize: 26,
                 letterSpacing: 1.1,
@@ -2819,7 +2819,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                                 "DECISION PENDING",
                                 style: TextStyle(
                                   color: Color(0xFFFFE082),
-                                  fontFamily: "Montserrat",
+                                  fontFamily: "Poppins",
                                   fontWeight: FontWeight.w800,
                                   fontSize: 11,
                                   letterSpacing: 1.2,
@@ -2831,7 +2831,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                               "Close call! What's your decision, Umpire?",
                               style: TextStyle(
                                 color: Colors.white,
-                                fontFamily: "Montserrat",
+                                fontFamily: "Poppins",
                                 fontWeight: FontWeight.w900,
                                 fontSize: 24,
                                 height: 1.15,
@@ -2930,7 +2930,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                         _userCallLabel,
                         style: TextStyle(
                           color: _userCallAccent,
-                          fontFamily: "Montserrat",
+                          fontFamily: "Poppins",
                           fontSize: 14,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.8,
@@ -3006,7 +3006,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             : "Sharp try! But the CrickX Call spotted something different.",
                         style: const TextStyle(
                           color: Colors.white,
-                          fontFamily: "Montserrat",
+                          fontFamily: "Poppins",
                           fontWeight: FontWeight.w900,
                           fontSize: 20,
                           height: 1.15,
@@ -3023,7 +3023,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                             text: TextSpan(
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.82),
-                                fontFamily: "Montserrat",
+                                fontFamily: "Poppins",
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -3117,7 +3117,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                                   card["value"]! as String,
                                   style: TextStyle(
                                     color: accentColor,
-                                    fontFamily: "Montserrat",
+                                    fontFamily: "Poppins",
                                     fontSize: 14,
                                     fontWeight: FontWeight.w900,
                                   ),
@@ -3376,7 +3376,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                                     "WICKET!",
                                     style: TextStyle(
                                       color: Color(0xFFFF6E6E),
-                                      fontFamily: "Montserrat",
+                                      fontFamily: "Poppins",
                                       fontWeight: FontWeight.w900,
                                       fontSize: 34,
                                       letterSpacing: 1.6,
@@ -3424,7 +3424,7 @@ class _DrsCinematicScreenState extends State<_DrsCinematicScreen>
                                 "CRICKNOVA REPLAY",
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontFamily: "Montserrat",
+                                  fontFamily: "Poppins",
                                   fontWeight: FontWeight.w800,
                                   fontSize: 10.5,
                                   letterSpacing: 0.7,
@@ -3631,7 +3631,7 @@ class _CoachReplyViewState extends State<_CoachReplyView> {
     final out = <String>[];
     for (int i = 0; i < mistakes.length; i++) {
       final clean = mistakes[i].replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
-      out.add("Mistake ${i + 1}: $clean");
+      out.add(mistakes.length == 1 ? "Mistake: $clean" : "Mistake ${i + 1}: $clean");
     }
     if (impact != null && impact.trim().isNotEmpty) {
       final cleanImp = impact.replaceFirst(RegExp(r'^Impact:\s*', caseSensitive: false), '').trim();
@@ -3651,9 +3651,10 @@ class _CoachReplyViewState extends State<_CoachReplyView> {
 
   List<String> _structuredToPoints(_ParsedCoachReply parsed) {
     final out = <String>[];
-    for (int i = 0; i < parsed.mistakes.take(2).length; i++) {
-      final clean = parsed.mistakes[i].replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
-      out.add("Mistake ${i + 1}: $clean");
+    final mList = parsed.mistakes.take(2).toList();
+    for (int i = 0; i < mList.length; i++) {
+      final clean = mList[i].replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
+      out.add(mList.length == 1 ? "Mistake: $clean" : "Mistake ${i + 1}: $clean");
     }
     if ((parsed.impact ?? "").trim().isNotEmpty) {
       final cleanImp = parsed.impact!.trim().replaceFirst(RegExp(r'^Impact:\s*', caseSensitive: false), '').trim();
@@ -3691,20 +3692,20 @@ class _CoachReplyViewState extends State<_CoachReplyView> {
     final looksLikeStatus =
         lower.contains("analyzing") ||
         lower.contains("please wait") ||
-        lower.contains("completed") ||
         lower.contains("unavailable") ||
         lower.contains("connection") ||
+        lower.contains("upload a") ||
         lower.contains("try again");
 
-    if (!parsed.isStructured || looksLikeStatus) {
+    if (looksLikeStatus) {
       return Text(
         parsed.fallback ?? raw,
-        textAlign: looksLikeStatus ? TextAlign.center : TextAlign.left,
-        style: TextStyle(
+        textAlign: TextAlign.center,
+        style: const TextStyle(
           color: Colors.white,
-          fontSize: looksLikeStatus ? 20 : 16,
-          fontWeight: looksLikeStatus ? FontWeight.w600 : FontWeight.w600,
-          height: looksLikeStatus ? 1.35 : 1.4,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          height: 1.35,
         ),
       );
     }
@@ -3714,10 +3715,40 @@ class _CoachReplyViewState extends State<_CoachReplyView> {
         ? _jsonToPoints(parsedJson)
         : _structuredToPoints(parsed);
 
-    if (points.isEmpty) {
-      return SelectableText(
-        raw.replaceAll('\r', '').trim(),
-        style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4),
+    if (points.isEmpty || !parsed.isStructured) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: CrickXColors.graphite,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: CrickXColors.limeSpark.withValues(alpha: 0.35),
+              ),
+            ),
+            child: Text(
+              "Coach Notes",
+              style: GoogleFonts.poppins(
+                color: CrickXColors.limeSpark,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          SelectableText(
+            (parsed.fallback ?? raw).replaceAll('\r', '').trim(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              height: 1.4,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       );
     }
 
@@ -3758,8 +3789,6 @@ class _CoachReplyViewState extends State<_CoachReplyView> {
               },
             ),
           ),
-        const SizedBox(height: 18),
-        _CoachVideoDrillCard(isBowling: widget.isBowling),
       ],
     );
   }
@@ -5658,6 +5687,39 @@ class _UploadScreenState extends State<UploadScreen>
         }
       }
 
+      final lowerLine = line.toLowerCase();
+      if (lowerLine.startsWith('1.') ||
+          lowerLine.startsWith('1)') ||
+          lowerLine.startsWith('mistake 1') ||
+          (mistakes.isEmpty && (lowerLine.contains('mistake:') || lowerLine.startsWith('mistake')))) {
+        final clean = normalized.replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
+        mistakes.add(clean);
+        continue;
+      } else if (lowerLine.startsWith('2.') ||
+          lowerLine.startsWith('2)') ||
+          lowerLine.startsWith('mistake 2') ||
+          (mistakes.length == 1 && (lowerLine.contains('mistake:') || lowerLine.startsWith('mistake')))) {
+        final clean = normalized.replaceFirst(RegExp(r'^Mistake\s*\d*:\s*', caseSensitive: false), '').trim();
+        mistakes.add(clean);
+        continue;
+      } else if (lowerLine.startsWith('3.') ||
+          lowerLine.startsWith('3)') ||
+          lowerLine.contains('impact:') ||
+          lowerLine.startsWith('impact')) {
+        final clean = normalized.replaceFirst(RegExp(r'^Impact:\s*', caseSensitive: false), '').trim();
+        impacts.add(clean);
+        continue;
+      } else if (lowerLine.startsWith('4.') ||
+          lowerLine.startsWith('4)') ||
+          lowerLine.contains('fix:') ||
+          lowerLine.contains('drill:') ||
+          lowerLine.startsWith('how to fix') ||
+          lowerLine.startsWith('fix')) {
+        final clean = normalized.replaceFirst(RegExp(r'^(How to Fix|Fix|Drill):\s*', caseSensitive: false), '').trim();
+        drills.add(clean);
+        continue;
+      }
+
       if (section == 'mistakes') {
         mistakes.add(normalized);
       } else if (section == 'impact') {
@@ -7097,7 +7159,7 @@ class _UploadScreenState extends State<UploadScreen>
                     title,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontFamily: "RobotoCondensed",
+                      fontFamily: "Poppins",
                       fontSize: 10.5,
                       fontWeight: FontWeight.w600,
                     ),
@@ -7107,7 +7169,7 @@ class _UploadScreenState extends State<UploadScreen>
                     value,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontFamily: "RobotoCondensed",
+                      fontFamily: "Poppins",
                       fontWeight: FontWeight.w900,
                       fontSize: 14,
                     ),
@@ -7836,6 +7898,27 @@ class _UploadScreenState extends State<UploadScreen>
       }
 
       await _applyAnalysisResult(analysis);
+      return true;
+    }
+
+    if (!_isBowlingMode) {
+      // 🏏 BATTING MISTAKE DETECTION: Zero OpenCV! Run AI Coach directly via NVIDIA model!
+      if (mounted) {
+        setState(() {
+          uploading = false;
+          analysisLoading = false;
+          showCoach = true;
+          _stopAnalysisExperience();
+        });
+      }
+      await _incrementTotalVideos();
+      unawaited(
+        AppAnalytics.log(
+          'upload_completed',
+          parameters: {'discipline': _analysisDiscipline},
+        ),
+      );
+      unawaited(runCoach());
       return true;
     }
 
@@ -9211,7 +9294,7 @@ Do not add intro or conclusion.
                       ),
                     ),
                   ),
-                  // CrickNova AI Watermark - Premium Branding
+                  // CricX AI Watermark - Premium Branding
                   Positioned(
                     left: 20,
                     bottom: 110,
@@ -9249,7 +9332,7 @@ Do not add intro or conclusion.
                             children: [
                               Text(
                                 "Uploaded on CrickX AI",
-                                style: GoogleFonts.outfit(
+                                style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontSize: 18,
                                   fontWeight: FontWeight.w900,
@@ -9265,7 +9348,7 @@ Do not add intro or conclusion.
                               ),
                               Text(
                                 "Where Cricket Meets Intelligence",
-                                style: GoogleFonts.outfit(
+                                style: GoogleFonts.poppins(
                                   color: Colors.white.withOpacity(0.85),
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
@@ -9322,7 +9405,7 @@ Do not add intro or conclusion.
                                   ? "CrickX noticed a few bowling mistakes in this clip. Tap Coach to fix them."
                                   : "CrickX noticed a few batting mistakes in this clip. Tap Coach to fix them.",
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.inter(
+                              style: GoogleFonts.poppins(
                                 color: Colors.white.withOpacity(0.86),
                                 fontSize: 12.5,
                                 height: 1.35,

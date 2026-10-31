@@ -25,7 +25,7 @@ class _FaqScreenState extends State<FaqScreen> {
       title: 'AI Precision',
       icon: Icons.blur_on_outlined,
       answer:
-          'CrickNova uses motion analysis and structured video cues to keep feedback consistent, fast, and practical for real training sessions.',
+          'CricX uses motion analysis and structured video cues to keep feedback consistent, fast, and practical for real training sessions.',
     ),
     _FaqCategory(
       title: 'Subscription (Ultra)',
@@ -43,7 +43,7 @@ class _FaqScreenState extends State<FaqScreen> {
       title: 'Device Compatibility',
       icon: Icons.devices_outlined,
       answer:
-          'CrickNova is designed for modern mobile devices and performs best when the app is updated and videos are recorded clearly in supported formats.',
+          'CricX is designed for modern mobile devices and performs best when the app is updated and videos are recorded clearly in supported formats.',
     ),
     _FaqCategory(
       title: 'Support',
@@ -62,7 +62,7 @@ class _FaqScreenState extends State<FaqScreen> {
   Future<void> _contactSupport() async {
     final emailUri = Uri.parse(
       'mailto:urmiladukare0@gmail.com'
-      '?subject=${Uri.encodeComponent('CrickNova Support')}',
+      '?subject=${Uri.encodeComponent('CricX Support')}',
     );
     if (!await canLaunchUrl(emailUri)) return;
     await launchUrl(emailUri);
@@ -90,7 +90,7 @@ class _FaqScreenState extends State<FaqScreen> {
         ),
         title: Text(
           'FAQ',
-          style: GoogleFonts.playfairDisplay(
+          style: GoogleFonts.poppins(
             color: Colors.white,
             fontWeight: FontWeight.w700,
             fontSize: 18,
@@ -107,8 +107,8 @@ class _FaqScreenState extends State<FaqScreen> {
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
               children: [
                 Text(
-                  'Quick answers for CrickNova AI features, access, privacy, and support.',
-                  style: GoogleFonts.montserrat(
+                  'Quick answers for CricX AI features, access, privacy, and support.',
+                  style: GoogleFonts.poppins(
                     color: Colors.white70,
                     fontSize: 13.5,
                     height: 1.55,
@@ -126,7 +126,7 @@ class _FaqScreenState extends State<FaqScreen> {
                   child: TextField(
                     controller: _searchController,
                     onChanged: (_) => setState(() {}),
-                    style: GoogleFonts.montserrat(color: Colors.white),
+                    style: GoogleFonts.poppins(color: Colors.white),
                     decoration: InputDecoration(
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
@@ -134,7 +134,7 @@ class _FaqScreenState extends State<FaqScreen> {
                         vertical: 16,
                       ),
                       hintText: 'Search categories',
-                      hintStyle: GoogleFonts.montserrat(
+                      hintStyle: GoogleFonts.poppins(
                         color: _slate.withValues(alpha: 0.75),
                       ),
                       prefixIcon: const Icon(
@@ -175,7 +175,7 @@ class _FaqScreenState extends State<FaqScreen> {
                     ),
                     child: Text(
                       'No matching FAQ found. Use support for a direct answer.',
-                      style: GoogleFonts.montserrat(
+                      style: GoogleFonts.poppins(
                         color: _slate,
                         fontSize: 13.5,
                         height: 1.45,
@@ -197,7 +197,7 @@ class _FaqScreenState extends State<FaqScreen> {
                     children: [
                       Text(
                         'Contact Support',
-                        style: GoogleFonts.playfairDisplay(
+                        style: GoogleFonts.poppins(
                           color: _gold,
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -206,7 +206,7 @@ class _FaqScreenState extends State<FaqScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Send a clear issue description and support will help you directly.',
-                        style: GoogleFonts.montserrat(
+                        style: GoogleFonts.poppins(
                           color: _slate,
                           fontSize: 13.5,
                           height: 1.45,
@@ -227,7 +227,7 @@ class _FaqScreenState extends State<FaqScreen> {
                           ),
                           child: Text(
                             'Contact Support',
-                            style: GoogleFonts.montserrat(
+                            style: GoogleFonts.poppins(
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -298,7 +298,7 @@ class _FaqAccordionTile extends StatelessWidget {
                   Expanded(
                     child: Text(
                       item.title,
-                      style: GoogleFonts.montserrat(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 15.5,
                         fontWeight: FontWeight.w700,
@@ -332,7 +332,7 @@ class _FaqAccordionTile extends StatelessWidget {
                 ),
                 child: Text(
                   item.answer,
-                  style: GoogleFonts.montserrat(
+                  style: GoogleFonts.poppins(
                     color: _FaqScreenState._slate,
                     fontSize: 13.5,
                     height: 1.55,

@@ -53,7 +53,7 @@ class BackendWarmupService {
             _warmupUri,
             headers: const <String, String>{
               'Accept': 'application/json, text/plain, */*',
-              'X-CrickNova-Warmup': 'app-open',
+              'X-CricX-Warmup': 'app-open',
             },
           )
           .timeout(const Duration(seconds: 6));

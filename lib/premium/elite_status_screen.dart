@@ -355,7 +355,7 @@ class _EliteStatusScreenState extends State<EliteStatusScreen>
                             Text(
                               "Elite Commander: ${widget.userName}",
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.cormorantGaramond(
+                              style: GoogleFonts.poppins(
                                 color: CrickXColors.limeSpark,
                                 fontSize: 34,
                                 fontWeight: FontWeight.w700,
@@ -597,7 +597,7 @@ class _ProfileCoreAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         initials,
-        style: GoogleFonts.cormorantGaramond(
+        style: GoogleFonts.poppins(
           color: CrickXColors.limeSpark,
           fontSize: 36,
           fontWeight: FontWeight.w700,

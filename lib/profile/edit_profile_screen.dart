@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import '../theme/crickx_colors.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String name;
@@ -38,7 +40,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> pickImage() async {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
+      backgroundColor: CrickXColors.graphite,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -48,8 +50,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.photo, color: Colors.white),
-              title: const Text("Choose from Gallery",
-                  style: TextStyle(color: Colors.white)),
+              title: Text("Choose from Gallery",
+                  style: GoogleFonts.poppins(color: Colors.white)),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? img =
@@ -63,7 +65,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Colors.white),
               title:
-                  const Text("Take Photo", style: TextStyle(color: Colors.white)),
+                  Text("Take Photo", style: GoogleFonts.poppins(color: Colors.white)),
               onTap: () async {
                 Navigator.pop(context);
                 final XFile? img =
@@ -82,12 +84,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: CrickXColors.graphiteBg,
 
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: CrickXColors.graphiteBg,
         title:
-            const Text("Edit Profile", style: TextStyle(color: Colors.white)),
+            Text("Edit Profile", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
 
       body: Padding(
@@ -99,21 +101,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               onTap: pickImage,
               child: CircleAvatar(
                 radius: 60,
+                backgroundColor: CrickXColors.graphiteElevated,
                 backgroundImage: imagePath != null
                     ? FileImage(File(imagePath!))
                     : profileImage.contains("http")
                         ? NetworkImage(profileImage)
-                        : FileImage(File(profileImage)) as ImageProvider,
+                        : (profileImage.isNotEmpty && File(profileImage).existsSync()
+                            ? FileImage(File(profileImage)) as ImageProvider
+                            : null),
                 child: Align(
                   alignment: Alignment.bottomRight,
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: const BoxDecoration(
-                      color: Colors.blueAccent,
+                      color: CrickXColors.limeSpark,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.edit,
-                        color: Colors.white, size: 18),
+                        color: CrickXColors.onLime, size: 18),
                   ),
                 ),
               ),
@@ -123,7 +128,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             TextField(
               controller: nameController,
-              style: const TextStyle(color: Colors.white),
+              style: GoogleFonts.poppins(color: Colors.white),
               decoration: _input("Name"),
             ),
 
@@ -131,7 +136,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             TextField(
               controller: emailController,
-              style: const TextStyle(color: Colors.white),
+              style: GoogleFonts.poppins(color: Colors.white),
               decoration: _input("Email"),
             ),
 
@@ -146,14 +151,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 });
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
+                backgroundColor: CrickXColors.limeSpark,
+                foregroundColor: CrickXColors.onLime,
                 minimumSize: const Size(double.infinity, 55),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text("Save",
-                  style: TextStyle(color: Colors.white, fontSize: 18)),
+              child: Text("Save",
+                  style: GoogleFonts.poppins(color: CrickXColors.onLime, fontSize: 16, fontWeight: FontWeight.w700)),
             ),
           ],
         ),
@@ -164,13 +170,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   InputDecoration _input(String label) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
+      labelStyle: GoogleFonts.poppins(color: Colors.white70),
       enabledBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: Colors.white24),
+        borderSide: const BorderSide(color: CrickXColors.graphiteBorder),
         borderRadius: BorderRadius.circular(12),
       ),
       focusedBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: Colors.blueAccent),
+        borderSide: const BorderSide(color: CrickXColors.limeSpark),
         borderRadius: BorderRadius.circular(12),
       ),
     );

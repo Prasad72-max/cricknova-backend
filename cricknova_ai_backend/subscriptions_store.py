@@ -38,46 +38,46 @@ def _parse_expiry(raw_expiry):
 PLANS = {
     "monthly": {
         "duration_days": 30,
-        "limits": {"chat": 200, "mistake": 15, "compare": 0}
+        "limits": {"chat": 1000, "mistake": 90, "compare": 60}
     },
     "6_months": {
         "duration_days": 180,
-        "limits": {"chat": 1200, "mistake": 30, "compare": 0}
+        "limits": {"chat": 3000, "mistake": 400, "compare": 300}
     },
     "yearly": {
         "duration_days": 365,
-        "limits": {"chat": 3000, "mistake": 60, "compare": 50}
+        "limits": {"chat": 7000, "mistake": 800, "compare": 700}
     },
     "ultra_pro": {
         "duration_days": 365,
-        "limits": {"chat": 7000, "mistake": 150, "compare": 150}
+        "limits": {"chat": 7000, "mistake": 800, "compare": 700}
     },
     "INTL_MONTHLY": {
         "duration_days": 30,
-        "limits": {"chat": 250, "mistake": 15, "compare": 15}
+        "limits": {"chat": 1000, "mistake": 90, "compare": 60}
     },
     "INTL_6M": {
         "duration_days": 180,
-        "limits": {"chat": 1500, "mistake": 30, "compare": 30}
+        "limits": {"chat": 3000, "mistake": 400, "compare": 300}
     },
     "INTL_YEARLY": {
         "duration_days": 365,
-        "limits": {"chat": 5000, "mistake": 60, "compare": 60}
+        "limits": {"chat": 7000, "mistake": 800, "compare": 700}
     },
     "INT_ULTRA": {
         "duration_days": 365,
-        "limits": {"chat": 999999, "mistake": 150, "compare": 150}
+        "limits": {"chat": 7000, "mistake": 800, "compare": 700}
     },
     "INTL_ULTRA": {
         "duration_days": 365,
-        "limits": {"chat": 999999, "mistake": 150, "compare": 150}
+        "limits": {"chat": 7000, "mistake": 800, "compare": 700}
     },
 }
 
 FREE_PLAN = {
     "plan": "free",
     "active": False,
-    "limits": {"chat": 5, "mistake": 2, "compare": 0},
+    "limits": {"chat": 0, "mistake": 0, "compare": 0},
     "chat_used": 0,
     "mistake_used": 0,
     "compare_used": 0,

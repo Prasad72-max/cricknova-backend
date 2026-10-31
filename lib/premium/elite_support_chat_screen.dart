@@ -51,7 +51,7 @@ class _EliteSupportChatScreenState extends State<EliteSupportChatScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final displayName = user?.displayName?.trim().isNotEmpty == true
         ? user!.displayName!.trim()
-        : "CrickNova Player";
+        : "CricX Player";
     final docRef = FirebaseFirestore.instance
         .collection("support_chats")
         .doc(_uid);

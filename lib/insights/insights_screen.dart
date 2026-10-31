@@ -309,7 +309,7 @@ class _InsightsScreenState extends State<InsightsScreen>
   List<String> _buildInsightLines(List<double> speeds, double accuracy) {
     if (speeds.isEmpty) {
       return const [
-        "Complete a session to unlock CrickNova's performance readout.",
+        "Complete a session to unlock CricX's performance readout.",
         "Speed, accuracy and consistency will be profiled together.",
         "Your next tracked ball starts the analytics timeline.",
       ];
@@ -1023,7 +1023,7 @@ class _AiInsightCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Text(
-                "CrickNova Insight",
+                "CricX Insight",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 15,

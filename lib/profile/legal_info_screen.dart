@@ -32,7 +32,7 @@ class LegalDocument {
       sections: [
         DocSection(
           heading: "1.0 Overview",
-          body: "CrickNova AI respects your game and your privacy.",
+          body: "CricX AI respects your game and your privacy.",
         ),
         DocSection(
           heading: "1.1 Camera Access",
@@ -64,7 +64,7 @@ class LegalDocument {
       sections: [
         DocSection(
           heading: "2.0 Agreement",
-          body: "By using CrickNova, you agree:",
+          body: "By using CricX, you agree:",
         ),
         DocSection(
           heading: "2.1 Elite Access",
@@ -73,12 +73,12 @@ class LegalDocument {
         DocSection(
           heading: "2.2 Physical Safety",
           body:
-              "Cricket is a physical sport. CrickNova is not liable for any injuries sustained during practice. Always play in a safe environment.",
+              "Cricket is a physical sport. CricX is not liable for any injuries sustained during practice. Always play in a safe environment.",
         ),
         DocSection(
           heading: "2.3 Usage",
           body:
-              "Any attempt to reverse-engineer the AI \"CrickNova Call\" will result in account termination.",
+              "Any attempt to reverse-engineer the AI \"CricX Call\" will result in account termination.",
         ),
       ],
     );
@@ -87,21 +87,21 @@ class LegalDocument {
   factory LegalDocument.about() {
     return const LegalDocument(
       type: LegalDocType.about,
-      title: "About CrickNova",
+      title: "About CricX",
       sections: [
         DocSection(
           heading: "3.0 Breaking Barriers",
-          body: "CrickNova AI: Breaking Barriers.",
+          body: "CricX AI: Breaking Barriers.",
         ),
         DocSection(
           heading: "3.1 Brand Story",
           body:
-              "Born from a passion for the streets of India, CrickNova brings professional DRS-style technology to every gully, club, and stadium. Our mission is to make elite coaching affordable and accessible to every dreamer with a bat or a ball.",
+              "Born from a passion for the streets of India, CricX brings professional DRS-style technology to every gully, club, and stadium. Our mission is to make elite coaching affordable and accessible to every dreamer with a bat or a ball.",
         ),
         DocSection(
           heading: "3.2 Built Independently",
           body:
-              "CrickNova AI is built independently with a solo creator mindset: focused, lean, and obsessed with making cricket analysis feel elite for every player.",
+              "CricX AI is built independently with a solo creator mindset: focused, lean, and obsessed with making cricket analysis feel elite for every player.",
         ),
       ],
     );
@@ -166,10 +166,10 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
           ),
           content: TextField(
             controller: controller,
-            style: GoogleFonts.montserrat(color: Colors.white),
+            style: GoogleFonts.poppins(color: Colors.white),
             decoration: InputDecoration(
               hintText: "Search keywords (e.g., Refund, Safety)",
-              hintStyle: GoogleFonts.montserrat(color: Colors.white54),
+              hintStyle: GoogleFonts.poppins(color: Colors.white54),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.06),
               border: OutlineInputBorder(
@@ -296,7 +296,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                 ),
                 title: Text(
                   doc.title,
-                  style: GoogleFonts.playfairDisplay(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                     fontSize: 18,
@@ -344,7 +344,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                     child: Text(
                       "\"Empowering every gully cricketer with the power of AI.\"",
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.playfairDisplay(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 18,
                         fontStyle: FontStyle.italic,
@@ -373,7 +373,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                         body: section.body,
                         headingSpan: _highlightedText(
                           section.heading,
-                          GoogleFonts.playfairDisplay(
+                          GoogleFonts.poppins(
                             color: CrickXColors.limeSpark,
                             fontWeight: FontWeight.w700,
                             fontSize: 16,
@@ -381,7 +381,7 @@ class _LegalInfoScreenState extends State<LegalInfoScreen> {
                         ),
                         bodySpan: _highlightedText(
                           section.body,
-                          GoogleFonts.montserrat(
+                          GoogleFonts.poppins(
                             color: Colors.white70,
                             fontSize: 13.5,
                             height: 1.6,
@@ -448,7 +448,7 @@ class _LogoWatermark extends StatelessWidget {
               angle: -0.35,
               child: Text(
                 "CRICKNOVA",
-                style: GoogleFonts.playfairDisplay(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 80,
                   fontWeight: FontWeight.w700,
@@ -505,8 +505,8 @@ class _AboutHero extends StatelessWidget {
             left: 18,
             bottom: 18,
             child: Text(
-              "CrickNova Arena",
-              style: GoogleFonts.playfairDisplay(
+              "CricX Arena",
+              style: GoogleFonts.poppins(
                 color: const Color(0xFFFFE7A0),
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
@@ -532,7 +532,7 @@ class _TimelineCard extends StatelessWidget {
   final List<_TimelineItem> _items = const [
     _TimelineItem("Idea Spark", "Local nets insight"),
     _TimelineItem("Prototype", "First DRS-style demo"),
-    _TimelineItem("CrickNova Call", "AI decision engine"),
+    _TimelineItem("CricX Call", "AI decision engine"),
     _TimelineItem("Elite Hub", "Personalized growth"),
   ];
 
@@ -550,7 +550,7 @@ class _TimelineCard extends StatelessWidget {
         children: [
           Text(
             "Founding Story",
-            style: GoogleFonts.playfairDisplay(
+            style: GoogleFonts.poppins(
               color: CrickXColors.limeSpark,
               fontWeight: FontWeight.w700,
               fontSize: 16,
@@ -608,7 +608,7 @@ class _TimelineRow extends StatelessWidget {
               children: [
                 Text(
                   item.title,
-                  style: GoogleFonts.montserrat(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
                   ),
@@ -616,7 +616,7 @@ class _TimelineRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   item.subtitle,
-                  style: GoogleFonts.montserrat(
+                  style: GoogleFonts.poppins(
                     color: Colors.white70,
                     fontSize: 12.5,
                   ),

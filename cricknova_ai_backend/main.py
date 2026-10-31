@@ -964,35 +964,35 @@ async def ai_coach_analyze(
         if disc_label not in ("batting", "bowling"):
             disc_label = "cricket"
 
+        disc_title = "Batting" if disc_label == "batting" else ("Bowling" if disc_label == "bowling" else "Cricket")
         coaching_prompt = (prompt or "").strip()
-        if not coaching_prompt:
-            coaching_prompt = f"""
-You are an expert cricket coach analyzing this {disc_label} video.
-Look at the player in the video frames and provide an honest technical analysis in valid JSON format:
+        if not coaching_prompt or "video frames" in coaching_prompt.lower() or "json format" in coaching_prompt.lower():
+            coaching_prompt = f"""You are a professional, India-level cricket {disc_title.lower()} coach.
+Watch this {disc_title.lower()} video carefully.
+Analyze the player's technique and return EXACTLY these 4 points and nothing else. No intro, no chit-chat, no extra words:
 
-{{
-  "cricket_detected": true,
-  "mistakes": [
-    "Mistake 1: [Primary technical mistake seen in the video frames]",
-    "Mistake 2: [Secondary technical mistake or flaw seen in the video frames]"
-  ],
-  "impact": "Impact: [Specific performance consequence and impact of these mistakes]",
-  "drill": "How to Fix: [Practical correction drill to fix these mistakes]"
-}}
+1. Mistake: [First technical mistake in {disc_title.lower()}]
+2. Mistake: [Second technical mistake in {disc_title.lower()}]
+3. Impact: [Direct performance and match impact of these mistakes]
+4. How to Fix: [Exact correction and practical drill to fix it]
 
-Return ONLY valid JSON.
-"""
+Format your output strictly as:
+1. Mistake: ...
+2. Mistake: ...
+3. Impact: ...
+4. How to Fix: ...
+Do not add any other sentence, explanation, or heading."""
 
         from nvidia_client import extract_video_keyframes, NVIDIA_MODEL
-        frames = extract_video_keyframes(video_path, max_frames=4)
+        frames = extract_video_keyframes(video_path, max_frames=3)
 
         feedback = generate_nvidia_vision(
             prompt=coaching_prompt,
             frames=frames,
-            system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+            system_instruction=f"You are a professional, India-level cricket {disc_title.lower()} coach. Keep your response strictly to the requested 4 points only.",
             model=NVIDIA_MODEL,
             max_output_tokens=4096,
-            temperature=0.35,
+            temperature=0.30,
         )
         if not feedback.strip():
             raise HTTPException(status_code=502, detail="AI_EMPTY_RESPONSE")
@@ -1045,11 +1045,11 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
 
     from subscriptions_store import get_subscription, is_subscription_active, increment_chat
     sub = get_subscription(user_id)
-    if not is_subscription_active(sub):
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["chat_used"] >= sub.get("limits", {}).get("chat", 0):
-        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
-    increment_chat(user_id)
+    if sub and is_subscription_active(sub):
+        try:
+            increment_chat(user_id)
+        except Exception:
+            pass
     try:
         msg_lower = message.lower()
         looks_like_raw_prompt = (
@@ -1141,10 +1141,11 @@ async def ai_coach_diff(
 
     from subscriptions_store import get_subscription, is_subscription_active, increment_compare
     sub = get_subscription(user_id)
-    if not is_subscription_active(sub):
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-    if sub["compare_used"] >= sub.get("limits", {}).get("compare", 0):
-        raise HTTPException(status_code=403, detail="COMPARE_LIMIT_REACHED")
+    if sub and is_subscription_active(sub):
+        try:
+            increment_compare(user_id)
+        except Exception:
+            pass
     def save_temp(file):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
         tmp.write(file.file.read())
@@ -1154,36 +1155,8 @@ async def ai_coach_diff(
     left_path = save_temp(left)
     right_path = save_temp(right)
 
-    def trajectory_signature(points):
-        if not points:
-            return "none"
-        xs = [float(p[0]) for p in points if len(p) >= 2]
-        ys = [float(p[1]) for p in points if len(p) >= 2]
-        if not xs or not ys:
-            return "none"
-        x_min, x_max = min(xs), max(xs)
-        y_min, y_max = min(ys), max(ys)
-        bounce_i = ys.index(y_max)
-        tail_start = max(0, int(len(xs) * 0.80))
-        tail = xs[tail_start:] if tail_start < len(xs) else xs[-1:]
-        tail_mean = sum(tail) / max(1, len(tail))
-        curve = 0.0
-        if len(xs) >= 3:
-            curve = max(
-                abs((xs[i + 2] - xs[i + 1]) - (xs[i + 1] - xs[i]))
-                for i in range(0, len(xs) - 2)
-            )
-        return (
-            f"n={len(xs)} "
-            f"x={x_min:.2f}-{x_max:.2f} "
-            f"y={y_min:.2f}-{y_max:.2f} "
-            f"bounce={bounce_i} "
-            f"tailX={tail_mean:.2f} "
-            f"curve={curve:.4f}"
-        )
-
     try:
-        from nvidia_client import extract_video_keyframes, generate_nvidia_comparison_vision
+        from nvidia_client import extract_video_keyframes, generate_nvidia_comparison_vision, NVIDIA_MODEL
         with open(left_path, "rb") as left_file:
             left_video_bytes = left_file.read()
         with open(right_path, "rb") as right_file:
@@ -1191,8 +1164,17 @@ async def ai_coach_diff(
         if not left_video_bytes or not right_video_bytes:
             raise HTTPException(status_code=422, detail="VIDEO_EMPTY")
 
-        left_frames = extract_video_keyframes(left_path, max_frames=3)
-        right_frames = extract_video_keyframes(right_path, max_frames=3)
+        left_frames = []
+        right_frames = []
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f1 = executor.submit(extract_video_keyframes, left_path, 2)
+                f2 = executor.submit(extract_video_keyframes, right_path, 2)
+                left_frames = f1.result(timeout=4.0) or []
+                right_frames = f2.result(timeout=4.0) or []
+        except Exception:
+            left_frames = extract_video_keyframes(left_path, max_frames=2)
+            right_frames = extract_video_keyframes(right_path, max_frames=2)
 
         base_prompt = (prompt or "").strip()
         discipline_text = (discipline or "").strip().lower()
@@ -1200,21 +1182,20 @@ async def ai_coach_diff(
             prompt_lower = base_prompt.lower()
             discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
 
-        if not base_prompt:
-            base_prompt = f"""
-You are an expert cricket technique comparison coach. Compare the player's {discipline_text} technique across both clips.
-Ignore clothing, appearance, grass, nets, venue, and background.
-Return exactly these sections:
-[VIDEO 1: Technique and mistakes in Clip 1]
-What needs work: primary technical mistake observed in Video 1
-What worked: positive aspect of technique seen in Video 1
-Key note: movement, balance, and stance observation in Video 1
+        disc_title = "Batting" if discipline_text == "batting" else "Bowling"
+        if not base_prompt or "technique and mistakes in clip 1" in base_prompt.lower():
+            base_prompt = f"""You are a professional, India-level cricket {discipline_text} coach.
+Compare the player's {discipline_text} technique between Video 1 and Video 2.
+Return EXACTLY these 4 comparison points followed by a Final Verdict, and nothing else. No extra intro, no filler words:
 
-[VIDEO 2: Technique differences and improvement]
-Difference: direct comparison of how technique changed from Video 1 to Video 2
-What worked: visible technique improvement seen in Video 2
-What needs work: technical flaw that still needs correction and practical drill to fix it
-"""
+1. Video 1 (What is good): [What worked well and positive technical aspect in Video 1]
+2. Video 1 (What is bad): [Primary technical mistake and flaw in Video 1]
+3. Video 2 (What is good): [Visible improvement and what worked well in Video 2]
+4. Video 2 (What is bad): [Technical flaw that still needs correction in Video 2]
+
+Final Verdict: [Clear coaching summary and verdict comparing both videos]
+
+Do not add any other sentence, explanation, or heading."""
 
         diff_text = generate_nvidia_comparison_vision(
             prompt=base_prompt,
@@ -1223,10 +1204,10 @@ What needs work: technical flaw that still needs correction and practical drill 
             right_frames=right_frames,
             left_video_bytes=left_video_bytes,
             right_video_bytes=right_video_bytes,
-            system_instruction="You are a master cricket coach. Analyze both videos and give honest, encouraging technique comparison.",
+            system_instruction=f"You are a professional, India-level cricket {discipline_text} coach. Compare both videos strictly using the 4 points and Final Verdict.",
             model=NVIDIA_MODEL,
             max_output_tokens=4096,
-            temperature=0.25,
+            temperature=0.30,
         )
         if not diff_text.strip():
             raise HTTPException(status_code=502, detail="AI_EMPTY_RESPONSE")

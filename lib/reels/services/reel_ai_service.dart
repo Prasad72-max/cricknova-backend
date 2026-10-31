@@ -9,7 +9,7 @@ import '../../config/api_config.dart';
 class ReelAiService {
   static const String _analyzeEndpoint = "/training/analyze";
 
-  /// Runs CrickNova AI technique analysis on an uploaded video file.
+  /// Runs CricX AI technique analysis on an uploaded video file.
   /// Reuses the existing backend endpoint and transforms results into [ReelAiAnalysis].
   static Future<ReelAiAnalysis?> analyzeReelVideo(File videoFile) async {
     final uri = Uri.parse("${ApiConfig.baseUrl}$_analyzeEndpoint");

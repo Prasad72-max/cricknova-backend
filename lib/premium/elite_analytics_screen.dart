@@ -58,7 +58,7 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
   Future<void> _shareReport(String path) async {
     await Share.shareXFiles([
       XFile(path),
-    ], text: "CrickNova Weekly Usage Report");
+    ], text: "CricX Weekly Usage Report");
   }
 
   int _activeDays(WeeklyStats stats, Map<String, Map<String, int>> daily) {
@@ -122,7 +122,7 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
         pw.MultiPage(
           build: (context) => [
             pw.Text(
-              "CrickNova Weekly Usage Report",
+              "CricX Weekly Usage Report",
               style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 6),
@@ -134,13 +134,13 @@ class _EliteAnalyticsScreenState extends State<EliteAnalyticsScreen> {
             pw.Text("Summary", style: const pw.TextStyle(fontSize: 16)),
             pw.Bullet(text: "App opens: ${stats.appOpens}"),
             pw.Bullet(text: "Active days: $activeDays / 7"),
-            pw.Bullet(text: "CrickNova Coach chats: ${stats.aiChats}"),
+            pw.Bullet(text: "CricX Coach chats: ${stats.aiChats}"),
             pw.Bullet(
-              text: "Cricknova Analyse Yourself uses: ${stats.analyseAi}",
+              text: "CricX Analyse Yourself uses: ${stats.analyseAi}",
             ),
             pw.Bullet(
               text:
-                  "Cricknova Mistake Detection uses: ${stats.mistakeDetection}",
+                  "CricX Mistake Detection uses: ${stats.mistakeDetection}",
             ),
             if (stats.appMinutes > 0)
               pw.Bullet(text: "Time in app: ${_fmtUsage(stats.appMinutes)}"),
@@ -397,7 +397,7 @@ class _UsageSummaryRow extends StatelessWidget {
         Row(
           children: [
             _StatChip(
-              label: "Cricknova Chat Coach",
+              label: "CricX Chat Coach",
               value: stats.aiChats.toString(),
             ),
             const SizedBox(width: 10),

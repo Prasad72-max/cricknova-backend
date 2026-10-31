@@ -97,7 +97,7 @@ class _CertificateViewScreenState extends State<CertificateViewScreen> {
       await Share.shareXFiles(
         [XFile(file.path)],
         text:
-            "My CrickNova AI Certificate\nTop: ${widget.topSpeed.toStringAsFixed(1)} km/h\nAccuracy: ${widget.accuracyPercent.toStringAsFixed(0)}%\n${widget.appLink}",
+            "My CricX AI Certificate\nTop: ${widget.topSpeed.toStringAsFixed(1)} km/h\nAccuracy: ${widget.accuracyPercent.toStringAsFixed(0)}%\n${widget.appLink}",
       );
     } catch (_) {
       if (!mounted) return;

@@ -21,12 +21,14 @@ class BowlingAnalyseScreen extends StatelessWidget {
 
   Future<void> _showWatchAdDialog(
     BuildContext context, {
+    bool isCompare = false,
     required VoidCallback onUnlocked,
   }) async {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => _BowlingWatchAdDialog(
+        isCompare: isCompare,
         onCreditGranted: () {
           Navigator.of(dialogCtx).pop();
           onUnlocked();
@@ -153,30 +155,55 @@ class BowlingAnalyseScreen extends StatelessWidget {
                       ),
 
                       // TAB 2: Bowling Compare (Two Video Comparison)
-                      Center(
-                        child: _MinimalBowlingAction(
-                          icon: Icons.compare_arrows_rounded,
-                          title: 'Bowling Compare',
-                          subtitle:
-                              'Choose two bowling clips to compare run-up, gather, release point, wrist seam, and follow-through.',
-                          buttonText: compareUnlocked
-                              ? 'Compare Bowling Clips'
-                              : 'Unlock Bowling Compare',
-                          locked: !compareUnlocked,
-                          onTap: () {
-                            if (!compareUnlocked) {
-                              _goPremium(context, 'bowling_compare');
-                              return;
-                            }
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const AnalyseYourselfScreen(
-                                  bowlingMode: true,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      ValueListenableBuilder<int>(
+                        valueListenable: AnalysisCreditService
+                            .instance.bowlingCompareCreditsNotifier,
+                        builder: (context, compareCredits, _) {
+                          final hasCompare =
+                              compareUnlocked || compareCredits > 0;
+
+                          return Center(
+                            child: _MinimalBowlingAction(
+                              icon: Icons.compare_arrows_rounded,
+                              title: 'Bowling Compare',
+                              subtitle:
+                                  'Choose two bowling clips to compare run-up, gather, release point, wrist seam, and follow-through.',
+                              buttonText: hasCompare
+                                  ? (compareCredits > 0 && !compareUnlocked
+                                      ? 'Compare Bowling Clips ($compareCredits Left)'
+                                      : 'Compare Bowling Clips')
+                                  : 'Watch Ad to Unlock 2 Bowling Comparisons',
+                              locked: false,
+                              onTap: () {
+                                if (hasCompare) {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const AnalyseYourselfScreen(
+                                        bowlingMode: true,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  _showWatchAdDialog(
+                                    context,
+                                    isCompare: true,
+                                    onUnlocked: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const AnalyseYourselfScreen(
+                                            bowlingMode: true,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                }
+                              },
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -193,9 +220,11 @@ class BowlingAnalyseScreen extends StatelessWidget {
 // ── Bowling Watch Ad Dialog ──────────────────────────────────────────────────
 class _BowlingWatchAdDialog extends StatefulWidget {
   const _BowlingWatchAdDialog({
+    this.isCompare = false,
     required this.onCreditGranted,
   });
 
+  final bool isCompare;
   final VoidCallback onCreditGranted;
 
   @override
@@ -213,7 +242,9 @@ class _BowlingWatchAdDialogState extends State<_BowlingWatchAdDialog> {
       _message = null;
     });
 
-    final result = await AnalysisCreditService.instance.watchAdForCredit();
+    final result = widget.isCompare
+        ? await AnalysisCreditService.instance.watchAdForBowlingCompare(amount: 2)
+        : await AnalysisCreditService.instance.watchAdForCredit(amount: 4);
     if (!mounted) return;
     setState(() => _loading = false);
 
@@ -227,7 +258,9 @@ class _BowlingWatchAdDialogState extends State<_BowlingWatchAdDialog> {
         break;
       case AdWatchResult.adClosedEarly:
         setState(
-            () => _message = 'Watch the complete ad to earn your 4 analyses.');
+            () => _message = widget.isCompare
+                ? 'Watch the complete ad to earn your 2 comparisons.'
+                : 'Watch the complete ad to earn your 4 analyses.');
         break;
       case AdWatchResult.premiumUser:
         widget.onCreditGranted();
@@ -237,6 +270,13 @@ class _BowlingWatchAdDialogState extends State<_BowlingWatchAdDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final title = widget.isCompare
+        ? '🎬 Watch Ad to Unlock 2 Comparisons'
+        : '🎬 Watch Ad to Unlock 4 Analyses';
+    final desc = widget.isCompare
+        ? 'Watch a short ad to unlock 2 Bowling Comparisons.'
+        : 'Watch a short ad to unlock 4 AI Bowling Analyses & Speed Detections.';
+
     return AlertDialog(
       backgroundColor: CrickXColors.graphiteBg,
       shape: RoundedRectangleBorder(
@@ -244,7 +284,7 @@ class _BowlingWatchAdDialogState extends State<_BowlingWatchAdDialog> {
         side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
       ),
       title: Text(
-        '🎬 Watch Ad to Unlock',
+        title,
         style: GoogleFonts.poppins(
           color: Colors.white,
           fontWeight: FontWeight.bold,
@@ -253,9 +293,9 @@ class _BowlingWatchAdDialogState extends State<_BowlingWatchAdDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
-            'Watch a short ad to unlock 4 AI Bowling Analyses & Speed Detections.',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+          Text(
+            desc,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),

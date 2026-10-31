@@ -23,9 +23,9 @@ class CrickNovaNotificationService {
       CrickNovaNotificationService._();
 
   static const String _channelId = 'cricknova_engagement';
-  static const String _channelName = 'CrickNova Engagement';
+  static const String _channelName = 'CricX Engagement';
   static const String _channelDescription =
-      'Witty practice nudges and analysis alerts from CrickNova AI.';
+      'Witty practice nudges and analysis alerts from CricX AI.';
 
   static const int _analysisCompleteId = 1101;
   static const int _personalBestId = 1102;
@@ -231,7 +231,7 @@ class CrickNovaNotificationService {
 
     await _showNow(
       id: _analysisCompleteId,
-      title: 'CrickNova: Result ready',
+      title: 'CricX: Result ready',
       body:
           'Your video analysis is complete. Open your video queue to view it.',
       payload: resultJobId == null ? null : 'analysis_ready:$resultJobId',
@@ -249,7 +249,7 @@ class CrickNovaNotificationService {
     final idSuffix = resultJobId == null ? 0 : resultJobId.hashCode.abs() % 700;
     await _localNotifications.zonedSchedule(
       id: _analysisCheckBaseId + idSuffix,
-      title: 'CrickNova: Check your result',
+      title: 'CricX: Check your result',
       body:
           'Your video is still being analyzed. Tap to view progress or the result.',
       scheduledDate: reminderAt,
@@ -276,7 +276,7 @@ class CrickNovaNotificationService {
     final skill = discipline == 'bowling' ? 'bowling' : 'batting';
     await _localNotifications.zonedSchedule(
       id: id,
-      title: 'CrickNova: 35-day check',
+      title: 'CricX: 35-day check',
       body:
           'Your $skill mistake window is closing. Upload a fresh clip and prove the fix.',
       scheduledDate: reminderAt,
@@ -292,7 +292,7 @@ class CrickNovaNotificationService {
 
     await _showNow(
       id: _personalBestId,
-      title: 'CrickNova: New Personal Best',
+      title: 'CricX: New Personal Best',
       body:
           "Your new top speed is ${speedKmph.toStringAsFixed(1)} km/h. Great work.",
     );
@@ -310,7 +310,7 @@ class CrickNovaNotificationService {
         : ' in $areaLabel';
     await _showNow(
       id: _leaderboardAlertId,
-      title: 'CrickNova: Leaderboard Alert',
+      title: 'CricX: Leaderboard Alert',
       body:
           "Someone nearby$suffix posted ${nearbyTopSpeedKmph.toStringAsFixed(1)} km/h. Move your name up the leaderboard.",
     );
@@ -358,7 +358,7 @@ class CrickNovaNotificationService {
 
     await _localNotifications.zonedSchedule(
       id: _trialEndingSoonId,
-      title: 'CrickNova: Trial ends tomorrow',
+      title: 'CricX: Trial ends tomorrow',
       body:
           'Your free trial ends tomorrow. Unless you cancel, billing will start at $priceSuffix.',
       scheduledDate: reminderAt,
@@ -373,7 +373,7 @@ class CrickNovaNotificationService {
     final reminderAt = now.add(const Duration(days: 3));
     await _localNotifications.zonedSchedule(
       id: _inactivityId,
-      title: 'CrickNova',
+      title: 'CricX',
       body: "You have not bowled for 3 days. Bowl one delivery today.",
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
@@ -391,7 +391,7 @@ class CrickNovaNotificationService {
 
     await _localNotifications.zonedSchedule(
       id: _eveningReminderId,
-      title: 'CrickNova',
+      title: 'CricX',
       body: "Let's practice for 10 minutes this evening.",
       scheduledDate: reminderAt,
       notificationDetails: _notificationDetails(),
@@ -442,7 +442,7 @@ class CrickNovaNotificationService {
     if (notification != null) {
       await _showNow(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        title: notification.title ?? 'CrickNova AI',
+        title: notification.title ?? 'CricX AI',
         body: notification.body ?? 'You have a new update waiting.',
       );
       return;

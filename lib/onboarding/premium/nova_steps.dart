@@ -103,7 +103,7 @@ final class NovaSummaryStep extends NovaStep {
     required this.title,
     required this.subtitle,
     required this.items,
-    this.ctaLabel = 'Enter CrickNova',
+    this.ctaLabel = 'Enter CricX',
   });
 }
 

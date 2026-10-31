@@ -386,9 +386,9 @@ class CricknovaGameSnapshotBuilder {
         'You can see visible improvement in ${range.$1}–${range.$2} days';
 
     final aiAdvantages = const <String>[
-      'Cricknova video comparison',
+      'CricX video comparison',
       'Instant mistake detection',
-      'Cricknova coaching feedback',
+      'CricX coaching feedback',
     ];
 
     final confidenceBoostLine = (training == 'Every day' ||
@@ -939,7 +939,7 @@ class _RateRow extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Enjoying CrickNova? Rate us.',
+              'Enjoying CricX? Rate us.',
               style: OnboardingTextStyles.uiSans(
                 color: OnboardingColors.textSecondary,
                 fontSize: 12.5,

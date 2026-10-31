@@ -1,33 +1,42 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Form
 import tempfile
 import os
-from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
+
 try:
-    from nvidia_client import generate_nvidia_text, NVIDIA_MODEL
+    from nvidia_client import (
+        is_nvidia_available,
+        extract_video_keyframes,
+        generate_nvidia_comparison_vision,
+        generate_nvidia_text,
+        NVIDIA_MODEL
+    )
 except ImportError:
-    from cricknova_ai_backend.nvidia_client import generate_nvidia_text, NVIDIA_MODEL
-
-from processing.ball_tracker_motion import track_ball_positions
-from cricknova_engine.processing.routes.spacefoco_backend import detect_swing_x, calculate_spin_real
-
-load_dotenv()
+    from cricknova_ai_backend.nvidia_client import (
+        is_nvidia_available,
+        extract_video_keyframes,
+        generate_nvidia_comparison_vision,
+        generate_nvidia_text,
+        NVIDIA_MODEL
+    )
 
 router = APIRouter()
 
-
+# ---------------------------------------------------------------------------
+# PURE NVIDIA MODEL COMPARE (Batting & Bowling) — ZERO OpenCV
+# ---------------------------------------------------------------------------
 @router.post("/coach/diff")
 async def compare_videos(
     left: UploadFile = File(...),
-    right: UploadFile = File(...)
+    right: UploadFile = File(...),
+    prompt: str | None = Form(None),
+    discipline: str | None = Form(None),
 ):
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not is_nvidia_available():
         return {
             "status": "failed",
-            "difference": "AI Coach is not configured yet. Please try again later."
+            "difference": "AI Coach is temporarily unavailable. Please try again."
         }
-
-    client = OpenAI(api_key=api_key)
 
     def save_temp(upload: UploadFile):
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
@@ -39,46 +48,57 @@ async def compare_videos(
     right_path = save_temp(right)
 
     try:
-        left_positions = track_ball_positions(left_path)
-        right_positions = track_ball_positions(right_path)
+        disc_label = (discipline or "").strip().lower()
+        if disc_label not in ("batting", "bowling"):
+            disc_label = "cricket technique"
 
-        if not left_positions or not right_positions:
-            return {
-                "status": "failed",
-                "difference": "Ball not detected clearly in one or both videos."
-            }
+        # ⚡ Pure FFmpeg keyframe extraction in parallel — 100% OpenCV free
+        left_frames = []
+        right_frames = []
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                f1 = executor.submit(extract_video_keyframes, left_path, 2)
+                f2 = executor.submit(extract_video_keyframes, right_path, 2)
+                left_frames = f1.result(timeout=4.0) or []
+                right_frames = f2.result(timeout=4.0) or []
+        except Exception:
+            left_frames = extract_video_keyframes(left_path, max_frames=2)
+            right_frames = extract_video_keyframes(right_path, max_frames=2)
 
-        left_swing = detect_swing_x(left_positions)
-        right_swing = detect_swing_x(right_positions)
+        base_prompt = (prompt or "").strip()
+        if not base_prompt or "video 1:" in base_prompt.lower():
+            base_prompt = f"""You are a professional, India-level cricket {disc_label} coach.
+Compare the player's {disc_label} technique between Video 1 and Video 2.
+Return EXACTLY these 4 comparison points followed by a Final Verdict, and nothing else. No extra intro, no filler words:
 
-        left_spin, _ = calculate_spin_real(left_positions)
-        right_spin, _ = calculate_spin_real(right_positions)
+1. Video 1 (What is good): [What worked well and positive technical aspect in Video 1]
+2. Video 1 (What is bad): [Primary technical mistake and flaw in Video 1]
+3. Video 2 (What is good): [Visible improvement and what worked well in Video 2]
+4. Video 2 (What is bad): [Technical flaw that still needs correction in Video 2]
 
-        prompt = f"""
-You are an elite cricket batting coach.
+Final Verdict: [Clear coaching summary and verdict comparing both videos]
 
-Compare two batting videos.
+Do not add any other sentence, explanation, or heading."""
 
-VIDEO 1:
-- Swing: {left_swing}
-- Spin: {left_spin}
-
-VIDEO 2:
-- Swing: {right_swing}
-- Spin: {right_spin}
-
-Explain the technical differences line by line.
-Focus on balance, head position, bat swing, timing, and decision making.
-Keep it concise and professional.
-"""
-
-        diff_text = generate_nvidia_text(
-            system_instruction="You are a professional cricket batting coach.",
-            user_prompt=prompt,
-            model=NVIDIA_MODEL,
-            max_output_tokens=4096,
-            temperature=0.6,
-        )
+        if left_frames and right_frames:
+            diff_text = generate_nvidia_comparison_vision(
+                prompt=base_prompt,
+                discipline=disc_label,
+                left_frames=left_frames,
+                right_frames=right_frames,
+                system_instruction=f"You are a professional, India-level cricket {disc_label} coach. Compare both videos strictly using the 4 points and Final Verdict.",
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
+                temperature=0.30,
+            )
+        else:
+            diff_text = generate_nvidia_text(
+                system_instruction=f"You are a professional, India-level cricket {disc_label} coach. Compare both videos strictly using the 4 points and Final Verdict.",
+                user_prompt=base_prompt,
+                model=NVIDIA_MODEL,
+                max_output_tokens=4096,
+                temperature=0.35,
+            )
 
         return {
             "status": "success",
@@ -93,6 +113,12 @@ Keep it concise and professional.
 
     finally:
         if os.path.exists(left_path):
-            os.remove(left_path)
+            try:
+                os.remove(left_path)
+            except Exception:
+                pass
         if os.path.exists(right_path):
-            os.remove(right_path)
+            try:
+                os.remove(right_path)
+            except Exception:
+                pass

@@ -53,9 +53,9 @@ class NovaColors {
 
 class NovaTypography {
   static String get _sansFallback =>
-      GoogleFonts.dmSans().fontFamily ?? 'DM Sans';
+      GoogleFonts.poppins().fontFamily ?? 'Poppins';
   static String get _monoFallback =>
-      GoogleFonts.jetBrainsMono().fontFamily ?? 'JetBrains Mono';
+      GoogleFonts.poppins().fontFamily ?? 'Poppins';
 
   static TextStyle display({
     Color? color,
@@ -64,7 +64,7 @@ class NovaTypography {
     double height = 1.06,
     double letterSpacing = -0.6,
   }) {
-    return GoogleFonts.instrumentSerif(
+    return GoogleFonts.poppins(
       color: color ?? NovaColors.textPrimary,
       fontSize: size,
       fontWeight: weight,

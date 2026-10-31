@@ -421,13 +421,13 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Video + CC saved to gallery and CrickNova Edge Saved.',
+              'Video + CC saved to gallery and CricX Edge Saved.',
             ),
           ),
         );
       }
     } catch (error) {
-      debugPrint('CrickNova Edge review save failed: $error');
+      debugPrint('CricX Edge review save failed: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -450,12 +450,12 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('CC + Voice saved inside CrickNova Edge Saved.'),
+            content: Text('CC + Voice saved inside CricX Edge Saved.'),
           ),
         );
       }
     } catch (error) {
-      debugPrint('CrickNova Edge CC + Voice save failed: $error');
+      debugPrint('CricX Edge CC + Voice save failed: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -530,7 +530,7 @@ class _ReviewPlayerScreenState extends State<ReviewPlayerScreen> {
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
           title: Text(
-            'CrickNova Edge Review',
+            'CricX Edge Review',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
           ),
           bottom: TabBar(
@@ -953,7 +953,7 @@ class _MarkerCard extends StatelessWidget {
             onPressed: onAskCoach,
             icon: const Icon(Icons.auto_awesome_rounded, color: CrickXColors.limeSpark),
             label: Text(
-              'Ask CrickNova to Fix This',
+              'Ask CricX to Fix This',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: CrickXColors.limeSpark),
             ),
           ),

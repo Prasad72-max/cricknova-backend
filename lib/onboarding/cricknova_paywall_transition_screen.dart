@@ -123,7 +123,7 @@ class _CricknovaPaywallTransitionScreenState
                           _AiAcknowledgeMark(pulseT: pulseT, scanT: scanT),
                           const SizedBox(height: 22),
                           Text(
-                            'Thanks for trusting CrickNova.',
+                            'Thanks for trusting CricX.',
                             textAlign: TextAlign.center,
                             style: OnboardingTextStyles.uiSans(
                               color: OnboardingColors.textPrimary,

@@ -294,7 +294,7 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
                                     ? 'Welcome To The Edge'
                                     : 'Elite Mode Activated',
                                 textAlign: TextAlign.center,
-                                style: GoogleFonts.playfairDisplay(
+                                style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontSize: 39,
                                   height: 0.98,
@@ -311,7 +311,7 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
                                       ? 'Boom. Your live AI net session is awake. Every clip, every cue, every correction now moves at the speed of your cricket.'
                                       : 'Your AI coach, cricket intelligence and premium training tools are live. Train sharper, read faster, improve with intent.',
                                   textAlign: TextAlign.center,
-                                  style: GoogleFonts.montserrat(
+                                  style: GoogleFonts.poppins(
                                     color: Colors.white.withValues(alpha: 0.78),
                                     fontSize: 14.5,
                                     height: 1.5,
@@ -380,7 +380,7 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
                                   child: Center(
                                     child: Text(
                                       isEdge ? 'Enter The Edge' : 'Enter Elite',
-                                      style: GoogleFonts.montserrat(
+                                      style: GoogleFonts.poppins(
                                         color: CrickXColors.onLime,
                                         fontSize: 15.5,
                                         fontWeight: FontWeight.w900,
@@ -447,7 +447,7 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
           ),
           child: Text(
             text,
-            style: GoogleFonts.montserrat(
+            style: GoogleFonts.poppins(
               color: color,
               fontSize: 10.5,
               fontWeight: FontWeight.w900,
@@ -472,7 +472,7 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.montserrat(
+        style: GoogleFonts.poppins(
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w800,
@@ -520,7 +520,7 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
                     const SizedBox(width: 6),
                     Text(
                       label,
-                      style: GoogleFonts.montserrat(
+                      style: GoogleFonts.poppins(
                         color: Colors.white.withValues(alpha: 0.90),
                         fontSize: 10,
                         fontWeight: FontWeight.w900,
@@ -556,14 +556,14 @@ class _PremiumSuccessScreenV2State extends State<PremiumSuccessScreenV2>
       case "INTL_ULTRA":
         return "Ultra Elite • \$109.99";
       default:
-        return "CrickNova Elite";
+        return "CricX Elite";
     }
   }
 
   String _edgePlanLabel() {
     final minutes = widget.edgeMinutes;
-    if (minutes == null || minutes <= 0) return "CrickNova Edge";
-    return "CrickNova Edge • $minutes min";
+    if (minutes == null || minutes <= 0) return "CricX Edge";
+    return "CricX Edge • $minutes min";
   }
 }
 
@@ -594,12 +594,16 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
         ]
       : const [
           _WelcomeFeature(
+            Icons.block_rounded,
+            "100% Ad-Free experience activated",
+          ),
+          _WelcomeFeature(
             Icons.sports_cricket_rounded,
             "AI cricket analysis unlocked",
           ),
           _WelcomeFeature(
             Icons.auto_awesome_rounded,
-            "CrickNova Coach is ready",
+            "CricX Coach is ready",
           ),
           _WelcomeFeature(
             Icons.query_stats_rounded,
@@ -789,7 +793,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                       isEdge
                                           ? "CRICKNOVA EDGE UNLOCKED"
                                           : "PREMIUM UNLOCKED",
-                                      style: GoogleFonts.montserrat(
+                                      style: GoogleFonts.poppins(
                                         color: accent,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w900,
@@ -848,9 +852,9 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                     Text(
                                       isEdge
                                           ? "Now You Are Entering The Edge"
-                                          : "CrickNova Elite Activated",
+                                          : "CricX Elite Activated",
                                       textAlign: TextAlign.center,
-                                      style: GoogleFonts.playfairDisplay(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         fontSize: 27,
                                         fontWeight: FontWeight.w900,
@@ -859,10 +863,10 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                     const SizedBox(height: 10),
                                     Text(
                                       isEdge
-                                          ? "Boom. CrickNova Edge is live. Your next session is built to change how you see your cricket."
+                                          ? "Boom. CricX Edge is live. Your next session is built to change how you see your cricket."
                                           : "Your training dashboard, AI coach and premium cricket insights are now live.",
                                       textAlign: TextAlign.center,
-                                      style: GoogleFonts.montserrat(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white70,
                                         fontSize: 14.5,
                                         height: 1.45,
@@ -897,7 +901,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                       ),
                                       child: Text(
                                         planLabel,
-                                        style: GoogleFonts.montserrat(
+                                        style: GoogleFonts.poppins(
                                           color: CrickXColors.limeSpark,
                                           fontSize: 12,
                                           fontWeight: FontWeight.w800,
@@ -958,7 +962,7 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
                                                 child: Text(
                                                   isEdge
                                                       ? "Start The Edge"
-                                                      : "Enter CrickNova Elite",
+                                                      : "Enter CricX Elite",
                                                   style: const TextStyle(
                                                     color: CrickXColors.onLime,
                                                     fontSize: 16,
@@ -1074,14 +1078,14 @@ class _PremiumSuccessScreenState extends State<PremiumSuccessScreen>
       case "INTL_ULTRA":
         return "Ultra Elite • \$109.99";
       default:
-        return "CrickNova Elite";
+        return "CricX Elite";
     }
   }
 
   String _edgePlanLabel() {
     final minutes = widget.edgeMinutes;
-    if (minutes == null || minutes <= 0) return "CrickNova Edge";
-    return "CrickNova Edge • $minutes min";
+    if (minutes == null || minutes <= 0) return "CricX Edge";
+    return "CricX Edge • $minutes min";
   }
 }
 
@@ -2041,11 +2045,9 @@ class _PremiumScreenState extends State<PremiumScreen>
     "₹99": GlobalKey(),
     "₹299": GlobalKey(),
     "₹499": GlobalKey(),
-    "₹1999": GlobalKey(),
     "\$8.99": GlobalKey(),
     "\$29.99": GlobalKey(),
     "\$59.99": GlobalKey(),
-    "\$109.99": GlobalKey(),
   };
 
   @override
@@ -2441,7 +2443,7 @@ class _PremiumScreenState extends State<PremiumScreen>
 
   Future<void> _showPlayBillingSheet() async {
     if (!mounted) return;
-    final planTitle = _lastPlanTitle ?? "CrickNova Premium";
+    final planTitle = _lastPlanTitle ?? "CricX Premium";
     final planPrice = _lastPlanPrice ?? "";
 
     await showModalBottomSheet<void>(
@@ -2995,35 +2997,35 @@ class _PremiumScreenState extends State<PremiumScreen>
     switch (source) {
       case "ai_coach":
         return const _PremiumEntryHighlight(
-          title: "Cricknova Chat Coach",
+          title: "CricX Chat Coach",
           subtitle: "You were redirected because Chat Coach needs Premium.",
           icon: Icons.auto_awesome_rounded,
-          keywords: ["Cricknova Chat Coach", "Priority AI"],
+          keywords: ["CricX Chat Coach", "Priority AI"],
         );
       case "analyse":
       case "compare_lock":
       case "compare_limit":
         return const _PremiumEntryHighlight(
-          title: "Cricknova Analyse Yourself Batting",
+          title: "CricX Analyse Yourself Batting",
           subtitle: "You were redirected to unlock batting video comparison.",
           icon: Icons.analytics_rounded,
-          keywords: ["Cricknova Analyse Yourself"],
+          keywords: ["CricX Analyse Yourself"],
         );
       case "bowling_analysis":
       case "mistake_lock":
       case "mistake_usage_limit":
         return const _PremiumEntryHighlight(
-          title: "Cricknova Mistake Detection",
+          title: "CricX Mistake Detection",
           subtitle: "You were redirected to unlock bowling AI feedback.",
           icon: Icons.sports_baseball_rounded,
-          keywords: ["Cricknova Mistake Detection"],
+          keywords: ["CricX Mistake Detection"],
         );
       case "bowling_compare":
         return const _PremiumEntryHighlight(
           title: "Bowling Compare",
           subtitle: "You were redirected to unlock bowling video comparison.",
           icon: Icons.compare_arrows_rounded,
-          keywords: ["Cricknova Analyse Yourself"],
+          keywords: ["CricX Analyse Yourself"],
         );
       case "upload_gate":
         return const _PremiumEntryHighlight(
@@ -3591,7 +3593,7 @@ class _PremiumScreenState extends State<PremiumScreen>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to start CrickNova Edge: $error')),
+        SnackBar(content: Text('Unable to start CricX Edge: $error')),
       );
       return;
     } finally {
@@ -3604,7 +3606,7 @@ class _PremiumScreenState extends State<PremiumScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Complete the Google Play purchase to unlock CrickNova Edge ${pack.minutes} min.',
+          'Complete the Google Play purchase to unlock CricX Edge ${pack.minutes} min.',
         ),
       ),
     );
@@ -3670,8 +3672,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Starter",
           glowColor: Colors.blueAccent,
           features: [
-            "200 Cricknova Chat Coach",
-            "15 Cricknova Mistake Detection (Batting/Bowling)",
+            "100% Ad-Free Experience",
+            "1,000 CricX Chat Coach",
+            "90 CricX Mistake Detection (Batting/Bowling)",
+            "60 CricX Analyse Yourself (Batting/Bowling)",
             "Basic Speed Detection",
             "Basic Swing Detection",
             "Basic Spin Detection",
@@ -3689,8 +3693,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Most Popular",
           glowColor: Colors.purpleAccent,
           features: [
-            "1,200 Cricknova Chat Coach",
-            "30 Cricknova Mistake Detection (Batting/Bowling)",
+            "100% Ad-Free Experience",
+            "3,000 CricX Chat Coach",
+            "400 CricX Mistake Detection (Batting/Bowling)",
+            "300 CricX Analyse Yourself (Batting/Bowling)",
             "Enhanced Speed Detection",
             "Enhanced Swing Detection",
             "Enhanced Spin Detection",
@@ -3710,9 +3716,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Best Value",
           glowColor: Colors.greenAccent,
           features: [
-            "3,000 Cricknova Chat Coach",
-            "60 Cricknova Mistake Detection (Batting/Bowling)",
-            "60 Cricknova Analyse Yourself (Batting/Bowling)",
+            "100% Ad-Free Experience",
+            "7,000 CricX Chat Coach",
+            "800 CricX Mistake Detection (Batting/Bowling)",
+            "700 CricX Analyse Yourself (Batting/Bowling)",
             "Advanced Speed Detection",
             "Advanced Swing Detection",
             "Advanced Spin Detection",
@@ -3730,80 +3737,11 @@ class _PremiumScreenState extends State<PremiumScreen>
   }
 
   List<Widget> indiaDirectPlans() {
-    return [
-      KeyedSubtree(
-        key: _planKeys["₹99"],
-        child: sexyPlanCard(
-          title: "Monthly",
-          price: "₹99",
-          tag: "Starter ⚡",
-          glowColor: Colors.blueAccent,
-          features: [
-            "200 Cricknova Chat Coach",
-            "15 Cricknova Mistake Detection (Batting/Bowling)",
-            "Basic Speed Detection",
-            "Basic Swing Detection",
-            "Basic Spin Detection",
-            "Basic DRS Decision System",
-            "Basic UltraEdge Detection",
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
-      KeyedSubtree(
-        key: _planKeys["₹499"],
-        child: sexyPlanCard(
-          title: "Yearly",
-          price: "₹499",
-          tag: "Best Value 💎",
-          glowColor: Colors.greenAccent,
-          features: [
-            "3,000 Cricknova Chat Coach",
-            "60 Cricknova Mistake Detection (Batting/Bowling)",
-            "60 Cricknova Analyse Yourself (Batting/Bowling)",
-            "Advanced Speed Detection",
-            "Advanced Swing Detection",
-            "Advanced Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
-            "Advanced DRS Decision System",
-            "Advanced UltraEdge Detection",
-          ],
-        ),
-      ),
-    ];
+    return indiaPlans();
   }
 
   List<Widget> indiaCompareOnlyPlans() {
-    return [
-      KeyedSubtree(
-        key: _planKeys["₹499"],
-        child: sexyPlanCard(
-          title: "Yearly",
-          price: "₹499",
-          tag: "Analyse Pro",
-          glowColor: Colors.greenAccent,
-          features: [
-            "3,000 Cricknova Chat Coach",
-            "60 Cricknova Mistake Detection (Batting/Bowling)",
-            "60 Cricknova Analyse Yourself (Batting/Bowling)",
-            "Advanced Speed Detection",
-            "Advanced Swing Detection",
-            "Advanced Spin Detection",
-            "Speed Graph",
-            "Accuracy Graph",
-            "Monthly Reports",
-            "XP System & Milestones",
-            "Speed Certificates",
-            "Advanced DRS Decision System",
-            "Advanced UltraEdge Detection",
-          ],
-        ),
-      ),
-    ];
+    return indiaPlans();
   }
 
   // ---------------- INTERNATIONAL PLANS ----------------
@@ -3818,9 +3756,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Starter ⚡",
           glowColor: Colors.blueAccent,
           features: [
-            "250 Cricknova Chat Coach",
-            "15 Cricknova Mistake Detection (Batting/Bowling)",
-            "15 Cricknova Analyse Yourself (Batting/Bowling)",
+            "100% Ad-Free Experience",
+            "1,000 CricX Chat Coach",
+            "90 CricX Mistake Detection (Batting/Bowling)",
+            "60 CricX Analyse Yourself (Batting/Bowling)",
             "AI Speed Analysis",
             "AI Swing Analysis",
             "AI Spin Analysis",
@@ -3839,9 +3778,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Most Popular",
           glowColor: Colors.purpleAccent,
           features: [
-            "1500 Cricknova Chat Coach",
-            "30 Cricknova Mistake Detection (Batting/Bowling)",
-            "30 Cricknova Analyse Yourself (Batting/Bowling)",
+            "100% Ad-Free Experience",
+            "3,000 CricX Chat Coach",
+            "400 CricX Mistake Detection (Batting/Bowling)",
+            "300 CricX Analyse Yourself (Batting/Bowling)",
             "Advanced Speed Analysis",
             "Advanced Swing Analysis",
             "Advanced Spin Analysis",
@@ -3863,9 +3803,10 @@ class _PremiumScreenState extends State<PremiumScreen>
           tag: "Best Deal",
           glowColor: Colors.greenAccent,
           features: [
-            "5000 Cricknova Chat Coach",
-            "60 Cricknova Mistake Detection (Batting/Bowling)",
-            "60 Cricknova Analyse Yourself (Batting/Bowling)",
+            "100% Ad-Free Experience",
+            "7,000 CricX Chat Coach",
+            "800 CricX Mistake Detection (Batting/Bowling)",
+            "700 CricX Analyse Yourself (Batting/Bowling)",
             "Speed Graph",
             "Accuracy Graph",
             "Speed Certificates",
@@ -4002,30 +3943,7 @@ class _PremiumScreenState extends State<PremiumScreen>
                             ),
                           ),
                         ),
-                        if (planKey == "\$109.99")
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Text(
-                              "Elite international access for less than \$0.31 per day",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white54,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        if (price == "₹1999")
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              "Less than ₹5 per day",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white54,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
+
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 20),
                           child: Divider(

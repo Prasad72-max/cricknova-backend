@@ -30,7 +30,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: const Text(
-          "Cricknova Analyse Yourself",
+          "CricX Analyse Yourself",
           style: TextStyle(color: Colors.white),
         ),
       ),

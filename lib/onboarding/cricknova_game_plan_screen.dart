@@ -219,7 +219,7 @@ class _CricknovaGamePlanScreenState extends State<CricknovaGamePlanScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Your CrickNova Game Plan is Ready.',
+                    'Your CricX Game Plan is Ready.',
                     style: OnboardingTextStyles.serif(
                       color: OnboardingColors.textPrimary,
                       fontSize: 36,
@@ -313,7 +313,7 @@ class _CricknovaGamePlanScreenState extends State<CricknovaGamePlanScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'If you consistently follow CrickNova coaching feedback...',
+                          'If you consistently follow CricX coaching feedback...',
                           style: OnboardingTextStyles.uiSans(
                             color: OnboardingColors.textSecondary.withValues(
                               alpha: 0.72,

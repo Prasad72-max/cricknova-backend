@@ -21,7 +21,7 @@ class CrickNovaMarketingNotificationService {
       CrickNovaMarketingNotificationService._();
 
   static const String _channelId = 'cricknova_marketing';
-  static const String _channelName = 'CrickNova Marketing';
+  static const String _channelName = 'CricX Marketing';
   static const String _channelDescription =
       'Daily cricket nudges, banter, and engagement reminders.';
 

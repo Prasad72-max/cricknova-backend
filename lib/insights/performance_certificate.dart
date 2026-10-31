@@ -813,7 +813,7 @@ class _CricketVelocityGaugeState extends State<_CricketVelocityGauge>
                     ),
                     const SizedBox(height: 10),
                     const Text(
-                      "CrickNova Kinetic Hub",
+                      "CricX Kinetic Hub",
                       style: TextStyle(
                         color: Colors.white60,
                         fontSize: 10.5,
@@ -998,7 +998,7 @@ class _BottomQrSignature extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            "CrickNova Seal",
+                            "CricX Seal",
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1023,7 +1023,7 @@ class _BottomQrSignature extends StatelessWidget {
                               const SizedBox(width: 10),
                               const Expanded(
                                 child: Text(
-                                  "Certified by the CrickNova AI\nPerformance Council",
+                                  "Certified by the CricX AI\nPerformance Council",
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -1085,7 +1085,7 @@ class _BottomQrSignature extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            "This performance record is cryptographically verified by CrickNova Precision Engine.",
+            "This performance record is cryptographically verified by CricX Precision Engine.",
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,

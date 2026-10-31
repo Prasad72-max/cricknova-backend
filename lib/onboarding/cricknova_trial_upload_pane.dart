@@ -367,7 +367,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
   bool _videoReady = false;
   bool _resultPreviewPlayed = false;
   double _progress = 0.0;
-  String _statusMsg = 'Uploading to CrickNova AI…';
+  String _statusMsg = 'Uploading to CricX AI…';
   String? _apiError;
 
   // results
@@ -433,7 +433,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
       _resultPreviewPlayed = false;
       _phase = _PanePhase.uploading;
       _progress = 0.0;
-      _statusMsg = 'Warming up CrickNova AI…';
+      _statusMsg = 'Warming up CricX AI…';
       _apiError = null;
     });
 
@@ -456,7 +456,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
           if (_progress < 0.3) {
             _statusMsg = 'Uploading video…';
           } else if (_progress < 0.6) {
-            _statusMsg = 'CrickNova AI is reading your video…';
+            _statusMsg = 'CricX AI is reading your video…';
           } else {
             _statusMsg = 'Detecting speed, swing & spin…';
           }
@@ -564,7 +564,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
       if (!mounted) return;
       setState(() {
         _apiError =
-            'Could not reach CrickNova AI. Check your connection and try again.';
+            'Could not reach CricX AI. Check your connection and try again.';
         _phase = _PanePhase.question;
         _progress = 0.0;
         _videoCtrl?.dispose();
@@ -957,7 +957,7 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                 _OptionButton(
                   emoji: '🎥',
                   label: 'Yes, I Have A Cricket Video',
-                  sub: 'Upload it now and see what CrickNova can detect.',
+                  sub: 'Upload it now and see what CricX can detect.',
                   gold: true,
                   onTap: _pickAndAnalyze,
                 ),
@@ -1382,8 +1382,8 @@ class _CricknovaTrialUploadPaneState extends State<CricknovaTrialUploadPane>
                         children: [
                           Text(
                             isDemo
-                                ? 'CrickNova AI Sample'
-                                : 'CrickNova AI Result',
+                                ? 'CricX AI Sample'
+                                : 'CricX AI Result',
                             style: OnboardingTextStyles.uiSans(
                               color: Colors.white,
                               fontSize: 14,

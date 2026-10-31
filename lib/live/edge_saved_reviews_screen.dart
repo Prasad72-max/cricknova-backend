@@ -76,7 +76,7 @@ class _EdgeSavedReviewsScreenState extends State<EdgeSavedReviewsScreen> {
                   SizedBox(height: 220),
                   Center(
                     child: Text(
-                      'No saved CrickNova Edge reviews yet.',
+                      'No saved CricX Edge reviews yet.',
                       style: TextStyle(color: Colors.white60),
                     ),
                   ),

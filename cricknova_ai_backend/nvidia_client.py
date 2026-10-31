@@ -201,77 +201,39 @@ def generate_nvidia_text(
         temperature=temperature,
     )
 
-def extract_video_keyframes(video_path: str, max_frames: int = 4) -> list[bytes]:
-    """⚡ High-speed keyframe extractor using OpenCV with sequential read fallback and FFmpeg."""
+def extract_video_keyframes(video_path: str, max_frames: int = 3) -> list[bytes]:
+    """⚡ Pure FFmpeg video keyframe extractor — 100% OpenCV-free (Only NVIDIA vision model used)."""
     frames: list[bytes] = []
     if not os.path.exists(video_path):
         return frames
 
-    # 1. Try OpenCV
+    import subprocess
+    import tempfile
+    import shutil
+
+    ffmpeg_bin = (
+        shutil.which("ffmpeg")
+        or ("/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else None)
+        or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else "ffmpeg")
+    )
     try:
-        import cv2
-        cap = cv2.VideoCapture(video_path)
-        if cap.isOpened():
-            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-            if total > 0:
-                count = min(max_frames, total)
-                positions = [int(total * (i + 1) / (count + 1)) for i in range(count)]
-                for pos in positions:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, pos)
-                    ret, fr = cap.read()
-                    if ret and fr is not None:
-                        h, w = fr.shape[:2]
-                        if w > 480:
-                            new_w = 480
-                            new_h = int(h * (480 / w))
-                            fr = cv2.resize(fr, (new_w, new_h))
-                        _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
-                        frames.append(buf.tobytes())
-
-            # Fallback: sequential read if seek gave 0 frames or total was <= 0
-            if not frames:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                step = 12
-                idx = 0
-                while True:
-                    ret, fr = cap.read()
-                    if not ret or fr is None:
-                        break
-                    if idx % step == 0:
-                        h, w = fr.shape[:2]
-                        if w > 480:
-                            new_w = 480
-                            new_h = int(h * (480 / w))
-                            fr = cv2.resize(fr, (new_w, new_h))
-                        _, buf = cv2.imencode(".jpg", fr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
-                        frames.append(buf.tobytes())
-                        if len(frames) >= max_frames:
-                            break
-                    idx += 1
-            cap.release()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cmd = [
+                ffmpeg_bin, "-v", "error", "-y", "-i", video_path,
+                "-vf", "fps=1.5,scale=360:-2",
+                "-q:v", "4",
+                "-vframes", str(max_frames),
+                os.path.join(tmp_dir, "frame_%02d.jpg")
+            ]
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+            for f in sorted(os.listdir(tmp_dir)):
+                if f.endswith(".jpg"):
+                    with open(os.path.join(tmp_dir, f), "rb") as fp:
+                        b = fp.read()
+                        if b:
+                            frames.append(b)
     except Exception as e:
-        print("⚠️ OpenCV extraction notice:", e)
-
-    # 2. Try FFmpeg fallback if OpenCV extracted nothing
-    if not frames:
-        import subprocess
-        import tempfile
-        ffmpeg_bin = "/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else "ffmpeg"
-        try:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                cmd = [
-                    ffmpeg_bin, "-v", "error", "-y", "-i", video_path,
-                    "-vf", "fps=1,scale=min(640\\,iw):-2",
-                    "-q:v", "3", "-vframes", str(max_frames),
-                    os.path.join(tmp_dir, "frame_%02d.jpg")
-                ]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
-                for f in sorted(os.listdir(tmp_dir)):
-                    if f.endswith(".jpg"):
-                        with open(os.path.join(tmp_dir, f), "rb") as fp:
-                            frames.append(fp.read())
-        except Exception as e:
-            print("⚠️ FFmpeg fallback notice:", e)
+        print("⚠️ Pure FFmpeg extraction notice:", e)
 
     return frames
 

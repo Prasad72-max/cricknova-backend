@@ -76,7 +76,7 @@ class RazorpayService {
       /// amount must already be in paise (backend-controlled)
       "amount": amount,
       "currency": "INR",
-      "name": "CrickNova AI",
+      "name": "CricX AI",
       "description": "Premium Subscription",
 
       "prefill": {"email": email, if (contact != null) "contact": contact},

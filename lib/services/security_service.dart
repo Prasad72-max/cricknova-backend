@@ -26,7 +26,7 @@ class SecurityService extends ChangeNotifier {
   bool _lastIpBlocked = false;
   String _blockTitle = "Action Required";
   String _blockMessage =
-      "CrickNova AI does not support VPNs or Proxies to ensure regional compliance and data integrity. Please disable all VPN services and restart the app to continue.";
+      "CricX AI does not support VPNs or Proxies to ensure regional compliance and data integrity. Please disable all VPN services and restart the app to continue.";
   bool _allowRetry = false;
   String _blockReason = "unknown";
   String? _blockIp;
@@ -144,7 +144,7 @@ class SecurityService extends ChangeNotifier {
         await _block(
           title: "Action Required",
           message:
-              "CrickNova AI does not support VPNs, Proxies, or Custom DNS to ensure regional compliance and data integrity. Please disable them and restart the app to continue.",
+              "CricX AI does not support VPNs, Proxies, or Custom DNS to ensure regional compliance and data integrity. Please disable them and restart the app to continue.",
           allowRetry: false,
           reason: vpn
               ? "vpn"
@@ -169,7 +169,7 @@ class SecurityService extends ChangeNotifier {
           await _block(
             title: "Action Required",
             message:
-                "CrickNova AI does not support VPNs or Proxies to ensure regional compliance and data integrity. Please disable all VPN services and restart the app to continue.",
+                "CricX AI does not support VPNs or Proxies to ensure regional compliance and data integrity. Please disable all VPN services and restart the app to continue.",
             allowRetry: false,
             reason: "ip_proxy",
             deviceId: deviceId,
@@ -181,7 +181,7 @@ class SecurityService extends ChangeNotifier {
         await _block(
           title: "Action Required",
           message:
-              "CrickNova AI does not support VPNs or Proxies to ensure regional compliance and data integrity. Please disable all VPN services and restart the app to continue.",
+              "CricX AI does not support VPNs or Proxies to ensure regional compliance and data integrity. Please disable all VPN services and restart the app to continue.",
           allowRetry: false,
           reason: "ip_proxy",
           deviceId: deviceId,

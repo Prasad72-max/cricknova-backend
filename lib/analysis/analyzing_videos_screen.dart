@@ -706,7 +706,7 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
                             ),
                           ),
                         ),
-                        // CrickNova AI Watermark (Enlarged + Slogan)
+                        // CricX AI Watermark (Enlarged + Slogan)
                         Positioned(
                           left: 16,
                           bottom: 28,
@@ -731,7 +731,7 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
                                   children: [
                                     Text(
                                       "Uploaded on CrickX AI",
-                                      style: GoogleFonts.outfit(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w900,
@@ -740,7 +740,7 @@ class _StoredTrainingVideoScreenState extends State<StoredTrainingVideoScreen> {
                                     ),
                                     Text(
                                       "Where Cricket Meets Intelligence",
-                                      style: GoogleFonts.outfit(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white.withOpacity(0.8),
                                         fontSize: 9,
                                         fontWeight: FontWeight.w600,
@@ -1022,7 +1022,7 @@ class _InlineVideoCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                // CrickNova AI Watermark (Enlarged + Slogan)
+                // CricX AI Watermark (Enlarged + Slogan)
                 Positioned(
                   left: 16,
                   bottom: 28,
@@ -1047,7 +1047,7 @@ class _InlineVideoCard extends StatelessWidget {
                           children: [
                             Text(
                               "Uploaded on CrickX AI",
-                              style: GoogleFonts.outfit(
+                              style: GoogleFonts.poppins(
                                 color: Colors.white,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w900,
@@ -1056,7 +1056,7 @@ class _InlineVideoCard extends StatelessWidget {
                             ),
                             Text(
                               "Where Cricket Meets Intelligence",
-                              style: GoogleFonts.outfit(
+                              style: GoogleFonts.poppins(
                                 color: Colors.white.withOpacity(0.8),
                                 fontSize: 9,
                                 fontWeight: FontWeight.w600,

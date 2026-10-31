@@ -69,7 +69,7 @@ class _ClaimFormSheetState extends State<ClaimFormSheet> {
   String _title() {
     switch (widget.rewardType) {
       case ClaimRewardType.jersey:
-        return "Official CrickNova Jersey";
+        return "Official CricX Jersey";
       case ClaimRewardType.gloves:
         return "Batting Gloves + Special Gift";
       case ClaimRewardType.fullKit:

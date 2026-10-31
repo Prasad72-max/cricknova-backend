@@ -134,16 +134,14 @@ def check_chat_limit(user_id: str):
 
     used = sub.get("chat_used", 0)
 
-    if not plan or chat_limit <= 0:
-        raise HTTPException(status_code=403, detail="PREMIUM_REQUIRED")
-
-    if used >= chat_limit:
-        raise HTTPException(status_code=403, detail="CHAT_LIMIT_REACHED")
-
-    # increment usage atomically
-    db_client.collection("subscriptions").document(user_id).update({
-        "chat_used": firestore.Increment(1)
-    })
+    # increment usage atomically if subscriber
+    if plan and chat_limit > 0:
+        try:
+            db_client.collection("subscriptions").document(user_id).update({
+                "chat_used": firestore.Increment(1)
+            })
+        except Exception:
+            pass
 
     return {
         "used": used + 1,
@@ -176,9 +174,10 @@ async def ai_coach(req: CoachRequest, request: Request):
     if not req.message or not req.message.strip():
         return {"reply": "Ask a cricket-related question."}
 
-    # ❗ AI CONFIG CHECK (do this BEFORE usage / premium checks)
-    if not (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")):
-        print("❌ GEMINI_API_KEY missing on server")
+    # ❗ AI CONFIG CHECK (NVIDIA Nemotron 3.5 Super VL)
+    from nvidia_client import is_nvidia_available
+    if not is_nvidia_available():
+        print("❌ NVIDIA_API_KEY missing on server")
         return {
             "reply": "AI Coach is temporarily unavailable. Please try again later."
         }

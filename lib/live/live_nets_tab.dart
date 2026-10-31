@@ -26,13 +26,13 @@ import 'review_player_screen.dart';
 
 const String edgeStartPolicyNotice =
     'CRICKET CONTENT ONLY.\n\n'
-    'Do not start CrickNova Edge for black screens, unrelated videos, apps, or non-cricket activity.\n\n'
+    'Do not start CricX Edge for black screens, unrelated videos, apps, or non-cricket activity.\n\n'
     'Non-cricket content will terminate the session immediately. Used time will not be refunded. Repeated violations will lock every AI and paid feature for 27 days.';
 
 const String strictCricketOnlyPolicyNotice =
     'NON-CRICKET CONTENT DETECTED.\n\n'
     'This session has been terminated immediately. No feedback will be generated, used time will not be refunded, and this violation has been recorded against your account.\n\n'
-    'Repeated violations will lock all CrickNova AI and paid features for 27 days.';
+    'Repeated violations will lock all CricX AI and paid features for 27 days.';
 
 class LiveNetsAccessCard extends StatelessWidget {
   const LiveNetsAccessCard({super.key});
@@ -105,7 +105,7 @@ class LiveNetsAccessCard extends StatelessWidget {
               ),
             ),
             title: Text(
-              'CrickNova Edge',
+              'CricX Edge',
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
@@ -295,7 +295,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
           elevation: 0,
           foregroundColor: Colors.white,
           title: const Text(
-            'CrickNova Edge',
+            'CricX Edge',
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -320,7 +320,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
         body: user == null
             ? const Center(
                 child: Text(
-                  'Sign in to use CrickNova Edge.',
+                  'Sign in to use CricX Edge.',
                   style: TextStyle(color: Colors.white70),
                 ),
               )
@@ -406,7 +406,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                           icon: Icons.savings_outlined,
                           title: 'Your Money Matters',
                           body:
-                              'We respect every minute you purchase. Your training time and money are valuable, and CrickNova is designed to protect both.',
+                              'We respect every minute you purchase. Your training time and money are valuable, and CricX is designed to protect both.',
                         ),
                         const _EdgeInstructionCard(
                           icon: Icons.play_circle_outline_rounded,
@@ -431,7 +431,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                           icon: Icons.sports_cricket_rounded,
                           title: 'Train With Confidence',
                           body:
-                              'Focus on your cricket while CrickNova Coach focuses on the analysis.',
+                              'Focus on your cricket while CricX Coach focuses on the analysis.',
                         ),
                         const SizedBox(height: 18),
                         ElevatedButton.icon(
@@ -454,7 +454,7 @@ class _LiveNetsTabState extends State<LiveNetsTab> {
                           ),
                           label: Text(
                             balanceMs > 0
-                                ? 'Start CrickNova Edge'
+                                ? 'Start CricX Edge'
                                 : 'Recharge Edge Minutes',
                             style: GoogleFonts.poppins(
                               fontSize: 16,
@@ -1078,7 +1078,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
 
       if (mounted) {
         setState(() {
-          _status = 'Connecting to CrickNova AI';
+          _status = 'Connecting to CricX AI';
         });
       }
 
@@ -1213,10 +1213,10 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
   String _friendlyStartError(Object error) {
     final message = error.toString();
     if (message.contains('Timeout')) {
-      return 'CrickNova AI took too long to respond. Please try again.';
+      return 'CricX AI took too long to respond. Please try again.';
     }
     if (message.contains('FIRESTORE') || message.contains('DATABASE')) {
-      return 'CrickNova backend started, but live data storage is not ready yet.';
+      return 'CricX backend started, but live data storage is not ready yet.';
     }
     if (message.contains('SocketException')) {
       return 'Could not reach the live AI backend. Check internet and backend deployment.';
@@ -1256,7 +1256,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         await controller.startVideoRecording();
         _currentClipStartedAt = DateTime.now();
       } catch (error) {
-        debugPrint('CrickNova Edge chunk restart failed: $error');
+        debugPrint('CricX Edge chunk restart failed: $error');
       }
       return;
     }
@@ -1268,7 +1268,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _chunksSent += 1;
       final clipIndex = _chunksSent;
       debugPrint(
-        'CrickNova Edge preparing 10-second video #$clipIndex: ${file.path}',
+        'CricX Edge preparing 10-second video #$clipIndex: ${file.path}',
       );
       if (!_ending && !_paused && controller.value.isInitialized) {
         await controller.startVideoRecording();
@@ -1285,22 +1285,22 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           final bytes = await file.readAsBytes();
           if (_ending) return;
           debugPrint(
-            'CrickNova Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
+            'CricX Edge sending 10-second video #$clipIndex: ${bytes.length} bytes',
           );
           _enqueueVideoChunkForFeedback(bytes, clipIndex);
         } catch (error) {
-          debugPrint('CrickNova Edge chunk read failed: $error');
+          debugPrint('CricX Edge chunk read failed: $error');
         }
       }());
       _flushPendingCoachFeedback();
     } catch (error) {
-      debugPrint('CrickNova Edge video chunk failed: $error');
+      debugPrint('CricX Edge video chunk failed: $error');
       if (!_ending && !_paused && controller.value.isInitialized) {
         try {
           await controller.startVideoRecording();
           _currentClipStartedAt = DateTime.now();
         } catch (restartError) {
-          debugPrint('CrickNova Edge recovery restart failed: $restartError');
+          debugPrint('CricX Edge recovery restart failed: $restartError');
         }
       }
     } finally {
@@ -1314,7 +1314,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       _feedbackUploadQueue.add(
         _PendingVideoChunk(bytes: bytes, clipIndex: clipIndex),
       );
-      debugPrint('CrickNova Edge queued clip #$clipIndex for feedback');
+      debugPrint('CricX Edge queued clip #$clipIndex for feedback');
       return;
     }
     unawaited(_uploadVideoChunkForFeedback(bytes, clipIndex));
@@ -1353,18 +1353,18 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       if (token != null && token.isNotEmpty) {
         request.headers['Authorization'] = 'Bearer $token';
       }
-      debugPrint('CrickNova Edge uploading clip #$clipIndex for feedback');
+      debugPrint('CricX Edge uploading clip #$clipIndex for feedback');
       final streamed = await request.send().timeout(
         const Duration(seconds: 90),
       );
       final response = await http.Response.fromStream(streamed);
       debugPrint(
-        'CrickNova Edge feedback response #$clipIndex: '
+        'CricX Edge feedback response #$clipIndex: '
         '${response.statusCode} ${response.body}',
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(
-          'CrickNova Edge chunk feedback failed: ${response.statusCode} ${response.body}',
+          'CricX Edge chunk feedback failed: ${response.statusCode} ${response.body}',
         );
         if (mounted) {
           setState(() {
@@ -1416,7 +1416,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
       if (text.isNotEmpty) {
         await _showCoachFeedback(text, mood: mood, clipIndex: clipIndex);
       } else {
-        debugPrint('CrickNova Edge feedback empty for clip #$clipIndex');
+        debugPrint('CricX Edge feedback empty for clip #$clipIndex');
         if (mounted) {
           setState(() {
             _status = 'Waiting for AI feedback';
@@ -1424,7 +1424,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         }
       }
     } catch (error) {
-      debugPrint('CrickNova Edge chunk upload failed: $error');
+      debugPrint('CricX Edge chunk upload failed: $error');
       if (mounted) {
         setState(() {
           _chunksAnalysed = clipIndex;
@@ -1539,7 +1539,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
     _feedbackUploadQueue.clear();
     setState(() {
       _coachProcessing = false;
-      _status = isBan ? 'CrickNova account locked' : 'Session terminated';
+      _status = isBan ? 'CricX account locked' : 'Session terminated';
       _latestCaption = message;
     });
     await showDialog<void>(
@@ -1555,7 +1555,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           ),
         ),
         title: Text(
-          isBan ? 'CrickNova Account Locked' : 'Non-Cricket Content Detected',
+          isBan ? 'CricX Account Locked' : 'Non-Cricket Content Detected',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w900,
@@ -1907,7 +1907,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
         });
       }
     } catch (error) {
-      debugPrint('CrickNova Edge pause/resume failed: $error');
+      debugPrint('CricX Edge pause/resume failed: $error');
       if (mounted) {
         setState(() {
           _status = nextPaused ? 'Could not pause' : 'Could not resume';
@@ -1945,7 +1945,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           _recordedChunkPaths.add(file.path);
         }
       } catch (error) {
-        debugPrint('CrickNova Edge final recording stop failed: $error');
+        debugPrint('CricX Edge final recording stop failed: $error');
       }
     }
     try {
@@ -1975,7 +1975,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
           name: p.basename(_recordedPath!),
         );
       } catch (error) {
-        debugPrint('CrickNova Edge automatic save failed: $error');
+        debugPrint('CricX Edge automatic save failed: $error');
       }
     }
 
@@ -2283,7 +2283,7 @@ class _LiveNetsCameraScreenState extends State<LiveNetsCameraScreen> {
                         Expanded(
                           child: Text(
                             _chunksSent == 0
-                                ? 'CrickNova Coach is watching your first 10 seconds...'
+                                ? 'CricX Coach is watching your first 10 seconds...'
                                 : 'Coach is reading your movement and preparing feedback...',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,

@@ -18,7 +18,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'Are You a Yorker? 😍🏏',
     body:
-        'Because you just landed perfectly in my plans. Open CrickNova AI and bowl another beauty.',
+        'Because you just landed perfectly in my plans. Open CricX AI and bowl another beauty.',
   ),
   CrickNovaNotificationTemplate(
     id: 2,
@@ -32,7 +32,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'Bowled Me Over 💫🔥',
     body:
-        'That action of yours should come with a warning label. CrickNova AI is waiting for your next spell.',
+        'That action of yours should come with a warning label. CricX AI is waiting for your next spell.',
   ),
   CrickNovaNotificationTemplate(
     id: 4,
@@ -74,7 +74,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'Pace with Grace 💃🔥',
     body:
-        'Fast enough to impress, smooth enough to obsess. CrickNova AI wants another look.',
+        'Fast enough to impress, smooth enough to obsess. CricX AI wants another look.',
   ),
   CrickNovaNotificationTemplate(
     id: 10,
@@ -102,7 +102,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'My Type? Fast Bowlers 😌🔥',
     body:
-        'Especially the ones who make the pitch look dramatic. Come flex in CrickNova AI.',
+        'Especially the ones who make the pitch look dramatic. Come flex in CricX AI.',
   ),
   CrickNovaNotificationTemplate(
     id: 14,
@@ -123,7 +123,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'You + Good Length = Magic ✨🏟️',
     body:
-        'Some partnerships are just meant to be. CrickNova AI is ready for round two.',
+        'Some partnerships are just meant to be. CricX AI is ready for round two.',
   ),
   CrickNovaNotificationTemplate(
     id: 17,
@@ -144,7 +144,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'Crushing on Your Action 💘🚀',
     body:
-        'That rhythm through the crease is hard to ignore. CrickNova AI wants another look.',
+        'That rhythm through the crease is hard to ignore. CricX AI wants another look.',
   ),
   CrickNovaNotificationTemplate(
     id: 20,
@@ -172,7 +172,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Flirty',
     title: 'You Look Good in Motion 😌🏟️',
     body:
-        'Especially at the crease. CrickNova AI is waiting to admire your next spell.',
+        'Especially at the crease. CricX AI is waiting to admire your next spell.',
   ),
   CrickNovaNotificationTemplate(
     id: 24,
@@ -193,7 +193,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Comedy',
     title: 'Grandma Pace Alert 👵💨',
     body:
-        'My grandma still thinks your last ball was a gentle warm-up. Open CrickNova AI and prove us wrong.',
+        'My grandma still thinks your last ball was a gentle warm-up. Open CricX AI and prove us wrong.',
   ),
   CrickNovaNotificationTemplate(
     id: 27,
@@ -242,7 +242,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Comedy',
     title: 'Delivery Delayed ⏳🏏',
     body:
-        'Your pace arrived like a late parcel. CrickNova AI is ready for express shipping.',
+        'Your pace arrived like a late parcel. CricX AI is ready for express shipping.',
   ),
   CrickNovaNotificationTemplate(
     id: 34,
@@ -284,7 +284,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Comedy',
     title: 'Pace on Airplane Mode ✈️📴',
     body:
-        'No signal, no threat, no drama. Come switch it back on in CrickNova AI.',
+        'No signal, no threat, no drama. Come switch it back on in CricX AI.',
   ),
   CrickNovaNotificationTemplate(
     id: 40,
@@ -340,7 +340,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Comedy',
     title: 'Net Session Looking Empty 👀🏏',
     body:
-        'Your run-up lane is collecting dust and bad decisions. Open CrickNova AI now.',
+        'Your run-up lane is collecting dust and bad decisions. Open CricX AI now.',
   ),
   CrickNovaNotificationTemplate(
     id: 48,
@@ -410,7 +410,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Pro',
     title: 'Alignment Looks Sharper 📐💎',
     body:
-        'Your body line through the crease is cleaner than before. Open CrickNova AI and compare another spell.',
+        'Your body line through the crease is cleaner than before. Open CricX AI and compare another spell.',
   ),
   CrickNovaNotificationTemplate(
     id: 58,
@@ -459,7 +459,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Pro',
     title: 'More Efficient Action ⚙️🏏',
     body:
-        'Less wasted movement, better energy transfer. CrickNova AI wants to measure the next step.',
+        'Less wasted movement, better energy transfer. CricX AI wants to measure the next step.',
   ),
   CrickNovaNotificationTemplate(
     id: 65,
@@ -487,7 +487,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Pro',
     title: 'Momentum Through Release 🔥💨',
     body:
-        'The ball is leaving the hand with better intent. Open CrickNova AI and track it again.',
+        'The ball is leaving the hand with better intent. Open CricX AI and track it again.',
   ),
   CrickNovaNotificationTemplate(
     id: 69,
@@ -529,7 +529,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Pro',
     title: 'Technical Gains Loading ⚙️🚀',
     body:
-        'The details are moving in the right direction. CrickNova AI is ready to measure the next rep.',
+        'The details are moving in the right direction. CricX AI is ready to measure the next rep.',
   ),
   CrickNovaNotificationTemplate(
     id: 75,
@@ -543,7 +543,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Motivational',
     title: 'The Crown Is Waiting 👑🔥',
     body:
-        'Great bowlers don’t wait for momentum, they create it. Open CrickNova AI and take your throne.',
+        'Great bowlers don’t wait for momentum, they create it. Open CricX AI and take your throne.',
   ),
   CrickNovaNotificationTemplate(
     id: 77,
@@ -592,7 +592,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Motivational',
     title: 'Own the Crease 👑🏏',
     body:
-        'Walk in like the spell belongs to you. CrickNova AI is ready when you are.',
+        'Walk in like the spell belongs to you. CricX AI is ready when you are.',
   ),
   CrickNovaNotificationTemplate(
     id: 84,
@@ -641,7 +641,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Motivational',
     title: 'Win the Evening Spell 🌆🏟️',
     body:
-        'Perfect time to train, perfect time to surprise yourself. CrickNova AI is on standby.',
+        'Perfect time to train, perfect time to surprise yourself. CricX AI is on standby.',
   ),
   CrickNovaNotificationTemplate(
     id: 91,
@@ -676,7 +676,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
     category: 'Motivational',
     title: 'Fire One Worth Remembering 🔥📈',
     body:
-        'You’re one clean release away from a statement ball. CrickNova AI is ready.',
+        'You’re one clean release away from a statement ball. CricX AI is ready.',
   ),
   CrickNovaNotificationTemplate(
     id: 96,
@@ -709,7 +709,7 @@ const List<CrickNovaNotificationTemplate> crickNovaNotifications = [
   CrickNovaNotificationTemplate(
     id: 100,
     category: 'Motivational',
-    title: 'CrickNova Wants a Show 🎆🏏',
+    title: 'CricX Wants a Show 🎆🏏',
     body:
         'Bring the rhythm, bring the fire, bring the spell that makes the app proud.',
   ),

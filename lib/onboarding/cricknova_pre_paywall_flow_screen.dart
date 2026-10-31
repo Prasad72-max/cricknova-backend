@@ -1076,7 +1076,7 @@ class _TrialStep extends StatelessWidget {
                   Text(
                     billingError!,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: const Color(0xFFD32F2F),
                       fontSize: 12.5,
                       fontWeight: FontWeight.w500,
@@ -1110,8 +1110,8 @@ class _TrialStep extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      'CrickNova AI',
-                      style: GoogleFonts.inter(
+                      'CricX AI',
+                      style: GoogleFonts.poppins(
                         color: Colors.white.withValues(alpha: 0.86),
                         fontSize: veryCompact ? 13 : 14,
                         fontWeight: FontWeight.w800,
@@ -1138,7 +1138,7 @@ class _TrialStep extends StatelessWidget {
                       ? 'Start your 3-day\nFREE trial to\ncontinue.'
                       : 'Continue with\nyour monthly\npremium plan.',
                   textAlign: TextAlign.left,
-                  style: GoogleFonts.cormorantGaramond(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: veryCompact ? 34 : 38,
                     fontWeight: FontWeight.w800,
@@ -1186,7 +1186,7 @@ class _TrialStep extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(18),
                       ),
-                      textStyle: GoogleFonts.inter(
+                      textStyle: GoogleFonts.poppins(
                         fontSize: veryCompact ? 15 : 16,
                         fontWeight: FontWeight.w900,
                       ),
@@ -1203,7 +1203,7 @@ class _TrialStep extends StatelessWidget {
                   Text(
                     billingError!,
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: const Color(0xFFFF6B6B),
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -1214,7 +1214,7 @@ class _TrialStep extends StatelessWidget {
                 Text(
                   footerCopy,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: Colors.white.withValues(alpha: 0.48),
                     fontSize: veryCompact ? 11.5 : 12.5,
                     fontWeight: FontWeight.w700,
@@ -1225,7 +1225,7 @@ class _TrialStep extends StatelessWidget {
                   Text(
                     'Device-based trial protection is active.',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: Colors.white.withValues(alpha: 0.32),
                       fontSize: veryCompact ? 10.5 : 11.5,
                       fontWeight: FontWeight.w600,
@@ -1331,7 +1331,7 @@ class _CalAITimelineItem extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: Colors.white,
                     fontSize: compact ? 13 : 14,
                     fontWeight: FontWeight.w900,
@@ -1340,7 +1340,7 @@ class _CalAITimelineItem extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.poppins(
                     color: Colors.white.withValues(alpha: 0.62),
                     fontSize: compact ? 10.5 : 11.5,
                     fontWeight: FontWeight.w600,
@@ -1390,7 +1390,7 @@ class _CalAIPlanCard extends StatelessWidget {
             children: [
               Text(
                 'Yearly Access',
-                style: GoogleFonts.inter(
+                style: GoogleFonts.poppins(
                   color: Colors.black,
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -1398,7 +1398,7 @@ class _CalAIPlanCard extends StatelessWidget {
               ),
               Text(
                 priceLabel,
-                style: GoogleFonts.inter(
+                style: GoogleFonts.poppins(
                   color: Colors.black,
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -1420,7 +1420,7 @@ class _CalAIPlanCard extends StatelessWidget {
             ),
             child: Text(
               '3 DAYS FREE',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 10.5,
                 fontWeight: FontWeight.w800,
@@ -1598,7 +1598,7 @@ class _TrialPlanCard extends StatelessWidget {
                       children: [
                         Text(
                           title,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: compact ? 15 : 16,
                             fontWeight: FontWeight.w800,
@@ -1607,7 +1607,7 @@ class _TrialPlanCard extends StatelessWidget {
                         SizedBox(height: compact ? 3 : 4),
                         Text(
                           priceLabel,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontSize: compact ? 17 : 19,
                             fontWeight: FontWeight.w800,
@@ -1661,7 +1661,7 @@ class _TrialPlanCard extends StatelessWidget {
               ),
               child: Text(
                 '3 DAYS FREE',
-                style: GoogleFonts.inter(
+                style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: compact ? 9 : 10,
                   fontWeight: FontWeight.w900,
@@ -1693,7 +1693,7 @@ class _NoPaymentLine extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             'No Payment Due Now',
-            style: GoogleFonts.inter(
+            style: GoogleFonts.poppins(
               color: Colors.white,
               fontSize: compact ? 17 : 19,
               fontWeight: FontWeight.w900,
@@ -1739,7 +1739,7 @@ class _YearlyTrialCard extends StatelessWidget {
                   children: [
                     Text(
                       'Yearly',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
@@ -1748,7 +1748,7 @@ class _YearlyTrialCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       priceLabel,
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
@@ -1758,7 +1758,7 @@ class _YearlyTrialCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       'Billed Annually',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.poppins(
                         color: const Color(0xCCFFFFFF),
                         fontSize: 12.5,
                         fontWeight: FontWeight.w500,
@@ -1800,7 +1800,7 @@ class _YearlyTrialCard extends StatelessWidget {
             ),
             child: Text(
               '3 DAYS FREE',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
@@ -1872,7 +1872,7 @@ class _Timeline extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: Colors.black,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -1881,7 +1881,7 @@ class _Timeline extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.poppins(
                       color: const Color(0xFF71717A),
                       fontSize: 13.5,
                       fontWeight: FontWeight.w500,
@@ -1906,7 +1906,7 @@ class _Timeline extends StatelessWidget {
             icon: Icons.lock_outline_rounded,
             title: 'Today',
             subtitle:
-                'Unlock all CrickNova AI features like Bowling Speed, Swing analysis, and Batting posture tracking.',
+                'Unlock all CricX AI features like Bowling Speed, Swing analysis, and Batting posture tracking.',
             last: false,
             iconColor: Colors.white,
             iconBg: const Color(0xFFF59E0B),
@@ -2042,7 +2042,7 @@ class _PlanCard extends StatelessWidget {
                           child: Text(
                             title,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.poppins(
                               color: Colors.black,
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
@@ -2059,7 +2059,7 @@ class _PlanCard extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(
                         subtitle!,
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.poppins(
                           color: Colors.black,
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
@@ -2109,7 +2109,7 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         text,
-        style: GoogleFonts.inter(
+        style: GoogleFonts.poppins(
           color: Colors.white,
           fontSize: 9.5,
           fontWeight: FontWeight.w700,
@@ -2142,7 +2142,7 @@ class _CheckLine extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           text,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.poppins(
             color: Colors.black,
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -2176,7 +2176,7 @@ class _GlowButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          textStyle: GoogleFonts.inter(
+          textStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w800,
           ),

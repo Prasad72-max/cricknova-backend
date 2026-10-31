@@ -25,7 +25,7 @@ class RazorpayService {
     var options = {
       'key': 'RAZORPAY_LIVE_KEY_HERE', // 🔴 PUT LIVE KEY
       'amount': amount, // in paise
-      'name': 'CrickNova',
+      'name': 'CricX',
       'description': description,
       'prefill': {
         'contact': contact,

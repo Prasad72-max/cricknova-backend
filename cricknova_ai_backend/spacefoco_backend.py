@@ -19,6 +19,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from nvidia_client import NVIDIA_MODEL
 
 app = FastAPI(title="CrickNova AI Backend")
 
@@ -1939,40 +1940,41 @@ async def ai_coach_analyze(
         if disc_label not in ("batting", "bowling"):
             disc_label = "cricket"
 
+        disc_title = "Batting" if disc_label == "batting" else ("Bowling" if disc_label == "bowling" else "Cricket")
         coaching_prompt = (prompt or "").strip()
-        if not coaching_prompt:
-            coaching_prompt = f"""
-You are an expert cricket coach analyzing this {disc_label} video.
-Look at the player in the video frames and provide an honest technical analysis in valid JSON format:
+        if not coaching_prompt or "video frames" in coaching_prompt.lower() or "json format" in coaching_prompt.lower():
+            coaching_prompt = f"""You are a professional, India-level cricket {disc_title.lower()} coach.
+Watch this {disc_title.lower()} video carefully.
+Analyze the player's technique and return EXACTLY these 4 points and nothing else. No intro, no chit-chat, no extra words:
 
-{{
-  "mistakes": [
-    "Mistake 1: [Primary technical mistake seen in the video frames]",
-    "Mistake 2: [Secondary technical mistake or flaw seen in the video frames]"
-  ],
-  "impact": "Impact: [Specific performance consequence and impact of these mistakes]",
-  "drill": "How to Fix: [Practical correction drill to fix these mistakes]"
-}}
+1. Mistake: [First technical mistake in {disc_title.lower()}]
+2. Mistake: [Second technical mistake in {disc_title.lower()}]
+3. Impact: [Direct performance and match impact of these mistakes]
+4. How to Fix: [Exact correction and practical drill to fix it]
 
-Return ONLY valid JSON.
-"""
+Format your output strictly as:
+1. Mistake: ...
+2. Mistake: ...
+3. Impact: ...
+4. How to Fix: ...
+Do not add any other sentence, explanation, or heading."""
 
         if frames:
             feedback = generate_nvidia_vision(
                 prompt=coaching_prompt,
                 frames=frames,
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                system_instruction=f"You are a professional, India-level cricket {disc_title.lower()} coach. Keep your response strictly to the requested 4 points only.",
                 model=NVIDIA_MODEL,
                 max_output_tokens=4096,
-                temperature=0.35,
+                temperature=0.30,
             )
         else:
             feedback = generate_nvidia_text(
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                system_instruction=f"You are a professional, India-level cricket {disc_title.lower()} coach. Keep your response strictly to the requested 4 points only.",
                 user_prompt=coaching_prompt,
                 model=NVIDIA_MODEL,
                 max_output_tokens=4096,
-                temperature=0.35,
+                temperature=0.30,
             )
 
         return {
@@ -2002,7 +2004,7 @@ class CoachChatRequest(BaseModel):
 
 @app.post("/coach/chat")
 async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
-    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text, NVIDIA_MODEL
     if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
@@ -2109,7 +2111,7 @@ async def ai_coach_diff(
     prompt: str | None = Form(None),
     discipline: str | None = Form(None),
 ):
-    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text
+    from nvidia_client import is_nvidia_available, extract_video_keyframes, generate_nvidia_comparison_vision, generate_nvidia_text, NVIDIA_MODEL
     if not is_nvidia_available():
         raise HTTPException(status_code=503, detail="AI_TEMPORARILY_UNAVAILABLE")
 
@@ -2132,34 +2134,6 @@ async def ai_coach_diff(
     left_path = save_temp(left)
     right_path = save_temp(right)
 
-    def trajectory_signature(points):
-        if not points:
-            return "none"
-        xs = [float(p[0]) for p in points if len(p) >= 2]
-        ys = [float(p[1]) for p in points if len(p) >= 2]
-        if not xs or not ys:
-            return "none"
-        x_min, x_max = min(xs), max(xs)
-        y_min, y_max = min(ys), max(ys)
-        bounce_i = ys.index(y_max)
-        tail_start = max(0, int(len(xs) * 0.80))
-        tail = xs[tail_start:] if tail_start < len(xs) else xs[-1:]
-        tail_mean = sum(tail) / max(1, len(tail))
-        curve = 0.0
-        if len(xs) >= 3:
-            curve = max(
-                abs((xs[i + 2] - xs[i + 1]) - (xs[i + 1] - xs[i]))
-                for i in range(0, len(xs) - 2)
-            )
-        return (
-            f"n={len(xs)} "
-            f"x={x_min:.2f}-{x_max:.2f} "
-            f"y={y_min:.2f}-{y_max:.2f} "
-            f"bounce={bounce_i} "
-            f"tailX={tail_mean:.2f} "
-            f"curve={curve:.4f}"
-        )
-
     try:
         from subscriptions_store import get_subscription, increment_compare
         sub = get_subscription(user_id)
@@ -2168,19 +2142,17 @@ async def ai_coach_diff(
         except Exception as e:
             print("⚠️ Compare usage bypassed for active subscriber:", e)
 
-        left_positions = []
-        right_positions = []
+        left_frames = []
+        right_frames = []
         try:
             with ThreadPoolExecutor(max_workers=2) as executor:
-                f1 = executor.submit(track_ball_positions, left_path)
-                f2 = executor.submit(track_ball_positions, right_path)
-                left_positions = f1.result(timeout=1.0) or []
-                right_positions = f2.result(timeout=1.0) or []
+                f1 = executor.submit(extract_video_keyframes, left_path, 2)
+                f2 = executor.submit(extract_video_keyframes, right_path, 2)
+                left_frames = f1.result(timeout=4.0) or []
+                right_frames = f2.result(timeout=4.0) or []
         except Exception:
-            pass
-
-        left_frames = extract_video_keyframes(left_path, max_frames=3)
-        right_frames = extract_video_keyframes(right_path, max_frames=3)
+            left_frames = extract_video_keyframes(left_path, max_frames=2)
+            right_frames = extract_video_keyframes(right_path, max_frames=2)
 
         base_prompt = (prompt or "").strip()
         discipline_text = (discipline or "").strip().lower()
@@ -2188,21 +2160,21 @@ async def ai_coach_diff(
             prompt_lower = base_prompt.lower()
             discipline_text = "bowling" if "bowling" in prompt_lower and "batting-only" not in prompt_lower else "batting"
 
-        if not base_prompt:
-            base_prompt = f"""
-You are an expert cricket technique comparison coach. Compare the player's {discipline_text} technique across both clips.
-Ignore clothing, appearance, grass, nets, venue, and background.
-Return exactly these sections:
-[VIDEO 1: Technique and mistakes in Clip 1]
-What needs work: primary technical mistake observed in Video 1
-What worked: positive aspect of technique seen in Video 1
-Key note: movement, balance, and stance observation in Video 1
+        disc_title = "Batting" if discipline_text == "batting" else "Bowling"
 
-[VIDEO 2: Technique differences and improvement]
-Difference: direct comparison of how technique changed from Video 1 to Video 2
-What worked: visible technique improvement seen in Video 2
-What needs work: technical flaw that still needs correction and practical drill to fix it
-"""
+        if not base_prompt or "technique and mistakes in clip 1" in base_prompt.lower():
+            base_prompt = f"""You are a professional, India-level cricket {discipline_text} coach.
+Compare the player's {discipline_text} technique between Video 1 and Video 2.
+Return EXACTLY these 4 comparison points followed by a Final Verdict, and nothing else. No extra intro, no filler words:
+
+1. Video 1 (What is good): [What worked well and positive technical aspect in Video 1]
+2. Video 1 (What is bad): [Primary technical mistake and flaw in Video 1]
+3. Video 2 (What is good): [Visible improvement and what worked well in Video 2]
+4. Video 2 (What is bad): [Technical flaw that still needs correction in Video 2]
+
+Final Verdict: [Clear coaching summary and verdict comparing both videos]
+
+Do not add any other sentence, explanation, or heading."""
 
         if left_frames and right_frames:
             diff_text = generate_nvidia_comparison_vision(
@@ -2210,10 +2182,10 @@ What needs work: technical flaw that still needs correction and practical drill 
                 discipline=discipline_text,
                 left_frames=left_frames,
                 right_frames=right_frames,
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                system_instruction=f"You are a professional, India-level cricket {discipline_text} coach. Compare both videos strictly using the 4 points and Final Verdict.",
                 model=NVIDIA_MODEL,
                 max_output_tokens=4096,
-                temperature=0.35,
+                temperature=0.30,
             )
         else:
             final_prompt = (
@@ -2225,7 +2197,7 @@ What needs work: technical flaw that still needs correction and practical drill 
             )
 
             diff_text = generate_nvidia_text(
-                system_instruction="You are a universal cricket coach. Keep your responses focused on cricket.",
+                system_instruction=f"You are a professional, India-level cricket {discipline_text} coach. Compare both videos strictly using the 4 points and Final Verdict.",
                 user_prompt=final_prompt,
                 model=NVIDIA_MODEL,
                 max_output_tokens=4096,

@@ -133,7 +133,7 @@ class RazorpayService {
       "key": razorpayKey,
       "amount": data["amount"], // MUST be in paise (backend returns paise)
       "currency": data["currency"],
-      "name": "CrickNova",
+      "name": "CricX",
       "description": "Subscription Payment",
       "order_id": data["orderId"],
       "prefill": {

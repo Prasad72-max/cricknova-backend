@@ -41,7 +41,7 @@ class _CricketAnalyzeScreenState extends State<CricketAnalyzeScreen> {
         backgroundColor: CrickXColors.graphiteBg,
         foregroundColor: Colors.white,
         title: Text(
-          "CrickNova Coach",
+          "CricX Coach",
           style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
         ),
       ),

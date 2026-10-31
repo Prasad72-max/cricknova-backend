@@ -126,10 +126,10 @@ class _ReelActionsState extends State<ReelActions> {
 
   Future<void> _handleShare() async {
     final shareUrl = "cricknova://reel/${widget.reel.reelId}";
-    final text = "Watch this cricket reel on CrickNova AI: ${widget.reel.caption}\n$shareUrl";
+    final text = "Watch this cricket reel on CricX AI: ${widget.reel.caption}\n$shareUrl";
     await Share.share(
       text,
-      subject: "CrickNova Cricket Reel",
+      subject: "CricX Cricket Reel",
     );
   }
 

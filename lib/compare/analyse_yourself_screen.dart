@@ -14,6 +14,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/weekly_stats_service.dart';
 import '../services/xp_service.dart';
 import '../theme/crickx_colors.dart';
+import '../services/analysis_credit_service.dart';
 
 class AnalyseYourselfScreen extends StatefulWidget {
   final bool bowlingMode;
@@ -81,6 +82,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     final v1 = _CompareVideoSummaryBuilder();
     final v2 = _CompareVideoSummaryBuilder();
     final drills = <String>[];
+    String? finalVerdict;
 
     bool isHeader(String l) {
       final s = l.toLowerCase();
@@ -96,11 +98,13 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
           s.startsWith('drill 1') ||
           s.startsWith('[drill 2') ||
           s.startsWith('drill 2') ||
-          s.startsWith('drills');
+          s.startsWith('drills') ||
+          s.startsWith('final verdict');
     }
 
     String headerKey(String l) {
       final s = l.toLowerCase();
+      if (s.contains('final verdict') || s.startsWith('verdict')) return 'verdict';
       if (s.contains('video') && s.contains('1')) return 'v1';
       if (s.contains('video') && s.contains('2')) return 'v2';
       if (s.contains('drill')) return 'drill';
@@ -110,19 +114,104 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     for (final rawLine in lines) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
+
+      final lower = line.toLowerCase();
+
+      // Detect Final Verdict
+      if (lower.startsWith('final verdict') || lower.startsWith('**final verdict')) {
+        final colonIdx = line.indexOf(':');
+        if (colonIdx != -1 && colonIdx + 1 < line.length) {
+          finalVerdict = line.substring(colonIdx + 1).trim();
+        } else {
+          finalVerdict = line.replaceFirst(RegExp(r'^(?:\*\*)?final verdict(?:\*\*)?[\s:-]*', caseSensitive: false), '').trim();
+        }
+        section = 'verdict';
+        continue;
+      }
+
+      if (section == 'verdict') {
+        if (finalVerdict == null || finalVerdict.isEmpty) {
+          finalVerdict = line;
+        } else {
+          finalVerdict = '$finalVerdict $line';
+        }
+        continue;
+      }
+
+      // Check for exact 4-point comparison structure
+      // 1. Video 1 (What is good)
+      if (lower.startsWith('1.') || (lower.contains('video 1') && (lower.contains('good') || lower.contains('worked') || lower.contains('positive')))) {
+        final colonIdx = line.indexOf(':');
+        final content = colonIdx != -1
+            ? line.substring(colonIdx + 1).trim()
+            : line.replaceFirst(RegExp(r'^\s*1\.?\s*(?:video\s*1[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (content.isNotEmpty) {
+          v1.stance = content;
+          section = 'v1_good';
+          continue;
+        }
+      }
+
+      // 2. Video 1 (What is bad)
+      if (lower.startsWith('2.') || (lower.contains('video 1') && (lower.contains('bad') || lower.contains('mistake') || lower.contains('flaw') || lower.contains('fix')))) {
+        final colonIdx = line.indexOf(':');
+        final content = colonIdx != -1
+            ? line.substring(colonIdx + 1).trim()
+            : line.replaceFirst(RegExp(r'^\s*2\.?\s*(?:video\s*1[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (content.isNotEmpty) {
+          v1.shotSelection = content;
+          section = 'v1_bad';
+          continue;
+        }
+      }
+
+      // 3. Video 2 (What is good)
+      if (lower.startsWith('3.') || (lower.contains('video 2') && (lower.contains('good') || lower.contains('worked') || lower.contains('improvement')))) {
+        final colonIdx = line.indexOf(':');
+        final content = colonIdx != -1
+            ? line.substring(colonIdx + 1).trim()
+            : line.replaceFirst(RegExp(r'^\s*3\.?\s*(?:video\s*2[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (content.isNotEmpty) {
+          v2.stance = content;
+          section = 'v2_good';
+          continue;
+        }
+      }
+
+      // 4. Video 2 (What is bad)
+      if (lower.startsWith('4.') || (lower.contains('video 2') && (lower.contains('bad') || lower.contains('mistake') || lower.contains('flaw') || lower.contains('fix')))) {
+        final colonIdx = line.indexOf(':');
+        final content = colonIdx != -1
+            ? line.substring(colonIdx + 1).trim()
+            : line.replaceFirst(RegExp(r'^\s*4\.?\s*(?:video\s*2[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (content.isNotEmpty) {
+          v2.shotSelection = content;
+          section = 'v2_bad';
+          continue;
+        }
+      }
+
       if (isHeader(line)) {
         section = headerKey(line);
         continue;
       }
 
-      // Strip common bullets/numbering for a cleaner card layout.
+      // Strip common bullets/numbering for cleaner layout.
       final normalized = line.replaceFirst(RegExp(r'^\s*[-•]\s*'), '');
       final normalized2 = normalized.replaceFirst(
         RegExp(r'^\s*\d+[\).\]]\s*'),
         '',
       );
 
-      if (section == 'v1') {
+      if (section == 'v1_good') {
+        v1.stance = v1.stance != null ? '${v1.stance} $normalized2' : normalized2;
+      } else if (section == 'v1_bad') {
+        v1.shotSelection = v1.shotSelection != null ? '${v1.shotSelection} $normalized2' : normalized2;
+      } else if (section == 'v2_good') {
+        v2.stance = v2.stance != null ? '${v2.stance} $normalized2' : normalized2;
+      } else if (section == 'v2_bad') {
+        v2.shotSelection = v2.shotSelection != null ? '${v2.shotSelection} $normalized2' : normalized2;
+      } else if (section == 'v1') {
         v1.addLine(normalized2);
       } else if (section == 'v2') {
         v2.addLine(normalized2);
@@ -132,7 +221,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     }
 
     // If the model ignored headers, fall back to the compact string.
-    if (!v1.hasAny && !v2.hasAny && drills.isEmpty) {
+    if (!v1.hasAny && !v2.hasAny && drills.isEmpty && (finalVerdict == null || finalVerdict.isEmpty)) {
       return _ParsedCompareReply.fallback(_formatCompareReply(cleaned));
     }
 
@@ -141,6 +230,7 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       video1: v1.build(),
       video2: v2.build(),
       drills: drills.take(2).toList(),
+      finalVerdict: finalVerdict,
       fallback: null,
     );
   }
@@ -311,6 +401,9 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
   @override
   void initState() {
     super.initState();
+    AnalysisCreditService.instance.loadCredits();
+    AnalysisCreditService.instance.battingCompareCreditsNotifier.addListener(_onCreditsUpdate);
+    AnalysisCreditService.instance.bowlingCompareCreditsNotifier.addListener(_onCreditsUpdate);
     // 🔥 Ensure premium state is loaded before using limits
     Future.microtask(() async {
       await PremiumService.restoreOnLaunch();
@@ -453,82 +546,201 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
     }
   }
 
+  Future<bool> _showWatchAdForCompareDialog({required bool isBowling}) async {
+    bool unlocked = false;
+    final title = isBowling ? 'Bowling Compare' : 'Analyse Yourself Batting';
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: CrickXColors.graphiteBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
+        ),
+        title: Text(
+          '🎬 Watch Ad to Unlock 2 Analyses',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Watch a short video ad to unlock 2 $title comparison analyses, or upgrade to Premium.',
+              style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.play_circle_fill_rounded, size: 20),
+                label: const Text(
+                  'Watch Ad (2 Free Analyses)',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: CrickXColors.onLime,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () async {
+                  Navigator.of(dialogCtx).pop();
+                  final result = isBowling
+                      ? await AnalysisCreditService.instance.watchAdForBowlingCompare(amount: 2)
+                      : await AnalysisCreditService.instance.watchAdForBattingCompare(amount: 2);
+
+                  if (result == AdWatchResult.rewardEarned ||
+                      result == AdWatchResult.premiumUser) {
+                    unlocked = true;
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🎉 2 comparison credits added!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      setState(() {});
+                    }
+                  } else if (result == AdWatchResult.adNotAvailable) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Ad isn't available right now. Please try again in a moment."),
+                        ),
+                      );
+                    }
+                  } else if (result == AdWatchResult.adClosedEarly) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Watch the complete ad to get your 2 analyses."),
+                        ),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const PremiumScreen(entrySource: "compare_lock"),
+                  ),
+                );
+              },
+              child: const Text(
+                'Get Premium (Unlimited Access)',
+                style: TextStyle(color: Colors.white60, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    return unlocked;
+  }
+
   Future<void> runCompare() async {
     if (!PremiumService.isLoaded) {
       await PremiumService.restoreOnLaunch();
     }
 
-    // 🔒 Locked users see blur CTA (no popup/snackbar).
-    if (!PremiumService.hasCompareAccess) {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => const PremiumScreen(entrySource: "compare_lock"),
-        ),
-      );
-      return;
-    }
+    final hasPremiumCompare = PremiumService.hasCompareAccess;
+    if (!hasPremiumCompare) {
+      final availableCredits = _isBowlingMode
+          ? AnalysisCreditService.instance.bowlingCompareCredits
+          : AnalysisCreditService.instance.battingCompareCredits;
 
-    final remaining = await PremiumService.getCompareLimit();
-    if (remaining <= 0) {
-      if (!mounted) return;
+      if (availableCredits <= 0) {
+        final earned = await _showWatchAdForCompareDialog(isBowling: _isBowlingMode);
+        if (!earned) {
+          final nowCredits = _isBowlingMode
+              ? AnalysisCreditService.instance.bowlingCompareCredits
+              : AnalysisCreditService.instance.battingCompareCredits;
+          if (nowCredits <= 0) return;
+        }
+      }
 
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          backgroundColor: CrickXColors.graphiteBg,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
-          ),
-          title: const Text(
-            "🚀 Analyse Limit Reached",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-          ),
-          content: const Text(
-            "You've used all your CrickX Cricknova Analyse Yourself attempts.\n\nUnlock advanced comparison again with ₹499 or ₹1999 plans.",
-            style: TextStyle(color: Colors.white70, height: 1.5),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                "Later",
-                style: TextStyle(color: Colors.white54),
-              ),
+      // Consume 1 credit
+      final consumed = _isBowlingMode
+          ? await AnalysisCreditService.instance.consumeBowlingCompareCredit()
+          : await AnalysisCreditService.instance.consumeBattingCompareCredit();
+      if (!consumed && !PremiumService.hasCompareAccess) {
+        await _showWatchAdForCompareDialog(isBowling: _isBowlingMode);
+        return;
+      }
+    } else {
+      final remaining = await PremiumService.getCompareLimit();
+      if (remaining <= 0) {
+        if (!mounted) return;
+
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            backgroundColor: CrickXColors.graphiteBg,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: CrickXColors.graphiteBorder, width: 1.2),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: CrickXColors.limeSpark,
-                foregroundColor: CrickXColors.onLime,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+            title: const Text(
+              "🚀 Analyse Limit Reached",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: const Text(
+              "You've used all your CricX Analyse Yourself attempts.\n\nUpgrade your plan or watch an ad to continue.",
+              style: TextStyle(color: Colors.white70, height: 1.5),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  "Later",
+                  style: TextStyle(color: Colors.white54),
                 ),
-                elevation: 0,
               ),
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        const PremiumScreen(entrySource: "compare_limit"),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: CrickXColors.limeSpark,
+                  foregroundColor: CrickXColors.onLime,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                );
-              },
-              child: Text(
-                "Upgrade Now",
-                style: GoogleFonts.poppins(
-                  color: CrickXColors.onLime,
-                  fontWeight: FontWeight.bold,
+                  elevation: 0,
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const PremiumScreen(entrySource: "compare_limit"),
+                    ),
+                  );
+                },
+                child: Text(
+                  "Upgrade Now",
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
-      );
-
-      return;
+            ],
+          ),
+        );
+        return;
+      }
     }
 
     if (leftVideo == null || rightVideo == null) return;
@@ -585,24 +797,18 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       request.fields["user_id"] = user.uid;
       request.fields["discipline"] = _analysisDiscipline;
       request.fields["prompt"] =
-          """
-You are an expert cricket technique comparison coach. Look closely at the player in Video 1 and Video 2 frames.
-Compare the $_analysisDiscipline technique honestly across both clips:
-$_disciplineGuard
-Ignore clothing, clothing color, player appearance, grass, nets, venue and background. Do not give a scene description.
-Return exactly these two sections for the two result boxes:
-[VIDEO 1: Technique and mistakes in Clip 1]
-What needs work: primary technical mistake observed in Video 1
-What worked: positive aspect of technique seen in Video 1
-Key note: stance, balance, and movement observation in Video 1
+          """You are a professional, India-level cricket $_analysisDiscipline coach.
+Compare the player's $_analysisDiscipline technique between Video 1 and Video 2.
+Return EXACTLY these 4 comparison points followed by a Final Verdict, and nothing else. No extra intro, no filler words:
 
-[VIDEO 2: Technique differences and improvement]
-Difference: direct comparison of how technique changed from Video 1 to Video 2
-What worked: visible technique improvement seen in Video 2
-What needs work: technical flaw that still needs correction and practical drill to fix it
-Do not discuss ball speed, ball swing or spin.
-Do not give rating/score.
-""";
+1. Video 1 (What is good): [What worked well and positive technical aspect in Video 1]
+2. Video 1 (What is bad): [Primary technical mistake and flaw in Video 1]
+3. Video 2 (What is good): [Visible improvement and what worked well in Video 2]
+4. Video 2 (What is bad): [Technical flaw that still needs correction in Video 2]
+
+Final Verdict: [Clear coaching summary and verdict comparing both videos]
+
+Do not add any other sentence, explanation, or heading.""";
       return request;
     }
 
@@ -686,7 +892,7 @@ Do not give rating/score.
                   style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 content: Text(
-                  "Your CrickX Cricknova Analyse Yourself limit has ended.\n\nUpgrade to ₹499 or ₹1999 to continue.",
+                  "Your CricX Analyse Yourself limit has ended.\n\nUpgrade your plan or watch an ad to continue.",
                   style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.4),
                 ),
                 actions: [
@@ -770,7 +976,7 @@ Do not give rating/score.
           style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         content: Text(
-          "You've reached your monthly CrickX Cricknova Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
+          "You've reached your monthly CrickX CricX Analyse Yourself limit.\n\nUpgrade to keep comparing your technique.",
           style: GoogleFonts.poppins(color: const Color(0xFFA1A1AA), height: 1.5),
         ),
         actions: [
@@ -821,7 +1027,7 @@ Do not give rating/score.
             fit: StackFit.expand,
             children: [
               VideoPlayer(controller),
-              // CrickNova AI Watermark (Enlarged + Slogan)
+              // CricX AI Watermark (Enlarged + Slogan)
               Positioned(
                 left: 12,
                 bottom: 12,
@@ -846,7 +1052,7 @@ Do not give rating/score.
                         children: [
                           Text(
                             "Uploaded on CrickX AI",
-                            style: GoogleFonts.outfit(
+                            style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w900,
@@ -855,7 +1061,7 @@ Do not give rating/score.
                           ),
                           Text(
                             "Where Cricket Meets Intelligence",
-                            style: GoogleFonts.outfit(
+                            style: GoogleFonts.poppins(
                               color: Colors.white.withOpacity(0.8),
                               fontSize: 8,
                               fontWeight: FontWeight.w600,
@@ -875,8 +1081,15 @@ Do not give rating/score.
     );
   }
 
+  void _onCreditsUpdate() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   void dispose() {
+    AnalysisCreditService.instance.battingCompareCreditsNotifier.removeListener(_onCreditsUpdate);
+    AnalysisCreditService.instance.bowlingCompareCreditsNotifier.removeListener(_onCreditsUpdate);
     leftController?.dispose();
     rightController?.dispose();
     _factTimer?.cancel();
@@ -888,19 +1101,6 @@ Do not give rating/score.
   @override
   Widget build(BuildContext context) {
     final bool canCompare = leftVideo != null && rightVideo != null;
-    final bool locked = !PremiumService.hasCompareAccess;
-
-    if (locked && !_redirected) {
-      _redirected = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => const PremiumScreen(entrySource: "analyse"),
-          ),
-        );
-      });
-    }
 
     void toggleSync() {
       if (leftController == null || rightController == null) return;
@@ -923,9 +1123,87 @@ Do not give rating/score.
       appBar: AppBar(
         backgroundColor: CrickXColors.graphiteBg,
         title: Text(
-          _isBowlingMode ? 'Bowling Compare' : 'CrickX Analyse Yourself',
+          _isBowlingMode ? 'Bowling Compare' : 'CricX Analyse Yourself',
         ),
         foregroundColor: Colors.white,
+        actions: [
+          ValueListenableBuilder<int>(
+            valueListenable: _isBowlingMode
+                ? AnalysisCreditService.instance.bowlingCompareCreditsNotifier
+                : AnalysisCreditService.instance.battingCompareCreditsNotifier,
+            builder: (context, credits, _) {
+              final premium = PremiumService.hasCompareAccess;
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 14),
+                  child: InkWell(
+                    onTap: premium
+                        ? null
+                        : () => _showWatchAdForCompareDialog(
+                              isBowling: _isBowlingMode,
+                            ),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: premium
+                            ? CrickXColors.limeSpark.withValues(alpha: 0.2)
+                            : (credits > 0
+                                ? CrickXColors.limeSpark.withValues(alpha: 0.15)
+                                : Colors.orange.withValues(alpha: 0.2)),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: premium
+                              ? CrickXColors.limeSpark
+                              : (credits > 0
+                                  ? CrickXColors.limeSpark
+                                  : Colors.orangeAccent),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            premium
+                                ? Icons.star_rounded
+                                : Icons.analytics_outlined,
+                            size: 14,
+                            color: premium
+                                ? CrickXColors.limeSpark
+                                : (credits > 0
+                                    ? CrickXColors.limeSpark
+                                    : Colors.orangeAccent),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            premium ? "PRO" : "$credits left",
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          if (!premium) ...[
+                            const SizedBox(width: 4),
+                            const Icon(
+                              Icons.add_circle,
+                              size: 14,
+                              color: Colors.white70,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Stack(
         children: [
@@ -983,7 +1261,7 @@ Do not give rating/score.
                 ),
                 const SizedBox(height: 26),
                 _ShimmerCompareButton(
-                  enabled: canCompare && !locked,
+                  enabled: canCompare,
                   shimmer: _shimmerController,
                   onTap: runCompare,
                 ),
@@ -1156,7 +1434,7 @@ Do not give rating/score.
                       fit: StackFit.expand,
                       children: [
                         VideoPlayer(controller),
-                        // CrickNova AI Watermark (Enlarged + Slogan)
+                        // CricX AI Watermark (Enlarged + Slogan)
                         Positioned(
                           left: 12,
                           bottom: 12,
@@ -1181,7 +1459,7 @@ Do not give rating/score.
                                   children: [
                                     Text(
                                       "Uploaded on CrickX AI",
-                                      style: GoogleFonts.outfit(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w900,
@@ -1190,7 +1468,7 @@ Do not give rating/score.
                                     ),
                                     Text(
                                       "Where Cricket Meets Intelligence",
-                                      style: GoogleFonts.outfit(
+                                      style: GoogleFonts.poppins(
                                         color: Colors.white.withOpacity(0.8),
                                         fontSize: 7.5,
                                         fontWeight: FontWeight.w600,
@@ -1311,12 +1589,14 @@ class _ParsedCompareReply {
   final _CompareVideoSummary video1;
   final _CompareVideoSummary video2;
   final List<String> drills;
+  final String? finalVerdict;
   final String? fallback;
 
   const _ParsedCompareReply({
     required this.video1,
     required this.video2,
     required this.drills,
+    this.finalVerdict,
     required this.fallback,
   });
 
@@ -1324,14 +1604,20 @@ class _ParsedCompareReply {
     : video1 = const _CompareVideoSummary.empty(),
       video2 = const _CompareVideoSummary.empty(),
       drills = const [],
+      finalVerdict = null,
       fallback = null;
 
   const _ParsedCompareReply.fallback(this.fallback)
     : video1 = const _CompareVideoSummary.empty(),
       video2 = const _CompareVideoSummary.empty(),
-      drills = const [];
+      drills = const [],
+      finalVerdict = null;
 
-  bool get hasStructured => video1.hasAny || video2.hasAny || drills.isNotEmpty;
+  bool get hasStructured =>
+      video1.hasAny ||
+      video2.hasAny ||
+      drills.isNotEmpty ||
+      (finalVerdict != null && finalVerdict!.isNotEmpty);
 }
 
 class _CompareResultView extends StatelessWidget {
@@ -1423,11 +1709,78 @@ class _CompareResultView extends StatelessWidget {
             ),
           ],
         ),
+        if (parsed.finalVerdict != null &&
+            parsed.finalVerdict!.trim().isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _FinalVerdictCard(verdict: parsed.finalVerdict!.trim()),
+        ],
         if (parsed.drills.isNotEmpty) ...[
           const SizedBox(height: 12),
           _DrillsCard(drills: parsed.drills),
         ],
       ],
+    );
+  }
+}
+
+class _FinalVerdictCard extends StatelessWidget {
+  final String verdict;
+  const _FinalVerdictCard({required this.verdict});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CrickXColors.graphiteElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: CrickXColors.limeSpark.withOpacity(0.6),
+          width: 1.2,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.gavel_rounded,
+                color: CrickXColors.limeSpark,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                "FINAL VERDICT",
+                style: GoogleFonts.poppins(
+                  color: CrickXColors.limeSpark,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            verdict,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 14,
+              height: 1.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1526,7 +1879,7 @@ class _CompareColumnCard extends StatelessWidget {
     final shot = summary.shotSelection?.trim();
     final key = summary.mistakeOrImprovement?.trim();
 
-    // If we couldn't extract fields, show the first 2 big points like Cricknova Mistake Detection.
+    // If we couldn't extract fields, show the first 2 big points like CricX Mistake Detection.
     if ((stance == null || stance.isEmpty) &&
         (shot == null || shot.isEmpty) &&
         (key == null || key.isEmpty) &&
