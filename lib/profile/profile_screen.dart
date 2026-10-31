@@ -1817,56 +1817,206 @@ class _ProfileScreenState extends State<ProfileScreen>
               // PREMIUM
               cardContainer(
                 title: "Explore Premium",
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: CrickXColors.graphiteElevated,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: CrickXColors.graphiteBorder,
-                        width: 1.1,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.workspace_premium_rounded,
-                      color: CrickXColors.limeSpark,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    "Open Subscription Hub",
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14.5,
-                    ),
-                  ),
-                  subtitle: Text(
-                    PremiumService.isPremiumActive
-                        ? "Manage your current premium plan"
-                        : "Compare all plans and feature tiers",
-                    style: GoogleFonts.poppins(
-                      color: const Color(0xFF94A3B8),
-                      fontSize: 12,
-                    ),
-                  ),
-                  trailing: const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 14,
-                    color: Color(0xFF71717A),
-                  ),
-                  onTap: _openSubscriptionHub,
+                child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseAuth.instance.currentUser != null
+                      ? FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(FirebaseAuth.instance.currentUser!.uid)
+                          .snapshots()
+                      : null,
+                  builder: (context, snapshot) {
+                    final data = snapshot.data?.data() ?? {};
+                    final balanceMs = LiveNetsAccessCard.balanceMsFrom(data);
+                    final hasEdgeBalance = balanceMs > 0;
+
+                    return Column(
+                      children: [
+                        // 1. Cricket Edge (Live AI Nets)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: CrickXColors.graphiteElevated,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: CrickXColors.limeSpark.withValues(alpha: 0.35),
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.12),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.sports_cricket_rounded,
+                              color: CrickXColors.limeSpark,
+                              size: 22,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                "Cricket Edge",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: CrickXColors.limeSpark.withValues(alpha: 0.4),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  hasEdgeBalance ? "ACTIVE" : "LIVE NETS",
+                                  style: GoogleFonts.poppins(
+                                    color: CrickXColors.limeSpark,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Text(
+                              hasEdgeBalance
+                                  ? "Balance: ${LiveNetsAccessCard.formatBalance(balanceMs)} • Live net session"
+                                  : "Live snicko, ball tracking & match-speed nets",
+                              style: GoogleFonts.poppins(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: Color(0xFF71717A),
+                          ),
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const LiveNetsTab(),
+                              ),
+                            );
+                          },
+                        ),
+
+                        const Divider(
+                          color: Color(0xFF23232A),
+                          height: 20,
+                        ),
+
+                        // 2. Open Subscription Hub
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: CrickXColors.graphiteElevated,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: CrickXColors.limeSpark.withValues(alpha: 0.35),
+                                width: 1.2,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: CrickXColors.limeSpark.withValues(alpha: 0.12),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.sports_score_rounded,
+                              color: CrickXColors.limeSpark,
+                              size: 22,
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                "Subscription Hub",
+                                style: GoogleFonts.poppins(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: PremiumService.isPremiumActive
+                                      ? CrickXColors.limeSpark.withValues(alpha: 0.2)
+                                      : Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: PremiumService.isPremiumActive
+                                        ? CrickXColors.limeSpark.withValues(alpha: 0.5)
+                                        : Colors.white24,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Text(
+                                  PremiumService.isPremiumActive ? "PRO ACTIVE" : "ALL PLANS",
+                                  style: GoogleFonts.poppins(
+                                    color: PremiumService.isPremiumActive
+                                        ? CrickXColors.limeSpark
+                                        : Colors.white70,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Text(
+                              PremiumService.isPremiumActive
+                                  ? "Manage your current plan • 100% Ad-Free"
+                                  : "Compare all tiers, AI coach & 100% Ad-Free",
+                              style: GoogleFonts.poppins(
+                                color: const Color(0xFF94A3B8),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          trailing: const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: Color(0xFF71717A),
+                          ),
+                          onTap: _openSubscriptionHub,
+                        ),
+                      ],
+                    );
+                  },
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: const LiveNetsAccessCard(),
               ),
 
               const SizedBox(height: 16),
@@ -2435,7 +2585,7 @@ class _ProfileScreenState extends State<ProfileScreen>
       headerIcon = Icons.play_circle_outline_rounded;
       headerAccent = CrickXColors.limeSpark;
     } else if (title == "Explore Premium") {
-      headerIcon = Icons.workspace_premium_rounded;
+      headerIcon = Icons.sports_cricket_rounded;
       headerAccent = CrickXColors.limeSpark;
     } else if (title == "Support & Rating") {
       headerIcon = Icons.star_outline_rounded;

@@ -25,6 +25,34 @@ async def analyze_video(file: UploadFile = File(...)):
         video_path = tmp.name
     
     try:
+        # 🏏 Cricket Verification via NVIDIA model (Zero hardcoding!)
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+            from nvidia_client import extract_video_keyframes, generate_nvidia_vision, NVIDIA_MODEL, is_nvidia_available
+            if is_nvidia_available():
+                v_frames = extract_video_keyframes(video_path, max_frames=2)
+                if v_frames:
+                    check_reply = generate_nvidia_vision(
+                        prompt="Is this cricket-related video or not? Answer strictly with one word: YES or NO.",
+                        frames=v_frames,
+                        system_instruction="You are an AI video inspector. Answer strictly YES if this video shows cricket (batting, bowling, nets, match, player with cricket bat or ball). Answer strictly NO if it does not show cricket (cars, trains, animals, random objects, dance, non-cricket clips). Reply ONLY with YES or NO.",
+                        model=NVIDIA_MODEL,
+                        max_output_tokens=10,
+                        temperature=0.1,
+                    ).strip().upper()
+                    if "NO" in check_reply and "YES" not in check_reply:
+                        return {
+                            "status": "non_cricket",
+                            "reason": "NOT_CRICKET_VIDEO",
+                            "message": "This video is not cricket-related. Please upload a clear cricket video.",
+                            "speed_kmph": None,
+                            "trajectory": [],
+                        }
+        except Exception as e:
+            print("NVIDIA cricket verification warning:", e)
+
         # Detect first ball using YOLO
         model_path = "yolo11n.pt"
         if os.path.exists("cricknova_engine/detectors/model.pt"):

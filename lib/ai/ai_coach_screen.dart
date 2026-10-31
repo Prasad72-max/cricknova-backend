@@ -610,7 +610,14 @@ class _AICoachScreenState extends State<AICoachScreen> {
 
   Widget buildMessage(Map<String, dynamic> msg) {
     bool isUser = msg["role"] == "user";
-    final content = (msg["content"] ?? msg["text"] ?? "").toString().trim();
+    final rawContent = (msg["content"] ?? msg["text"] ?? "").toString().trim();
+    // 🧹 Clean markdown symbols (*, #, _, `) so chat reads in crystal-clean natural text
+    final content = isUser
+        ? rawContent
+        : rawContent
+            .replaceAll(RegExp(r'[*#_`~]'), '')
+            .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+            .trim();
 
     Future<void> copy() async {
       await Clipboard.setData(ClipboardData(text: content));

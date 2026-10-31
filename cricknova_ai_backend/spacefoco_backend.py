@@ -1768,6 +1768,31 @@ async def analyze_training_video(file: UploadFile = File(...)):
         video_path = tmp.name
 
     try:
+        # 🏏 Cricket Verification via NVIDIA model (Zero hardcoding!)
+        from nvidia_client import extract_video_keyframes, generate_nvidia_vision, NVIDIA_MODEL, is_nvidia_available
+        if is_nvidia_available():
+            try:
+                v_frames = extract_video_keyframes(video_path, max_frames=2)
+                if v_frames:
+                    check_reply = generate_nvidia_vision(
+                        prompt="Is this cricket-related video or not? Answer strictly with one word: YES or NO.",
+                        frames=v_frames,
+                        system_instruction="You are an AI video inspector. Answer strictly YES if this video shows cricket (batting, bowling, nets, match, player with cricket bat or ball). Answer strictly NO if it does not show cricket (cars, trains, animals, random objects, dance, non-cricket clips). Reply ONLY with YES or NO.",
+                        model=NVIDIA_MODEL,
+                        max_output_tokens=10,
+                        temperature=0.1,
+                    ).strip().upper()
+                    if "NO" in check_reply and "YES" not in check_reply:
+                        return {
+                            "status": "non_cricket",
+                            "reason": "NOT_CRICKET_VIDEO",
+                            "message": "This video is not cricket-related. Please upload a clear cricket video.",
+                            "speed_kmph": None,
+                            "trajectory": [],
+                        }
+            except Exception as e:
+                print("NVIDIA cricket verification warning:", e)
+
         ball_positions = track_ball_positions(video_path)
 
         # Use ONLY the first ball delivery (no best-ball logic)
@@ -2065,11 +2090,18 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             )
             return {"status": "success", "reply": reply_text}
 
-        # ⚡ Direct CricX Chat: "You are a universal cricket coach."
+        # ⚡ Direct CricX Chat: "You are CricX AI Cricket Coach."
         messages_payload = [
             {
                 "role": "system",
-                "content": "You are a universal cricket coach. Keep your responses focused on cricket.",
+                "content": (
+                    "You are CricX AI Cricket Coach, a world-class professional cricket mentor. "
+                    "Provide direct, sharp, practical cricket coaching advice in natural, plain text. "
+                    "STRICT FORMATTING RULE: Do NOT use markdown symbols. Never output asterisks (*, **), "
+                    "never output hash symbols (#, ##, ###), and never use markdown bullets. "
+                    "Write in clean, readable plain sentences or standard numbering (1., 2.). "
+                    "Be fast, helpful, and focused strictly on cricket technique, drills, mindset, and match tactics."
+                ),
             }
         ]
         for item in history[-12:]:
@@ -2086,12 +2118,18 @@ async def ai_coach_chat(request: Request, req: CoachChatRequest = Body(...)):
             messages_payload,
             model=NVIDIA_MODEL,
             max_tokens=4096,
-            temperature=0.6,
+            temperature=0.45,
+            timeout=25,
         )
+
+        # 🧹 Strip any stray markdown symbols (*, #, _, `) so replies are crystal clean
+        clean_reply = re.sub(r'[*#_`~]', '', reply_text)
+        clean_reply = re.sub(r'[ \t]+', ' ', clean_reply)
+        clean_reply = re.sub(r'\n{3,}', '\n\n', clean_reply).strip()
 
         return {
             "status": "success",
-            "reply": reply_text
+            "reply": clean_reply
         }
 
     except Exception as e:
