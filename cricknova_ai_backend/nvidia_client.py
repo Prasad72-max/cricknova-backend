@@ -201,28 +201,64 @@ def generate_nvidia_text(
         temperature=temperature,
     )
 
-def extract_video_keyframes(video_path: str, max_frames: int = 3) -> list[bytes]:
-    """⚡ Fast & robust keyframe extractor for NVIDIA multimodal vision model.
-    Pure frame decoder (cv2/ffmpeg) — extracts raw JPEG bytes for AI model input."""
+def extract_video_keyframes(video_path: str, max_frames: int = 2) -> list[bytes]:
+    """⚡ Ultra-fast (<0.1s) keyframe extraction for NVIDIA vision using FFmpeg input-seeking & cv2."""
     frames: list[bytes] = []
     if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
         return frames
 
-    # Strategy 1: cv2 (standard on server in requirements.txt via opencv-python-headless)
+    # Find FFmpeg binary: imageio_ffmpeg bundled static binary > PATH > standard paths
+    ffmpeg_bin = None
+    try:
+        import imageio_ffmpeg
+        ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+
+    if not ffmpeg_bin:
+        import shutil
+        ffmpeg_bin = (
+            shutil.which("ffmpeg")
+            or ("/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else None)
+            or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else None)
+        )
+
+    # Strategy 1: Ultra-fast input-seeking FFmpeg (-ss before -i takes <0.05s)
+    if ffmpeg_bin:
+        import subprocess
+        import tempfile
+        timestamps = ["0.5", "1.5"] if max_frames == 2 else ["0.3", "1.0", "1.8"]
+        try:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                for i, ts in enumerate(timestamps[:max_frames]):
+                    out_path = os.path.join(tmp_dir, f"f_{i}.jpg")
+                    cmd = [
+                        ffmpeg_bin, "-ss", ts, "-i", video_path,
+                        "-vf", "scale=360:-2",
+                        "-vframes", "1",
+                        "-q:v", "6",
+                        "-y", out_path
+                    ]
+                    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=4)
+                    if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                        with open(out_path, "rb") as fp:
+                            frames.append(fp.read())
+            if frames:
+                return frames
+        except Exception as exc:
+            print("Fast FFmpeg extract notice:", exc)
+
+    # Strategy 2: Sequential cv2 frame grab (never seek with CAP_PROP_POS_FRAMES)
     try:
         import cv2
         cap = cv2.VideoCapture(video_path)
         if cap.isOpened():
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-            if total_frames > 0:
-                indices = [int(total_frames * (i + 1) / (max_frames + 1)) for i in range(max_frames)]
-            else:
-                indices = [0, 10, 20][:max_frames]
-
-            for idx in indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            count = 0
+            while len(frames) < max_frames and count < 60:
                 ret, frame = cap.read()
-                if ret and frame is not None:
+                if not ret or frame is None:
+                    break
+                if count in (5, 25, 45) or (count == 0 and len(frames) == 0):
                     h, w = frame.shape[:2]
                     target_w = 360
                     target_h = max(180, int(h * (360.0 / max(1, w))))
@@ -230,43 +266,12 @@ def extract_video_keyframes(video_path: str, max_frames: int = 3) -> list[bytes]
                     success, buf = cv2.imencode(".jpg", resized, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
                     if success and buf is not None:
                         frames.append(buf.tobytes())
+                count += 1
             cap.release()
             if frames:
                 return frames
     except Exception as exc:
-        print(f"cv2 keyframe decode notice: {exc}")
-
-    # Strategy 2: FFmpeg CLI (if installed in system)
-    try:
-        import subprocess
-        import tempfile
-        import shutil
-
-        ffmpeg_bin = (
-            shutil.which("ffmpeg")
-            or ("/opt/homebrew/bin/ffmpeg" if os.path.exists("/opt/homebrew/bin/ffmpeg") else None)
-            or ("/usr/bin/ffmpeg" if os.path.exists("/usr/bin/ffmpeg") else None)
-        )
-        if ffmpeg_bin:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                cmd = [
-                    ffmpeg_bin, "-v", "error", "-y", "-i", video_path,
-                    "-vf", "fps=1.5,scale=360:-2",
-                    "-q:v", "5",
-                    "-vframes", str(max_frames),
-                    os.path.join(tmp_dir, "frame_%02d.jpg")
-                ]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
-                for f in sorted(os.listdir(tmp_dir)):
-                    if f.endswith(".jpg"):
-                        with open(os.path.join(tmp_dir, f), "rb") as fp:
-                            b = fp.read()
-                            if b:
-                                frames.append(b)
-            if frames:
-                return frames
-    except Exception as exc:
-        print(f"ffmpeg keyframe decode notice: {exc}")
+        print("Sequential cv2 extract notice:", exc)
 
     return frames
 
@@ -417,13 +422,14 @@ def generate_nvidia_comparison_vision(
             model=model or NVIDIA_MODEL,
             max_tokens=max_output_tokens,
             temperature=temperature,
-            timeout=50,
+            timeout=25,
         )
     except Exception as e:
         print(f"⚠️ Comparison vision call failed: {e}. Falling back to text.")
         fallback_prompt = (
             f"You are a professional, India-level cricket {discipline} coach.\n"
-            f"Analyze the player's technique between Video 1 and Video 2 and return strictly the 4 points and Final Verdict:\n\n"
+            f"Provide a direct technical comparison between Video 1 and Video 2 focusing on body alignment, timing, bat path/bowling arm, and follow-through.\n"
+            f"Return strictly the requested 4 comparison points and Final Verdict:\n\n"
             f"{prompt}"
         )
         return generate_nvidia_text(

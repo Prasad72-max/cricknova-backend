@@ -79,150 +79,114 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
 
     final lines = cleaned.split('\n').map((l) => l.trim()).toList();
     String section = '';
-    final v1 = _CompareVideoSummaryBuilder();
-    final v2 = _CompareVideoSummaryBuilder();
-    final drills = <String>[];
+    String? v1;
+    String? v2;
+    String? diff;
+    String? prog;
     String? finalVerdict;
-
-    bool isHeader(String l) {
-      final s = l.toLowerCase();
-      return s.startsWith('[video 1') ||
-          s.startsWith('video 1') ||
-          s.startsWith('[video1') ||
-          s.startsWith('video1') ||
-          s.startsWith('[video 2') ||
-          s.startsWith('video 2') ||
-          s.startsWith('[video2') ||
-          s.startsWith('video2') ||
-          s.startsWith('[drill 1') ||
-          s.startsWith('drill 1') ||
-          s.startsWith('[drill 2') ||
-          s.startsWith('drill 2') ||
-          s.startsWith('drills') ||
-          s.startsWith('final verdict');
-    }
-
-    String headerKey(String l) {
-      final s = l.toLowerCase();
-      if (s.contains('final verdict') || s.startsWith('verdict')) return 'verdict';
-      if (s.contains('video') && s.contains('1')) return 'v1';
-      if (s.contains('video') && s.contains('2')) return 'v2';
-      if (s.contains('drill')) return 'drill';
-      return '';
-    }
 
     for (final rawLine in lines) {
       final line = rawLine.trim();
       if (line.isEmpty) continue;
-
       final lower = line.toLowerCase();
 
-      // Detect Final Verdict
+      // Final Verdict
       if (lower.startsWith('final verdict') || lower.startsWith('**final verdict')) {
         final colonIdx = line.indexOf(':');
-        if (colonIdx != -1 && colonIdx + 1 < line.length) {
-          finalVerdict = line.substring(colonIdx + 1).trim();
-        } else {
-          finalVerdict = line.replaceFirst(RegExp(r'^(?:\*\*)?final verdict(?:\*\*)?[\s:-]*', caseSensitive: false), '').trim();
-        }
+        final val = colonIdx != -1
+            ? line.substring(colonIdx + 1).trim()
+            : line.replaceFirst(RegExp(r'^(?:\*\*)?final verdict(?:\*\*)?[\s:-]*', caseSensitive: false), '').trim();
+        finalVerdict = val;
         section = 'verdict';
         continue;
       }
 
-      if (section == 'verdict') {
-        if (finalVerdict == null || finalVerdict.isEmpty) {
-          finalVerdict = line;
-        } else {
-          finalVerdict = '$finalVerdict $line';
-        }
-        continue;
-      }
-
-      // Check for exact 4-point comparison structure
-      // 1. Video 1 (What is good)
-      if (lower.startsWith('1.') || (lower.contains('video 1') && (lower.contains('good') || lower.contains('worked') || lower.contains('positive')))) {
+      // Point 1: Video 1
+      if (lower.startsWith('1.') || (lower.contains('video 1') && (lower.contains('technique') || lower.contains('execution') || lower.contains('good') || lower.contains('worked')))) {
         final colonIdx = line.indexOf(':');
-        final content = colonIdx != -1
+        final val = colonIdx != -1
             ? line.substring(colonIdx + 1).trim()
             : line.replaceFirst(RegExp(r'^\s*1\.?\s*(?:video\s*1[^\:]*[\:\-])?', caseSensitive: false), '').trim();
-        if (content.isNotEmpty) {
-          v1.stance = content;
-          section = 'v1_good';
+        if (val.isNotEmpty) {
+          v1 = val;
+          section = 'v1';
           continue;
         }
       }
 
-      // 2. Video 1 (What is bad)
-      if (lower.startsWith('2.') || (lower.contains('video 1') && (lower.contains('bad') || lower.contains('mistake') || lower.contains('flaw') || lower.contains('fix')))) {
+      // Point 2: Video 2
+      if (lower.startsWith('2.') || (lower.contains('video 2') && (lower.contains('technique') || lower.contains('changes') || lower.contains('execution') || lower.contains('bad') || lower.contains('good')))) {
         final colonIdx = line.indexOf(':');
-        final content = colonIdx != -1
+        final val = colonIdx != -1
             ? line.substring(colonIdx + 1).trim()
-            : line.replaceFirst(RegExp(r'^\s*2\.?\s*(?:video\s*1[^\:]*[\:\-])?', caseSensitive: false), '').trim();
-        if (content.isNotEmpty) {
-          v1.shotSelection = content;
-          section = 'v1_bad';
+            : line.replaceFirst(RegExp(r'^\s*2\.?\s*(?:video\s*2[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (val.isNotEmpty) {
+          v2 = val;
+          section = 'v2';
           continue;
         }
       }
 
-      // 3. Video 2 (What is good)
-      if (lower.startsWith('3.') || (lower.contains('video 2') && (lower.contains('good') || lower.contains('worked') || lower.contains('improvement')))) {
+      // Point 3: Key Technical Differences
+      if (lower.startsWith('3.') || lower.contains('difference') || lower.contains('comparison') || lower.contains('contrast')) {
         final colonIdx = line.indexOf(':');
-        final content = colonIdx != -1
+        final val = colonIdx != -1
             ? line.substring(colonIdx + 1).trim()
-            : line.replaceFirst(RegExp(r'^\s*3\.?\s*(?:video\s*2[^\:]*[\:\-])?', caseSensitive: false), '').trim();
-        if (content.isNotEmpty) {
-          v2.stance = content;
-          section = 'v2_good';
+            : line.replaceFirst(RegExp(r'^\s*3\.?\s*(?:key technical differences[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (val.isNotEmpty) {
+          diff = val;
+          section = 'diff';
           continue;
         }
       }
 
-      // 4. Video 2 (What is bad)
-      if (lower.startsWith('4.') || (lower.contains('video 2') && (lower.contains('bad') || lower.contains('mistake') || lower.contains('flaw') || lower.contains('fix')))) {
+      // Point 4: Progression & Corrections
+      if (lower.startsWith('4.') || lower.contains('progression') || lower.contains('correction') || lower.contains('adjustment')) {
         final colonIdx = line.indexOf(':');
-        final content = colonIdx != -1
+        final val = colonIdx != -1
             ? line.substring(colonIdx + 1).trim()
-            : line.replaceFirst(RegExp(r'^\s*4\.?\s*(?:video\s*2[^\:]*[\:\-])?', caseSensitive: false), '').trim();
-        if (content.isNotEmpty) {
-          v2.shotSelection = content;
-          section = 'v2_bad';
+            : line.replaceFirst(RegExp(r'^\s*4\.?\s*(?:progression[^\:]*[\:\-])?', caseSensitive: false), '').trim();
+        if (val.isNotEmpty) {
+          prog = val;
+          section = 'prog';
           continue;
         }
       }
 
-      if (isHeader(line)) {
-        section = headerKey(line);
-        continue;
-      }
+      final normalized = line
+          .replaceFirst(RegExp(r'^\s*[-•]\s*'), '')
+          .replaceFirst(RegExp(r'^\s*\d+[\).\]]\s*'), '')
+          .trim();
+      if (normalized.isEmpty) continue;
 
-      // Strip common bullets/numbering for cleaner layout.
-      final normalized = line.replaceFirst(RegExp(r'^\s*[-•]\s*'), '');
-      final normalized2 = normalized.replaceFirst(
-        RegExp(r'^\s*\d+[\).\]]\s*'),
-        '',
-      );
-
-      if (section == 'v1_good') {
-        v1.stance = v1.stance != null ? '${v1.stance} $normalized2' : normalized2;
-      } else if (section == 'v1_bad') {
-        v1.shotSelection = v1.shotSelection != null ? '${v1.shotSelection} $normalized2' : normalized2;
-      } else if (section == 'v2_good') {
-        v2.stance = v2.stance != null ? '${v2.stance} $normalized2' : normalized2;
-      } else if (section == 'v2_bad') {
-        v2.shotSelection = v2.shotSelection != null ? '${v2.shotSelection} $normalized2' : normalized2;
+      if (section == 'verdict') {
+        finalVerdict = (finalVerdict != null && finalVerdict.isNotEmpty)
+            ? '$finalVerdict $normalized'
+            : normalized;
       } else if (section == 'v1') {
-        v1.addLine(normalized2);
+        v1 = (v1 != null && v1.isNotEmpty) ? '$v1\n• $normalized' : normalized;
       } else if (section == 'v2') {
-        v2.addLine(normalized2);
-      } else if (section == 'drill') {
-        drills.add(normalized2);
+        v2 = (v2 != null && v2.isNotEmpty) ? '$v2\n• $normalized' : normalized;
+      } else if (section == 'diff') {
+        diff = (diff != null && diff.isNotEmpty) ? '$diff\n• $normalized' : normalized;
+      } else if (section == 'prog') {
+        prog = (prog != null && prog.isNotEmpty) ? '$prog\n• $normalized' : normalized;
       }
     }
 
-    // If the model ignored headers, fall back to the compact string.
-    if (!v1.hasAny && !v2.hasAny && drills.isEmpty && (finalVerdict == null || finalVerdict.isEmpty)) {
+    if (v1 == null && v2 == null && diff == null && prog == null && (finalVerdict == null || finalVerdict.isEmpty)) {
       return _ParsedCompareReply.fallback(_formatCompareReply(cleaned));
+    }
+
+    return _ParsedCompareReply(
+      video1: v1,
+      video2: v2,
+      differences: diff,
+      progression: prog,
+      finalVerdict: finalVerdict,
+      fallback: null,
+    );
+  }
     }
 
     // Keep it short and scannable.
@@ -439,7 +403,10 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
         _pickingRight = true;
       }
 
-      final XFile? picked = await picker.pickVideo(source: ImageSource.gallery);
+      final XFile? picked = await picker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(seconds: 15),
+      );
       if (picked == null) return;
 
       final File file = File(picked.path);
@@ -799,14 +766,16 @@ class _AnalyseYourselfScreenState extends State<AnalyseYourselfScreen>
       request.fields["prompt"] =
           """You are a professional, India-level cricket $_analysisDiscipline coach.
 Compare the player's $_analysisDiscipline technique between Video 1 and Video 2.
+Directly contrast both clips and highlight concrete technical differences, technique changes, and progression.
+
 Return EXACTLY these 4 comparison points followed by a Final Verdict, and nothing else. No extra intro, no filler words:
 
-1. Video 1 (What is good): [What worked well and positive technical aspect in Video 1]
-2. Video 1 (What is bad): [Primary technical mistake and flaw in Video 1]
-3. Video 2 (What is good): [Visible improvement and what worked well in Video 2]
-4. Video 2 (What is bad): [Technical flaw that still needs correction in Video 2]
+1. Video 1 (Technique): [Technical execution and body posture in Video 1]
+2. Video 2 (Technique): [Technical execution and adjustments seen in Video 2]
+3. Key Technical Differences: [Direct head-to-head comparison highlighting the exact differences between both videos]
+4. Progression & Corrections: [Analysis of technical improvement from Video 1 to Video 2 and remaining corrections]
 
-Final Verdict: [Clear coaching summary and verdict comparing both videos]
+Final Verdict: [Definite coaching verdict comparing both videos and declaring which clip showed better technique]
 
 Do not add any other sentence, explanation, or heading.""";
       return request;
@@ -819,7 +788,7 @@ Do not add any other sentence, explanation, or heading.""";
       for (int attempt = 0; attempt < 2; attempt++) {
         try {
           final req = await _buildRequest();
-          response = await req.send().timeout(const Duration(seconds: 180));
+          response = await req.send().timeout(const Duration(seconds: 45));
           body = await response.stream.bytesToString();
           break;
         } catch (e) {
@@ -1586,37 +1555,42 @@ Do not add any other sentence, explanation, or heading.""";
 }
 
 class _ParsedCompareReply {
-  final _CompareVideoSummary video1;
-  final _CompareVideoSummary video2;
-  final List<String> drills;
+  final String? video1;
+  final String? video2;
+  final String? differences;
+  final String? progression;
   final String? finalVerdict;
   final String? fallback;
 
   const _ParsedCompareReply({
-    required this.video1,
-    required this.video2,
-    required this.drills,
+    this.video1,
+    this.video2,
+    this.differences,
+    this.progression,
     this.finalVerdict,
-    required this.fallback,
+    this.fallback,
   });
 
   const _ParsedCompareReply.empty()
-    : video1 = const _CompareVideoSummary.empty(),
-      video2 = const _CompareVideoSummary.empty(),
-      drills = const [],
-      finalVerdict = null,
-      fallback = null;
+      : video1 = null,
+        video2 = null,
+        differences = null,
+        progression = null,
+        finalVerdict = null,
+        fallback = null;
 
   const _ParsedCompareReply.fallback(this.fallback)
-    : video1 = const _CompareVideoSummary.empty(),
-      video2 = const _CompareVideoSummary.empty(),
-      drills = const [],
-      finalVerdict = null;
+      : video1 = null,
+        video2 = null,
+        differences = null,
+        progression = null,
+        finalVerdict = null;
 
   bool get hasStructured =>
-      video1.hasAny ||
-      video2.hasAny ||
-      drills.isNotEmpty ||
+      (video1 != null && video1!.isNotEmpty) ||
+      (video2 != null && video2!.isNotEmpty) ||
+      (differences != null && differences!.isNotEmpty) ||
+      (progression != null && progression!.isNotEmpty) ||
       (finalVerdict != null && finalVerdict!.isNotEmpty);
 }
 
@@ -1652,7 +1626,7 @@ class _CompareResultView extends StatelessWidget {
               parsed.fallback ?? raw,
               style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: 15,
                 height: 1.5,
               ),
             ),
@@ -1665,17 +1639,16 @@ class _CompareResultView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Icon(
-              Icons.sports_cricket_rounded,
+              Icons.compare_arrows_rounded,
               color: CrickXColors.limeSpark,
               size: 22,
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                "Comparison Summary",
+                "Comparison & Difference Analysis",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 16,
@@ -1686,39 +1659,207 @@ class _CompareResultView extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _CompareColumnCard(
-                title: "VIDEO 1",
-                subtitle: "Clip 1",
-                accent: CrickXColors.limeSpark,
-                summary: parsed.video1,
+        const SizedBox(height: 14),
+
+        // Side-by-side Video 1 vs Video 2 technique
+        if ((parsed.video1 != null && parsed.video1!.isNotEmpty) ||
+            (parsed.video2 != null && parsed.video2!.isNotEmpty)) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _CompareVideoCard(
+                  title: "VIDEO 1",
+                  subtitle: "Clip 1 Technique",
+                  content: parsed.video1 ?? "Technique analyzed",
+                  accent: CrickXColors.limeSpark,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _CompareColumnCard(
-                title: "VIDEO 2",
-                subtitle: "Clip 2",
-                accent: CrickXColors.limeSpark,
-                summary: parsed.video2,
+              const SizedBox(width: 12),
+              Expanded(
+                child: _CompareVideoCard(
+                  title: "VIDEO 2",
+                  subtitle: "Clip 2 Technique",
+                  content: parsed.video2 ?? "Technique analyzed",
+                  accent: const Color(0xFF38BDF8),
+                ),
               ),
-            ),
-          ],
-        ),
-        if (parsed.finalVerdict != null &&
-            parsed.finalVerdict!.trim().isNotEmpty) ...[
+            ],
+          ),
           const SizedBox(height: 14),
-          _FinalVerdictCard(verdict: parsed.finalVerdict!.trim()),
         ],
-        if (parsed.drills.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _DrillsCard(drills: parsed.drills),
+
+        // Head-to-Head Technical Differences
+        if (parsed.differences != null && parsed.differences!.isNotEmpty) ...[
+          _ComparisonSectionCard(
+            title: "KEY TECHNICAL DIFFERENCES",
+            icon: Icons.swap_horiz_rounded,
+            accent: CrickXColors.limeSpark,
+            content: parsed.differences!,
+          ),
+          const SizedBox(height: 14),
         ],
+
+        // Progression & Corrections
+        if (parsed.progression != null && parsed.progression!.isNotEmpty) ...[
+          _ComparisonSectionCard(
+            title: "PROGRESSION & CORRECTIONS",
+            icon: Icons.trending_up_rounded,
+            accent: const Color(0xFF38BDF8),
+            content: parsed.progression!,
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // Final Verdict
+        if (parsed.finalVerdict != null && parsed.finalVerdict!.isNotEmpty)
+          _FinalVerdictCard(verdict: parsed.finalVerdict!),
       ],
+    );
+  }
+}
+
+class _CompareVideoCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String content;
+  final Color accent;
+
+  const _CompareVideoCard({
+    required this.title,
+    required this.subtitle,
+    required this.content,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: CrickXColors.graphiteElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: GoogleFonts.poppins(
+              color: const Color(0xFFA1A1AA),
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            content,
+            style: GoogleFonts.poppins(
+              color: Colors.white.withOpacity(0.92),
+              fontSize: 13,
+              height: 1.45,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComparisonSectionCard extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Color accent;
+  final String content;
+
+  const _ComparisonSectionCard({
+    required this.title,
+    required this.icon,
+    required this.accent,
+    required this.content,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CrickXColors.graphiteElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withOpacity(0.5), width: 1.1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  color: accent,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            content,
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 13.5,
+              height: 1.5,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1779,218 +1920,6 @@ class _FinalVerdictCard extends StatelessWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CompareColumnCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final Color accent;
-  final _CompareVideoSummary summary;
-
-  const _CompareColumnCard({
-    required this.title,
-    required this.subtitle,
-    required this.accent,
-    required this.summary,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: CrickXColors.graphiteElevated,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: accent,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: accent.withOpacity(0.45),
-                      blurRadius: 10,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.7,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: GoogleFonts.poppins(
-              color: const Color(0xFFA1A1AA),
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (!summary.hasAny)
-            Text(
-              "No notes returned.",
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.70),
-                fontSize: 15,
-                height: 1.45,
-              ),
-            )
-          else
-            ..._buildSummaryCards(),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildSummaryCards() {
-    final stance = summary.stance?.trim();
-    final shot = summary.shotSelection?.trim();
-    final key = summary.mistakeOrImprovement?.trim();
-
-    // If we couldn't extract fields, show the first 2 big points like CricX Mistake Detection.
-    if ((stance == null || stance.isEmpty) &&
-        (shot == null || shot.isEmpty) &&
-        (key == null || key.isEmpty) &&
-        summary.extraLines.isNotEmpty) {
-      return [
-        _MiniSectionCard(
-          title: "KEY POINTS",
-          accent: accent,
-          bullets: summary.extraLines.take(2).toList(),
-        ),
-      ];
-    }
-
-    final widgets = <Widget>[];
-    if (stance != null && stance.isNotEmpty) {
-      widgets.add(
-        _MiniSectionCard(
-          title: "WHAT WORKED",
-          accent: accent,
-          bullets: [stance],
-        ),
-      );
-    }
-    if (shot != null && shot.isNotEmpty) {
-      widgets.add(
-        _MiniSectionCard(title: "WHAT TO FIX", accent: accent, bullets: [shot]),
-      );
-    }
-    if (key != null && key.isNotEmpty) {
-      widgets.add(
-        _MiniSectionCard(title: "KEY NOTE", accent: accent, bullets: [key]),
-      );
-    }
-
-    // Keep it compact: at most 3 cards.
-    return [
-      for (int i = 0; i < widgets.length; i++) ...[
-        widgets[i],
-        if (i != widgets.length - 1) const SizedBox(height: 10),
-      ],
-    ];
-  }
-}
-
-class _MiniSectionCard extends StatelessWidget {
-  final String title;
-  final Color accent;
-  final List<String> bullets;
-
-  const _MiniSectionCard({
-    required this.title,
-    required this.accent,
-    required this.bullets,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: CrickXColors.graphiteBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: CrickXColors.graphiteBorder, width: 1.1),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 9,
-                height: 9,
-                decoration: BoxDecoration(
-                  color: accent,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: GoogleFonts.poppins(
-                  color: accent,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.7,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          for (final b in bullets.take(2))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                "• $b",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 14,
-                  height: 1.4,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
         ],
       ),
     );

@@ -67,17 +67,19 @@ async def compare_videos(
             right_frames = extract_video_keyframes(right_path, max_frames=2)
 
         base_prompt = (prompt or "").strip()
-        if not base_prompt or "video 1:" in base_prompt.lower():
+        if not base_prompt or "video 1:" in base_prompt.lower() or "what worked" in base_prompt.lower():
             base_prompt = f"""You are a professional, India-level cricket {disc_label} coach.
 Compare the player's {disc_label} technique between Video 1 and Video 2.
+Directly contrast both clips and highlight concrete technical differences, technique changes, and progression.
+
 Return EXACTLY these 4 comparison points followed by a Final Verdict, and nothing else. No extra intro, no filler words:
 
-1. Video 1 (What is good): [What worked well and positive technical aspect in Video 1]
-2. Video 1 (What is bad): [Primary technical mistake and flaw in Video 1]
-3. Video 2 (What is good): [Visible improvement and what worked well in Video 2]
-4. Video 2 (What is bad): [Technical flaw that still needs correction in Video 2]
+1. Video 1 (Technique): [Technical execution and body posture in Video 1]
+2. Video 2 (Technique): [Technical execution and adjustments seen in Video 2]
+3. Key Technical Differences: [Direct head-to-head comparison highlighting the exact differences between both videos]
+4. Progression & Corrections: [Analysis of technical improvement from Video 1 to Video 2 and remaining corrections]
 
-Final Verdict: [Clear coaching summary and verdict comparing both videos]
+Final Verdict: [Definite coaching verdict comparing both videos and declaring which clip showed better technique]
 
 Do not add any other sentence, explanation, or heading."""
 
